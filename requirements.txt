@@ -1,0 +1,25 @@
+# XAU_AI_PRO - Python Dependencies
+# Gold (XAU) AI Trading System
+# Install with: pip install -r requirements.txt
+
+# Data Processing
+pandas==3.0.3
+numpy==2.5.1
+
+# Machine Learning
+scikit-learn==1.9.0
+scipy==1.18.0
+joblib==1.5.3
+
+# Visualization
+matplotlib==3.11.0
+plotly==6.8.0
+
+# Web Framework
+fastapi==0.139.0
+uvicorn==0.51.0
+pydantic==2.13.4
+
+# Utilities
+python-dateutil==2.9.0.post0
+six==1.17.0
