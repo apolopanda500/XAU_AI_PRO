@@ -1,3 +1,4 @@
+"""Módulo de treinamento do modelo XAU_AI_PRO."""
 import os
 from pathlib import Path
 
@@ -30,6 +31,7 @@ MODEL = BASE_DIR / "model.pkl"
 # ==========================================
 
 def train():
+    """Executa o treinamento do modelo RandomForestClassifier."""
 
     print("================================")
     print(" XAU_AI_PRO TRAINING ENGINE")
@@ -117,7 +119,7 @@ def train():
     ]
 
 
-    X = df[features]
+    x = df[features]
 
 
 
@@ -142,7 +144,7 @@ def train():
 
 
 
-    X = df[features]
+    x = df[features]
 
     y = df["Target"]
 
@@ -152,9 +154,9 @@ def train():
     # SPLIT
     # ===============================
 
-    X_train, X_test, y_train, y_test = train_test_split(
+    x_train, x_test, y_train, y_test = train_test_split(
 
-        X,
+        x,
         y,
         test_size=0.2,
         shuffle=False
@@ -184,7 +186,7 @@ def train():
 
 
     model.fit(
-        X_train,
+        x_train,
         y_train
     )
 
@@ -195,7 +197,7 @@ def train():
     # ===============================
 
     pred = model.predict(
-        X_test
+        x_test
     )
 
 
