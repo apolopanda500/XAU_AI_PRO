@@ -46,12 +46,20 @@ def train():
 
 
 
+    with open(DATASET, "rb") as f:
+        raw = f.read()
+
+    text = raw.decode("utf-16", errors="replace")
+
+    lines = [line for line in text.splitlines() if line.strip()]
+    start_idx = next((i for i, line in enumerate(lines) if line.startswith("2026")), 0)
+    
+    import io
     df = pd.read_csv(
-    DATASET,
-    encoding="utf-16",
-    sep=",",
-    header=None
-)
+        io.StringIO("\n".join(lines[start_idx:])),
+        sep=",",
+        header=None
+    )
 
 
     df.columns = [
@@ -86,7 +94,7 @@ def train():
 
     df = df.dropna()
 
-    df = df[df["Symbol"]=="XAUUSDc"]
+    df = df[df["Symbol"].astype(str).str.startswith("XAUUSD")]
 
 
     if len(df) < 1:
@@ -243,3 +251,4 @@ def train():
 if __name__ == "__main__":
 
     train()
+

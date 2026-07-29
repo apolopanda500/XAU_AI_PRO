@@ -35,11 +35,20 @@ def predict():
 
     model = joblib.load(MODEL)
 
+    with open(DATASET, "rb") as f:
+        raw = f.read()
+
+    text = raw.decode("utf-16-le", errors="replace")
+
+    lines = [line for line in text.splitlines() if line.strip()]
+    start_idx = next((i for i, line in enumerate(lines) if line.startswith("2026")), 0)
+    
+    import io
     df = pd.read_csv(
-        DATASET,
-        encoding="utf-16",
+        io.StringIO("\n".join(lines[start_idx:])),
         sep=",",
-        header=None
+        header=None,
+        on_bad_lines="skip",
     )
 
     df.columns = [
@@ -58,17 +67,15 @@ def predict():
 
     df = df.dropna()
 
-    symbol_mask = df["Symbol"].astype(str).str.upper().str.startswith("XAUUSD")
+    symbol_mask = df["Symbol"].astype(str).str.strip().str.upper().str.startswith("XAUUSD")
     df = df[symbol_mask]
-
-    df["Time"] = pd.to_datetime(df["Time"])
-
-    df = df.sort_values("Time")
 
     if df.empty:
         raise ValueError("Nenhum registro XAUUSD encontrado no dataset para previsão.")
 
-    print(df.tail())
+    df["Time"] = pd.to_datetime(df["Time"])
+
+    df = df.sort_values("Time")
 
     last = df.iloc[-1]
 

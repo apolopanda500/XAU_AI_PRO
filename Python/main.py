@@ -13,10 +13,10 @@ BASE_DIR = Path(__file__).resolve().parent
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python main.py [predict|train]")
-        sys.exit(1)
-
-    arg = sys.argv[1].lower()
+        print("No command provided. Defaulting to: train")
+        arg = "train"
+    else:
+        arg = sys.argv[1].lower()
 
     if arg == "predict":
         # Load and run predict module
