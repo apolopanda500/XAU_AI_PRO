@@ -1,54 +1,42 @@
-"""
-Main entry point for XAU_AI_PRO.
-Usage:
-    python main.py predict
-    python main.py train
-"""
+"""Main entry point for XAU_AI_PRO."""
 
+from __future__ import annotations
+
+import logging
 import sys
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
 
+COMMANDS = ("train", "predict", "help")
 
-def main():
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+
+
+def _usage() -> None:
+    print("Usage: python main.py [train|predict|help]")
+
+
+def main() -> None:
     if len(sys.argv) < 2:
-        print("No command provided. Defaulting to: train")
-        arg = "train"
-    else:
-        arg = sys.argv[1].lower()
+        _usage()
+        sys.exit(1)
+
+    arg = sys.argv[1].lower()
+
+    if arg == "help":
+        _usage()
+        return
 
     if arg == "predict":
-        # Load and run predict module
-        import importlib.util
-
-        predict_path = BASE_DIR / "predict.py"
-        spec = importlib.util.spec_from_file_location("predict", predict_path)
-        if spec and spec.loader:
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            module.predict()
-        else:
-            print(f"Failed to load {predict_path}")
-            sys.exit(1)
-
+        import predict
+        predict.predict()
     elif arg == "train":
-        # Load and run train module
-        import importlib.util
-
-        train_path = BASE_DIR / "train.py"
-        spec = importlib.util.spec_from_file_location("train", train_path)
-        if spec and spec.loader:
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            module.train()
-        else:
-            print(f"Failed to load {train_path}")
-            sys.exit(1)
-
+        import train
+        train.train()
     else:
         print(f"Unknown command: {arg}")
-        print("Usage: python main.py [predict|train]")
+        _usage()
         sys.exit(1)
 
 
