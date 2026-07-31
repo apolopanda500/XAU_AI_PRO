@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import io
+import json
+import os
 import sys
 from pathlib import Path
 
 import pandas as pd
 
+# Constantes
 BASE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = BASE_DIR.parent
 sys.path.append(str(BASE_DIR))
@@ -14,21 +18,34 @@ sys.path.append(str(BASE_DIR))
 from ai.predict_model import load_model, run_prediction
 from ai.predict_engine import build_result
 
-MODEL = BASE_DIR / "model.pkl"
-DATASET = Path(
-    __import__("os").getenv(
+MODEL_PATH = BASE_DIR / "model.pkl"
+DATASET_PATH = Path(
+    os.getenv(
         "XAU_AI_PRO_DATASET",
         PROJECT_ROOT / "MQL5" / "Files" / "Data" / "dataset.csv",
     )
 ).expanduser()
-OUTPUT = PROJECT_ROOT / "MQL5" / "Files" / "Data" / "prediction.json"
+OUTPUT_PATH = PROJECT_ROOT / "MQL5" / "Files" / "Data" / "prediction.json"
+
+FEATURES = [
+    "Open",
+    "High",
+    "Low",
+    "Close",
+    "Volume",
+    "Spread",
+    "ATR",
+    "ADX",
+    "RSI",
+]
 
 
-def _load_dataset():
-    if not DATASET.exists():
-        raise FileNotFoundError(f"Dataset não encontrado: {DATASET}")
+def _load_dataset() -> pd.DataFrame:
+    """Carrega e pré-processa o dataset para previsão."""
+    if not DATASET_PATH.exists():
+        raise FileNotFoundError(f"Dataset não encontrado: {DATASET_PATH}")
 
-    with open(DATASET, "rb") as f:
+    with open(DATASET_PATH, "rb") as f:
         raw = f.read()
 
     text = raw.decode("utf-16", errors="replace")
@@ -36,7 +53,7 @@ def _load_dataset():
     start_idx = next((i for i, line in enumerate(lines) if line.startswith("2026")), 0)
 
     df = pd.read_csv(
-        __import__("io").StringIO("\n".join(lines[start_idx:])),
+        io.StringIO("\n".join(lines[start_idx:])),
         sep=",",
         header=None,
         on_bad_lines="skip",
@@ -64,11 +81,11 @@ def _load_dataset():
         raise ValueError("Nenhum registro XAUUSD encontrado no dataset para previsão.")
 
     df["Time"] = pd.to_datetime(df["Time"])
-    df = df.sort_values("Time")
+    df = df.sort_values("Time").reset_index(drop=True)
     return df
 
 
-def predict():
+def predict() -> None:
     """Run prediction on the latest dataset row and save results."""
 
     print("=" * 30)
@@ -91,10 +108,7 @@ def predict():
             last["ADX"],
             last["RSI"],
         ]],
-        columns=[
-            "Open", "High", "Low", "Close",
-            "Volume", "Spread", "ATR", "ADX", "RSI",
-        ],
+        columns=FEATURES,
     )
 
     prediction, probability = run_prediction(model, x_data)
@@ -102,13 +116,13 @@ def predict():
 
     print(result)
 
-    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    with open(OUTPUT, "w", encoding="utf-8") as f:
-        __import__("json").dump(result, f, indent=4)
+    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
+        json.dump(result, f, indent=4)
 
     print()
     print("prediction.json criado")
-    print(OUTPUT)
+    print(OUTPUT_PATH)
 
 
 if __name__ == "__main__":
