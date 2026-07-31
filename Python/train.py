@@ -36,6 +36,15 @@ FEATURES = [
     "ATR",
     "ADX",
     "RSI",
+    "BodySize",
+    "RangeSize",
+    "UpperShadow",
+    "LowerShadow",
+    "ATR_Pct",
+    "RSI_Diff",
+    "Close_Diff",
+    "Volume_MA",
+    "ADX_Change",
 ]
 
 
@@ -73,14 +82,24 @@ def _load_dataset() -> pd.DataFrame:
     ]
 
     df = df.dropna()
-    symbol_mask = df["Symbol"].astype(str).str.strip().str.upper().str.startswith("XAUUSD")
-    df = df[symbol_mask]
 
     if df.empty:
-        raise ValueError("Nenhum registro XAUUSD encontrado no dataset para treinamento.")
+        raise ValueError("Nenhum registro encontrado no dataset para treinamento.")
 
     df["Time"] = pd.to_datetime(df["Time"])
     df = df.sort_values("Time").reset_index(drop=True)
+
+    # Feature engineering
+    df["BodySize"] = df["Close"] - df["Open"]
+    df["RangeSize"] = df["High"] - df["Low"]
+    df["UpperShadow"] = df["High"] - df[["Open", "Close"]].max(axis=1)
+    df["LowerShadow"] = df[["Open", "Close"]].min(axis=1) - df["Low"]
+    df["ATR_Pct"] = (df["ATR"] / df["Close"]) * 100
+    df["RSI_Diff"] = df["RSI"].diff().fillna(0)
+    df["Close_Diff"] = df["Close"].diff().fillna(0)
+    df["Volume_MA"] = df["Volume"].rolling(window=5, min_periods=1).mean()
+    df["ADX_Change"] = df["ADX"].diff().fillna(0)
+
     return df
 
 
@@ -101,7 +120,9 @@ def train() -> None:
     print(df.info())
 
     # Cria target: 1 se Close futuro > Close atual, senão 0
-    df["Target"] = (df["Close"].shift(-1) > df["Close"]).astype(int)
+    # Usa forward return normalizado para melhor qualidade
+    df["Future_Return"] = df["Close"].shift(-1) / df["Close"] - 1
+    df["Target"] = (df["Future_Return"] > 0).astype(int)
     df = df.dropna()
 
     if len(df) < 10:
@@ -119,8 +140,10 @@ def train() -> None:
     )
 
     model = RandomForestClassifier(
-        n_estimators=200,
-        max_depth=8,
+        n_estimators=300,
+        max_depth=10,
+        min_samples_leaf=5,
+        class_weight="balanced",
         random_state=42,
         n_jobs=-1,
     )

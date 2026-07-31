@@ -25,7 +25,7 @@ DATASET_PATH = Path(
         PROJECT_ROOT / "MQL5" / "Files" / "Data" / "dataset.csv",
     )
 ).expanduser()
-OUTPUT_PATH = PROJECT_ROOT / "MQL5" / "Files" / "Data" / "prediction.json"
+OUTPUT_DIR = PROJECT_ROOT / "MQL5" / "Files" / "Data"
 
 FEATURES = [
     "Open",
@@ -37,6 +37,15 @@ FEATURES = [
     "ATR",
     "ADX",
     "RSI",
+    "BodySize",
+    "RangeSize",
+    "UpperShadow",
+    "LowerShadow",
+    "ATR_Pct",
+    "RSI_Diff",
+    "Close_Diff",
+    "Volume_MA",
+    "ADX_Change",
 ]
 
 
@@ -74,27 +83,36 @@ def _load_dataset() -> pd.DataFrame:
     ]
 
     df = df.dropna()
-    symbol_mask = df["Symbol"].astype(str).str.strip().str.upper().str.startswith("XAUUSD")
-    df = df[symbol_mask]
 
     if df.empty:
-        raise ValueError("Nenhum registro XAUUSD encontrado no dataset para previsão.")
+        raise ValueError("Nenhum registro encontrado no dataset para previsão.")
 
     df["Time"] = pd.to_datetime(df["Time"])
-    df = df.sort_values("Time").reset_index(drop=True)
+    df = df.sort_values(by="Time").reset_index(drop=True)
+
+    # Feature engineering (igual ao train.py)
+    df["BodySize"] = df["Close"] - df["Open"]
+    df["RangeSize"] = df["High"] - df["Low"]
+    df["UpperShadow"] = df["High"] - df[["Open", "Close"]].max(axis=1)
+    df["LowerShadow"] = df[["Open", "Close"]].min(axis=1) - df["Low"]
+    df["ATR_Pct"] = (df["ATR"] / df["Close"]) * 100
+    df["RSI_Diff"] = df["RSI"].diff().fillna(0)
+    df["Close_Diff"] = df["Close"].diff().fillna(0)
+    df["Volume_MA"] = df["Volume"].rolling(window=5, min_periods=1).mean()
+    df["ADX_Change"] = df["ADX"].diff().fillna(0)
+
     return df
 
 
-def predict() -> None:
-    """Run prediction on the latest dataset row and save results."""
+def _predict_symbol(model: object, df: pd.DataFrame, symbol: str) -> dict | None:
+    """Gera predição para um símbolo específico."""
+    symbol_df = df[df["Symbol"].astype(str).str.strip() == symbol]
 
-    print("=" * 30)
-    print(" XAU_AI_PRO AI PREDICT")
-    print("=" * 30)
+    if symbol_df.empty:
+        print(f"  Sem dados para {symbol}, pulando...")
+        return None
 
-    model = load_model()
-    df = _load_dataset()
-    last = df.iloc[-1]
+    last: pd.Series = symbol_df.iloc[-1]
 
     x_data = pd.DataFrame(
         [[
@@ -107,6 +125,15 @@ def predict() -> None:
             last["ATR"],
             last["ADX"],
             last["RSI"],
+            last["BodySize"],
+            last["RangeSize"],
+            last["UpperShadow"],
+            last["LowerShadow"],
+            last["ATR_Pct"],
+            last["RSI_Diff"],
+            last["Close_Diff"],
+            last["Volume_MA"],
+            last["ADX_Change"],
         ]],
         columns=FEATURES,
     )
@@ -114,15 +141,54 @@ def predict() -> None:
     prediction, probability = run_prediction(model, x_data)
     result = build_result(prediction, probability, last)
 
-    print(result)
+    return result
 
-    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
-        json.dump(result, f, indent=4)
+
+def predict() -> None:
+    """Run prediction on all symbols and save results per symbol."""
+
+    print("=" * 30)
+    print(" XAU_AI_PRO AI PREDICT (MULTI-SYMBOL)")
+    print("=" * 30)
+
+    model = load_model()
+    df = _load_dataset()
+
+    # Lista de símbolos únicos no dataset
+    symbols = df["Symbol"].astype(str).str.strip().unique()
+
+    print(f"Símbolos encontrados: {len(symbols)}")
+    for s in symbols:
+        print(f"  - {s}")
+
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    predictions_made = 0
+
+    for symbol in symbols:
+        if not symbol:
+            continue
+
+        print(f"\nPredizendo {symbol}...")
+
+        result = _predict_symbol(model, df, symbol)
+
+        if result is None:
+            continue
+
+        print(f"  Resultado: {result}")
+
+        # Salvar prediction_{symbol}.json
+        output_file = OUTPUT_DIR / f"prediction_{symbol}.json"
+        with open(output_file, "w", encoding="utf-8") as f:
+            json.dump(result, f, indent=4)
+
+        print(f"  Salvo: {output_file}")
+        predictions_made += 1
 
     print()
-    print("prediction.json criado")
-    print(OUTPUT_PATH)
+    print(f"Predições geradas: {predictions_made}/{len(symbols)}")
+    print(f"Diretório: {OUTPUT_DIR}")
 
 
 if __name__ == "__main__":

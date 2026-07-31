@@ -63,9 +63,9 @@ class DataEngineXAU:
         ]
 
 
-        # somente ouro
+        # remover linhas com símbolo vazio
         self.df = self.df[
-            self.df["Symbol"] == "XAUUSD"
+            self.df["Symbol"].astype(str).str.strip() != ""
         ]
 
 
@@ -116,7 +116,7 @@ class DataEngineXAU:
         )
 
 
-        print("DATASET XAUUSD CARREGADO")
+        print("DATASET CARREGADO")
         print(self.df.head())
 
         print()
