@@ -450,3 +450,7 @@ Arquivo: `Docs/ETAPA15_BASELINE_CONTRATOS.md` (este mesmo).
 - 18.7 AI->DecisionEngine: Python/ai/ai_decision.py (IA = componente; valida via gateway+confidence, delega ao decide() so se VALID).
 - 18.11 Fail-Safe: !valid -> AI=UNAVAILABLE, sinal retirado, TECHNICAL_ONLY/SAFE; latencia>2000ms->AI_WARNING; emite eventos IA.
 
+
+- 18.12 Testes: Python/test_etapa18.py -> 8/8 OK (T1 READY, T2 UNAVAILABLE, T3 ERROR, T4 STALE, T5 UNAVAILABLE, T6 FEATURE_ERROR, T7 VALID, T8 READY).
+**ETAPA 18 CONCLUIDA (18.1-18.12).**
+
