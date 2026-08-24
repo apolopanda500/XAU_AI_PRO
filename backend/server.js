@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const cors = require('cors');
 const http = require('http');
 const socketIo = require('socket.io');
@@ -160,3 +160,7 @@ server.listen(PORT, () => {
   console.log(`Event stream: ${eventsFile()}`);
 });
 app.get('/api/reconcile', (req, res) => { const { reconcile } = require('./reconcile'); res.json(reconcile()); });
+
+const { financialSummary } = require('./financial');
+app.get('/api/financial', (req,res)=>res.json(financialSummary()));
+

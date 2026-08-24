@@ -479,3 +479,9 @@ Arquivo: `Docs/ETAPA15_BASELINE_CONTRATOS.md` (este mesmo).
 - Dados reais (7 trades fechados): win rate 57.14%, PF 0.46, expectativa -0.23, P/L -1.62, 0 inconsistencias.
 - Por simbolo: USDJPY/USDCHF +, AUDUSD/GBPUSD - (R:R desbalanceado).
 
+
+## ✅ ETAPA 22 - Dashboard profissional final (2026-08-24)
+- backend/financial.js + GET /api/financial (reconciliacao financeira real).
+- Dashboard (painel unico): Sistema, Trading, IA, Risco, Execucao, Health, EventStream + Reconciliaacao financeira (Win Rate 57.14%, P/L -1.62, 7 trades).
+- EA intacto; tudo via API backend.
+

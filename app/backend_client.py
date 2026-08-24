@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """Cliente da API Backend (ETAPA 16.4) para o Dashboard (16.5).
 
 Consome a API unica do backend Node.js (porta 3001) que le o
@@ -27,7 +27,7 @@ ENDPOINTS = {
     "risk": "/api/risk",
     "execution": "/api/execution",
     "telemetry": "/api/telemetry",
-    "alerts": "/api/alerts",
+    "alerts": "/api/alerts","financial": "/api/financial",
 }
 
 
@@ -87,6 +87,13 @@ def status_lines(data: dict[str, Any]) -> list[tuple[str, str, str]]:
     exec_ = data.get("execution") or {}
     if exec_.get("taxa_aprovacao") is not None:
         lines.append(("Taxa Aprovacao", f'{exec_["taxa_aprovacao"]}%', "ok"))
+
+    fin = data.get("financial") or {}
+    lines.append(("Win Rate", str(fin.get("win_rate_pct", 0)) + "%",
+                  "ok" if (fin.get("win_rate_pct") or 0) >= 50 else "warn"))
+    lines.append(("P/L Total", str(fin.get("pnl_total", 0)),
+                  "ok" if (fin.get("pnl_total") or 0) >= 0 else "bad"))
+    lines.append(("Trades", str(fin.get("total_trades", 0)), "ok"))
 
     alerts = data.get("alerts") or {}
     lines.append(("Alertas", str(alerts.get("total", 0)),
