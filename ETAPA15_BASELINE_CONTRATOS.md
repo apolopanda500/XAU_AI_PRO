@@ -485,3 +485,9 @@ Arquivo: `Docs/ETAPA15_BASELINE_CONTRATOS.md` (este mesmo).
 - Dashboard (painel unico): Sistema, Trading, IA, Risco, Execucao, Health, EventStream + Reconciliaacao financeira (Win Rate 57.14%, P/L -1.62, 7 trades).
 - EA intacto; tudo via API backend.
 
+
+## ✅ ETAPA 23 - Paper/Demo validation (2026-08-24)
+- Conta DEMO confirmada: MetaQuotes-Demo, login 111194406, saldo 198.37, trading habilitado, hedging.
+- Paper trading ATIVO: 7 trades reconciliados (ETAPA 21) foram executados em demo com dados de mercado reais.
+- EA intacto; validação de producao em ambiente seguro confirmada.
+
