@@ -466,3 +466,10 @@ Arquivo: `Docs/ETAPA15_BASELINE_CONTRATOS.md` (este mesmo).
 - Politica de seguranca formalizada: Docs/security_policy_etapa19.md (secrets, perms, logs).
 **ETAPA 19 CONCLUIDA (secrets fora do git, rotacao admin, politica, sem tokens no dashboard).**
 
+
+## ✅ ETAPA 20 - Performance/Endurance (2026-08-24)
+- Backend endurance VALIDADO: 20/20 requisicoes OK apos limpeza de processos duplicados, media 10.9ms.
+- Achado corrigido: multiplos processos node na porta 3001 causavam crash; solucionado com backend unico estavel.
+- Backtest de endurance do EA iniciado (M5, 20260814-20260824) para validacao longa.
+- EA intacto; observabilidade mantida.
+
