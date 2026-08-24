@@ -417,3 +417,9 @@ Arquivo: `Docs/ETAPA15_BASELINE_CONTRATOS.md` (este mesmo).
 - /api/system: estado=ERROR (18x HEALTH_FAILURE no stream), razao rastreavel.
 - Substapas 17.2/17.4/17.5/17.6/17.7 pendentes.
 
+
+### 17.4 Reconciliação IMPLEMENTADA (2026-08-24)
+- backend/reconcile.js + GET /api/reconcile (Event Stream vs AuditLog).
+- Achados reais: 2 duplicatas no AuditLog; 2 divergencias stream-vs-audit.
+- Pendentes: 17.2, 17.5, 17.6, 17.7.
+

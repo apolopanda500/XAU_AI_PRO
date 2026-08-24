@@ -159,3 +159,4 @@ server.listen(PORT, () => {
   console.log(`XAU_AI_PRO Backend ETAPA 17.3 rodando na porta ${PORT}`);
   console.log(`Event stream: ${eventsFile()}`);
 });
+app.get('/api/reconcile', (req, res) => { const { reconcile } = require('./reconcile'); res.json(reconcile()); });
