@@ -541,3 +541,42 @@ Regra de imutabilidade (a partir de agora):
 - PF=0.46 deve ser MEDIDO (causa raiz), NAO forcado >1. Alteracao apenas apos medicao e via v1t1 com justificativa.
 - Sequencia pos-baseline: 20.2 endurance tecnica -> 20.3 forward test prolongado -> 20.4 analise estatistica -> 20.5 performance/PF -> 20.6 failure & restore -> 20.7 production gate definitivo (PASS/WARNING/BLOCKED).
 
+
+
+## [OK] ETAPA 20.3 - FORWARD TEST PROLONGADO (plano, 2026-08-24)
+
+Contexto: executa em PARALELO a otimizacao de endurance 20.2 (run em background) e apos ela.
+Baseline v1.2.0 congelado - NENHUM motor de trading alterado.
+
+Objetivo: acumular 30 dias de operacao em conta DEMO real, com registro diario.
+
+Eixo ativo (ja em operacao, conta demo MetaQuotes-Demo login 111194406, saldo 198.37):
+
+- 6 x EA XAU_AI_PRO v1.2.0 em charts M5 (XAUUSD, EURUSD, USDBRL, AUDUSD, NZDUSD, USDCHF).
+- EventStream forward_test_events.csv (UTF-16, 10 colunas) crescendo continuamente.
+- system_status.json (health, trading, risk, ai, news, python, database).
+
+Metricas a registrar DIARIAMENTE durante os 30 dias:
+
+| Metrica | Registro |
+|---|---|
+| Trades abertas/fechadas | forward_test_trades.csv + historico broker |
+| Profit factor | soma ganhos / soma perdas (sem forcar >1) |
+| Drawdown | pico da equity vs valle |
+| Win rate | % trades vencedores |
+| Expectancy | pnl medio por trade |
+| Rejeicoes / erros / retry | ExecutionEngine + audit |
+| Latencia | heartbeat forward (TimeLocal-TimeCurrent) |
+| Estado IA | READY / STALE / UNAVAILABLE / ERROR (registry + gateway) |
+| Periodos SAFE | quando risk bloqueou entrada |
+| Recovery | HEALTH_FAILURE -> RECOVERY (ciclos observados) |
+| Divergencia audit | full_audit.csv x stream x broker |
+
+Criterio de conclusao: 30 dias de dados acumulados em conta demo, sem alterar baseline,
+com relatorio FORWARD_TEST_REPORT.md anexado ao final do periodo.
+
+Regra: PF=0.46 continua a ser MEDIDO (causa raiz) na ETAPA 20.5; NAO forcado >1.
+
+Situacao atual: run endurance 20.2 em background (run iniciado, otimizacao 15 pass ticks reais).
+Forward test 20.3 formalmente iniciado com o eixo demo ativo.
+
