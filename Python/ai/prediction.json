@@ -1,0 +1,12 @@
+{
+    "symbol": "XAUUSD",
+    "signal": "SELL",
+    "score": 80.0,
+    "buy_probability": 20.0,
+    "sell_probability": 80.0,
+    "price": 4178.95,
+    "atr": 1.5699999999999998,
+    "adx": 32.87,
+    "rsi": 55.04,
+    "time": "2026-07-12 22:36:51.249516"
+}

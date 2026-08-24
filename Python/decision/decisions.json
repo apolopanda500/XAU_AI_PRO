@@ -1,0 +1,89 @@
+[
+    {
+        "timestamp": "2026-08-01T21:22:16.610089",
+        "action": "EXECUTAR",
+        "reason": "Vantagem estatística confirmada. Operação de qualidade com risco controlado.",
+        "score": 0.8475,
+        "lot": 0.1,
+        "details": {
+            "symbol": "XAUUSDC",
+            "signal": "BUY",
+            "confidence": 0.75,
+            "ai_score": 0.8,
+            "ai": {
+                "passed": true,
+                "confidence": 0.75,
+                "ai_score": 0.8
+            },
+            "entry": {
+                "passed": true,
+                "score": 0.85,
+                "reason": "Entrada de qualidade."
+            },
+            "risk": {
+                "passed": true,
+                "lot": 0.1,
+                "reason": "Operação permitida."
+            },
+            "decision_score": 0.8475
+        }
+    },
+    {
+        "timestamp": "2026-08-01T21:22:16.616192",
+        "action": "REJEITAR",
+        "reason": "IA não confirma vantagem estatística. Confiança: 0.50, Score IA: 0.40.",
+        "score": 0.5475,
+        "lot": 0.0,
+        "details": {
+            "symbol": "XAUUSDC",
+            "signal": "BUY",
+            "confidence": 0.5,
+            "ai_score": 0.4,
+            "ai": {
+                "passed": false,
+                "confidence": 0.5,
+                "ai_score": 0.4
+            },
+            "entry": {
+                "passed": true,
+                "score": 0.85,
+                "reason": "Entrada de qualidade."
+            },
+            "risk": {
+                "passed": true,
+                "lot": 0.1,
+                "reason": "Operação permitida."
+            },
+            "decision_score": 0.5475
+        }
+    },
+    {
+        "timestamp": "2026-08-01T21:22:16.625191",
+        "action": "REJEITAR",
+        "reason": "Gerenciamento de risco bloqueou operação.",
+        "score": 0.635,
+        "lot": 0.0,
+        "details": {
+            "symbol": "XAUUSDC",
+            "signal": "BUY",
+            "confidence": 0.8,
+            "ai_score": 0.85,
+            "ai": {
+                "passed": true,
+                "confidence": 0.8,
+                "ai_score": 0.85
+            },
+            "entry": {
+                "passed": true,
+                "score": 0.9,
+                "reason": "Entrada de qualidade."
+            },
+            "risk": {
+                "passed": false,
+                "lot": 0.0,
+                "reason": "Daily Stop atingido."
+            },
+            "decision_score": 0.635
+        }
+    }
+]

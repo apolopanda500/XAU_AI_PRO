@@ -1,0 +1,5 @@
+# XAU AI PRO — dependências adicionais do App Desktop (Ultimate)
+# As bases (pandas, sklearn, streamlit, litellm, MetaTrader5, etc.) já
+# estão em requirements.txt da raiz. Aqui estão as extras usadas pela GUI.
+yfinance>=0.2.40
+requests

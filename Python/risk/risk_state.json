@@ -1,0 +1,65 @@
+{
+    "config": {
+        "daily_stop_pct": 0.02,
+        "weekly_stop_pct": 0.05,
+        "drawdown_stop_pct": 0.1,
+        "equity_protection_pct": 0.15,
+        "lot_reduction_enabled": true,
+        "lot_reduction_after_losses": 3,
+        "lot_reduction_factor": 0.5,
+        "pause_enabled": true,
+        "pause_after_losses": 4,
+        "pause_duration_hours": 2.0,
+        "risk_per_trade_pct": 0.01,
+        "max_lot": 1.0,
+        "min_lot": 0.01
+    },
+    "state": {
+        "initial_equity": 10000.0,
+        "current_equity": 9600.0,
+        "peak_equity": 10000.0,
+        "day_start_equity": 10000.0,
+        "week_start_equity": 10000.0,
+        "current_day": "2026-08-01",
+        "current_week": "2026-W30",
+        "consecutive_losses": 4,
+        "consecutive_wins": 0,
+        "paused_until": "2026-08-01T23:21:33.914097",
+        "current_lot": 0.1,
+        "base_lot": 0.1,
+        "trades": [
+            {
+                "timestamp": "2026-08-01T21:21:33.900100",
+                "symbol": "XAUUSDc",
+                "signal": "BUY",
+                "lot": 0.1,
+                "pnl": -100.0,
+                "equity": 9900.0
+            },
+            {
+                "timestamp": "2026-08-01T21:21:33.907102",
+                "symbol": "XAUUSDc",
+                "signal": "BUY",
+                "lot": 0.1,
+                "pnl": -100.0,
+                "equity": 9800.0
+            },
+            {
+                "timestamp": "2026-08-01T21:21:33.911099",
+                "symbol": "XAUUSDc",
+                "signal": "BUY",
+                "lot": 0.1,
+                "pnl": -100.0,
+                "equity": 9700.0
+            },
+            {
+                "timestamp": "2026-08-01T21:21:33.914097",
+                "symbol": "XAUUSDc",
+                "signal": "BUY",
+                "lot": 0.1,
+                "pnl": -100.0,
+                "equity": 9600.0
+            }
+        ]
+    }
+}

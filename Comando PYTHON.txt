@@ -1,0 +1,238 @@
+1) Verificar instalação do Python
+python --version
+
+ou:
+
+python -V
+
+Ver caminho do Python:
+
+where python
+
+Ver versão do pip:
+
+pip --version
+2) Executar programas Python
+
+Executar arquivo:
+
+python arquivo.py
+
+Exemplo:
+
+python main.py
+
+Executar módulo:
+
+python -m modulo
+
+Exemplo:
+
+python -m pip install pandas
+3) Criar ambiente virtual (venv)
+
+Criar ambiente:
+
+python -m venv venv
+
+Ativar no Windows:
+
+venv\Scripts\activate
+
+Desativar:
+
+deactivate
+
+Verificar ambiente ativo:
+
+where python
+4) Instalar bibliotecas
+
+Atualizar pip:
+
+python -m pip install --upgrade pip
+
+Instalar pacote:
+
+pip install nome_do_pacote
+
+Exemplos:
+
+pip install pandas
+pip install numpy
+pip install scikit-learn
+pip install matplotlib
+pip install python-dotenv
+pip install python-telegram-bot
+5) Remover bibliotecas
+pip uninstall nome_do_pacote
+
+Exemplo:
+
+pip uninstall pandas
+6) Ver bibliotecas instaladas
+
+Lista completa:
+
+pip list
+
+Detalhes de um pacote:
+
+pip show pandas
+
+Ver pacotes desatualizados:
+
+pip list --outdated
+7) Salvar dependências do projeto
+
+Criar arquivo requirements:
+
+pip freeze > requirements.txt
+
+Instalar tudo novamente:
+
+pip install -r requirements.txt
+8) Navegação no terminal
+
+Ver arquivos:
+
+dir
+
+Entrar em pasta:
+
+cd nome_da_pasta
+
+Voltar:
+
+cd ..
+
+Limpar tela:
+
+cls
+
+Criar pasta:
+
+mkdir nome
+9) Executar projetos
+
+Entrar na pasta:
+
+cd projeto
+
+Ativar ambiente:
+
+venv\Scripts\activate
+
+Rodar:
+
+python main.py
+
+Exemplo:
+
+python train.py
+python predict.py
+10) Python interativo
+
+Abrir console:
+
+python
+
+Sair:
+
+exit()
+
+ou:
+
+quit()
+11) Testar importação de módulos
+
+Testar pandas:
+
+python -c "import pandas; print(pandas.__version__)"
+
+Testar numpy:
+
+python -c "import numpy; print(numpy.__version__)"
+
+Testar Telegram:
+
+python -c "import telegram; print('OK')"
+12) Treinar modelo IA (exemplo seu projeto)
+
+Treinar:
+
+python train.py
+
+Gerar previsão:
+
+python predict.py
+
+Executar pipeline:
+
+python main.py
+
+13) Trabalhar com arquivos CSV
+
+Verificar arquivo:
+
+dir *.csv
+
+Exemplo:
+
+dir xau_dataset.csv
+14) Diagnóstico de erros
+
+Mostrar versão completa:
+
+python --version
+
+Mostrar caminho:
+
+where python
+
+Ver ambiente:
+
+pip list
+
+Reinstalar pacote:
+
+pip install --force-reinstall nome
+
+Limpar cache pip:
+
+pip cache purge
+15) Jupyter Notebook
+
+Instalar:
+
+pip install notebook
+
+Abrir:
+
+jupyter notebook
+16) Streamlit (seu dashboard IA)
+
+Instalar:
+
+pip install streamlit
+
+Executar:
+
+streamlit run app.py
+17) Git (controle de versão)
+
+Ver status:
+
+git status
+
+Adicionar arquivos:
+
+git add .
+
+Salvar:
+
+git commit -m "mensagem"
+
+Enviar:
+
+git push

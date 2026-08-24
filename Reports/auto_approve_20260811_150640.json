@@ -1,0 +1,119 @@
+{
+  "generated_at": "2026-08-11T15:06:16",
+  "dataset": {
+    "exists": true,
+    "rows": 72,
+    "symbols": [
+      "BTCJPYM",
+      "BTCUSDC",
+      "BTCUSDM",
+      "EURUSD",
+      "XAUUSD",
+      "XAUUSDC"
+    ],
+    "period": [
+      "2026-07-13",
+      "2026-07-21"
+    ]
+  },
+  "training": {
+    "returncode": 0,
+    "ok": true
+  },
+  "prediction": {
+    "returncode": 0,
+    "ok": true
+  },
+  "predictions": [
+    {
+      "file": "prediction_BTCJPYm.json",
+      "symbol": "BTCJPYm",
+      "signal": "SELL",
+      "score": 68.72,
+      "price": 10551326.0
+    },
+    {
+      "file": "prediction_BTCUSD#.json",
+      "symbol": "BTCUSDC",
+      "signal": "BUY",
+      "score": 58.5502,
+      "price": 66310.86
+    },
+    {
+      "file": "prediction_BTCUSDc.json",
+      "symbol": "BTCUSDc",
+      "signal": "BUY",
+      "score": 52.31,
+      "price": 66310.86
+    },
+    {
+      "file": "prediction_BTCUSDm.json",
+      "symbol": "BTCUSDm",
+      "signal": "SELL",
+      "score": 55.39,
+      "price": 65003.94
+    },
+    {
+      "file": "prediction_ETHUSD#.json",
+      "symbol": "EURUSD",
+      "signal": "BUY",
+      "score": 86.39,
+      "price": 1.14352
+    },
+    {
+      "file": "prediction_EURUSD.json",
+      "symbol": "EURUSD",
+      "signal": "BUY",
+      "score": 86.39,
+      "price": 1.14352
+    },
+    {
+      "file": "prediction_GOLD#.json",
+      "symbol": "XAUUSDc",
+      "signal": "BUY",
+      "score": 84.49,
+      "price": 4077.934
+    },
+    {
+      "file": "prediction_XAUUSD.json",
+      "symbol": "XAUUSD",
+      "signal": "NEUTRAL",
+      "score": 55.9,
+      "price": 4056.83
+    },
+    {
+      "file": "prediction_XAUUSD_M5.json",
+      "symbol": "XAUUSD",
+      "signal": "NEUTRAL",
+      "score": 55.9,
+      "price": 4056.83
+    },
+    {
+      "file": "prediction_XAUUSDc.json",
+      "symbol": "XAUUSDc",
+      "signal": "BUY",
+      "score": 84.49,
+      "price": 4077.934
+    }
+  ],
+  "verdict": {
+    "approved": false,
+    "checks": [
+      {
+        "name": "dados_suficientes",
+        "ok": false,
+        "detail": "72 amostras (min 500)"
+      },
+      {
+        "name": "treinamento",
+        "ok": true,
+        "detail": "train.py"
+      },
+      {
+        "name": "predicoes_geradas",
+        "ok": true,
+        "detail": "10 arquivos"
+      }
+    ]
+  }
+}

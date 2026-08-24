@@ -1,0 +1,35 @@
+# XAU_AI_PRO - Python Dependencies
+# Gold (XAU) AI Trading System
+# Install with: pip install -r requirements.txt
+
+# Data Processing
+pandas
+numpy
+
+# Machine Learning
+scikit-learn
+scipy
+joblib
+xgboost
+lightgbm
+catboost
+
+# Visualization
+matplotlib
+plotly
+
+# Web Framework
+fastapi
+uvicorn
+pydantic
+streamlit
+litellm
+openai
+
+# Monitoring
+sentry-sdk>=2.44.0
+
+# Utilities
+MetaTrader5
+python-dateutil
+six

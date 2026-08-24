@@ -1,0 +1,10 @@
+{
+    "XAUUSDC": {
+        "BUY": {
+            "trades": 25,
+            "wins": 13,
+            "losses": 12,
+            "win_rate": 0.52
+        }
+    }
+}

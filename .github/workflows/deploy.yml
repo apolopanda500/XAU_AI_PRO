@@ -1,0 +1,58 @@
+name: Deploy App
+
+on:
+  push:
+    branches: [ main, master ]
+  release:
+    types: [ published ]
+
+jobs:
+  build-and-deploy:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Install frontend dependencies
+      working-directory: frontend
+      run: npm install
+
+    - name: Build frontend
+      working-directory: frontend
+      run: npm run build
+
+    - name: Install backend dependencies
+      working-directory: backend
+      run: npm install
+
+    - name: Create release package
+      run: |
+        7z a -tzip "../CryptoTraderPro-${{ github.ref_name }}.zip" .
+        
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: v${{ github.ref_name }}
+        release_name: Release v${{ github.ref_name }}
+        draft: false
+        prerelease: false
+
+    - name: Upload release asset
+      id: upload_release_asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ../CryptoTraderPro-${{ github.ref_name }}.zip
+        asset_content_type: application/zip

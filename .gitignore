@@ -1,0 +1,50 @@
+﻿# Dependencies
+node_modules/
+frontend/node_modules/
+backend/node_modules/
+
+# Build outputs
+frontend/dist/
+*.exe
+
+# Logs
+logs/
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+
+# Environment files
+.env
+.env.local
+
+# Python
+__pycache__/
+*.pyc
+# XAU_AI_PRO artifacts
+MQL5/Experts/*/*.ex5
+MQL5/Experts/*/*.log
+build/
+Temp/
+Backup_v120/
+Python/models_backup_*/
+dist/
+*.log
+Logs/*
+**/Python/models/*.pkl 
+**/MQL5/Files/Data/dataset.csv 
+**/build/ 
+**/*.pkg 
+**/*.pyz 
+**/app_venv/ 
+.git_backup_corrupt/ 
+**/Tools/python_embed/ 
+**/*.pyd 
+**/Ultimate/trading.db 
+**/database/trading.db 
+**/MQL5/Files/Data/prediction_*.json 
