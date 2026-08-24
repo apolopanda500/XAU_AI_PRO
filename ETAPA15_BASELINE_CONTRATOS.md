@@ -409,3 +409,11 @@ Arquivo: `Docs/ETAPA15_BASELINE_CONTRATOS.md` (este mesmo).
 - Cenario Python/Stream OFF: backend tolera CSV ausente (retorna events:[] e health stream_ok:false).
 **ETAPA 16 CONCLUIDA (16.1-16.6).**
 
+
+## ✅ ETAPA 17 - Integracao Operacional (iniciada 2026-08-24)
+### 17.1 AI stales + 17.3 Estado Unificado IMPLEMENTADOS (EA intacto)
+- Backend /api/system retorna ESTADO UNIFICADO (HEALTHY/WARNING/DEGRADED/SAFE/RECOVERY/ERROR/OFFLINE).
+- /api/ai: IA=STALE (age_sec=668724, prediction 16/08 nunca tratado como atual).
+- /api/system: estado=ERROR (18x HEALTH_FAILURE no stream), razao rastreavel.
+- Substapas 17.2/17.4/17.5/17.6/17.7 pendentes.
+

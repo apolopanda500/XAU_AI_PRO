@@ -1,9 +1,3 @@
-/**
- * XAU AI PRO - Backend Observabilidade (ETAPA 16.4)
- * Consome o Event Stream real do EA (forward_test_events.csv).
- * API unica: health, events, trading, positions, ai, risk, execution,
- * telemetry, alerts + WebSocket. SEM alteracao no EA.
- */
 const express = require('express');
 const cors = require('cors');
 const http = require('http');
@@ -14,22 +8,15 @@ const path = require('path');
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, { cors: { origin: "*", methods: ["GET","POST"] } });
-
 const PORT = process.env.PORT || 3001;
 
-const TERMINAL_DATA = path.join(
-  process.env.APPDATA || '',
-  'MetaQuotes','Terminal',
-  'D0E8209F77C8CF37AD8BF550E51FF075','MQL5','Files','Data','forward_test_events.csv'
-);
-const LOCAL_DATA = path.join(__dirname, '..', 'MQL5','Files','Data','forward_test_events.csv');
+const DATA_DIR = 'C:/Users/Micro/AppData/Roaming/MetaQuotes/Terminal/D0E8209F77C8CF37AD8BF550E51FF075/MQL5/Files/Data';
 
 function eventsFile() {
-  try { if (fs.existsSync(TERMINAL_DATA)) return TERMINAL_DATA; } catch(e){}
-  return LOCAL_DATA;
+  const p = path.join(DATA_DIR, 'forward_test_events.csv');
+  return fs.existsSync(p) ? p : path.join(__dirname, '..', 'MQL5', 'Files', 'Data', 'forward_test_events.csv');
 }
 
-// ---------- Event Ingestion (CSV UTF-16, tolerante ','/'\t') ----------
 function readEvents(limit = 200) {
   const f = eventsFile();
   if (!fs.existsSync(f)) return { source: f, events: [] };
@@ -41,149 +28,134 @@ function readEvents(limit = 200) {
     const delim = header.includes('\t') && !header.includes(',') ? '\t' : ',';
     const cols = header.split(delim).map(h => h.trim());
     const events = lines.slice(1).map(ln => {
-      const p = ln.split(delim).map(x => x.trim());
+      const p2 = ln.split(delim).map(x => x.trim());
       const o = {};
-      cols.forEach((c, i) => o[c] = p[i] !== undefined ? p[i] : '');
+      cols.forEach((c, i) => o[c] = p2[i] !== undefined ? p2[i] : '');
       return o;
-    }).filter(e => e.Event); // ignora linhas corrompidas
+    }).filter(e => e.Event);
     return { source: f, events: events.slice(-limit) };
-  } catch (e) {
-    return { source: f, events: [], error: String(e) };
-  }
+  } catch (e) { return { source: f, events: [] }; }
 }
 
-// ---------- Derivacao de estado (15.6.5) ----------
-function deriveState(events) {
+// ---------- 17.1: Estado IA a partir do prediction JSON (staleness) ----------
+function aiState() {
+  const base = path.join(DATA_DIR, 'prediction_XAUUSD.json');
+  const local = path.join(__dirname, '..', 'MQL5', 'Files', 'Data', 'prediction_XAUUSD.json');
+  const f = fs.existsSync(base) ? base : local;
+  if (!fs.existsSync(f)) return { estado: 'UNAVAILABLE', motivo: 'sem prediction', file: f };
+  try {
+    const j = JSON.parse(fs.readFileSync(f, 'utf8'));
+    const ts = j.timestamp || j.timestamp_utc || '';
+    let ageMs = Infinity;
+    const ageSec = j.age_sec;
+    if (ts) {
+      const t = new Date(ts).getTime();
+      if (!isNaN(t)) ageMs = Date.now() - t;
+    }
+    const ageSecNum = Number.isFinite(ageMs) ? Math.round(ageMs / 1000) : (ageSec || 1e9);
+    let estado = 'READY';
+    if (j.signal === 'UNAVAILABLE') estado = 'UNAVAILABLE';
+    else if (ageSecNum > 300) estado = 'STALE';          // >5min obsoleto
+    else if (j.signal === 'ERROR') estado = 'ERROR';
+    else if (!j.timestamp && !j.timestamp_utc) estado = 'STALE';
+    return { estado, signal: j.signal || null, confidence: j.confidence ?? null, age_sec: ageSecNum, timestamp: ts, file: f };
+  } catch (e) { return { estado: 'ERROR', motivo: 'json invalido', file: f }; }
+}
+
+// ---------- 17.3: ESTADO UNIFICADO (7 estados) ----------
+// HEALTHY / WARNING / DEGRADED / SAFE / RECOVERY / ERROR / OFFLINE
+function unifiedState(events, ai) {
   const counts = {};
-  events.forEach(e => { const t = e.Event || ''; if(t) counts[t] = (counts[t]||0)+1; });
-  let estado = 'HEALTHY';
-  if (counts['HEALTH_FAILURE']) estado = 'FAILURE';
-  else if (counts['CIRCUIT_BREAKER'] || counts['SAFE_MODE']) estado = 'SAFE';
-  else if (counts['SYSTEM_ERROR']||counts['BROKER_ERROR']||counts['PYTHON_ERROR']||counts['DATABASE_ERROR']) estado = 'ERROR';
-  else if (counts['RECOVERY']) estado = 'RECOVERY';
-  else if (counts['HEALTH_WARNING']||counts['RISK_BLOCK']||counts['NEWS_BLOCK']||counts['AI_BLOCK']) estado = 'WARNING';
-  else if (counts['TRADE_OPEN']) estado = 'TRADING';
-  return { estado, counts };
-}
+  events.forEach(e => { const t = e.Event; if (t) counts[t] = (counts[t] || 0) + 1; });
 
-// ---------- Sub-agregacoes por dominio ----------
-function byType(events, types) {
-  return events.filter(e => types.includes(e.Event));
-}
-function lastOf(events, type) {
-  for (let i = events.length-1; i >= 0; i--) if (events[i].Event === type) return events[i];
-  return null;
+  // OFFLINE: sem eventos recentes (< 5min)
+  let newest = 0;
+  events.forEach(e => {
+    const m = /^(\d{4})\.(\d{2})\.(\d{2}) (\d{2}):(\d{2}):(\d{2})/.exec(e.Time || '');
+    if (m) {
+      const t = new Date(+m[1], +m[2]-1, +m[3], +m[4], +m[5], +m[6]).getTime();
+      if (t > newest) newest = t;
+    }
+  });
+  const recentMs = Math.max(0, Date.now() - newest);
+  if (!events.length || recentMs > 300000) {
+    return { estado: 'OFFLINE', source: 'sem eventos recentes', recent_sec: Math.round(recentMs/1000) };
+  }
+
+  if (counts['HEALTH_FAILURE'] || counts['SYSTEM_ERROR'] || counts['BROKER_ERROR'] || counts['DATABASE_ERROR'])
+    return { estado: 'ERROR', reasons: ['health_failure/system/broker/db'] };
+  if (counts['CIRCUIT_BREAKER'] || counts['SAFE_MODE'])
+    return { estado: 'SAFE', reasons: ['circuit_breaker/safe_mode'] };
+  if (ai.estado === 'UNAVAILABLE' && (counts['PYTHON_ERROR'] || counts['AI_ERROR']))
+    return { estado: 'DEGRADED', reasons: ['ia_unavailable'] };
+  if (counts['RECOVERY']) return { estado: 'RECOVERY', reasons: ['recovery'] };
+  if (ai.estado === 'STALE' || ai.estado === 'UNAVAILABLE')
+    return { estado: 'DEGRADED', reasons: ['ia_stale/unavailable'] };
+  if (counts['HEALTH_WARNING'] || counts['RISK_BLOCK'] || counts['NEWS_BLOCK'] || counts['AI_BLOCK'])
+    return { estado: 'WARNING', reasons: ['warning/block'] };
+  return { estado: 'HEALTHY', reasons: ['ok'] };
 }
 
 function buildDomains(events) {
   const counts = {};
-  events.forEach(e => { const t = e.Event||''; counts[t] = (counts[t]||0)+1; });
-  const trades = byType(events, ['TRADE_OPEN','TRADE_CLOSE','TRADE_APPROVED','TRADE_REJECTED']);
-  const lastOpen = lastOf(events, 'TRADE_OPEN');
-  const lastClose = lastOf(events, 'TRADE_CLOSE');
-  const ai = byType(events, ['AI_PREDICTION','AI_BLOCK','AI_ERROR']);
-  const risk = byType(events, ['RISK_BLOCK','SAFE_MODE','RECOVERY','CIRCUIT_BREAKER','NEWS_BLOCK']);
-  const exec = byType(events, ['TRADE_APPROVED','TRADE_REJECTED']);
-  const alerts = events.filter(e => ['WARN','ERROR','CRITICAL'].includes(e.Severity));
+  events.forEach(e => { const t = e.Event||''; if(t) counts[t]=(counts[t]||0)+1; });
   return {
     counts,
-    trading: {
-      trades_abertos: counts['TRADE_OPEN']||0,
-      trades_fechados: counts['TRADE_CLOSE']||0,
-      aprovados: counts['TRADE_APPROVED']||0,
-      rejeitados: counts['TRADE_REJECTED']||0,
-      ultimo_open: lastOpen,
-      ultimo_close: lastClose,
-      trades
-    },
-    positions: {
-      abertas: (counts['TRADE_OPEN']||0) - (counts['TRADE_CLOSE']||0),
-      abertas_bruto: Math.max(0, (counts['TRADE_OPEN']||0) - (counts['TRADE_CLOSE']||0)),
-      ultima: lastOpen
-    },
-    ai: {
-      predictions: counts['AI_PREDICTION']||0,
-      blocks: counts['AI_BLOCK']||0,
-      errors: counts['AI_ERROR']||0,
-      ultima_prediction: lastOf(events, 'AI_PREDICTION'),
-      ultimo_block: lastOf(events, 'AI_BLOCK'),
-      eventos: ai
-    },
-    risk: {
-      risk_blocks: counts['RISK_BLOCK']||0,
-      news_blocks: counts['NEWS_BLOCK']||0,
-      safe_mode: counts['SAFE_MODE']||0,
-      recoveries: counts['RECOVERY']||0,
-      circuit_breaker: counts['CIRCUIT_BREAKER']||0,
-      eventos: risk
-    },
-    execution: {
-      aprovados: counts['TRADE_APPROVED']||0,
-      rejeitados: counts['TRADE_REJECTED']||0,
-      taxa_aprovacao: ((counts['TRADE_APPROVED']||0) + (counts['TRADE_REJECTED']||0)) > 0
-        ? Math.round((counts['TRADE_APPROVED']||0) * 100 / ((counts['TRADE_APPROVED']||0)+(counts['TRADE_REJECTED']||0))) : null,
-      eventos: exec
-    },
-    telemetry: {
-      total_eventos: events.length,
-      por_tipo: counts,
-      fontes: [...new Set(events.map(e=>e.Module).filter(Boolean))],
-      heartbeat_estimado: (counts['SYSTEM_START']||0) + (counts['FORWARD_TEST_START']||0)
-    },
-    alerts: { total: alerts.length, eventos: alerts.slice(-20) }
+    ai_raw: aiState(),
+    trading: { opens: counts['TRADE_OPEN']||0, closes: counts['TRADE_CLOSE']||0,
+      aprovados: counts['TRADE_APPROVED']||0, rejeitados: counts['TRADE_REJECTED']||0 },
+    positions: { abertas: Math.max(0,(counts['TRADE_OPEN']||0)-(counts['TRADE_CLOSE']||0)) },
+    risk: { blocks: counts['RISK_BLOCK']||0, news: counts['NEWS_BLOCK']||0,
+      safe: counts['SAFE_MODE']||0, recovery: counts['RECOVERY']||0 },
+    execution: { aprovados: counts['TRADE_APPROVED']||0, rejeitados: counts['TRADE_REJECTED']||0 },
+    telemetry: { total: events.length, por_tipo: counts },
+    alerts: events.filter(e => ['WARN','ERROR','CRITICAL'].includes(e.Severity)).slice(-20)
   };
 }
 
 app.use(cors());
 app.use(express.json());
 
-app.get('/', (req, res) => { res.json({ app: 'XAU_AI_PRO Backend', status: 'online', version: '1.2.0-RC1', etapa: '16.4' }); });
+app.get('/', (req, res) => res.json({ app: 'XAU_AI_PRO Backend', status: 'online', version: '1.2.0-RC1', etapa: '17.3' }));
 
-// ---------- Contrato JSON 16.4 ----------
 app.get('/api/health', (req, res) => {
   const { source } = readEvents(1);
   res.json({ ok: true, uptime_sec: Math.round(process.uptime()), stream_ok: fs.existsSync(source), source, ts: new Date().toISOString() });
 });
+app.get('/api/events', (req, res) => res.json(readEvents(parseInt(req.query.limit) || 100)));
+app.get('/api/events/latest', (req, res) => { const { source, events } = readEvents(1); res.json({ source, evento: events[events.length-1] || null, ts: new Date().toISOString() }); });
 
-app.get('/api/events', (req, res) => {
-  const limit = parseInt(req.query.limit) || 100;
-  res.json(readEvents(limit));
-});
-
-app.get('/api/events/latest', (req, res) => {
-  const { source, events } = readEvents(1);
-  res.json({ source, evento: events[events.length-1] || null, ts: new Date().toISOString() });
-});
-
+// 17.3: endpoint de estado unificado
 app.get('/api/system', (req, res) => {
   const { source, events } = readEvents(200);
-  const st = deriveState(events);
-  res.json({ source, estado: st.estado, contagem: st.counts, total_eventos: events.length, ts: new Date().toISOString() });
+  const ai = aiState();
+  const st = unifiedState(events, ai);
+  res.json({ source, estado: st.estado, razones: st.reasons || [], recent_sec: st.recent_sec, ai, contagem: buildDomains(events).counts, total_eventos: events.length, ts: new Date().toISOString() });
 });
+
+// 17.1: estado IA dedicado
+app.get('/api/ai', (req, res) => { const { events } = readEvents(200); res.json({ ...aiState(), eventos: events.filter(e=>['AI_PREDICTION','AI_BLOCK','AI_ERROR'].includes(e.Event)).slice(-20) }); });
 
 app.get('/api/trading', (req, res) => res.json(buildDomains(readEvents(500).events).trading));
 app.get('/api/positions', (req, res) => res.json(buildDomains(readEvents(500).events).positions));
-app.get('/api/ai', (req, res) => res.json(buildDomains(readEvents(500).events).ai));
 app.get('/api/risk', (req, res) => res.json(buildDomains(readEvents(500).events).risk));
 app.get('/api/execution', (req, res) => res.json(buildDomains(readEvents(500).events).execution));
 app.get('/api/telemetry', (req, res) => res.json(buildDomains(readEvents(500).events).telemetry));
 app.get('/api/alerts', (req, res) => res.json(buildDomains(readEvents(500).events).alerts));
 
-// ---------- WebSocket (polling 5s - fs.watch no Windows e nao uniforme) ----------
 io.on('connection', (socket) => {
-  console.log('Dashboard conectado:', socket.id);
   const push = () => {
     const { events } = readEvents(100);
-    const st = deriveState(events);
-    const dom = buildDomains(events);
-    socket.emit('system_state', { ts: new Date().toISOString(), estado: st.estado, contagem: st.counts, ultimo: events[events.length-1] || null, dominios: { trading: dom.trading, ai: dom.ai, risk: dom.risk, execution: dom.execution } });
+    const ai = aiState();
+    const st = unifiedState(events, ai);
+    socket.emit('system_state', { ts: new Date().toISOString(), estado: st.estado, razoes: st.reasons||[], ai, dominios: buildDomains(events) });
   };
   push();
-  const iv = setInterval(push, 5000);
+  const iv = setInterval(push, 3000);
   socket.on('disconnect', () => clearInterval(iv));
 });
 
 server.listen(PORT, () => {
-  console.log(`XAU_AI_PRO Backend ETAPA 16.4 rodando na porta ${PORT}`);
+  console.log(`XAU_AI_PRO Backend ETAPA 17.3 rodando na porta ${PORT}`);
   console.log(`Event stream: ${eventsFile()}`);
 });
