@@ -446,3 +446,7 @@ Arquivo: `Docs/ETAPA15_BASELINE_CONTRATOS.md` (este mesmo).
 - 18.8 EventStream IA: Python/ai/ai_event_stream.py (7 eventos: AI_PREDICTION/ERROR/STALE/UNAVAILABLE/MODEL_READY/MODEL_CHANGED/FEATURE_ERROR) - append UTF-16 10 colunas.
 - 18.9 Metricas IA: quebradas em telemetria (contagem por tipo) via /api/telemetry; evolucao pos-acumulo.
 
+
+- 18.7 AI->DecisionEngine: Python/ai/ai_decision.py (IA = componente; valida via gateway+confidence, delega ao decide() so se VALID).
+- 18.11 Fail-Safe: !valid -> AI=UNAVAILABLE, sinal retirado, TECHNICAL_ONLY/SAFE; latencia>2000ms->AI_WARNING; emite eventos IA.
+
