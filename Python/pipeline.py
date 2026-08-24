@@ -328,6 +328,17 @@ def load_model(symbol: str, timeframe: str = "M5") -> Any:
     return model
 
 
+def load_model_meta(symbol: str, timeframe: str = "M5") -> dict[str, Any]:
+    """ETAPA 15.3: metadados de governanca do modelo (.meta.json)."""
+    path = get_model_path(symbol, timeframe).with_suffix(".meta.json")
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
 def model_exists(symbol: str, timeframe: str = "M5") -> bool:
     return get_model_path(symbol, timeframe).exists()
 
@@ -401,6 +412,34 @@ def train_symbol_model(
 
     save_model(symbol, timeframe, model)
 
+    # ============================================================
+    # ETAPA 15.3: METADADOS DE GOVERNANCA (ModelGovernance.mqh)
+    # Publica algorithm/train_date/dataset_version/metrics que o
+    # AIConnector le via GetAIMetaString -> ModelGovernanceRefresh.
+    # ============================================================
+    try:
+        ds_sig = (
+            f"{len(df)}|"
+            f"{float(df['Close'].iloc[-1]):.5f}|"
+            f"{timeframe}|"
+            f"{len(FEATURES)}"
+        )
+        meta = {
+            "algorithm": type(model).__name__,
+            "train_date": datetime.now(timezone.utc).isoformat(),
+            "dataset_version": hashlib.sha256(ds_sig.encode("utf-8")).hexdigest()[:16],
+            "metrics": metrics,
+            "feature_count": len(FEATURES),
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "model_version": APP_VERSION,
+        }
+        meta_path = get_model_path(symbol, timeframe).with_suffix(".meta.json")
+        meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+        logger.info("Meta de governanca salva: %s", meta_path)
+    except Exception as exc:
+        logger.warning("Falha ao salvar meta de governanca %s: %s", symbol, exc)
+
     logger.info(
         "Modelo %s [%s] | acc=%.2f%% | f1=%.2f",
         symbol,
@@ -437,6 +476,8 @@ def predict_symbol(
         "confidence": round(confidence, 2),
         "prob_buy": round(prob_buy * 100, 2),
         "prob_sell": round(prob_sell * 100, 2),
+        # ETAPA 15.3: metadados de governanca para o JSON final
+        "meta": load_model_meta(symbol, timeframe),
     }
 
 
@@ -520,6 +561,7 @@ def build_prediction_json(
     timeframe: str = "M5",
     category: str = "Unknown",
     inference_ms: float = 0.0,
+    meta: dict[str, Any] | None = None,  # ETAPA 15.3: governanca
 ) -> dict[str, Any]:
     """ConstrÃ³i JSON de predicao."""
     last_row = df.iloc[-1]
@@ -559,6 +601,9 @@ def build_prediction_json(
         f"{model_id}|{close_price}|{atr}|{confidence}".encode("utf-8")
     ).hexdigest()[:16]
 
+    # ETAPA 15.3: metadados de governanca vindos do .meta.json do treino
+    m = meta or {}
+
     result: dict[str, Any] = {
         "symbol": symbol,
         "category": category,
@@ -571,9 +616,15 @@ def build_prediction_json(
         "prob_sell": prob_sell,
         "risk": risk,
         "model": model_type,
-        "model_version": "1.2.0",
+        "model_version": str(m.get("model_version", APP_VERSION)),
         "model_id": model_id,
         "feature_hash": feature_hash,
+        # ETAPA 15.3: campos consumidos pelo ModelGovernance.mqh
+        "algorithm": str(m.get("algorithm", "")),
+        "train_date": str(m.get("train_date", "")),
+        "dataset_version": str(m.get("dataset_version", "")),
+        "feature_count": int(m.get("feature_count", len(FEATURES))),
+        "metrics": json.dumps(m.get("metrics", {}), ensure_ascii=False),
         "inference_ms": inference_ms,
         "timestamp": pd.Timestamp.now().isoformat(),
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
@@ -938,6 +989,7 @@ class Pipeline:
             category=category,
             timeframe=timeframe,
             inference_ms=inference_ms,
+            meta=pred.get("meta"),  # ETAPA 15.3: governanca
         )
         return result
 

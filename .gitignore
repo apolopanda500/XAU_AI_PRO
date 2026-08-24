@@ -47,4 +47,10 @@ Logs/*
 **/*.pyd 
 **/Ultimate/trading.db 
 **/database/trading.db 
-**/MQL5/Files/Data/prediction_*.json 
+**/MQL5/Files/Data/prediction_*.json
+**/MQL5/Files/Data/forward_test_events.csv
+**/*.meta.json
+**/Python/ai/model.pkl
+**/MQL5/Files/Data/system_status.json
+**/secrets.*
+**/config.local.* 

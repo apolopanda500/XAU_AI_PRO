@@ -1,5 +1,12 @@
 ﻿# CHANGELOG
 
+
+### 2026-08-24 - Correcoes de integracao EventEmitter
+- Removida duplicacao de EventSystemStart no OnInit (XAU_AI_PRO.mq5).
+- Removida duplicacao de EventTradeOpen no ExecutionEngine (fluxo unico via OnTradeTransaction).
+- EA recompilado: 0 erros / 0 avisos.
+- Sincronizado workspace -> plataforma (XAU_AI_PRO.mq5, ExecutionEngine.mqh, .ex5).
+
 ## [1.2.0-RC1] - 2026-08-23
 ### ETAPA 14 + ETAPA 15 (baseline/contratos)
 - EA MQL5 v1.2.0-RC1 (build 0/0) injetado na Plataforma a partir do workspace.
@@ -103,3 +110,4 @@
 
 ---
 *Próximo paso: Recompilar EA en MetaEditor y testear en gráfico XAUUSD.*
+

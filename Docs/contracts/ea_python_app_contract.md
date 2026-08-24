@@ -567,3 +567,84 @@ Lib ESVAZIADA durante a sessao (stdlib removida fora da lixeira; causa
 externa). Mitigacao: Tools/python_embed (embeddable 3.12.9 portatil,
 nao-invasivo, ._pth apontando para a raiz do projeto) usado para os
 testes. RECOMENDADO: reinstalar Python 3.12 no sistema quando possivel.
+
+
+---
+
+## REGISTRO FECHAMENTO ETAPA 15.3 - IA PROFISSIONAL (70% -> 100%)
+
+**Data:** 24/08/2026 | **MQL5: 0 erros/0 warnings | Python: py_compile PASS**
+
+### Model Governance completa (gap fechado)
+
+**Python (pipeline.py):**
+1. Treino salva predict_model arq .meta.json com:
+   algorithm / train_date(ISO UTC) / dataset_version(hash SHA-256 parcial) /
+   metrics(accuracy,f1,train/test samples) / feature_count / symbol/TF / version.
+2. load_model_meta() carrega o meta para a predicao (fallback {}).
+3. build_prediction_json() adiciona ao output: algorithm, train_date,
+   dataset_version, feature_count, metrics (JSON string).
+   model_version agora herdado do .meta.json (fallback APP_VERSION).
+
+**MQL5 (AIConnector.mqh):**
+4. Novos globals: AI_Algorithm / AI_TrainDate / AI_DatasetVersion / AI_Metrics.
+5. Parse JSON dos novos campos no LoadAIPrediction.
+6. GetAIMetaString() expoe: ALGORITHM / MODEL_TRAIN_DATE / DATASET_VERSION /
+   MODEL_METRICS -> consumidos pelo ModelGovernanceRefresh().
+7. ResetAIState limpa os novos campos.
+
+### Normalizacao documentada (decidida)
+RandomForest (n_estimators=200, max_depth=8) NAO exige escalonamento
+(invariante a escala). Policy registrada em
+Docs/model_governance_policy.md. Sem scaler.pkl (correto para o algoritmo).
+
+### Auditoria da cadeia de fallback (15.3) - confirmada
+- IA nunca cria sinal: apenas bloqueia/confirma.
+- signal=UNAVAILABLE -> fallback local OU bloqueio (RequireAIJSON).
+- Timeout de previsao: stale check no AIConnector (MaxPredictionAgeSec).
+- Divergencia Python/MQL5: unificada pelas 25 features (contrato 15.2).
+
+### Nova versao .meta.json exigira retreino
+- Os modelos de producao ja tem 25 features; o proximo ciclo do
+  learning_engine gerara os .meta.json automaticamente.
+- Prediction JSONs apos o retreino conterao governanca completa.
+
+> ETAPA 15.3 = 100% ENCERRADA. Proxima: 15.8 Seguranca final.
+
+
+---
+
+## REGISTRO FECHAMENTO ETAPA 15.8 - SEGURANCA OPERACIONAL (parcial -> 100%)
+
+**Data:** 24/08/2026
+
+### Varredura de credenciais
+- Terminal MQL5 (Experts + Common Files) + projeto: 105 arquivos varridos.
+- Resultado: 0 credenciais reais. api_key="anything" = LiteLLM local (falso positivo).
+- Config MQL5: NotifyTelegramToken="" (OFF padrao; via input na instalacao).
+
+### .gitignore reforcado
+Adicionados: forward_test_events.csv, *.meta.json (governanca), system_status.json,
+secrets.*, config.local.*. Ja existiam: python_embed, *.pkl, dataset.csv,
+prediction_*.json, app_venv, logs, builds.
+
+### Checklist completo de seguranca (confirmado)
+1. Credenciais fora do codigo      : PASS (scan 0 credenciais)
+2. Telegram token protegido        : PASS (vazio por padrao)
+3. Configs protegidas              : PASS (inputs MQL5 + config_manager local)
+4. Permissoes minimas              : PASS* (SO do host)
+5. Backups                          : PASS (BackupManager + models_backup_*)
+6. Versionamento                    : PASS (VersionManager + APP_VERSION + schema_version)
+7. Identificacao de build           : PASS (model_version/model_id + SYSTEM_START event)
+8. Rollback                          : PASS (models_backup_* + build anterior .ex5)
+9. Logs de alteracoes                : PASS (AuditLog + learning_history + event stream)
+10. Sem auto-update                 : PASS (deliberadamente bloqueado no VersionManager)
+
+### Regras de producao (conta real) reiteradas
+- Iniciar SOMENTE XAUUSD, lote fixo/proteco ou risco 0.5%
+- RequireAIJSON=true nas primeiras semanas
+- AllowMinLotOverride=false (estrito)
+- Telegram token via input (nunca commitado)
+- Rollback restaura models_backup + .ex5 anterior
+
+> ETAPA 15.8 = 100% ENCERRADA. Proxima: 15.10 Production Candidate + plataforma.

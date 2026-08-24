@@ -381,3 +381,9 @@ Pré-requisito: Backtests seguem abaixos. Verificar:
 
 Arquivo: `Docs/ETAPA15_BASELINE_CONTRATOS.md` (este mesmo).
 
+
+## âœ… Correcao de integracao 15.6 (2026-08-24)
+- Removidas duplicacoes de EventSystemStart (OnInit) e EventTradeOpen (ExecutionEngine).
+- Fluxo de eventos: aprovaÃ§Ã£o (TRADE_APPROVED) na ExecutionEngine + abertura real (TRADE_OPEN) no OnTradeTransaction.
+- EA: 0 erros / 0 avisos.
+

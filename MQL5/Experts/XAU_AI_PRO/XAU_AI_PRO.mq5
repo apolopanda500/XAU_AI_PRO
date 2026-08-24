@@ -119,6 +119,7 @@ CTrade trade;
 
 // ETAPA 6: Monitoring & Auditoria
 #include "Monitoring/HealthMonitor.mqh"   // HealthMonitor + WatchDog integrado
+#include "Monitoring/EventEmitter.mqh"    // ETAPA 15.6.1/15.6.2: event stream (canonico)
 // Auditoria (AuditLog + FullAudit fundidos) - incluÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­do no top (ETAPA 11)
 #include "Monitoring/Diagnostics.mqh"     // Diagnostico completo
 
@@ -727,6 +728,7 @@ int OnInit()
    Print("----------------------------------------");
    Print("Sistema inicializado com sucesso.");
    Print("----------------------------------------");
+
 
    return INIT_SUCCEEDED;
   }
@@ -1639,6 +1641,10 @@ void OnDeinit(
    const int reason
 )
   {
+   // ETAPA 15.6.1: ultimo evento do event stream (API canonica)
+   EventSystemStop("deinit_reason=" + IntegerToString(reason));
+   EventShutdown();
+
    Print(
       "========================================"
    );
