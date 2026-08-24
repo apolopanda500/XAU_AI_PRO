@@ -434,3 +434,7 @@ Arquivo: `Docs/ETAPA15_BASELINE_CONTRATOS.md` (este mesmo).
 ## ✅ ETAPA 18 - IA Profissional (iniciada 2026-08-24)
 - 18.1 Auditoria: 12 modelos {SYMBOL}_{TF}.pkl em Python/models (todos M5, STALE 7.7d); orfaos: ai/model.pkl + models_backup*. 0- 18.3 Model Registry: Python/model_registry.py (exists/is_ready/version/age/feature_version/path) -> READY/STALE/UNAVAILABLE/ERROR/TRAINING. 0- 18.4 Prediction Gateway: Python/prediction_gateway.py (contrato unico, valida via registry). 0- 18.5 Estados OK: XAUUSD_M15(inexistente)=UNAVAILABLE; XAUUSD_M5(antigo)=STALE - nunca BUY/SELL. 0- Pendentes: 18.2, 18.6-18.12.
 
+
+- 18.2 Contrato de Features FECHADO: Python/ai/feature_contract.py (25F-v1, hash, validate_feature_frame: ordem/nomes/tipos/NaN, prepare_features_contract).
+- Conf: lista identica ao feature_engineering.py/pipeline.py -> treinamento == prediccao.
+
