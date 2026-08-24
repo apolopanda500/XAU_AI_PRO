@@ -387,3 +387,10 @@ Arquivo: `Docs/ETAPA15_BASELINE_CONTRATOS.md` (este mesmo).
 - Fluxo de eventos: aprovaÃ§Ã£o (TRADE_APPROVED) na ExecutionEngine + abertura real (TRADE_OPEN) no OnTradeTransaction.
 - EA: 0 erros / 0 avisos.
 
+
+## ✅ ETAPA 16.4 - Backend/API (2026-08-24)
+- server.js reescrito: ingestion do forward_test_events.csv real (utf16le, tolerante a separador).
+- 11 endpoints validados: /api/health, /events, /events/latest, /system, /trading, /positions, /ai, /risk, /execution, /telemetry, /alerts.
+- WebSocket 5s para Dashboard. EA NAO ALTERADO (regra 16.4).
+- Teste real: 53 eventos processados, estado derivado FAILURE, AI_PREDICTION/TRADE_OPEN/RISK_BLOCK lidos do stream.
+

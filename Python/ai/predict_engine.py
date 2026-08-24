@@ -1,6 +1,6 @@
-﻿"""LEGACY/ORFAO - NAO CONECTADO (15.3). Usar pipeline.py (predict_all -> save_prediction_json).
+"""LEGACY/ORFAO - NAO CONECTADO (15.3). Usar pipeline.py (predict_all -> save_prediction_json).
+Signal builder para previsoes XAU_AI_PRO (mantido como referencia).
 """
-"""Signal builder for XAU_AI_PRO predictions."""
 
 from __future__ import annotations
 

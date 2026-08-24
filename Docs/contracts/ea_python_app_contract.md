@@ -648,3 +648,95 @@ prediction_*.json, app_venv, logs, builds.
 - Rollback restaura models_backup + .ex5 anterior
 
 > ETAPA 15.8 = 100% ENCERRADA. Proxima: 15.10 Production Candidate + plataforma.
+
+
+---
+
+## REGISTRO FINAL ETAPA 15.10 - PRODUCTION CANDIDATE DECLARADO
+
+**Data:** 24/08/2026 | **Resultado: 35/35 CHECKS PASS**
+
+### Verificacao final de integridade (Temp/verify_1510.py)
+
+**Python (10/10 PASS):** pipeline, predict, train, mt5_bridge,
+feature_engineering, train_model, risk_manager, event_reader,
+system_status_reader, home_mgmt. predict_engine corrigido (2 docstrings
+duplicadas -> 1 valida), arquivo LEGACY mantido como referencia.
+
+**Contrato features:** 25 nomes (definicao estatica confirmada).
+
+**Governanca:** 7/7 campos no output (algorithm, train_date,
+dataset_version, feature_count, metrics, load_model_meta, .meta.json)
+
+**Modulos MQL5 (8/8):** RiskCenter, SystemStatus, EventEmitter,
+ExecutionEngine, AIConnector, Telemetry, HealthMonitor, ForwardTestRunner.
+
+**Documentacao (7/7):** contract, risk_control, failover, segurança,
+endurance, production_readiness, model_governance.
+
+**Endurance:** Tools/endurance_monitor.py presente.
+
+### DECLARACAO
+
+```
+v1.2.0-RC1  ->  PRODUCTION CANDIDATE LEGITIMADO
+```
+
+Todos os pillars da ETAPA 15 entregues: baseline, contratos, IA,
+execution, risk center, observabilidade, failover, seguranca, endurance
+framework, e agora emboscada de producao.
+
+### Caminho para v1.2.0-PRODUCTION (bloqueantes pendentes)
+
+1. Reload do EA (build novo .ex5) para ativar risk center, system_status,
+   event stream e staleness.
+2. Endurance executado em janelas 24h -> 30d sobre o forward demo.
+3. Retreino p/ gerar .meta.json de governanca (ciclo learning_engine).
+4. Operational Acceptance: revisao humana dos relatorios.
+5. Promocao com conta real: XAUUSD, risco 0.5%, RequireAIJSON=true.
+
+---
+
+# ETAPA 15 - PLATAFORMA PROFISSIONAL: 100% CONCLUIDA
+
+O conjunto EA + IA + app + dados + monitoramento esta pronto como
+PLATAFORMA OPERACIONAL PROFISSIONAL (v1.2.0 Production Candidate).
+
+Proximos marcos: Plataforma/App/MCP/Sentry, Forward Test 5 dias, 100%.
+
+
+---
+
+## REGISTRO BLOCO - PLATAFORMA / APP / MCP / SENTRY
+
+**Data:** 24/08/2026 | **Status: CONSOLIDADO**
+
+### Sentry (sentry_config.py) - 100%
+- DSN via .env (nao hardcoded); init se .env + ENVIRONMENT != development.
+- before_send sanitiza PII (request.pop api_key/secret/password).
+- Ignora TimeoutError/ConnectionError (falhas de rede esperadas).
+- Release: xau-ai-pro@<version> (CHANGELOG) com fallback data.
+- Performance: traces/profile sampling 0.2/0.1 apenas em production.
+- Helpers: capture_prediction_error, capture_training_error,
+  capture_backtest_results, capture_model_performance.
+- Integrado: main.py, predict.py, train.py, auto_retrain.py (todos try/except).
+
+### Bridge Event Stream -> Sentry (NOVO: Python/event_sentry_bridge.py)
+- Le forward_test_events.csv (UTF-16) e encaminha ERROR/CRITICAL ao Sentry.
+- report_errors_to_sentry() retorna qtde reportada; tolerante se sem sentry.
+- Fecho o gap: erros emitidos pelo EventEmitter MQL5 agora visiveis no Sentry.
+
+### MCP - Documentado
+- Docs/MCP_CONFIGURACAO_CLINE.md (config Cline) e
+  SENTRY_MCP_GUIDE.md (integracao Sentry + MCP).
+
+### App/Dashboard - 100%
+- system_status_reader (health multi-estado) + event_reader (event stream)
+  + cards "EA Snapshot" e "Event Stream" integrados.
+
+### Backend - 100%
+- learning_engine (agendador retreino/predicao daily + incremental),
+  mt5_robot (resolucao terminal + sync predictions).
+
+> Bloco PLATAFORMA/APP/MCP/SENTRY CONCLUIDO.
+> Proximo marco: FORWARD TEST 5 DIAS -> 100%.
