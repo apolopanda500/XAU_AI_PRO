@@ -438,3 +438,7 @@ Arquivo: `Docs/ETAPA15_BASELINE_CONTRATOS.md` (este mesmo).
 - 18.2 Contrato de Features FECHADO: Python/ai/feature_contract.py (25F-v1, hash, validate_feature_frame: ordem/nomes/tipos/NaN, prepare_features_contract).
 - Conf: lista identica ao feature_engineering.py/pipeline.py -> treinamento == prediccao.
 
+
+- 18.6 Confidence profissional: Python/ai/confidence.py (evaluate_confidence: pred+conf+model_status+age+features+version).
+- Regra: STALE/conf<0.5/age>300s -> NAO e sinal; so READY+conf>=0.5+age<=300+features+version = VALID.
+
