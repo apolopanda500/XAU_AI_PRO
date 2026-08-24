@@ -454,3 +454,15 @@ Arquivo: `Docs/ETAPA15_BASELINE_CONTRATOS.md` (este mesmo).
 - 18.12 Testes: Python/test_etapa18.py -> 8/8 OK (T1 READY, T2 UNAVAILABLE, T3 ERROR, T4 STALE, T5 UNAVAILABLE, T6 FEATURE_ERROR, T7 VALID, T8 READY).
 **ETAPA 18 CONCLUIDA (18.1-18.12).**
 
+
+## ✅ ETAPA 19 - Seguranca Avancada (2026-08-24)
+- Secrets: .env fora do git; chaves API vazias no config; pbkdf2_hmac(100k) p/ senha admin.
+- Corrigido: config.json (hash+salt admin) removido do versionamento; app/data e Ultimate/config no .gitignore.
+- Dashboard/backend: sem tokens hardcoded; logs sem dados sensiveis.
+- Pendente: hash/salt ainda no historico git (requer reescrita p/ limpeza total).
+
+
+- Senha admin ROTACIONADA (2026-08-24): novo salt+hash pbkdf2; hash antigo invalidado; config.json fora do git.
+- Politica de seguranca formalizada: Docs/security_policy_etapa19.md (secrets, perms, logs).
+**ETAPA 19 CONCLUIDA (secrets fora do git, rotacao admin, politica, sem tokens no dashboard).**
+
