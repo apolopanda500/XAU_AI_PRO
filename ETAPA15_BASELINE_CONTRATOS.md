@@ -423,3 +423,10 @@ Arquivo: `Docs/ETAPA15_BASELINE_CONTRATOS.md` (este mesmo).
 - Achados reais: 2 duplicatas no AuditLog; 2 divergencias stream-vs-audit.
 - Pendentes: 17.2, 17.5, 17.6, 17.7.
 
+
+### 17.5 Dashboard: secao Backend API (ja cobre SYSTEM/TRADING/AI/RISK/EXECUTION/HEALTH/ALERTS).
+
+### 17.6 Seguranca operacional: .env fora do git (BROKER_API_KEY etc.), apenas .env.example versionado, sem tokens no codigo/dashboard.
+
+### 17.7 Teste integracao VALIDADO: Backend OFF -> CSV preservado (97 eventos, sem perda) -> restart -> estado reconstruido (ERROR, IA STALE).
+
