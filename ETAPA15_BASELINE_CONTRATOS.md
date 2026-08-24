@@ -442,3 +442,7 @@ Arquivo: `Docs/ETAPA15_BASELINE_CONTRATOS.md` (este mesmo).
 - 18.6 Confidence profissional: Python/ai/confidence.py (evaluate_confidence: pred+conf+model_status+age+features+version).
 - Regra: STALE/conf<0.5/age>300s -> NAO e sinal; so READY+conf>=0.5+age<=300+features+version = VALID.
 
+
+- 18.8 EventStream IA: Python/ai/ai_event_stream.py (7 eventos: AI_PREDICTION/ERROR/STALE/UNAVAILABLE/MODEL_READY/MODEL_CHANGED/FEATURE_ERROR) - append UTF-16 10 colunas.
+- 18.9 Metricas IA: quebradas em telemetria (contagem por tipo) via /api/telemetry; evolucao pos-acumulo.
+
