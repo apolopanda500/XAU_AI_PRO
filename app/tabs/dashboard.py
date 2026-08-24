@@ -14,7 +14,7 @@ from app.config_manager import get_config
 from app.market_data import MarketData
 from app.mt5_robot import MT5Robot
 from app.system_status_reader import read_system_status, summarize
-from app.event_reader import event_status_lines  # ETAPA 15.6
+from app.event_reader import event_status_lines`nfrom app.backend_client import fetch_all, status_lines  # ETAPA 16.5  # ETAPA 15.6
 from app.theme.mexc import Theme
 
 
@@ -91,10 +91,17 @@ class DashboardTab:
         self.ea_frame = tk.Frame(ea_card.body, bg=Theme.CARD)
         self.ea_frame.pack(fill="both", expand=True, padx=8, pady=8)
 
+        # ETAPA 16.5: seccao Backend API (16.4)
+        api_card = Card(bottom, title='backend API (16.4)')
+        api_card.grid(row=2, column=0, columnspan=2, sticky='nsew', pady=(10, 0))
+        self.api_frame = tk.Frame(api_card.body, bg=Theme.CARD)
+        self.api_frame.pack(fill='both', expand=True, padx=8, pady=8)
+
     def refresh(self) -> None:
         self._update_account()
         self._update_services()
         self._update_system_status()
+        self._update_backend_api()
         self.last_update.configure(text=f"Atualizado: {datetime.now().strftime('%H:%M:%S')}")
         self.on_status("Dashboard atualizado")
 
@@ -141,6 +148,27 @@ class DashboardTab:
             tk.Label(row, text=value, bg=Theme.CARD,
                      fg=color_map.get(color, Theme.TEXT),
                      font=(Theme.FONT_FAMILY, 9, "bold")).pack(side="right")
+
+    def _update_backend_api(self) -> None:
+        """ETAPA 16.5: consome a API do backend (16.4) - sem tocar no EA."""
+        for w in self.api_frame.winfo_children():
+            w.destroy()
+        color_map = {"": Theme.TEXT, "ok": Theme.SUCCESS,
+                     "warn": Theme.WARNING, "bad": Theme.DANGER}
+        try:
+            data = fetch_all()
+            lines = status_lines(data)
+        except Exception:
+            lines = [("Backend API", "ERRO DE LEITURA", "bad")]
+        for name, value, color in lines:
+            row = tk.Frame(self.api_frame, bg=Theme.CARD)
+            row.pack(fill="x", pady=2)
+            tk.Label(row, text=name, bg=Theme.CARD, fg=Theme.TEXT,
+                     font=(Theme.FONT_FAMILY, 10)).pack(side="left")
+            tk.Label(row, text=value, bg=Theme.CARD,
+                     fg=color_map.get(color, Theme.TEXT),
+                     font=(Theme.FONT_FAMILY, 9, "bold")).pack(side="right")
+
 
     def _update_account(self) -> None:
         info = self.robot.account_info()
@@ -213,4 +241,5 @@ class DashboardTab:
                 return s.connect_ex(("127.0.0.1", int(port))) == 0
         except Exception:
             return False
+
 

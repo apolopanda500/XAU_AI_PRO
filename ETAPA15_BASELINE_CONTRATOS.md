@@ -394,3 +394,9 @@ Arquivo: `Docs/ETAPA15_BASELINE_CONTRATOS.md` (este mesmo).
 - WebSocket 5s para Dashboard. EA NAO ALTERADO (regra 16.4).
 - Teste real: 53 eventos processados, estado derivado FAILURE, AI_PREDICTION/TRADE_OPEN/RISK_BLOCK lidos do stream.
 
+
+## ✅ ETAPA 16.5 - Dashboard profissional (2026-08-24)
+- app/backend_client.py: cliente da API 16.4 (11 endpoints, fallback offline).
+- Dashboard (app/tabs/dashboard.py): nova secao 'Backend API (16.4)' com Estado, Eventos, IA, Risk, Trades, Execucao, Alertas.
+- EA NAO ALTERADO. Fonte: forward_test_events.csv via backend.
+
