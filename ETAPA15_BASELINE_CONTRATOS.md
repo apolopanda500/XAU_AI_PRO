@@ -498,3 +498,10 @@ Arquivo: `Docs/ETAPA15_BASELINE_CONTRATOS.md` (este mesmo).
 - Bloqueantes: endurance 24h+, forward demo 30d (tempo real), PF 0.46 precisa >1.
 - EA intacto; sem recomendacao de capital real ainda.
 
+
+## ✅ ETAPA 25 - FINAL RELEASE (2026-08-24)
+- Docs/FINAL_RELEASE_etapa25.md: relatorio final consolidado (ETAPAS 1-25).
+- Pacote v1.2.0-RC1 = PRODUCTION CANDIDATE final; pendentes de producao: endurance 24h+, forward 30d, PF>1.
+- EA INTOCADO em tudo desde ETAPA 15.6; plataforma completa e estavel.
+**ROADMAP 1-25 CONCLUIDO (candidato final).**
+
