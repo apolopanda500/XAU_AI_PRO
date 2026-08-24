@@ -505,3 +505,39 @@ Arquivo: `Docs/ETAPA15_BASELINE_CONTRATOS.md` (este mesmo).
 - EA INTOCADO em tudo desde ETAPA 15.6; plataforma completa e estavel.
 **ROADMAP 1-25 CONCLUIDO (candidato final).**
 
+
+
+## [OK] ETAPA 20.1 - BASELINE CONGELADO (2026-08-24 17:44 -03:00)
+
+Estado oficial (imutavel):
+
+| Item | Status |
+|---|---|
+| EA XAU_AI_PRO v1.2.0 | compilacao 0 erros / 0 avisos |
+| 89 .mqh/.mq5 de codigo-fonte limpos | UTF-8 sem BOM |
+| Encoding corrigido | sim (incidente BOM duplo C3 AF C2 BB resolvido) |
+| Compilacao x64 | 0/0, cpu='X64 Regular', 9030 ms |
+| Arquitetura / trading / IA / Risk / Execution | CONGELADO (nao alterar) |
+| Backend/Dashboard | baseline |
+| Versao | v1.2.0 |
+
+Evidencia de build (registro imutavel v1.2.0):
+
+- Commit do estado limpo (baseline congelado): f182271476e9edb59138d4b3d3662776252780e0
+- Commit final (gitignore stats runtime, HEAD limpo): 22fdbf45ada6689c4856e481c1b74470f7892d6f
+- SHA-256 do XAU_AI_PRO.ex5: 036cc18d6015913c6919d3856f8211bbe4e1e3e870e81fb728a0c2cfd584cfe4
+- SHA-256 do XAU_AI_PRO.mq5: e72caefb8ce9c1ad879f1e54c87ff41295557a7f99aa28765a1bff46724ef333
+- Tamanho do .ex5: 402226 bytes
+- MetaEditor/MQL5 build: 6140 | Alvo x64 | Data/hora build: 2026-08-24 17:44 -03:00 (UTC 20:44)
+- Resultado compilacao: 0 erros / 0 avisos (9030 ms)
+- Git working tree: LIMPO (nothing to commit, working tree clean)
+- Branch: main | push github/apolopanda500/mql5 839b803..22fdbf:main->main
+
+Regra de imutabilidade (a partir de agora):
+
+- DecisionEngine / RiskEngine / ExecutionEngine / AIEngine / AIConnctor / SignalCore / NewsFilter = CONGELADOS.
+- Qualquer mudanca => branch/versao experimental v1.2.1, comparada contra o baseline v1.2.0. NAO alterar o baseline diretamente.
+- O preprocessador MQL5 processa #include antes da compilacao: mudanca pequena em um .mqh pode gerar cascata de erros no EA.
+- PF=0.46 deve ser MEDIDO (causa raiz), NAO forcado >1. Alteracao apenas apos medicao e via v1t1 com justificativa.
+- Sequencia pos-baseline: 20.2 endurance tecnica -> 20.3 forward test prolongado -> 20.4 analise estatistica -> 20.5 performance/PF -> 20.6 failure & restore -> 20.7 production gate definitivo (PASS/WARNING/BLOCKED).
+
