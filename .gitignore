@@ -54,3 +54,5 @@ Logs/*
 **/MQL5/Files/Data/system_status.json
 **/secrets.*
 **/config.local.* 
+**/app/data/config.json 
+**/Ultimate/config.json 
