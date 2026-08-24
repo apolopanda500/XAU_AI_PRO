@@ -400,3 +400,12 @@ Arquivo: `Docs/ETAPA15_BASELINE_CONTRATOS.md` (este mesmo).
 - Dashboard (app/tabs/dashboard.py): nova secao 'Backend API (16.4)' com Estado, Eventos, IA, Risk, Trades, Execucao, Alertas.
 - EA NAO ALTERADO. Fonte: forward_test_events.csv via backend.
 
+
+## ✅ ETAPA 16.6 - Teste E2E (2026-08-24)
+- Cadeia validada: EA - - - 16.4 - - 16.5.
+- 9/9 endpoints OK com backend unico (health, system, events/latest, ai, risk, trading, execution, telemetry, alerts).
+- Achado corrigido: multiplos processos node na porta 3001 causavam crash; limpeza - processo estavel.
+- Resilienda: CSV vivo (72 linhas, novos eventos 18:33); backend deriva estado FAILURE dos eventos reais.
+- Cenario Python/Stream OFF: backend tolera CSV ausente (retorna events:[] e health stream_ok:false).
+**ETAPA 16 CONCLUIDA (16.1-16.6).**
+
