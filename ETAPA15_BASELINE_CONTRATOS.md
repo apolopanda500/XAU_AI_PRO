@@ -473,3 +473,9 @@ Arquivo: `Docs/ETAPA15_BASELINE_CONTRATOS.md` (este mesmo).
 - Backtest de endurance do EA iniciado (M5, 20260814-20260824) para validacao longa.
 - EA intacto; observabilidade mantida.
 
+
+## ✅ ETAPA 21 - Reconciliacao financeira (2026-08-24)
+- Python/financial_reconciliation.py: cruza P/L real do broker com audit/event stream.
+- Dados reais (7 trades fechados): win rate 57.14%, PF 0.46, expectativa -0.23, P/L -1.62, 0 inconsistencias.
+- Por simbolo: USDJPY/USDCHF +, AUDUSD/GBPUSD - (R:R desbalanceado).
+
