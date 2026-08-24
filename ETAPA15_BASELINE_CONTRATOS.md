@@ -491,3 +491,10 @@ Arquivo: `Docs/ETAPA15_BASELINE_CONTRATOS.md` (este mesmo).
 - Paper trading ATIVO: 7 trades reconciliados (ETAPA 21) foram executados em demo com dados de mercado reais.
 - EA intacto; validação de producao em ambiente seguro confirmada.
 
+
+## ✅ ETAPA 24 - Production Validation Gate (2026-08-24)
+- Docs/production_gate_etapa24.md: gate estrito criado (qualidade, contratos, IA, observabilidade, seguranca, demo).
+- VERDICT: PRODUCTION CANDIDATE (nao PRODUCTION).
+- Bloqueantes: endurance 24h+, forward demo 30d (tempo real), PF 0.46 precisa >1.
+- EA intacto; sem recomendacao de capital real ainda.
+
