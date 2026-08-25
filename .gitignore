@@ -30,6 +30,7 @@ __pycache__/
 MQL5/Experts/*/*.ex5
 MQL5/Experts/*/*.log
 MQL5/Scripts/*.ex4
+MQL5/Scripts/*.ex5
 build/
 Temp/
 Backup_v120/
