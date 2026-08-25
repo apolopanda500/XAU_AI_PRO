@@ -29,6 +29,7 @@ __pycache__/
 # XAU_AI_PRO artifacts
 MQL5/Experts/*/*.ex5
 MQL5/Experts/*/*.log
+MQL5/Scripts/*.ex4
 build/
 Temp/
 Backup_v120/
