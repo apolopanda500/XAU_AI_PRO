@@ -39,6 +39,15 @@ try:
 except Exception:
     cs = None
 
+# Sentry (v1.2.2-integration): monitoramento tolerante - nao quebra se nao configurado
+try:
+    _py_dir = Path(__file__).resolve().parent.parent / "Python"
+    sys.path.insert(0, str(_py_dir))
+    from sentry_config import init_sentry
+    init_sentry()
+except Exception:
+    pass
+
 
 # ============================================================
 # MODELOS

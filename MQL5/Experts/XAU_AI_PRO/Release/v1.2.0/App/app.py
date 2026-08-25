@@ -17,6 +17,16 @@ DB_PATH = PROJECT_ROOT / "database" / "trading.db"
 # Cliente IA (LiteLLM)
 client = OpenAI(api_key="anything", base_url="http://localhost:4000")
 
+# Sentry (v1.2.2-integration): monitoramento tolerante - nao quebra se nao configurado
+try:
+    import sys as _sys
+    _py_dir = Path(__file__).resolve().parent.parent / "Python"
+    _sys.path.insert(0, str(_py_dir))
+    from sentry_config import init_sentry
+    init_sentry()
+except Exception:
+    pass
+
 
 @st.cache_data
 def load_dataset() -> pd.DataFrame | None:
