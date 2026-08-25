@@ -13,24 +13,27 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Python 3.11 (cache pip)
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
           cache: 'pip'
 
-      - name: Install dependencies
+      - name: Install dependencies (CI)
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          # MetaTrader5 e exclusivo Windows (sem wheel Linux) -> filtrado no CI.
+          # No desktop Windows use o requirements.txt completo normalmente.
+          grep -viE '^\s*MetaTrader5' requirements.txt > /tmp/requirements-ci.txt
+          pip install -r /tmp/requirements-ci.txt
 
       - name: Validate Python modules (syntax check)
         run: |
           python -m compileall -q \
             MQL5/Experts/XAU_AI_PRO/Release/v1.2.0/Python \
-            Backend App 2>/dev/null || true
+            Backend App || true
           echo "Syntax validation done"
 
       - name: Package release bundle
@@ -39,6 +42,8 @@ jobs:
           zip -r "dist/XAU_AI_PRO-${{ github.ref_name }}.zip" \
             "MQL5/Experts/XAU_AI_PRO/Release/v1.2.0" \
             Python \
+            Backend \
+            App \
             requirements.txt \
             > /dev/null
           ls -lh dist/
