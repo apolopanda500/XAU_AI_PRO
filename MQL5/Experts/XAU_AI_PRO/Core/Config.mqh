@@ -177,6 +177,17 @@ input bool   RequireAIJSON      = false;
 // Padrao 900s = 15 min (~3 candles M5).
 //==================================================
 input int    MaxPredictionAgeSec = 900;
+//==================================================
+// IA - GATE DIRECIONAL (ETAPA 20.x)
+// Exige que a predicao do modelo concorde com a
+// direcao do sinal tecnico (BUY/SELL) acima de um
+// limiar de probabilidade. Desligado por padrao
+// para preservar o baseline; ative nos testes que
+// medem o impacto da IA na win-rate.
+//==================================================
+input bool   AIRequireDirection  = false;
+input double AIMinDirectionProb  = 60.0;   // prob minima (0-100) da direcao para liberar
+
 
 //==================================================
 // KCI v1.2.0

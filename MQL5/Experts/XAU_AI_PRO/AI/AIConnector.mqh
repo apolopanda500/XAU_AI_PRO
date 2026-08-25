@@ -155,6 +155,11 @@ bool LoadAIPrediction(string symbol="")
    // SÃƒÂ­mbolo normalizado (nome base do pipeline Python)
    string normalized = NormalizeAISymbol(symbol);
 
+   // Estrategia Tester usa sandbox proprio (agente local). A pasta
+   // Common (MQL5\Files\Common) e compartilhada terminal<->tester;
+   // sem ela o JSON de predicao nunca e encontrado no backtest.
+   bool aiCommonFile=false;
+
    string fileName=
       "Data\\prediction_" +
       symbol +
@@ -171,6 +176,20 @@ bool LoadAIPrediction(string symbol="")
 
       if(FileIsExist(altName))
          fileName=altName;
+   }
+
+   // Fallback FILE_COMMON (backtest/tester): o sandbox do agente nao
+   // enxerga MQL5\Files do terminal, mas enxerga MQL5\Files\Common.
+   if(!FileIsExist(fileName) && FileIsExist(fileName, FILE_COMMON))
+   {
+      aiCommonFile=true;
+      if(logOnce)
+         Print(
+            "AI LOAD COMMON | ",
+            symbol,
+            " | FILE=",
+            fileName
+         );
    }
 
 
@@ -190,7 +209,7 @@ bool LoadAIPrediction(string symbol="")
    // FILE EXISTS
    //================================================
 
-   if(!FileIsExist(fileName))
+   if(!FileIsExist(fileName) && !aiCommonFile)
    {
       if(logOnce)
          Print(
@@ -206,12 +225,15 @@ bool LoadAIPrediction(string symbol="")
    // OPEN FILE
    //================================================
 
+   int commonFlags = aiCommonFile ? FILE_COMMON : 0;
+
    int file=
       FileOpen(
          fileName,
          FILE_READ |
          FILE_TXT |
-         FILE_ANSI
+         FILE_ANSI |
+         commonFlags
       );
 
 
