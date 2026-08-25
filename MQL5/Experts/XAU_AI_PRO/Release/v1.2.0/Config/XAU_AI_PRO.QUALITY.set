@@ -1,0 +1,34 @@
+; XAU_AI_PRO QUALITY config - Nivel 2: filtros de qualidade ON
+; Protecoes (BE/Trailing/Partial) + Spread + Sessao (7h-23h) + News + MTF + ADX + Trend + AI
+; MULTI SYMBOL restaurado (lista completa do Config)
+; Obs: EnableNewsFilterReal foi removido no Config v1.3.0 (NewsFilter profissional)
+; Load: EA properties > Inputs > Load > XAU_AI_PRO.QUALITY.set
+;
+EnableBreakEven=true||false||0||true||N
+BreakEvenTrigger=80||80||1||800||N
+BreakEvenOffset=10||10||1||1000||N
+EnableTrailingATR=true||false||0||true||N
+ATRMultiplier=1.2||1.2||0.120000||12.000000||N
+EnablePartialClose=true||false||0||true||N
+PartialTrigger=150||150||1||1500||N
+PartialPercent=30.0||30.0||3.000000||300.000000||N
+EnableSpreadFilter=true||false||0||true||N
+MaxSpread=50.0||30.0||3.000000||300.000000||N
+EnableSessionFilter=true||false||0||true||N
+TradeStartHour=7||0||1||10||N
+TradeEndHour=23||24||1||240||N
+EnableTrendFilter=true||false||0||true||N
+EnableADXFilter=true||false||0||true||N
+MinimumADX=18.0||18.0||1.800000||180.000000||N
+EnableMTFConfirmation=true||false||0||true||N
+ConfirmTF1=15||15||0||49153||N
+MTFUseClosedCandle=true||false||0||true||N
+EnableNewsFilter=true||false||0||true||N
+NewsCurrencies=
+NewsImpactThreshold=2||2||1||3||N
+NewsMinutesBefore=30||30||1||300||N
+NewsMinutesAfter=30||30||1||300||N
+EnableAIFilter=true||false||0||true||N
+EnableVolatilityFilter=false||false||0||true||N
+EnableMultiSymbol=true||false||0||true||N
+Symbols=XAUUSD,EURUSD,GBPUSD,USDJPY,AUDUSD,USDCAD,NZDUSD,USDCHF,XAGUSD,US30,US500,USTEC
