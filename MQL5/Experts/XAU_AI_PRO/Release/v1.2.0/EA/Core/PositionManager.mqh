@@ -232,9 +232,14 @@ void TrailingStopATR(string symbol, ulong ticket)
          return;
    }
 
-   // Normalizar SL para o sÃ­mbolo
+   // Normalizar SL para o simbolo
    int digits=(int)SymbolInfoInteger(symbol,SYMBOL_DIGITS);
    newSL=NormalizeDouble(newSL,digits);
+
+   // v1.2.2-opt: skip se SL alvo == SL atual (apos normalizacao).
+   // Evita OrderSend "modify [no changes]" repetido a cada tick.
+   if(MathAbs(newSL-sl)<point/2.0)
+      return;
 
    trade.PositionModify(symbol,newSL,tp);
 }

@@ -104,6 +104,11 @@ ulong ticket = PositionGetTicket(i);
   int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
   newSL = NormalizeDouble(newSL, digits);
 
+  // v1.2.2-opt: skip se SL alvo == SL atual (apos normalizacao).
+  // Evita OrderSend "modify [no changes]" repetido a cada tick.
+  if(MathAbs(newSL-currentSL) < point/2.0)
+     continue;
+
   ResetLastError();
 
   if(!trade.PositionModify(symbol, newSL, currentTP))
