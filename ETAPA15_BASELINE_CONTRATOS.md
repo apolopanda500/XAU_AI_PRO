@@ -580,3 +580,50 @@ Regra: PF=0.46 continua a ser MEDIDO (causa raiz) na ETAPA 20.5; NAO forcado >1.
 Situacao atual: run endurance 20.2 em background (run iniciado, otimizacao 15 pass ticks reais).
 Forward test 20.3 formalmente iniciado com o eixo demo ativo.
 
+## [OK] FASE 0 (2026-08-25) - RESTAURACAO DA SINCRONIA DO BASELINE + DIAGNOSTICO
+
+### A. Diagnostico do "EA parou de abrir posicoes"
+
+Nenhum modulo de veto bloqueia o EA (Risk/Safety/Circuit/News/Connection/Equity/IA)
+=> CRITICAL all PASS, Recovery OK, 0x "[TRADE BLOCK]" no log do dia.
+
+O bloqueio real esta em `SignalCore.GetSignal()` -> `CopyBuffer(iRSI()) <= 0`
+para os simbolos secundarios escaneados -> `GetSignal()==0` -> "[SCANNER] BLOCK | No Signal".
+
+- Dia 24/08: Falha copiar RSI = 3082 | SIGNAL OK = 55 | TRADE EXECUTADO = 1.
+- Dia 25/08: Falha copiar RSI =  38 | SIGNAL OK =  0 | TRADE EXECUTADO = 0.
+
+Causa: historico M5 dos simbolos secundarios nao carregado no terminal
+(bases\MetaQuotes-Demo\history vazia) -> indicador nao calcula RSI.
+
+### B. Duas arvores de fonte divergentes (raiz da inconsistencia de hashes)
+
+- Workspace real do MT5 (fonte da verdade de build/execucao):
+  C:\Users\Micro\AppData\Roaming\MetaQuotes\Terminal\D0E8209F77C8CF37AD8BF550E51FF075\MQL5\Experts\XAU_AI_PRO
+- Repositorio do projeto (incompleto):
+  C:\Users\Micro\Downloads\XAU_AI_PRO\MQL5
+
+O workspace continha modulos NAO versionados no repo: Core\RiskCenter.mqh,
+Monitoring\SystemStatus.mqh, Include\KCI\*.mqh (dependencia de build). Alem disso,
+quase todos os .mqh/.mq5 do repo divergiam do workspace (conteudo + encoding BOM).
+
+### C. Restaurada a sincronia (fonte da verdade = workspace real do MT5)
+
+- Copiados 89 arquivos .mq5/.mqh do workspace -> repositorio (conteudo + encoding limpo, sem BOM duplo).
+- Adicionados: Core\RiskCenter.mqh, Monitoring\SystemStatus.mqh, Include\KCI\KCI_*.
+- .ex5 real que roda (build 21:25) copiado para o repo (nao versionado, gitignored).
+- Removido T7_BackupRecoveryTest.mq5 (EA de teste auxiliar, nao e do XAU_AI_PRO).
+
+### D. Hashes do baseline REAL v1.2.0 (fonte: workspace que compila 0/0 e roda)
+
+- SHA-256 do XAU_AI_PRO.mq5: 787B53206D546E5E4BA9D5F41B84FDE50870A6A825A697FB7E2488C479D39
+- SHA-256 do XAU_AI_PRO.ex5: 35EA2DE37CB6FF48E5CFE5291032563B359ABAEA4EA6D0FF6D7C91D3B3B5
+- Tamanho .ex5: 401904 bytes | Build: 2026-08-24 21:25 (8040 ms, cpu='X64 Regular')
+- Resultado compilacao (MetaEditor): 0 erros / 0 avisos
+- Encoding corrigido: sem BOM inicial no .mq5 (nao ha C3 AF C2 BB). UTF-8 simples ok.
+
+### E. Regra mantida
+
+Baseline v1.2.0 agora SINCRONIZADO a partir do workspace real (fonte da verdade).
+Qualquer ajuste em DecisionEngine/RiskEngine/ExecutionEngine/AI etc => branch v1.2.1,
+NUNCA alterar o baseline diretamente. PF=0.46 segue a ser MEDIDO (causa raiz) e NAO forcado >1.

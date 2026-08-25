@@ -1,4 +1,4 @@
-﻿// XAU_AI_PRO v1.2.0
+// XAU_AI_PRO v1.2.0
 #ifndef EXECUTIONENGINE_MQH
 #define EXECUTIONENGINE_MQH
 
@@ -292,4 +292,3 @@ bool ExecuteTrade(int signal)
 }
 
 #endif
-  

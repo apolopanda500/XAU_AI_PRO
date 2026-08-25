@@ -1,6 +1,9 @@
-﻿// XAU_AI_PRO v1.2.0
+// XAU_AI_PRO v1.2.0
 #ifndef AICONNECTOR_MQH
 #define AICONNECTOR_MQH
+
+#include "../Core/Config.mqh"            // self-contained: inputs (MaxPredictionAgeSec etc.)
+#include "../Monitoring/EventEmitter.mqh" // self-contained: EventAIBlock (guard idempotente)
 
 //==================================================
 // AI CONNECTOR
@@ -9,12 +12,12 @@
 //
 // RESPONSABILIDADE:
 // - Ler prediction_<SYMBOL>.json
-// - Validar o sÃ­mbolo
+// - Validar o sÃƒÂ­mbolo
 // - Armazenar os dados da IA
 // - Disponibilizar getters
 //
 // OBS:
-// A funÃ§Ã£o AITradeAllowed() NÃƒO fica aqui.
+// A funÃƒÂ§ÃƒÂ£o AITradeAllowed() NÃƒÆ’O fica aqui.
 // Ela pertence ao AIEngine.mqh.
 //==================================================
 
@@ -38,6 +41,12 @@ string AI_ModelID="";
 string AI_FeatureHash="";
 double AI_InferenceMs=0.0;
 string AI_TimestampUTC="";
+
+// ETAPA 15.3: governanca completa (publicados pelo pipeline Python)
+string AI_Algorithm="";
+string AI_TrainDate="";
+string AI_DatasetVersion="";
+string AI_Metrics="";
 
 // Staleness (ETAPA 15.3): idade da previsao em segundos.
 // AI_IsStale=true quando a previsao excedeu MaxPredictionAgeSec
@@ -67,6 +76,11 @@ void ResetAIState()
    AI_InferenceMs=0.0;
    AI_TimestampUTC="";
 
+   AI_Algorithm="";
+   AI_TrainDate="";
+   AI_DatasetVersion="";
+   AI_Metrics="";
+
    AI_IsStale=false;
    AI_AgeSeconds=-1.0;
 }
@@ -74,7 +88,7 @@ void ResetAIState()
 
 //==================================================
 // NORMALIZE AI SYMBOL
-// Converte o sÃ­mbolo do broker no nome base usado
+// Converte o sÃƒÂ­mbolo do broker no nome base usado
 // pelo pipeline Python. Ex: GOLD# -> XAUUSD,
 // BTCUSD# -> BTCUSD, XAUUSDc -> XAUUSD.
 //==================================================
@@ -138,7 +152,7 @@ bool LoadAIPrediction(string symbol="")
    if(symbol=="")
       return false;
 
-   // SÃ­mbolo normalizado (nome base do pipeline Python)
+   // SÃƒÂ­mbolo normalizado (nome base do pipeline Python)
    string normalized = NormalizeAISymbol(symbol);
 
    string fileName=
@@ -146,8 +160,8 @@ bool LoadAIPrediction(string symbol="")
       symbol +
       ".json";
 
-   // Fallback: se o arquivo exato nÃ£o existe, tenta o nome normalizado
-   // (pipeline Python gera prediction_XAUUSD.json, nÃ£o prediction_GOLD#.json)
+   // Fallback: se o arquivo exato nÃƒÂ£o existe, tenta o nome normalizado
+   // (pipeline Python gera prediction_XAUUSD.json, nÃƒÂ£o prediction_GOLD#.json)
    if(!FileIsExist(fileName) && normalized!=symbol)
    {
       string altName=
@@ -332,6 +346,31 @@ bool LoadAIPrediction(string symbol="")
          "timestamp_utc"
       );
 
+   // ETAPA 15.3: campos de governanca (publicados pelo pipeline)
+   string jsonAlgorithm=
+      ExtractJSON(
+         json,
+         "algorithm"
+      );
+
+   string jsonTrainDate=
+      ExtractJSON(
+         json,
+         "train_date"
+      );
+
+   string jsonDatasetVersion=
+      ExtractJSON(
+         json,
+         "dataset_version"
+      );
+
+   string jsonMetrics=
+      ExtractJSON(
+         json,
+         "metrics"
+      );
+
 
    //================================================
    // VALIDATE SYMBOL
@@ -367,9 +406,9 @@ bool LoadAIPrediction(string symbol="")
 
    //================================================
    // SYMBOL MATCH
-   // Aceita o sÃ­mbolo exato ou o normalizado
+   // Aceita o sÃƒÂ­mbolo exato ou o normalizado
    // (ex: arquivo prediction_XAUUSD.json com symbol=XAUUSD
-   //  Ã© aceito para o sÃ­mbolo do broker GOLD#).
+   //  ÃƒÂ© aceito para o sÃƒÂ­mbolo do broker GOLD#).
    //================================================
 
    bool symbolOk =
@@ -460,6 +499,12 @@ bool LoadAIPrediction(string symbol="")
 
    AI_TimestampUTC=
       jsonTimestampUTC;
+
+   // ETAPA 15.3: governanca completa
+   AI_Algorithm      = jsonAlgorithm;
+   AI_TrainDate      = jsonTrainDate;
+   AI_DatasetVersion = jsonDatasetVersion;
+   AI_Metrics        = jsonMetrics;
 
 
    //================================================
@@ -963,9 +1008,21 @@ string GetAIMetaString(string key)
    if(key == "TIMESTAMP_UTC")
       return AI_TimestampUTC;
 
+   // ETAPA 15.3: governanca completa (publicados pelo pipeline Python)
+   if(key == "ALGORITHM")
+      return AI_Algorithm;
+
+   if(key == "MODEL_TRAIN_DATE")
+      return AI_TrainDate;
+
+   if(key == "DATASET_VERSION")
+      return AI_DatasetVersion;
+
+   if(key == "MODEL_METRICS")
+      return AI_Metrics;
+
    // Campo desconhecido -> "" (honesto)
    return "";
 }
 
 #endif
-  

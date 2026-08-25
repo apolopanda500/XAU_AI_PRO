@@ -27,6 +27,8 @@
 #ifndef NOTIFICATION_CENTER_MQH
 #define NOTIFICATION_CENTER_MQH
 
+#include "../Monitoring/AuditLog.mqh" // self-contained: AuditLogSimple
+
 #define NOTIFY_MAX_PER_MINUTE_DEF 10
 #define NOTIFY_DEDUP_SEC_DEF      60
 

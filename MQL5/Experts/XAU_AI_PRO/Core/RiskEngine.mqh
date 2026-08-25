@@ -1,8 +1,9 @@
-﻿// XAU_AI_PRO v1.2.0
+// XAU_AI_PRO v1.2.0
 #ifndef RISKENGINE_MQH
 #define RISKENGINE_MQH
 
 #include "../Core/Config.mqh"
+#include "../Core/RiskHub.mqh"
 #include "../Management/DailyRisk.mqh"
 
 //==================================================
@@ -49,11 +50,10 @@ double CalculateLotByRisk(
       return 0.0;   // bloqueia nova operacao
    }
    
-   // Drawdown da CONTA (acumulado vs balance). Metricas diarias
-   // (peak do dia) vivem no RiskHub (GetDrawdownPercent).
-   double drawdown=0;
-   if(balance > 0)
-      drawdown = ((balance - equity) / balance) * 100.0;
+   // ETAPA 15.5: fonte UNICA de drawdown (RiskHub, vs peak
+   // diario persistente). Regra da Etapa 3: nenhum modulo
+   // recalcula drawdown por conta propria.
+   double drawdown = GetDrawdownPercent();
    
    // Ajustar risco baseado no drawdown (escalonado a partir de MaxDrawdownPercent)
    double adjustedRisk = riskPercent;

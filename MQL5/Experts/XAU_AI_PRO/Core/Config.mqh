@@ -168,6 +168,17 @@ input double MinAIConfidence    = 50.0;
 input bool   RequireAIJSON      = false;
 
 //==================================================
+// IA - STALENESS (ETAPA 15.3)
+// Idade maxima aceita para o timestamp_utc do
+// prediction JSON, em segundos. 0 = verificacao
+// desativada. Previsao mais antiga que o limite
+// e tratada como INDISPONIVEL (o AIEngine cai no
+// fallback local ou bloqueia, conforme politica).
+// Padrao 900s = 15 min (~3 candles M5).
+//==================================================
+input int    MaxPredictionAgeSec = 900;
+
+//==================================================
 // KCI v1.2.0
 // Parametros centralizados dos indicadores KCI.
 //==================================================

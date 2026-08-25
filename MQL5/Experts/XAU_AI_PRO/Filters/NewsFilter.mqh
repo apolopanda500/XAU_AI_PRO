@@ -1,8 +1,10 @@
-﻿// XAU_AI_PRO v1.2.0 - NEWS FILTER PROFESSIONAL (Etapa 6 + calendario MT5 nativo)
+// XAU_AI_PRO v1.2.0 - NEWS FILTER PROFESSIONAL (Etapa 6 + calendario MT5 nativo)
 #ifndef NEWSFILTER_MQH
 #define NEWSFILTER_MQH
 
 #include "../Core/Config.mqh"
+#include "../Monitoring/AuditLog.mqh"     // self-contained: AuditLogSimple
+#include "../Monitoring/EventEmitter.mqh" // self-contained: EventNewsBlock
 
 //==================================================
 // ESTADOS EXPLICITOS DO FILTRO

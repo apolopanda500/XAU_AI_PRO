@@ -3,6 +3,7 @@
 #define HEALTHMONITOR_MQH
 
 #include "../Core/Config.mqh"
+#include "../Enterprise/Telemetry.mqh"   // ETAPA 15.6.5: ENUM_TELEMETRY_STATE compartilhado
 #include "Logger.mqh"
 
 //==================================================
@@ -409,6 +410,11 @@ bool HealthMonitorCheck()
    g_healthStatus      = healthy;
    g_healthLastCheckOK = healthy;
 
+   // ETAPA 15.6.5: ponte com telemetria real —
+   // falha de health alimenta o contador global de erros.
+   if(!healthy)
+      CTelemetry::RecordError();
+
    if(healthy)
       LogInfo("HealthMonitor: HEALTH OK");
    else
@@ -526,6 +532,55 @@ int HealthGetHeartbeatFailures(string module)
 bool HealthIsHealthy()
 {
    return g_healthStatus;
+}
+
+//==================================================
+// ESTADO MULTI-NIVEL (ETAPA 15.6.5)
+// Deriva HEALTHY/WARNING/ERROR a partir dos
+// contadores e watchdogs. UNAVAILABLE quando o
+// monitor nao foi inicializado.
+//==================================================
+
+ENUM_TELEMETRY_STATE HealthGetState()
+{
+   if(!g_healthInitialized)
+      return TM_UNAVAILABLE;
+
+   // Falha estrutural do ultimo check
+   if(!g_healthStatus)
+      return TM_ERROR;
+
+   // WARNING: erros presentes, abaixo dos limites criticos
+   int totalErr = g_healthBrokerErrors + g_healthAIErrors +
+                  g_healthDatasetErrors + g_healthFileErrors +
+                  g_healthJSONErrors  + g_healthPythonErrors +
+                  g_healthIndicatorErrors;
+
+   if(totalErr > 0)
+      return TM_WARNING;
+
+   // WARNING: watchdog com falhas parciais (1..2 de 3)
+   for(int i = 0; i < HEALTH_WD_MODULES; i++)
+   {
+      if(g_wdFailures[i] > 0 && g_wdFailures[i] < HEALTH_WD_MAX_FAILURES)
+         return TM_WARNING;
+   }
+
+   return TM_HEALTHY;
+}
+
+string HealthGetStateString()
+{
+   switch(HealthGetState())
+   {
+      case TM_HEALTHY:     return "HEALTHY";
+      case TM_WARNING:     return "WARNING";
+      case TM_ERROR:       return "ERROR";
+      case TM_SAFE:        return "SAFE";
+      case TM_RECOVERY:    return "RECOVERY";
+      case TM_UNAVAILABLE: return "UNAVAILABLE";
+   }
+   return "UNAVAILABLE";
 }
 
 //==================================================

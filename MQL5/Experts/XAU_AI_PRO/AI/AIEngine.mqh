@@ -1,4 +1,4 @@
-﻿// XAU_AI_PRO v1.2.0
+// XAU_AI_PRO v1.2.0
 #ifndef AIENGINE_MQH
 #define AIENGINE_MQH
 
@@ -52,6 +52,14 @@ bool AITradeAllowed(string symbol="")
 
    if(LoadAIPrediction(symbol))
    {
+      //------------------------------------------------
+      // ETAPA 15.3: sinal UNAVAILABLE = IA indisponivel.
+      // NAO confirma e NAO veta; o score base prevalece.
+      // Comportamento fail-safe identico a ausencia de JSON.
+      //------------------------------------------------
+      if(AI_Signal=="UNAVAILABLE")
+         return true;
+
       if(signal==1 && AI_Signal=="SELL")
          return false;
 
@@ -84,7 +92,11 @@ double GetAIConfidence(int signal,string symbol="")
 
    double score=50.0;
 
-   if(LoadAIPrediction(symbol))
+   //------------------------------------------------
+   // ETAPA 15.3: UNAVAILABLE nao gera bonus de IA;
+   // cai no fallback local (trend/RSI/ADX).
+   //------------------------------------------------
+   if(LoadAIPrediction(symbol) && AI_Signal!="UNAVAILABLE")
    {
       if(signal==1 && AI_Signal=="BUY")
          score+=20.0;
@@ -413,4 +425,4 @@ void LogAIFeedback(string symbol,double profit)
    FileClose(file);
 }
 
-#endif  f
+#endif
