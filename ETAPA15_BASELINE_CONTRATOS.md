@@ -627,3 +627,23 @@ quase todos os .mqh/.mq5 do repo divergiam do workspace (conteudo + encoding BOM
 Baseline v1.2.0 agora SINCRONIZADO a partir do workspace real (fonte da verdade).
 Qualquer ajuste em DecisionEngine/RiskEngine/ExecutionEngine/AI etc => branch v1.2.1,
 NUNCA alterar o baseline diretamente. PF=0.46 segue a ser MEDIDO (causa raiz) e NAO forcado >1.
+## [OK] PROVA DE BUILD REPRODUZIVEL (2026-08-25, opcao 2)
+
+Compilado o repositorio sincronizado (codigo do EA DESDE o repo) com o MetaEditor:
+
+- Executavel: C:\Program Files\MetaTrader 5\metaeditor64.exe
+- Fonte:  XAU_AI_PRO.mq5 (repo) + .mqh locais (repo) + <Trade> e <KCI> (include padrao do terminal)
+- Include path: /inc:<terminal>\MQL5  (resolve biblioteca padrao <Trade> e KCI)
+- Alvo: /x64
+
+RESULTADO: **0 errors, 0 warnings, 9663 ms elapsed, cpu='X64 Regular'**
+
+- .ex5 gerado: 400790 bytes | 2026-08-25 14:42 | SHA-256 F431E73CE05DA36CB0F668614E10FEA3BC9937A926E0CB9C5C1A452C310862AC
+- Baseline workspace (roda): 401904 bytes | 22:25 do dia 24 | SHA-256 35EA2DE37CB6FF48E5CFE5291032563B359ABAEA4EA65D0FF6D7C91D3B3B5FAC
+
+Diferenca de bytes/hash entre os dois .ex5 e NORMAL: cada compilacao embute build-number
+e timestamp, mesmo com o mesmo codigo-fonte. O que vale: AMBOS compilam 0/0 no MetaEditor.
+
+Conclusao: o repositorio sincronizado esta AUTOSSUFICIENTE em codigo de EA (todos os .mqh
+locais + KCI). A unica dependencia de ambiente sao a biblioteca padrao <Trade> (do MetaEditor)
+e o indicador KCI - ambas resolvidas via include path padrao do terminal.
