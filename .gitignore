@@ -58,3 +58,6 @@ Logs/*
 **/config.local.* 
 **/app/data/config.json 
 **/Ultimate/config.json 
+
+# Python venv (local)
+.venv/
