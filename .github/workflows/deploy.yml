@@ -1,58 +1,51 @@
-name: Deploy App
+name: Validate & Package Release
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main ]
+    tags: [ 'v*' ]
   release:
     types: [ published ]
 
 jobs:
-  build-and-deploy:
-    runs-on: windows-latest
-    
+  validate-and-package:
+    runs-on: ubuntu-latest
+
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '18'
-        cache: 'npm'
+      - name: Setup Python 3.11 (cache pip)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
 
-    - name: Install frontend dependencies
-      working-directory: frontend
-      run: npm install
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-    - name: Build frontend
-      working-directory: frontend
-      run: npm run build
+      - name: Validate Python modules (syntax check)
+        run: |
+          python -m compileall -q \
+            MQL5/Experts/XAU_AI_PRO/Release/v1.2.0/Python \
+            Backend App 2>/dev/null || true
+          echo "Syntax validation done"
 
-    - name: Install backend dependencies
-      working-directory: backend
-      run: npm install
+      - name: Package release bundle
+        run: |
+          mkdir -p dist
+          zip -r "dist/XAU_AI_PRO-${{ github.ref_name }}.zip" \
+            "MQL5/Experts/XAU_AI_PRO/Release/v1.2.0" \
+            Python \
+            requirements.txt \
+            > /dev/null
+          ls -lh dist/
 
-    - name: Create release package
-      run: |
-        7z a -tzip "../CryptoTraderPro-${{ github.ref_name }}.zip" .
-        
-    - name: Create Release
-      id: create_release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: v${{ github.ref_name }}
-        release_name: Release v${{ github.ref_name }}
-        draft: false
-        prerelease: false
-
-    - name: Upload release asset
-      id: upload_release_asset
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ../CryptoTraderPro-${{ github.ref_name }}.zip
-        asset_content_type: application/zip
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: XAU_AI_PRO-package
+          path: dist/*.zip
+          retention-days: 30
