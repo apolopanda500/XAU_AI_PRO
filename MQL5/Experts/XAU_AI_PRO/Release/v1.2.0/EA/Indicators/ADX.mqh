@@ -73,10 +73,18 @@ double GetADX()
 
    if(copied != 1)
    {
-      Print(
-         "[ADX] CopyBuffer failed | Error=",
-         GetLastError()
-      );
+      // v1.2.1-crashfix: throttle do log de erro (1x/min). Antes imprimia
+      // a cada tick -> saturacao de I/O de log no tester ("CPU travando").
+      static datetime lastAdxErrLog = 0;
+      datetime nowLog = TimeCurrent();
+      if(nowLog - lastAdxErrLog >= 60)
+        {
+         lastAdxErrLog = nowLog;
+         Print(
+            "[ADX] CopyBuffer failed | Error=",
+            GetLastError()
+         );
+      }
 
       return 0.0;
    }
