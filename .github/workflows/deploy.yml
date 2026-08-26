@@ -102,6 +102,8 @@ jobs:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID || 'team_m6XXhz0AuVtzK0zxtv96h03a' }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID || 'prj_RApeFNVlnOGYxtYcRDqaSUTIJD1G' }}
+      # Webhook do Slack definido no nível do JOB para ser visível nas condições "if"
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -121,11 +123,16 @@ jobs:
           cd backend
           npm install --no-audit --no-fund
       - name: Deploy produção (Vercel CLI oficial)
-        working-directory: backend
+        # ⚠️ Executa NA RAIZ do repo. O Root Directory "backend" configurado nas
+        # settings do projeto na Vercel é resolvido pelo próprio CLI a partir do cwd.
+        # NÃO adicionar working-directory/cd aqui, senão gera "backend/backend".
         run: |
           set -o pipefail
-          npx vercel --prod --force --yes --token "$VERCEL_TOKEN" | tee deploy-output.log
-          URL=$(grep -oE 'https://[a-z0-9-]+\.vercel\.app' deploy-output.log | tail -n 1 || true)
+          npx vercel@59.6.2 --prod --force --yes --token "$VERCEL_TOKEN" | tee deploy-output.log
+          URL=$(grep -oiE 'https://[a-zA-Z0-9.-]+\.vercel\.app' deploy-output.log | tail -n 1 || true)
+          if [ -z "$URL" ]; then
+            echo "::warning::URL de deploy não encontrada no log do Vercel"
+          fi
           echo "DEPLOY_URL=$URL" >> "$GITHUB_ENV"
       - name: Smoke test pós-deploy
         run: |
@@ -138,20 +145,17 @@ jobs:
           echo "::warning::Healthcheck ainda não refletiu o novo deploy"
       - name: Notificar Slack (sucesso)
         if: success() && env.SLACK_WEBHOOK_URL != ''
-        uses: slackapi/slack-github-action@v1.26.0
+        uses: slackapi/slack-github-action@v4.0.0
         with:
           payload: |
             {"text":"Deploy XAU AI PRO OK!","blocks":[{"type":"section","text":{"type":"mrkdwn","text":"*OK* Branch: `${{ github.ref_name }}` | Run: #${{ github.run_number }} | ${{ env.API_URL }}"}}]}
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
       - name: Notificar Slack (falha)
-        if: failure()
-        uses: slackapi/slack-github-action@v1.26.0
+        # Tolerante a ausência do secret: não falha quando SLACK_WEBHOOK não existe
+        if: failure() && env.SLACK_WEBHOOK_URL != ''
+        uses: slackapi/slack-github-action@v4.0.0
         with:
           payload: |
             {"text":"Falha no deploy XAU AI PRO","blocks":[{"type":"section","text":{"type":"mrkdwn","text":"*FALHA* Branch: `${{ github.ref_name }}` | Run: #${{ github.run_number }}"}}]}
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
 
   preview-deploy:
     name: Preview Deploy (PR)
@@ -176,8 +180,8 @@ jobs:
           cd backend
           npm install --no-audit --no-fund
       - name: Preview (Vercel CLI)
-        working-directory: backend
-        run: npx vercel --yes --token "$VERCEL_TOKEN"
+        # Também roda da raiz para respeitar o Root Directory das settings
+        run: npx vercel@59.6.2 --yes --token "$VERCEL_TOKEN"
 
   healthcheck:
     name: Health Check Final
