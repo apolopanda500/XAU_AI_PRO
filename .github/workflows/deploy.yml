@@ -78,9 +78,8 @@ jobs:
             npm ci
           fi
       - name: Configurar Sentry (Release)
-        uses: getsentry/action@v3
+        uses: getsentry/sentry-action@v2.1.0
         with:
-          step: prepare
           environment: ${{ github.ref_name == 'main' && 'production' || 'preview' }}
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
@@ -182,3 +181,4 @@ jobs:
         run: |
           curl -fsSL https://xau-ai-pro-ecru.vercel.app/api/health | head -c 500 || echo "Health check OK"
           curl -fsSL https://xau-ai-pro-ecru.vercel.app/ | head -c 200 || echo "Root OK"
+
