@@ -44,15 +44,21 @@ jobs:
         run: python -m compileall -q MQL5/Experts/XAU_AI_PRO/Release/v1.2.0/Python backend app || true
       - name: Empacotar bundle
         id: package
+        env:
+          REF_NAME: ${{ github.ref_name }}
         run: |
           mkdir -p dist
-          PN="XAU_AI_PRO-${{ github.ref_name }}-$(date +%Y%m%d%H%M%S)"
-          zip -r "dist/$PN.zip" MQL5/Experts/XAU_AI_PRO/Release/v1.2.0 Python backend app requirements.txt > /dev/null
-          echo "name=$PN" >> $GITHUB_OUTPUT
+          # Sanitiza a referência (ex.: "4/merge" em PRs) para não gerar
+          # barras no nome do arquivo/artefato
+          SAFE_REF="${REF_NAME//\//-}"
+          PN="XAU_AI_PRO-${SAFE_REF}-$(date +%Y%m%d%H%M%S)"
+          echo "Empacotando como: $PN"
+          zip -r "dist/${PN}.zip" MQL5/Experts/XAU_AI_PRO/Release/v1.2.0 Python backend app requirements.txt > /dev/null
+          echo "name=${PN}" >> "$GITHUB_OUTPUT"
       - name: Upload artefato
         uses: actions/upload-artifact@v5
         with:
-          name: pkg-${{ github.ref_name }}
+          name: pkg-${{ steps.package.outputs.name }}
           path: dist/*.zip
           retention-days: 30
 
