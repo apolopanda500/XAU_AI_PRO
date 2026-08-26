@@ -114,7 +114,7 @@ jobs:
           cd backend
           npm install
       - name: Deploy produção no Vercel
-        uses: amondnet/vercel-action@v25.2.0
+        uses: amondnet/vercel-action@v42.3.0
         with:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
@@ -159,7 +159,7 @@ jobs:
           cd backend
           npm install
       - name: Preview Deploy
-        uses: amondnet/vercel-action@v25.2.0
+        uses: amondnet/vercel-action@v42.3.0
         with:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
@@ -180,5 +180,6 @@ jobs:
         run: |
           curl -fsSL https://xau-ai-pro-ecru.vercel.app/api/health | head -c 500 || echo "Health check OK"
           curl -fsSL https://xau-ai-pro-ecru.vercel.app/ | head -c 200 || echo "Root OK"
+
 
 
