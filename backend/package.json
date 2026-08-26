@@ -1,7 +1,20 @@
 {
+  "name": "xau-ai-pro-backend",
+  "version": "1.2.0-RC1",
+  "private": true,
+  "main": "src/index.mjs",
+  "scripts": {
+    "dev": "node server-desktop.cjs",
+    "build": "nitro build",
+    "vercel-build": "nitro build",
+    "start": "node src/index.mjs"
+  },
   "dependencies": {
     "cors": "^2.8.6",
     "express": "^5.2.1",
-    "socket.io": "^4.8.3"
+    "socket.io": "^4.8.3",
+    "workflow": "^4.8.5",
+    "nitro": "3.0.260610-beta",
+    "rollup": "4.63.0"
   }
 }

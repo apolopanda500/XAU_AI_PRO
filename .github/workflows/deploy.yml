@@ -1,4 +1,4 @@
-﻿name: CI/CD - XAU AI PRO (GitHub + Vercel + Sentry)
+name: CI/CD - XAU AI PRO (GitHub + Vercel + Sentry)
 
 on:
   push:
@@ -9,11 +9,11 @@ on:
   workflow_dispatch:
 
 env:
-  NODE_VERSION: "20"
+  NODE_VERSION: "22"
   PYTHON_VERSION: "3.11"
-  SENTRY_ORG: apolopanda500
-  SENTRY_PROJECT: xau-ai-pro
-  VERCEL_ORG: apolopanda500
+  SENTRY_ORG: henrique-7n
+  SENTRY_PROJECT: default
+  API_URL: https://xau-ai-pro-api.vercel.app
 
 concurrency:
   group: cicd-${{ github.ref }}
@@ -27,11 +27,11 @@ jobs:
       package-name: ${{ steps.package.outputs.name }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
@@ -41,16 +41,16 @@ jobs:
           grep -viE "^\s*MetaTrader5" requirements.txt > /tmp/req-ci.txt
           pip install -r /tmp/req-ci.txt
       - name: Validar sintaxe Python
-        run: python -m compileall -q MQL5/Experts/XAU_AI_PRO/Release/v1.2.0/Python Backend App || true
+        run: python -m compileall -q MQL5/Experts/XAU_AI_PRO/Release/v1.2.0/Python backend app || true
       - name: Empacotar bundle
         id: package
         run: |
           mkdir -p dist
           PN="XAU_AI_PRO-${{ github.ref_name }}-$(date +%Y%m%d%H%M%S)"
-          zip -r "dist/$PN.zip" MQL5/Experts/XAU_AI_PRO/Release/v1.2.0 Python Backend App requirements.txt > /dev/null
+          zip -r "dist/$PN.zip" MQL5/Experts/XAU_AI_PRO/Release/v1.2.0 Python backend app requirements.txt > /dev/null
           echo "name=$PN" >> $GITHUB_OUTPUT
       - name: Upload artefato
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: pkg-${{ github.ref_name }}
           path: dist/*.zip
@@ -63,11 +63,11 @@ jobs:
     if: always()
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
       - name: Instalar dependências frontend
@@ -82,15 +82,13 @@ jobs:
         if: env.SENTRY_AUTH_TOKEN != ''
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-          SENTRY_ORG: ${{ env.SENTRY_ORG }}
-          SENTRY_PROJECT: ${{ env.SENTRY_PROJECT }}
         run: |
           npm install -g @sentry/cli
           if [ -d frontend/build ]; then
-            sentry-cli releases new ${{ github.sha }}-$GITHUB_RUN_NUMBER || true
-            sentry-cli releases set-commits ${{ github.sha }}-$GITHUB_RUN_NUMBER --auto || true
-            sentry-cli releases files ${{ github.sha }}-$GITHUB_RUN_NUMBER upload-sourcemaps ./frontend/build --url-prefix '~/build' || true
-            sentry-cli releases finalize ${{ github.sha }}-$GITHUB_RUN_NUMBER || true
+            sentry-cli releases new "${{ github.sha }}-$GITHUB_RUN_NUMBER" || true
+            sentry-cli releases set-commits "${{ github.sha }}-$GITHUB_RUN_NUMBER" --auto || true
+            sentry-cli releases files "${{ github.sha }}-$GITHUB_RUN_NUMBER" upload-sourcemaps ./frontend/build --url-prefix '~/build' || true
+            sentry-cli releases finalize "${{ github.sha }}-$GITHUB_RUN_NUMBER" || true
           else
             echo 'Sem pasta frontend/build - skip Sentry source maps'
           fi
@@ -100,85 +98,97 @@ jobs:
     needs: validate-and-package
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID || 'team_m6XXhz0AuVtzK0zxtv96h03a' }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID || 'prj_RApeFNVlnOGYxtYcRDqaSUTIJD1G' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - name: Instalar Vercel CLI
-        run: npm install -g vercel
-      - name: Instalar backend
+      - name: Guard - Verificar token Vercel
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "::error::Secret VERCEL_TOKEN ausente. Crie em https://vercel.com/account/tokens e adicione nos Secrets do repo."
+            exit 1
+          fi
+          echo "Token OK | Org=$VERCEL_ORG_ID | Proj=$VERCEL_PROJECT_ID"
+      - name: Instalar dependências backend
         run: |
           cd backend
-          npm install
-      - name: Deploy produção no Vercel
-        uses: amondnet/vercel-action@v42.3.0
-        with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          vercel-args: "--prod --force --token ${{ secrets.VERCEL_TOKEN }}"
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          alias-domains: xau-ai-pro-ecru.vercel.app
+          npm install --no-audit --no-fund
+      - name: Deploy produção (Vercel CLI oficial)
+        working-directory: backend
+        run: |
+          set -o pipefail
+          npx vercel --prod --force --yes --token "$VERCEL_TOKEN" | tee deploy-output.log
+          URL=$(grep -oE 'https://[a-z0-9-]+\.vercel\.app' deploy-output.log | tail -n 1 || true)
+          echo "DEPLOY_URL=$URL" >> "$GITHUB_ENV"
+      - name: Smoke test pós-deploy
+        run: |
+          for i in 1 2 3 4 5; do
+            if curl -fsSL "$API_URL/api/health" | grep -q '"ok":true'; then
+              echo "Healthcheck OK"; exit 0
+            fi
+            sleep 10
+          done
+          echo "::warning::Healthcheck ainda não refletiu o novo deploy"
       - name: Notificar Slack (sucesso)
         if: success() && env.SLACK_WEBHOOK_URL != ''
         uses: slackapi/slack-github-action@v1.26.0
         with:
           payload: |
-            {"text":"✅ Deploy XAU AI PRO!","blocks":[{"type":"section","text":{"type":"mrkdwn","text":"*OK* Branch: `${{ github.ref_name }}` | Commit: `${{ github.sha }}` | Run: #${{ github.run_number }} | https://xau-ai-pro-ecru.vercel.app"}}]}
+            {"text":"Deploy XAU AI PRO OK!","blocks":[{"type":"section","text":{"type":"mrkdwn","text":"*OK* Branch: `${{ github.ref_name }}` | Run: #${{ github.run_number }} | ${{ env.API_URL }}"}}]}
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
       - name: Notificar Slack (falha)
-        if: failure() && env.SLACK_WEBHOOK_URL != ''
+        if: failure()
         uses: slackapi/slack-github-action@v1.26.0
         with:
           payload: |
-            {"text":"Falha deploy XAU AI PRO","blocks":[{"type":"section","text":{"type":"mrkdwn","text":"*FALHA* Branch: `${{ github.ref_name }}` | Commit: `${{ github.sha }}` | Run: #${{ github.run_number }} | Status: Error"}}]}
+            {"text":"Falha no deploy XAU AI PRO","blocks":[{"type":"section","text":{"type":"mrkdwn","text":"*FALHA* Branch: `${{ github.ref_name }}` | Run: #${{ github.run_number }}"}}]}
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
 
   preview-deploy:
-    name: Preview Deploy
+    name: Preview Deploy (PR)
     needs: validate-and-package
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID || 'team_m6XXhz0AuVtzK0zxtv96h03a' }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID || 'prj_RApeFNVlnOGYxtYcRDqaSUTIJD1G' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - name: Instalar Vercel CLI
-        run: npm install -g vercel
-      - name: Instalar backend
+      - name: Guard token
+        run: test -n "$VERCEL_TOKEN" || { echo "::error::Configure o secret VERCEL_TOKEN"; exit 1; }
+      - name: Instalar dependências backend
         run: |
           cd backend
-          npm install
-      - name: Preview Deploy
-        uses: amondnet/vercel-action@v42.3.0
-        with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          vercel-args: "--token ${{ secrets.VERCEL_TOKEN }}"
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          npm install --no-audit --no-fund
+      - name: Preview (Vercel CLI)
+        working-directory: backend
+        run: npx vercel --yes --token "$VERCEL_TOKEN"
 
   healthcheck:
-    name: Health Check
+    name: Health Check Final
     needs: deploy-vercel
     runs-on: ubuntu-latest
     if: success()
     steps:
-      - name: Aguardar
-        run: sleep 10
-      - name: Verificar saúde
+      - name: Aguardar propagação do alias
+        run: sleep 15
+      - name: Verificar saúde da API
         run: |
-          curl -fsSL https://xau-ai-pro-ecru.vercel.app/api/health | head -c 500 || echo "Health check OK"
-          curl -fsSL https://xau-ai-pro-ecru.vercel.app/ | head -c 200 || echo "Root OK"
-
-
-
-
+          curl -fsSL "$API_URL/api/health" | head -c 500
+          echo ""
+          curl -fsSL "$API_URL/" | head -c 300

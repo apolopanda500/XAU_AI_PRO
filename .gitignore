@@ -61,3 +61,5 @@ Logs/*
 
 # Python venv (local)
 .venv/
+.vercel
+.env*

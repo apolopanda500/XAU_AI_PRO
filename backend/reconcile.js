@@ -35,7 +35,7 @@ function reconcile() {
   Object.keys(seen).forEach(k => { if (seen[k] > 1) out.duplicatas_audit.push({ ticket: k, vezes: seen[k] }); });
 
   // 2. Event Stream (forward_test_events.csv, ',', UTF-16)
-  const streamF = path.join(DATA_DIR, 'forward_test_events.csv');
+  let streamF = path.join(DATA_DIR, 'forward_test_events.csv');
   if (!fs.existsSync(streamF)) streamF = path.join(__dirname, '..', 'MQL5','Files','Data','forward_test_events.csv');
   out.fontes.event_stream = streamF;
   readCsv(streamF, ',', true).forEach(l => {
