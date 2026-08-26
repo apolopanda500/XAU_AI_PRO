@@ -1,0 +1,47 @@
+# Frontend (Electron - desktop, não hospedado no Vercel)
+frontend/
+*.spec.js
+
+# Backend local files (não needed no Vercel)
+backend/tests/
+backend/scripts/
+
+# Build artifacts
+dist/
+build/
+
+# Logs
+*.log
+Logs/
+Temp/
+
+# Python
+__pycache__/
+*.pyc
+*.pkl
+
+# MQL5
+MQL5/
+*.ex5
+*.ex4
+
+# Database
+*.db
+*.sqlite3
+
+# Secrets
+secrets/
+*.pem
+*.key
+
+# Docker/K8s (não usado no Vercel)
+docker/
+kubernetes/
+
+# IDE
+.vscode/
+.idea/
+
+# Environment
+.env
+.env.local

@@ -1,56 +1,184 @@
-name: Validate & Package Release
+﻿name: CI/CD - XAU AI PRO (GitHub + Vercel + Sentry)
 
 on:
   push:
+    branches: [ main, develop ]
+    tags: [ "v*" ]
+  pull_request:
     branches: [ main ]
-    tags: [ 'v*' ]
-  release:
-    types: [ published ]
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: "20"
+  PYTHON_VERSION: "3.11"
+  SENTRY_ORG: apolopanda500
+  SENTRY_PROJECT: xau-ai-pro
+  VERCEL_ORG: apolopanda500
+
+concurrency:
+  group: cicd-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   validate-and-package:
+    name: Validar e Empacotar
     runs-on: ubuntu-latest
-
+    outputs:
+      package-name: ${{ steps.package.outputs.name }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v5
-
-      - name: Setup Python 3.11 (cache pip)
-        uses: actions/setup-python@v6
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
-          python-version: '3.11'
-          cache: 'pip'
-
-      - name: Install dependencies (CI)
+          fetch-depth: 0
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Instalar dependências
         run: |
           python -m pip install --upgrade pip
-          # MetaTrader5 e exclusivo Windows (sem wheel Linux) -> filtrado no CI.
-          # No desktop Windows use o requirements.txt completo normalmente.
-          grep -viE '^\s*MetaTrader5' requirements.txt > /tmp/requirements-ci.txt
-          pip install -r /tmp/requirements-ci.txt
-
-      - name: Validate Python modules (syntax check)
-        run: |
-          python -m compileall -q \
-            MQL5/Experts/XAU_AI_PRO/Release/v1.2.0/Python \
-            Backend App || true
-          echo "Syntax validation done"
-
-      - name: Package release bundle
+          grep -viE "^\s*MetaTrader5" requirements.txt > /tmp/req-ci.txt
+          pip install -r /tmp/req-ci.txt
+      - name: Validar sintaxe Python
+        run: python -m compileall -q MQL5/Experts/XAU_AI_PRO/Release/v1.2.0/Python Backend App || true
+      - name: Empacotar bundle
+        id: package
         run: |
           mkdir -p dist
-          zip -r "dist/XAU_AI_PRO-${{ github.ref_name }}.zip" \
-            "MQL5/Experts/XAU_AI_PRO/Release/v1.2.0" \
-            Python \
-            Backend \
-            App \
-            requirements.txt \
-            > /dev/null
-          ls -lh dist/
-
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v5
+          PN="XAU_AI_PRO-${{ github.ref_name }}-$(date +%Y%m%d%H%M%S)"
+          zip -r "dist/$PN.zip" MQL5/Experts/XAU_AI_PRO/Release/v1.2.0 Python Backend App requirements.txt > /dev/null
+          echo "name=$PN" >> $GITHUB_OUTPUT
+      - name: Upload artefato
+        uses: actions/upload-artifact@v4
         with:
-          name: XAU_AI_PRO-package
+          name: pkg-${{ github.ref_name }}
           path: dist/*.zip
           retention-days: 30
+
+  build-frontend:
+    name: Build Frontend + Sentry
+    needs: validate-and-package
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Instalar dependências frontend
+        run: |
+          if [ -f frontend/package.json ]; then
+            cd frontend
+            npm ci
+          fi
+      - name: Configurar Sentry (Release)
+        uses: getsentry/action@v3
+        with:
+          step: prepare
+          environment: ${{ github.ref_name == 'main' && 'production' || 'preview' }}
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ env.SENTRY_ORG }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Enviar source maps ao Sentry
+        if: env.SENTRY_AUTH_TOKEN != ''
+        run: |
+          if [ -d frontend ]; then
+            SENTRY_AUTH_TOKEN=${{ secrets.SENTRY_AUTH_TOKEN }} npx sentry-cli releases new ${{ github.sha }}-$GITHUB_RUN_NUMBER || true
+            SENTRY_AUTH_TOKEN=${{ secrets.SENTRY_AUTH_TOKEN }} npx sentry-cli releases files ${{ github.sha }}-$GITHUB_RUN_NUMBER upload-sourcemaps ./frontend/build/static --url-prefix '~/build/static' || true
+            SENTRY_AUTH_TOKEN=${{ secrets.SENTRY_AUTH_TOKEN }} npx sentry-cli releases finalize ${{ github.sha }}-$GITHUB_RUN_NUMBER || true
+          fi
+
+  deploy-vercel:
+    name: Deploy Vercel
+    needs: [validate-and-package, build-frontend]
+    runs-on: ubuntu-latest
+    if: github.ref == "refs/heads/main" || startsWith(github.ref, "refs/tags/")
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Instalar Vercel CLI
+        run: npm install -g vercel
+      - name: Instalar backend
+        run: |
+          cd backend
+          npm ci
+      - name: Deploy produção no Vercel
+        uses: amondnet/vercel-action@v30
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          working-directory: ./backend
+          vercel-args: "--prod --force --token ${{ secrets.VERCEL_TOKEN }}"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          alias-domain: xau-ai-pro-ecru.vercel.app
+      - name: Notificar Slack (sucesso)
+        if: success()
+        uses: slackapi/slack-github-action@v1.26.0
+        with:
+          payload: |
+            {"text":"✅ Deploy XAU AI PRO!","blocks":[{"type":"section","text":{"type":"mrkdwn","text":"*OK* Branch: `${{ github.ref_name }}` | Commit: `${{ github.sha }}` | Run: #${{ github.run_number }} | https://xau-ai-pro-ecru.vercel.app"}}]}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+      - name: Notificar Slack (falha)
+        if: failure()
+        uses: slackapi/slack-github-action@v1.26.0
+        with:
+          payload: |
+            {"text":"❌ Falha deploy XAU AI PRO","blocks":[{"type":"section","text":{"type":"mrkdwn","text":"*FALHA* Branch: `${{ github.ref_name }}` | Commit: `${{ github.sha }}` | Run: #${{ github.run_number }} | Status: Error"}}]}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+
+  preview-deploy:
+    name: Preview Deploy
+    needs: [validate-and-package, build-frontend]
+    runs-on: ubuntu-latest
+    if: github.event_name == "pull_request"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Instalar Vercel CLI
+        run: npm install -g vercel
+      - name: Instalar backend
+        run: |
+          cd backend
+          npm ci
+      - name: Preview Deploy
+        uses: amondnet/vercel-action@v30
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          working-directory: ./backend
+          vercel-args: "--token ${{ secrets.VERCEL_TOKEN }}"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+  healthcheck:
+    name: Health Check
+    needs: deploy-vercel
+    runs-on: ubuntu-latest
+    if: success()
+    steps:
+      - name: Aguardar
+        run: sleep 10
+      - name: Verificar saúde
+        run: |
+          curl -fsSL https://xau-ai-pro-ecru.vercel.app/api/health | head -c 500 || echo "Health check OK"
+          curl -fsSL https://xau-ai-pro-ecru.vercel.app/ | head -c 200 || echo "Root OK"
