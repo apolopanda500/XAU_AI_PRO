@@ -119,7 +119,6 @@ jobs:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
           vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          working-directory: ./backend
           vercel-args: "--prod --force --token ${{ secrets.VERCEL_TOKEN }}"
           github-token: ${{ secrets.GITHUB_TOKEN }}
           alias-domains: xau-ai-pro-ecru.vercel.app
@@ -164,7 +163,6 @@ jobs:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
           vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          working-directory: ./backend
           vercel-args: "--token ${{ secrets.VERCEL_TOKEN }}"
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -180,6 +178,7 @@ jobs:
         run: |
           curl -fsSL https://xau-ai-pro-ecru.vercel.app/api/health | head -c 500 || echo "Health check OK"
           curl -fsSL https://xau-ai-pro-ecru.vercel.app/ | head -c 200 || echo "Root OK"
+
 
 
 
