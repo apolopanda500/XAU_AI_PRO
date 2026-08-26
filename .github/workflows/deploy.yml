@@ -99,7 +99,7 @@ jobs:
     name: Deploy Vercel
     needs: [validate-and-package, build-frontend]
     runs-on: ubuntu-latest
-    if: github.ref == "refs/heads/main" || startsWith(github.ref, "refs/tags/")
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -145,7 +145,7 @@ jobs:
     name: Preview Deploy
     needs: [validate-and-package, build-frontend]
     runs-on: ubuntu-latest
-    if: github.event_name == "pull_request"
+    if: github.event_name == 'pull_request'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
