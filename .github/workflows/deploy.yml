@@ -70,12 +70,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
       - name: Instalar dependências frontend
         run: |
           if [ -f frontend/package.json ]; then
             cd frontend
-            npm ci
+            npm install
+          else
+            echo 'Sem frontend/package.json - skip'
           fi
       - name: Enviar source maps ao Sentry (sentry-cli)
         if: env.SENTRY_AUTH_TOKEN != ''
@@ -96,7 +97,7 @@ jobs:
 
   deploy-vercel:
     name: Deploy Vercel
-    needs: [validate-and-package, build-frontend]
+    needs: validate-and-package
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
     steps:
@@ -106,13 +107,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
       - name: Instalar Vercel CLI
         run: npm install -g vercel
       - name: Instalar backend
         run: |
           cd backend
-          npm ci
+          npm install
       - name: Deploy produção no Vercel
         uses: amondnet/vercel-action@v30
         with:
@@ -142,7 +142,7 @@ jobs:
 
   preview-deploy:
     name: Preview Deploy
-    needs: [validate-and-package, build-frontend]
+    needs: validate-and-package
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     steps:
@@ -152,13 +152,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
       - name: Instalar Vercel CLI
         run: npm install -g vercel
       - name: Instalar backend
         run: |
           cd backend
-          npm ci
+          npm install
       - name: Preview Deploy
         uses: amondnet/vercel-action@v30
         with:
@@ -181,5 +180,3 @@ jobs:
         run: |
           curl -fsSL https://xau-ai-pro-ecru.vercel.app/api/health | head -c 500 || echo "Health check OK"
           curl -fsSL https://xau-ai-pro-ecru.vercel.app/ | head -c 200 || echo "Root OK"
-
-
