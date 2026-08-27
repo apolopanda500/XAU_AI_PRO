@@ -8,23 +8,39 @@ import express from 'express';
 import cors from 'cors';
 import { start } from 'workflow/api';
 import { marketDataWorkflow, reconcileWorkflow } from '../workflows/index.mjs';
+import { track } from '@vercel/analytics/server';
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 // ---------- Rotas de saÃºde ----------
-app.get('/', (req, res) =>
+app.get('/', async (req, res) => {
+  // Track homepage visits with Vercel Analytics
+  try {
+    await track('api_home_visit', {}, { request: req });
+  } catch (e) {
+    // Silently fail analytics to not affect API response
+    console.error('Analytics tracking error:', e.message);
+  }
+  
   res.json({
     app: 'XAU_AI_PRO Backend',
     status: 'online',
     version: '1.2.0-RC1',
     etapa: '17.3',
     workflows_available: ['marketDataWorkflow', 'reconcileWorkflow'],
-  })
-);
+  });
+});
 
-app.get('/api/health', (req, res) => {
+app.get('/api/health', async (req, res) => {
+  // Track health check requests
+  try {
+    await track('api_health_check', {}, { request: req });
+  } catch (e) {
+    console.error('Analytics tracking error:', e.message);
+  }
+  
   res.json({ ok: true, ts: new Date().toISOString(), source: 'vercel' });
 });
 
@@ -63,11 +79,18 @@ app.get('/api/_diag', async (req, res) => {
 // Inicia o marketDataWorkflow (busca dados e gera previsÃµes)
 app.post('/api/workflows/market-data', async (req, res) => {
   try {
+    // Track workflow initiation
+    await track('workflow_market_data_started', {}, { request: req }).catch(e => 
+      console.error('Analytics tracking error:', e.message)
+    );
+    
     const run = await start(marketDataWorkflow, [], {
       name: 'market-data-sync',
     });
     res.json({ runId: run.runId, status: 'started' });
   } catch (e) {
+    // Track workflow errors
+    await track('workflow_market_data_error', { error: e.message }, { request: req }).catch(() => {});
     res.status(500).json({ error: e.message });
   }
 });
@@ -78,11 +101,19 @@ app.post('/api/workflows/market-data', async (req, res) => {
 app.post('/api/workflows/reconcile', async (req, res) => {
   try {
     const { symbol } = req.body || {};
+    
+    // Track workflow initiation with symbol info
+    await track('workflow_reconcile_started', { symbol: symbol || 'XAUUSD' }, { request: req }).catch(e => 
+      console.error('Analytics tracking error:', e.message)
+    );
+    
     const run = await start(reconcileWorkflow, [symbol || 'XAUUSD'], {
       name: 'reconcile-trade',
     });
     res.json({ runId: run.runId, status: 'started' });
   } catch (e) {
+    // Track workflow errors
+    await track('workflow_reconcile_error', { error: e.message }, { request: req }).catch(() => {});
     res.status(500).json({ error: e.message });
   }
 });
