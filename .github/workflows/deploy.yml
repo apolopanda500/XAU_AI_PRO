@@ -129,10 +129,11 @@ jobs:
             exit 1
           fi
           echo "Token OK | Org=$VERCEL_ORG_ID | Proj=$VERCEL_PROJECT_ID"
-      - name: Notificar Slack (início do deploy)
+            - name: Notificar Slack (início do deploy)
         if: env.SLACK_WEBHOOK_URL != ''
         uses: slackapi/slack-github-action@v4.0.0
         with:
+          webhook type: incoming-webhook
           payload: |
             {
               "blocks": [
@@ -168,15 +169,23 @@ jobs:
           # confiável que o `vercel inspect`, cuja saída formata o estado como
           # "● Ready" e não é capturado por grep de palavras).
           # O endpoint v13 aceita a URL do deployment diretamente.
-          API="https://api.vercel.com/v13/deployments/$URL?teamId=${VERCEL_ORG_ID}"
+                    # Estrategia: vercel inspect --json (primitivo mas confiavel); fallback API v13
+          READY=0
           for i in $(seq 1 30); do
-            STATE=$(curl -sS -H "Authorization: Bearer $VERCEL_TOKEN" "$API" | \
-              python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get('readyState',''))" 2>/dev/null || true)
+            STATE=$(npx vercel@59.6.2 inspect "$URL" --json --token "$VERCEL_TOKEN" 2>/dev/null | \
+              python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('readyState',''))" 2>/dev/null || true)
+            if [ -z "$STATE" ]; then
+              STATE=$(curl -sS -H "Authorization: Bearer $VERCEL_TOKEN" \
+                "https://api.vercel.com/v13/deployments/${URL}?teamId=${VERCEL_ORG_ID}" 2>/dev/null | \
+                python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('readyState',''))" 2>/dev/null || true)
+            fi
             echo "[$i] readyState: ${STATE:-aguardando...}"
-            if [ "$STATE" = "READY" ]; then echo "Deployment READY"; break; fi
+            if [ "$STATE" = "READY" ]; then echo "Deployment READY"; READY=1; break; fi
             if [ "$STATE" = "ERROR" ] || [ "$STATE" = "CANCELED" ]; then echo "::error::Deployment $STATE"; exit 1; fi
             sleep 10
           done
+          if [ "$READY" != "1" ]; then echo "::warning::Timeout aguardando READY - proseguindo para promote"; fi
+
           # 3) Promove explicitamente (contorna o check deployment-alias que fica
           #    pending no auto-assign de projetos sem microfrontends)
           npx vercel@59.6.2 promote "$URL" --yes --token "$VERCEL_TOKEN" || \
@@ -202,6 +211,7 @@ jobs:
         if: success() && env.SLACK_WEBHOOK_URL != ''
         uses: slackapi/slack-github-action@v4.0.0
         with:
+          webhook type: incoming-webhook
           payload: |
             {
               "blocks": [
@@ -214,6 +224,7 @@ jobs:
         if: failure() && env.SLACK_WEBHOOK_URL != ''
         uses: slackapi/slack-github-action@v4.0.0
         with:
+          webhook type: incoming-webhook
           payload: |
             {
               "blocks": [
@@ -266,10 +277,11 @@ jobs:
           curl -fsSL "$API_URL/api/health" | head -c 500
           echo ""
           curl -fsSL "$API_URL/" | head -c 300
-      - name: Notificar Slack (conclusão)
+            - name: Notificar Slack (conclusão)
         if: success() && env.SLACK_WEBHOOK_URL != ''
         uses: slackapi/slack-github-action@v4.0.0
         with:
+          webhook type: incoming-webhook
           payload: |
             {
               "blocks": [
