@@ -129,7 +129,7 @@ jobs:
             exit 1
           fi
           echo "Token OK | Org=$VERCEL_ORG_ID | Proj=$VERCEL_PROJECT_ID"
-            - name: Notificar Slack (início do deploy)
+      - name: Notificar Slack (início do deploy)
         if: env.SLACK_WEBHOOK_URL != ''
         uses: slackapi/slack-github-action@v4.0.0
         with:
@@ -267,7 +267,6 @@ jobs:
     runs-on: ubuntu-latest
     if: success()
     env:
-      API_URL: ${{ env.API_URL }}
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK || secrets.SLACK_WEBHOOK_URL }}
     steps:
       - name: Aguardar propagação do alias
@@ -277,8 +276,10 @@ jobs:
           curl -fsSL "$API_URL/api/health" | head -c 500
           echo ""
           curl -fsSL "$API_URL/" | head -c 300
-            - name: Notificar Slack (conclusão)
+      - name: Notificar Slack (conclusão)
         if: success() && env.SLACK_WEBHOOK_URL != ''
+        env:
+          DEPLOY_API_URL: ${{ env.API_URL }}
         uses: slackapi/slack-github-action@v4.0.0
         with:
           webhook type: incoming-webhook
@@ -286,6 +287,6 @@ jobs:
             {
               "blocks": [
                 {"type":"section","text":{"type":"mrkdwn","text":":tada: *Pipeline XAU AI PRO concluído com sucesso*"}},
-                {"type":"section","text":{"type":"mrkdwn","text":"*Branch:* `${{ github.ref_name }}` | *Run:* #${{ github.run_number }}\n*Health:* ${{ env.API_URL }}/api/health\n*Workflows:* marketDataWorkflow, reconcileWorkflow"}}
+                {"type":"section","text":{"type":"mrkdwn","text":"*Branch:* `${{ github.ref_name }}` | *Run:* #${{ github.run_number }}\n*Health:* ${{ env.DEPLOY_API_URL }}/api/health\n*Workflows:* marketDataWorkflow, reconcileWorkflow"}}
               ]
             }
