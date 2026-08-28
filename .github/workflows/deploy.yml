@@ -152,11 +152,15 @@ jobs:
           fi
           echo "DEPLOY_URL=$URL" >> "$GITHUB_ENV"
           echo "Deployment URL: $URL"
-          # 2) Aguardar o deployment atingir READY (poll via API) — o CLI sozinho
-          # pode esperar para sempre no check deployment-alias (pending).
+          # 2) Aguardar o deployment atingir READY (poll via API REST — mais
+          # confiável que o `vercel inspect`, cuja saída formata o estado como
+          # "● Ready" e não é capturado por grep de palavras).
+          # O endpoint v13 aceita a URL do deployment diretamente.
+          API="https://api.vercel.com/v13/deployments/$URL?teamId=${VERCEL_ORG_ID}"
           for i in $(seq 1 30); do
-            STATE=$(npx vercel@59.6.2 inspect "$URL" --token "$VERCEL_TOKEN" 2>/dev/null | grep -oE 'READY|ERROR|CANCELED' | head -n1 || true)
-            echo "[$i] estado: ${STATE:-aguardando...}"
+            STATE=$(curl -sS -H "Authorization: Bearer $VERCEL_TOKEN" "$API" | \
+              python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get('readyState',''))" 2>/dev/null || true)
+            echo "[$i] readyState: ${STATE:-aguardando...}"
             if [ "$STATE" = "READY" ]; then echo "Deployment READY"; break; fi
             if [ "$STATE" = "ERROR" ] || [ "$STATE" = "CANCELED" ]; then echo "::error::Deployment $STATE"; exit 1; fi
             sleep 10
