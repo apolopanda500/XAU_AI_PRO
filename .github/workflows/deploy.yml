@@ -131,9 +131,8 @@ jobs:
           echo "Token OK | Org=$VERCEL_ORG_ID | Proj=$VERCEL_PROJECT_ID"
       - name: Notificar Slack (início do deploy)
         if: env.SLACK_WEBHOOK_URL != ''
-        uses: slackapi/slack-github-action@v4.0.0
+        uses: slackapi/slack-github-action@v1.26.0
         with:
-          webhook type: incoming-webhook
           payload: |
             {
               "blocks": [
@@ -209,9 +208,8 @@ jobs:
           echo "run=${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
       - name: Notificar Slack (sucesso)
         if: success() && env.SLACK_WEBHOOK_URL != ''
-        uses: slackapi/slack-github-action@v4.0.0
+        uses: slackapi/slack-github-action@v1.26.0
         with:
-          webhook type: incoming-webhook
           payload: |
             {
               "blocks": [
@@ -222,9 +220,8 @@ jobs:
       - name: Notificar Slack (falha)
         # Tolerante a ausência do secret: não falha quando SLACK_WEBHOOK não existe
         if: failure() && env.SLACK_WEBHOOK_URL != ''
-        uses: slackapi/slack-github-action@v4.0.0
+        uses: slackapi/slack-github-action@v1.26.0
         with:
-          webhook type: incoming-webhook
           payload: |
             {
               "blocks": [
@@ -280,9 +277,8 @@ jobs:
         if: success() && env.SLACK_WEBHOOK_URL != ''
         env:
           DEPLOY_API_URL: ${{ env.API_URL }}
-        uses: slackapi/slack-github-action@v4.0.0
+        uses: slackapi/slack-github-action@v1.26.0
         with:
-          webhook type: incoming-webhook
           payload: |
             {
               "blocks": [
