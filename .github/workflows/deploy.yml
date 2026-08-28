@@ -60,7 +60,7 @@ jobs:
           zip -r "dist/${PN}.zip" MQL5/Experts/XAU_AI_PRO/Release/v1.2.0 Python backend app requirements.txt > /dev/null
           echo "name=${PN}" >> "$GITHUB_OUTPUT"
       - name: Upload artefato
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: pkg-${{ steps.package.outputs.name }}
           path: dist/*.zip
