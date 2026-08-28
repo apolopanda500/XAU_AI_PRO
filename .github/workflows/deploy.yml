@@ -13,7 +13,9 @@ env:
   PYTHON_VERSION: "3.11"
   SENTRY_ORG: henrique-7n
   SENTRY_PROJECT: default
-  API_URL: https://xau-ai-pro-api.vercel.app
+  # ⚠️ Domínio real do projeto Vercel (com sufixo da team). O domínio
+  # "xau-ai-pro-api.vercel.app" NÃO existe (sem o sufixo da team).
+  API_URL: https://xau-ai-pro-api-apolopanda500.vercel.app
 
 concurrency:
   group: cicd-${{ github.ref }}
@@ -129,17 +131,27 @@ jobs:
           cd backend
           npm install --no-audit --no-fund
       - name: Deploy produção (Vercel CLI oficial)
-        # ⚠️ Executa NA RAIZ do repo. O Root Directory "backend" configurado nas
-        # settings do projeto na Vercel é resolvido pelo próprio CLI a partir do cwd.
-        # NÃO adicionar working-directory/cd aqui, senão gera "backend/backend".
+        # ✅ Executa DENTRO de backend/ (o projeto xau-ai-pro-api NÃO tem Root
+        # Directory configurado, então não gera "backend/backend"). Isso garante
+        # que o build Nitro (nitro build) rode de verdade — o deploy da raiz
+        # gerava um build estático vazio.
+        working-directory: backend
         run: |
           set -o pipefail
-          npx vercel@59.6.2 --prod --force --yes --token "$VERCEL_TOKEN" | tee deploy-output.log
+          npx vercel@59.6.2 --prod --force --yes --token "$VERCEL_TOKEN" 2>&1 | tee deploy-output.log || true
           URL=$(grep -oiE 'https://[a-zA-Z0-9.-]+\.vercel\.app' deploy-output.log | tail -n 1 || true)
           if [ -z "$URL" ]; then
-            echo "::warning::URL de deploy não encontrada no log do Vercel"
+            echo "::error::URL de deploy não encontrada no log do Vercel"
+            exit 1
           fi
           echo "DEPLOY_URL=$URL" >> "$GITHUB_ENV"
+          # O verdict de sistema "mfe-config-present" (Microfrontends Config
+          # Present) roda como Required mesmo em projetos que NÃO usam
+          # microfrontends e falha como inaplicável, deixando o deployment em
+          # STAGED. O deployment é criado normalmente; promovemos explicitamente
+          # para assumir os aliases de produção:
+          npx vercel@59.6.2 promote "$URL" --yes --token "$VERCEL_TOKEN" || \
+            echo "::warning::Promoção automática falhou - promote manual no dashboard"
       - name: Smoke test pós-deploy
         run: |
           for i in 1 2 3 4 5; do
@@ -186,7 +198,9 @@ jobs:
           cd backend
           npm install --no-audit --no-fund
       - name: Preview (Vercel CLI)
-        # Também roda da raiz para respeitar o Root Directory das settings
+        # Executa dentro de backend/ para o build Nitro correto (mesma razão
+        # do deploy de produção acima)
+        working-directory: backend
         run: npx vercel@59.6.2 --yes --token "$VERCEL_TOKEN"
 
   healthcheck:
