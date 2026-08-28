@@ -89,7 +89,7 @@ jobs:
             echo 'Sem frontend/package.json - skip'
           fi
       - name: Enviar source maps ao Sentry (sentry-cli)
-        if: env.SENTRY_AUTH_TOKEN != ''
+        if: env.SENTRY_AUTH_TOKEN != '' && hashFiles('frontend/build/**') != ''
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         run: |
@@ -97,8 +97,8 @@ jobs:
           if [ -d frontend/build ]; then
             sentry-cli releases new "${{ github.sha }}-$GITHUB_RUN_NUMBER" || true
             sentry-cli releases set-commits "${{ github.sha }}-$GITHUB_RUN_NUMBER" --auto || true
-            sentry-cli releases files "${{ github.sha }}-$GITHUB_RUN_NUMBER" upload-sourcemaps ./frontend/build --url-prefix '~/build' || true
-            sentry-cli releases finalize "${{ github.sha }}-$GITHUB_RUN_NUMBER" || true
+            sentry-cli releases files "${{ github.sha }}-$GITHUB_RUN_NUMBER" upload-sourcemaps ./frontend/build --url-prefix '~/build'
+            sentry-cli releases finalize "${{ github.sha }}-$GITHUB_RUN_NUMBER"
           else
             echo 'Sem pasta frontend/build - skip Sentry source maps'
           fi
@@ -115,8 +115,6 @@ jobs:
       # Webhook do Slack definido no nível do JOB para ser visível nas condições "if"
       # (aceita SLACK_WEBHOOK ou SLACK_WEBHOOK_URL)
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK || secrets.SLACK_WEBHOOK_URL }}
-      # CRITICO: sem INCOMING_WEBHOOK a action achata o payload e o Slack responde 400 no_text
-      SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -133,7 +131,7 @@ jobs:
           echo "Token OK | Org=$VERCEL_ORG_ID | Proj=$VERCEL_PROJECT_ID"
       - name: Notificar Slack (início do deploy)
         if: env.SLACK_WEBHOOK_URL != ''
-        uses: slackapi/slack-github-action@v1.26.0
+        uses: slackapi/slack-github-action@v4.0.0
         with:
           payload: |
             {
@@ -143,6 +141,7 @@ jobs:
                 {"type":"section","text":{"type":"mrkdwn","text":"*Branch:* `${{ github.ref_name }}`\n*Commit:* `${{ github.sha }}`\n*Run:* #${{ github.run_number }}\n*Link:* https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"}}
               ]
             }
+          webhook-type: incoming-webhook
       - name: Instalar dependências backend
         run: |
           cd backend
@@ -159,7 +158,7 @@ jobs:
         run: |
           set -o pipefail
           # 1) Cria o deployment (limite de tempo para não prender o job)
-          timeout 180 npx vercel@59.6.2 --prod --force --yes --token "$VERCEL_TOKEN" 2>&1 | tee deploy-output.log || true
+          timeout 180 npx vercel@59.9.1 --prod --force --yes --token "$VERCEL_TOKEN" 2>&1 | tee deploy-output.log || true
           URL=$(grep -oiE 'https://[a-zA-Z0-9.-]+\.vercel\.app' deploy-output.log | tail -n 1 || true)
           if [ -z "$URL" ]; then
             echo "::error::URL de deploy não encontrada no log do Vercel"
@@ -174,7 +173,7 @@ jobs:
                     # Estrategia: vercel inspect --json (primitivo mas confiavel); fallback API v13
           READY=0
           for i in $(seq 1 30); do
-            STATE=$(npx vercel@59.6.2 inspect "$URL" --json --token "$VERCEL_TOKEN" 2>/dev/null | \
+            STATE=$(npx vercel@59.9.1 inspect "$URL" --json --token "$VERCEL_TOKEN" 2>/dev/null | \
               python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('readyState',''))" 2>/dev/null || true)
             if [ -z "$STATE" ]; then
               STATE=$(curl -sS -H "Authorization: Bearer $VERCEL_TOKEN" \
@@ -190,7 +189,7 @@ jobs:
 
           # 3) Promove explicitamente (contorna o check deployment-alias que fica
           #    pending no auto-assign de projetos sem microfrontends)
-          npx vercel@59.6.2 promote "$URL" --yes --token "$VERCEL_TOKEN" || \
+          npx vercel@59.9.1 promote "$URL" --yes --token "$VERCEL_TOKEN" || \
             echo "::warning::Promoção automática falhou - promote manual no dashboard"
       - name: Smoke test pós-deploy
         run: |
@@ -211,7 +210,7 @@ jobs:
           echo "run=${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
       - name: Notificar Slack (sucesso)
         if: success() && env.SLACK_WEBHOOK_URL != ''
-        uses: slackapi/slack-github-action@v1.26.0
+        uses: slackapi/slack-github-action@v4.0.0
         with:
           payload: |
             {
@@ -221,10 +220,11 @@ jobs:
                 {"type":"section","text":{"type":"mrkdwn","text":"*Projeto:* xau-ai-pro-api\n*Branch:* `${{ steps.notify.outputs.ref }}`\n*Commit:* `${{ steps.notify.outputs.commit }}`\n*Run:* #${{ steps.notify.outputs.run }}\n*Deploy:* ${{ steps.notify.outputs.deploy_url }}"}}
               ]
             }
+          webhook-type: incoming-webhook
       - name: Notificar Slack (falha)
         # Tolerante a ausência do secret: não falha quando SLACK_WEBHOOK não existe
         if: failure() && env.SLACK_WEBHOOK_URL != ''
-        uses: slackapi/slack-github-action@v1.26.0
+        uses: slackapi/slack-github-action@v4.0.0
         with:
           payload: |
             {
@@ -234,6 +234,7 @@ jobs:
                 {"type":"section","text":{"type":"mrkdwn","text":"*Branch:* `${{ github.ref_name }}`\n*Run:* #${{ github.run_number }}\n*Veja:* https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"}}
               ]
             }
+          webhook-type: incoming-webhook
 
   preview-deploy:
     name: Preview Deploy (PR)
@@ -261,7 +262,7 @@ jobs:
         # Executa dentro de backend/ para o build Nitro correto (mesma razão
         # do deploy de produção acima)
         working-directory: backend
-        run: npx vercel@59.6.2 --yes --token "$VERCEL_TOKEN"
+        run: npx vercel@59.9.1 --yes --token "$VERCEL_TOKEN"
 
   healthcheck:
     name: Health Check Final
@@ -270,8 +271,6 @@ jobs:
     if: success()
     env:
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK || secrets.SLACK_WEBHOOK_URL }}
-      # CRITICO: sem INCOMING_WEBHOOK a action achata o payload e o Slack responde 400 no_text
-      SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
     steps:
       - name: Aguardar propagação do alias
         run: sleep 15
@@ -284,7 +283,7 @@ jobs:
         if: success() && env.SLACK_WEBHOOK_URL != ''
         env:
           DEPLOY_API_URL: ${{ env.API_URL }}
-        uses: slackapi/slack-github-action@v1.26.0
+        uses: slackapi/slack-github-action@v4.0.0
         with:
           payload: |
             {
@@ -294,3 +293,4 @@ jobs:
                 {"type":"section","text":{"type":"mrkdwn","text":"*Branch:* `${{ github.ref_name }}` | *Run:* #${{ github.run_number }}\n*Health:* ${{ env.DEPLOY_API_URL }}/api/health\n*Workflows:* marketDataWorkflow, reconcileWorkflow"}}
               ]
             }
+          webhook-type: incoming-webhook
