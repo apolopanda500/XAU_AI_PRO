@@ -56,7 +56,7 @@ app.get('/api/_diag', async (req, res) => {
   try {
     const api = await import('workflow/api');
     info.api_keys = Object.keys(api);
-    const wf = await import('./workflows/index.mjs');
+    const wf = await import('../workflows/index.mjs');
     info.wf_keys = Object.keys(wf);
     try {
       const run = await api.start(wf.marketDataWorkflow, [], { name: 'diag' });
