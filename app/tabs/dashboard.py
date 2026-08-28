@@ -14,7 +14,8 @@ from app.config_manager import get_config
 from app.market_data import MarketData
 from app.mt5_robot import MT5Robot
 from app.system_status_reader import read_system_status, summarize
-from app.event_reader import event_status_lines`nfrom app.backend_client import fetch_all, status_lines  # ETAPA 16.5  # ETAPA 15.6
+from app.event_reader import event_status_lines
+from app.backend_client import fetch_all, status_lines  # ETAPA 16.5  # ETAPA 15.6
 from app.theme.mexc import Theme
 
 
