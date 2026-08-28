@@ -35,18 +35,38 @@
 ## Correções realizadas (28/08/2026)
 
 1. **Erro "Microfrontends Config Present (mfe-config-present)"**
-   - Causa: `vercel.json` legado com BOM e configuração inválida de `microfrontends`
-     (removido no commit `4b852c2`).
-   - O alias de produção ficou órfão de um deployment deletado, fazendo o check
-     `deployment-alias` falhar e os deployments ficarem **STAGED**.
-   - Solução: promoção manual (`vercel promote`) — recria o alias limpo.
+   - Causa raiz FINAL: o projeto tinha o check `mfe-config-present` configurado como
+     **job com target `production`** (campo `jobs` do projeto na API) — um resquício
+     da tentativa de configurar microfrontends com o `vercel.json` legado (com BOM,
+     removido no commit `4b852c2`).
+   - Como o projeto não é um MFE default app, o check sempre falhava como
+     "inaplicável" e bloqueava a promoção (deployment ficava em STAGED).
+   - Solução: zerar os targets do job nos dois projetos:
+     ```bash
+     PATCH /v9/projects/{id} -d '{"jobs": {"mfe-config-present": {"targets": []}}}'
+     ```
+     (o PATCH com `{"jobs": {...}}` faz merge — para remover um job, sete `targets: []`).
 
-2. **SSO Protection ativo** — desabilitado via API nos dois projetos
+2. **Deployments STAGED (check `deployment-alias` failed)**
+   - Consequência do item 1: com checks falhando, o alias de produção não era atribuído.
+   - Contorno no CI/CD: `vercel promote <deployment-url> --yes` após o deploy.
+
+3. **SSO Protection ativo** — desabilitado via API nos dois projetos
    (`PATCH /v9/projects/{id}` com `ssoProtection: null`), pois bloqueava qualquer
    acesso público à API.
 
-3. **Bug no `/api/_diag`** — import dinâmico com caminho errado
+4. **Bug no `/api/_diag`** — import dinâmico com caminho errado
    (`'./workflows/index.mjs'` → `'../workflows/index.mjs'`) corrigido no commit `e2f8ac0`.
+
+5. **Workflow GitHub Actions** (commit `686162d`)
+   - Deploy agora roda com `working-directory: backend` (build Nitro real — antes
+     subia um build estático vazio da raiz do repo).
+   - `vercel promote` explícito após o deploy.
+   - `API_URL` corrigida para `https://xau-ai-pro-api-apolopanda500.vercel.app`.
+
+6. **Git desconectado do projeto `xau-ai-pro-api`**
+   - (`DELETE /v9/projects/xau-ai-pro-api/link`) — o deploy dele é controlado pelo
+     Actions; o projeto `xau-ai-pro` mantém o Git conectado (rootDirectory `backend`).
 
 ## Troubleshooting
 
