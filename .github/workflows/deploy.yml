@@ -45,7 +45,7 @@ jobs:
           grep -viE "^\s*MetaTrader5" requirements.txt > /tmp/req-ci.txt
           pip install -r /tmp/req-ci.txt
       - name: Validar sintaxe Python
-        run: python -m compileall -q MQL5/Experts/XAU_AI_PRO/Release/v1.2.0/Python backend app || true
+        run: python -m compileall -q MQL5/Experts/XAU_AI_PRO/Release/v1.2.0/Python backend app
       - name: Empacotar bundle
         id: package
         env:
