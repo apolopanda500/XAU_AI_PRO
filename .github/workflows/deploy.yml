@@ -113,7 +113,8 @@ jobs:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID || 'team_m6XXhz0AuVtzK0zxtv96h03a' }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID || 'prj_RApeFNVlnOGYxtYcRDqaSUTIJD1G' }}
       # Webhook do Slack definido no nível do JOB para ser visível nas condições "if"
-      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+      # (aceita SLACK_WEBHOOK ou SLACK_WEBHOOK_URL)
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK || secrets.SLACK_WEBHOOK_URL }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -128,6 +129,17 @@ jobs:
             exit 1
           fi
           echo "Token OK | Org=$VERCEL_ORG_ID | Proj=$VERCEL_PROJECT_ID"
+      - name: Notificar Slack (início do deploy)
+        if: env.SLACK_WEBHOOK_URL != ''
+        uses: slackapi/slack-github-action@v4.0.0
+        with:
+          payload: |
+            {
+              "blocks": [
+                {"type":"section","text":{"type":"mrkdwn","text":":rocket: *Deploy XAU AI PRO iniciado*"}},
+                {"type":"section","text":{"type":"mrkdwn","text":"*Branch:* `${{ github.ref_name }}`\n*Commit:* `${{ github.sha }}`\n*Run:* #${{ github.run_number }}\n*Link:* https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"}}
+              ]
+            }
       - name: Instalar dependências backend
         run: |
           cd backend
@@ -178,19 +190,37 @@ jobs:
             sleep 10
           done
           echo "::warning::Healthcheck ainda não refletiu o novo deploy"
+      - name: Coletar URL do deploy p/ notificação
+        id: notify
+        run: |
+          DEPLOY_URL="${DEPLOY_URL:-$API_URL}"
+          echo "deploy_url=$DEPLOY_URL" >> "$GITHUB_OUTPUT"
+          echo "commit=${GITHUB_SHA:0:7}" >> "$GITHUB_OUTPUT"
+          echo "ref=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+          echo "run=${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
       - name: Notificar Slack (sucesso)
         if: success() && env.SLACK_WEBHOOK_URL != ''
         uses: slackapi/slack-github-action@v4.0.0
         with:
           payload: |
-            {"text":"Deploy XAU AI PRO OK!","blocks":[{"type":"section","text":{"type":"mrkdwn","text":"*OK* Branch: `${{ github.ref_name }}` | Run: #${{ github.run_number }} | ${{ env.API_URL }}"}}]}
+            {
+              "blocks": [
+                {"type":"section","text":{"type":"mrkdwn","text":":white_check_mark: *Deploy XAU AI PRO OK*"}},
+                {"type":"section","text":{"type":"mrkdwn","text":"*Projeto:* xau-ai-pro-api\n*Branch:* `${{ steps.notify.outputs.ref }}`\n*Commit:* `${{ steps.notify.outputs.commit }}`\n*Run:* #${{ steps.notify.outputs.run }}\n*Deploy:* ${{ steps.notify.outputs.deploy_url }}"}}
+              ]
+            }
       - name: Notificar Slack (falha)
         # Tolerante a ausência do secret: não falha quando SLACK_WEBHOOK não existe
         if: failure() && env.SLACK_WEBHOOK_URL != ''
         uses: slackapi/slack-github-action@v4.0.0
         with:
           payload: |
-            {"text":"Falha no deploy XAU AI PRO","blocks":[{"type":"section","text":{"type":"mrkdwn","text":"*FALHA* Branch: `${{ github.ref_name }}` | Run: #${{ github.run_number }}"}}]}
+            {
+              "blocks": [
+                {"type":"section","text":{"type":"mrkdwn","text":":x: *Falha no deploy XAU AI PRO*"}},
+                {"type":"section","text":{"type":"mrkdwn","text":"*Branch:* `${{ github.ref_name }}`\n*Run:* #${{ github.run_number }}\n*Veja:* https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"}}
+              ]
+            }
 
   preview-deploy:
     name: Preview Deploy (PR)
@@ -225,6 +255,9 @@ jobs:
     needs: deploy-vercel
     runs-on: ubuntu-latest
     if: success()
+    env:
+      API_URL: ${{ env.API_URL }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK || secrets.SLACK_WEBHOOK_URL }}
     steps:
       - name: Aguardar propagação do alias
         run: sleep 15
@@ -233,3 +266,14 @@ jobs:
           curl -fsSL "$API_URL/api/health" | head -c 500
           echo ""
           curl -fsSL "$API_URL/" | head -c 300
+      - name: Notificar Slack (conclusão)
+        if: success() && env.SLACK_WEBHOOK_URL != ''
+        uses: slackapi/slack-github-action@v4.0.0
+        with:
+          payload: |
+            {
+              "blocks": [
+                {"type":"section","text":{"type":"mrkdwn","text":":tada: *Pipeline XAU AI PRO concluído com sucesso*"}},
+                {"type":"section","text":{"type":"mrkdwn","text":"*Branch:* `${{ github.ref_name }}` | *Run:* #${{ github.run_number }}\n*Health:* ${{ env.API_URL }}/api/health\n*Workflows:* marketDataWorkflow, reconcileWorkflow"}}
+              ]
+            }
