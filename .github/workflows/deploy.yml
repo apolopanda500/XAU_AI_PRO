@@ -19,7 +19,9 @@ env:
 
 concurrency:
   group: cicd-${{ github.ref }}
-  cancel-in-progress: false
+  # Sempre cancela o run anterior: o deploy mais recente deve vencer (evita
+  # runs travados bloqueando a fila de deploys).
+  cancel-in-progress: true
 
 jobs:
   validate-and-package:
@@ -135,21 +137,32 @@ jobs:
         # Directory configurado, então não gera "backend/backend"). Isso garante
         # que o build Nitro (nitro build) rode de verdade — o deploy da raiz
         # gerava um build estático vazio.
+        # Obs 2: o CLI do `--prod` pode ficar pendurado aguardando o check
+        # "deployment-alias" (pending). Usamos `timeout` + grep para extrair a
+        # URL e depois aguardamos READY via API antes de promover.
         working-directory: backend
         run: |
           set -o pipefail
-          npx vercel@59.6.2 --prod --force --yes --token "$VERCEL_TOKEN" 2>&1 | tee deploy-output.log || true
+          # 1) Cria o deployment (limite de tempo para não prender o job)
+          timeout 180 npx vercel@59.6.2 --prod --force --yes --token "$VERCEL_TOKEN" 2>&1 | tee deploy-output.log || true
           URL=$(grep -oiE 'https://[a-zA-Z0-9.-]+\.vercel\.app' deploy-output.log | tail -n 1 || true)
           if [ -z "$URL" ]; then
             echo "::error::URL de deploy não encontrada no log do Vercel"
             exit 1
           fi
           echo "DEPLOY_URL=$URL" >> "$GITHUB_ENV"
-          # O verdict de sistema "mfe-config-present" (Microfrontends Config
-          # Present) roda como Required mesmo em projetos que NÃO usam
-          # microfrontends e falha como inaplicável, deixando o deployment em
-          # STAGED. O deployment é criado normalmente; promovemos explicitamente
-          # para assumir os aliases de produção:
+          echo "Deployment URL: $URL"
+          # 2) Aguardar o deployment atingir READY (poll via API) — o CLI sozinho
+          # pode esperar para sempre no check deployment-alias (pending).
+          for i in $(seq 1 30); do
+            STATE=$(npx vercel@59.6.2 inspect "$URL" --token "$VERCEL_TOKEN" 2>/dev/null | grep -oE 'READY|ERROR|CANCELED' | head -n1 || true)
+            echo "[$i] estado: ${STATE:-aguardando...}"
+            if [ "$STATE" = "READY" ]; then echo "Deployment READY"; break; fi
+            if [ "$STATE" = "ERROR" ] || [ "$STATE" = "CANCELED" ]; then echo "::error::Deployment $STATE"; exit 1; fi
+            sleep 10
+          done
+          # 3) Promove explicitamente (contorna o check deployment-alias que fica
+          #    pending no auto-assign de projetos sem microfrontends)
           npx vercel@59.6.2 promote "$URL" --yes --token "$VERCEL_TOKEN" || \
             echo "::warning::Promoção automática falhou - promote manual no dashboard"
       - name: Smoke test pós-deploy
