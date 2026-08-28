@@ -115,6 +115,8 @@ jobs:
       # Webhook do Slack definido no nível do JOB para ser visível nas condições "if"
       # (aceita SLACK_WEBHOOK ou SLACK_WEBHOOK_URL)
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK || secrets.SLACK_WEBHOOK_URL }}
+      # CRITICO: sem INCOMING_WEBHOOK a action achata o payload e o Slack responde 400 no_text
+      SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -135,6 +137,7 @@ jobs:
         with:
           payload: |
             {
+              "text": ":rocket: Deploy XAU AI PRO iniciado",
               "blocks": [
                 {"type":"section","text":{"type":"mrkdwn","text":":rocket: *Deploy XAU AI PRO iniciado*"}},
                 {"type":"section","text":{"type":"mrkdwn","text":"*Branch:* `${{ github.ref_name }}`\n*Commit:* `${{ github.sha }}`\n*Run:* #${{ github.run_number }}\n*Link:* https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"}}
@@ -212,6 +215,7 @@ jobs:
         with:
           payload: |
             {
+              "text": ":white_check_mark: Deploy XAU AI PRO OK",
               "blocks": [
                 {"type":"section","text":{"type":"mrkdwn","text":":white_check_mark: *Deploy XAU AI PRO OK*"}},
                 {"type":"section","text":{"type":"mrkdwn","text":"*Projeto:* xau-ai-pro-api\n*Branch:* `${{ steps.notify.outputs.ref }}`\n*Commit:* `${{ steps.notify.outputs.commit }}`\n*Run:* #${{ steps.notify.outputs.run }}\n*Deploy:* ${{ steps.notify.outputs.deploy_url }}"}}
@@ -224,6 +228,7 @@ jobs:
         with:
           payload: |
             {
+              "text": ":x: Falha no deploy XAU AI PRO",
               "blocks": [
                 {"type":"section","text":{"type":"mrkdwn","text":":x: *Falha no deploy XAU AI PRO*"}},
                 {"type":"section","text":{"type":"mrkdwn","text":"*Branch:* `${{ github.ref_name }}`\n*Run:* #${{ github.run_number }}\n*Veja:* https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"}}
@@ -265,6 +270,8 @@ jobs:
     if: success()
     env:
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK || secrets.SLACK_WEBHOOK_URL }}
+      # CRITICO: sem INCOMING_WEBHOOK a action achata o payload e o Slack responde 400 no_text
+      SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
     steps:
       - name: Aguardar propagação do alias
         run: sleep 15
@@ -281,6 +288,7 @@ jobs:
         with:
           payload: |
             {
+              "text": ":tada: Pipeline XAU AI PRO concluido com sucesso",
               "blocks": [
                 {"type":"section","text":{"type":"mrkdwn","text":":tada: *Pipeline XAU AI PRO concluído com sucesso*"}},
                 {"type":"section","text":{"type":"mrkdwn","text":"*Branch:* `${{ github.ref_name }}` | *Run:* #${{ github.run_number }}\n*Health:* ${{ env.DEPLOY_API_URL }}/api/health\n*Workflows:* marketDataWorkflow, reconcileWorkflow"}}
