@@ -147,6 +147,13 @@ class XauAiProApp:
         self.status_var = tk.StringVar(value="Pronto. Faça login para continuar.")
         self._build_status_bar()
 
+        # Slack watcher: eventos do EA -> Slack em tempo real (thread daemon)
+        try:
+            import slack_watcher
+            slack_watcher.start_watcher(interval=10.0)
+        except Exception:
+            pass
+
         # Estado da sessão
         cs.ensure_default_user()
         cs.ensure_schema()
@@ -1045,8 +1052,18 @@ class XauAiProApp:
             res = mi.send_order(symbol, order_type, volume, sl, tp)
             if res.get("ok"):
                 self.msg_queue.put(("mt5_order", f"Ordem executada: ticket {res['ticket']} @ {res['price']}"))
+                try:
+                    import slack_notifier as _sn
+                    _sn.send_info("ORDEM MANUAL", f"{order_type} {volume} {symbol} @ {res['price']} (ticket {res['ticket']})")
+                except Exception:
+                    pass
             else:
                 self.msg_queue.put(("mt5_order", f"Erro na ordem: {res.get('error', '?')}"))
+                try:
+                    import slack_notifier as _sn
+                    _sn.send_error("ORDEM MANUAL", f"{symbol}: {res.get('error', '?')}")
+                except Exception:
+                    pass
         except Exception as e:
             self.msg_queue.put(("mt5_order", f"Excecao: {e}"))
 
@@ -1085,6 +1102,14 @@ class XauAiProApp:
         try:
             res = mi.close_position(ticket)
             self.msg_queue.put(("mt5_close", res))
+            try:
+                import slack_notifier as _sn
+                if res.get("ok"):
+                    _sn.send_info("POSICAO", f"Posicao {ticket} fechada manualmente")
+                else:
+                    _sn.send_error("POSICAO", f"Falha ao fechar {ticket}: {res.get('error', '?')}")
+            except Exception:
+                pass
         except Exception as e:
             self.msg_queue.put(("status", f"MT5 close: {e}"))
 

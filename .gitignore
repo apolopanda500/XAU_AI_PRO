@@ -63,3 +63,5 @@ Logs/*
 .venv/
 .vercel
 .env*
+.slack_watcher_offset
+Ultimate/.slack_watcher_offset
