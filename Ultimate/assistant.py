@@ -15,6 +15,12 @@ from typing import Any
 
 from config_store import DB_PATH
 
+# Sentry AI telemetry (Python/ no path)
+import sys as _sys
+_PY = Path(__file__).resolve().parent.parent / "Python"
+if str(_PY) not in _sys.path:
+    _sys.path.insert(0, str(_PY))
+
 
 class MemoryStore:
     """Armazena conversas, pensamentos e notas no SQLite."""
@@ -197,15 +203,62 @@ class AIAssistant:
             messages.append({"role": h["role"], "content": h["content"]})
         messages.append({"role": "user", "content": user_msg})
 
-        # Sentry Conversas: agrupa os spans de IA desta conversa
+        # --- Sentry AI Agent Monitoring (gen_ai.* spans) ---
         try:
-            import sentry_config
-            sentry_config.set_ai_conversation_id(self._conversation_id())
-        except Exception:
-            pass
+            import json
+            import sentry_sdk
+            from sentry_config import set_ai_conversation_id
 
-        reply = self._call_litellm(messages)
-        model = "litellm"
+            conv_id = self._conversation_id()
+            set_ai_conversation_id(conv_id)
+
+            with sentry_sdk.start_span(
+                op="gen_ai.invoke_agent", name="invoke_agent XAU AI Assistant"
+            ) as agent_span:
+                agent_span.set_data("gen_ai.request.model", "gpt-4o-mini")
+                agent_span.set_data("gen_ai.agent.name", "XAU AI Assistant")
+                agent_span.set_data("gen_ai.conversation.id", conv_id)
+
+                with sentry_sdk.start_span(
+                    op="gen_ai.request", name="chat gpt-4o-mini"
+                ) as req_span:
+                    req_span.set_data("gen_ai.request.model", "gpt-4o-mini")
+                    req_span.set_data("gen_ai.request.messages", json.dumps(messages))
+                    req_span.set_data("gen_ai.request.temperature", 0.7)
+                    req_span.set_data("gen_ai.conversation.id", conv_id)
+
+                    reply = self._call_litellm(messages)
+                    model = "litellm"
+
+                    req_span.set_data(
+                        "gen_ai.response.text",
+                        json.dumps([reply]) if reply else "[]",
+                    )
+                    # Tokens (se o LiteLLM retornar usage na resposta)
+                    try:
+                        import requests as _r
+                        from config_store import get_api_config
+                        _cfg = get_api_config()
+                        _port = _cfg.get("litellm_port", 4000)
+                        _url = f"http://127.0.0.1:{_port}/v1/chat/completions"
+                        _pr = {"model": "gpt-4o-mini", "messages": messages, "temperature": 0.7}
+                        _rr = _r.post(_url, json=_pr, timeout=15)
+                        if _rr.status_code == 200:
+                            _u = _rr.json().get("usage", {})
+                            if _u.get("prompt_tokens"):
+                                req_span.set_data("gen_ai.usage.input_tokens", _u["prompt_tokens"])
+                            if _u.get("completion_tokens"):
+                                req_span.set_data("gen_ai.usage.output_tokens", _u["completion_tokens"])
+                            if _u.get("total_tokens"):
+                                req_span.set_data("gen_ai.usage.total_tokens", _u["total_tokens"])
+                    except Exception:
+                        pass
+
+                agent_span.set_data("gen_ai.response.text", str(reply))
+        except Exception:
+            # Fallback: sem telemetry, mantem funcionamento
+            reply = self._call_litellm(messages)
+            model = "litellm"
         if reply is None:
             reply = self._local_reply(user_msg)
             model = "local"

@@ -168,6 +168,17 @@ class XauAiProApp:
             cs.set_session("admin")
         except Exception:
             pass
+
+        # Sentry: atribui usuario corrente (coluna User em Conversas)
+        try:
+            import sys as _sys
+            _PY = Path(__file__).resolve().parent.parent / "Python"
+            if str(_PY) not in _sys.path:
+                _sys.path.insert(0, str(_PY))
+            from sentry_config import set_current_user
+            set_current_user("admin", username="admin")
+        except Exception:
+            pass
         self.show_login()
         self.root.after(300, self._auto_login)
 

@@ -79,11 +79,12 @@ def init_sentry():
         environment=environment,
         
         # Performance monitoring para IA/Trading
-        traces_sample_rate=0.2 if environment == "production" else 1.0,
+        traces_sample_rate=1.0,
         profiles_sample_rate=0.1 if environment == "production" else 0.0,
         
         # Seguranca
-        send_default_pii=False,
+        stream_gen_ai_spans=True,
+        send_default_pii=True,
         attach_stacktrace=True,
         
         # Debug apenas em staging
@@ -113,14 +114,32 @@ def init_sentry():
     print(f"[SENTRY] Asset: XAUUSD")
 
 def set_ai_conversation_id(conversation_id: str) -> None:
-    """Define o ID de conversa para o Sentry Conversas.
+    """Define o ID de conversa para o Sentry Conversas (gen_ai.conversation.id).
 
-    O Sentry agrupa spans de IA pelo atributo gen_ai.conversation.id.
+    Usa a API oficial sentry_sdk.ai (SDK >= 2.64) com fallback manual.
     """
     try:
+        try:
+            from sentry_sdk import ai as _sai
+            _sai.set_conversation_id(str(conversation_id))
+            return
+        except Exception:
+            pass
+        import sentry_sdk
         sentry_sdk.get_current_scope().set_attribute(
             "gen_ai.conversation.id", str(conversation_id)
         )
+    except Exception:
+        pass
+
+
+def set_current_user(user_id: str, **fields) -> None:
+    """Atribui o usuario corrente (preenche a coluna User do Sentry Conversas)."""
+    try:
+        import sentry_sdk
+        user = {"id": str(user_id)}
+        user.update(fields)
+        sentry_sdk.set_user(user)
     except Exception:
         pass
 
@@ -207,3 +226,6 @@ def capture_model_performance(model_metrics):
 
 # Inicializa automaticamente ao importar
 init_sentry()
+
+
+
