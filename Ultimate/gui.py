@@ -255,6 +255,10 @@ class XauAiProApp:
                     if res.data:
                         for r in res.data.get("results", []):
                             self._ilog(f"  - {r}")
+                elif kind == "slack_test":
+                    res = item[1]
+                    self.slack_status.set("OK" if res.ok else "Falhou")
+                    self._ilog(f"[Slack] {res.message}")
                 elif kind == "mt5_order":
                     self._mt5_log(item[1])
                     self.set_status(item[1])
@@ -1470,6 +1474,34 @@ class XauAiProApp:
             row=2, column=1, sticky="w", padx=6
         )
 
+        sl = ttk.LabelFrame(tab, text="Slack Notifications")
+        sl.pack(fill="x", padx=10, pady=8)
+        ttk.Label(sl, text="Webhook URL:").grid(row=0, column=0, sticky="e", padx=4, pady=3)
+        self.slack_webhook = tk.StringVar(value=cfg.get("slack_webhook_url", ""))
+        ttk.Entry(sl, textvariable=self.slack_webhook, width=60).grid(row=0, column=1, padx=6, pady=3)
+        ttk.Label(sl, text="(https://hooks.slack.com/services/...)").grid(
+            row=0, column=2, sticky="w", padx=2, foreground="#888"
+        )
+        self.slack_enabled = tk.BooleanVar(value=cfg.get("slack_enabled", True))
+        ttk.Checkbutton(sl, text="Ativar", variable=self.slack_enabled).grid(
+            row=1, column=1, sticky="w", padx=6, pady=2
+        )
+        self.slack_notify_trades = tk.BooleanVar(value=cfg.get("slack_notify_trades", True))
+        ttk.Checkbutton(sl, text="Notificar trades", variable=self.slack_notify_trades).grid(
+            row=1, column=1, sticky="e", padx=6, pady=2
+        )
+        self.slack_notify_errors = tk.BooleanVar(value=cfg.get("slack_notify_errors", True))
+        ttk.Checkbutton(sl, text="Notificar erros", variable=self.slack_notify_errors).grid(
+            row=1, column=2, sticky="w", padx=6, pady=2
+        )
+        self.slack_status = tk.StringVar(value="Nao testado")
+        ttk.Button(sl, text="Testar conexao", command=self._test_slack).grid(
+            row=2, column=0, padx=4, pady=4
+        )
+        ttk.Label(sl, textvariable=self.slack_status, foreground="#888").grid(
+            row=2, column=1, sticky="w", padx=6
+        )
+
         ttk.Button(tab, text="Salvar tokens", command=self._save_integration_tokens).pack(
             anchor="w", padx=10, pady=8
         )
@@ -1490,8 +1522,21 @@ class XauAiProApp:
             "figma_token": self.figma_token.get(),
             "figma_team_id": self.figma_team.get(),
             "brave_api_key": self.brave_key.get(),
+            "slack_webhook_url": self.slack_webhook.get(),
+            "slack_enabled": self.slack_enabled.get(),
+            "slack_notify_trades": self.slack_notify_trades.get(),
+            "slack_notify_errors": self.slack_notify_errors.get(),
         })
         self._ilog("[OK] Tokens salvos.")
+
+    def _test_slack(self) -> None:
+        self.slack_status.set("testando...")
+        threading.Thread(target=self._slack_thread, daemon=True).start()
+
+    def _slack_thread(self) -> None:
+        client = integrations.SlackClient(self.slack_webhook.get())
+        res = client.test()
+        self.msg_queue.put(("slack_test", res))
 
     def _test_github(self) -> None:
         self.gh_status.set("testando...")

@@ -193,6 +193,19 @@ def run_full(check: bool = True) -> dict:
     out_file = REPORTS_DIR / f"auto_approve_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     out_file.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
     report["report_file"] = str(out_file)
+
+    # Notifica resultado no Slack (se configurado)
+    try:
+        import sys as _sys
+        _sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import slack_notifier as _sn
+        approved = verdict.get("approved") if check else None
+        if approved is not None:
+            details = f"Dataset: {stats.get('rows', 0)} amostras | Trades: {len(preds)}"
+            _sn.SlackNotifier.get().send_approval(approved, details)
+    except Exception:
+        pass
+
     return report
 
 

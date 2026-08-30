@@ -81,7 +81,12 @@ DEFAULTS: dict = {
         "dashboard_port": 8501,
         "live_provider": "auto",  # auto | mt5 | yfinance
         "refresh_seconds": 5,
-        "mt5_terminal_path": "C:\\Program Files\\MetaTrader 5\\terminal64.exe",
+        "mt5_terminal_path": "C:\Program Files\MetaTrader 5\terminal64.exe",
+        "slack_webhook_url": "",     # Incoming Webhook URL (https://hooks.slack.com/services/...)
+        "slack_enabled": True,       # Ativa/desativa notificações Slack
+        "slack_notify_trades": True, # Notificar abertura/fechamento de posições
+        "slack_notify_errors": True, # Notificar erros críticos
+        "slack_notify_risk": True,   # Notificar drawdown, circuit breaker, etc.
     },
     "ui": {
         "theme": "dark",
@@ -279,3 +284,7 @@ def ensure_schema(db_path: Path = DB_PATH) -> None:
 
 def db_connect(db_path: Path = DB_PATH):
     return sqlite3.connect(str(db_path))
+
+
+
+

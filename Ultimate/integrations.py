@@ -129,3 +129,36 @@ class WebSearchClient:
             return IntegrationResult(ok=False, message=f"Erro {r.status_code}: {r.text[:200]}")
         except Exception as e:
             return IntegrationResult(ok=False, message=str(e))
+class SlackClient:
+    """Cliente leve para notificações via Incoming Webhook do Slack."""
+
+    def __init__(self, webhook_url: str = "") -> None:
+        self.webhook_url = webhook_url.strip() if webhook_url else ""
+
+    def test(self) -> IntegrationResult:
+        """Testa a conexão enviando uma mensagem de teste."""
+        if not self.webhook_url:
+            return IntegrationResult(ok=False, message="Webhook URL nao configurado")
+        if not self.webhook_url.startswith("https://hooks.slack.com/services/"):
+            return IntegrationResult(ok=False, message="URL invalida (deve ser https://hooks.slack.com/services/...)")
+        try:
+            payload = {"text": ":white_check_mark: XAU AI PRO — conexao Slack OK!"}
+            r = requests.post(self.webhook_url, json=payload, timeout=10)
+            if r.status_code == 200:
+                return IntegrationResult(ok=True, message="Conectado ao Slack com sucesso")
+            return IntegrationResult(ok=False, message=f"Erro {r.status_code}: {r.text[:200]}")
+        except Exception as e:
+            return IntegrationResult(ok=False, message=str(e))
+
+    def send(self, text: str) -> IntegrationResult:
+        """Envia uma mensagem de texto para o canal Slack."""
+        if not self.webhook_url:
+            return IntegrationResult(ok=False, message="Webhook URL nao configurado")
+        try:
+            payload = {"text": text, "mrkdwn": True}
+            r = requests.post(self.webhook_url, json=payload, timeout=10)
+            if r.status_code == 200:
+                return IntegrationResult(ok=True, message="Mensagem enviada")
+            return IntegrationResult(ok=False, message=f"Erro {r.status_code}: {r.text[:200]}")
+        except Exception as e:
+            return IntegrationResult(ok=False, message=str(e))

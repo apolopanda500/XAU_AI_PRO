@@ -89,6 +89,14 @@ def _banner(rep: dict) -> None:
 def main() -> None:
     dry = os.getenv("WATCH_DRY_STATS", "") == "1"
     interval = _get_interval_seconds()
+
+    # Inicia Slack watcher em background (apenas se configurado)
+    try:
+        import slack_watcher
+        slack_watcher.start_watcher(interval=10.0)
+    except Exception:
+        pass
+
     print(f"AUTO-WATCH iniciado. Intervalo: {interval}s | dry_stats={dry}")
     while True:
         started = time.time()

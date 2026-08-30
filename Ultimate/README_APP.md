@@ -76,6 +76,55 @@ python ../Python/backend/api.py        # http://127.0.0.1:8000/docs
 Endpoints: `/`, `/prediction/{symbol}`, `/predictions`, `/account`,
 `/market/live`, `/market/live/{symbol}`, `/login`, `/train`, `/predict`.
 
+## 📢 Notificações Slack
+O XAU AI PRO envia alertas em tempo real para canais Slack via **Incoming Webhooks**.
+
+### Configuração (1 vez)
+1. Acesse https://api.slack.com/apps → **Create New App** → *From scratch*
+2. Dê um nome (ex: `XAU AI PRO`) e selecione o workspace
+3. Em **Incoming Webhooks** → **Activate Incoming Webhooks** (ON)
+4. Clique **Add New Webhook to Workspace** → escolha o canal (ex: `#xau-alerts`)
+5. Copie a **Webhook URL** (formato: `https://hooks.slack.com/services/T.../B.../XXX...`)
+
+### Ativar no XAU AI PRO
+**Opção A — GUI:**
+- Aba **Integrações** → seção **Slack Notifications**
+- Cole a Webhook URL → marque "Ativar" / "Notificar trades" / "Notificar erros"
+- Clique **Testar conexão** → deve mostrar "OK"
+
+**Opção B — config.json:**
+```json
+"api": {
+  "slack_webhook_url": "https://hooks.slack.com/services/...",
+  "slack_enabled": true,
+  "slack_notify_trades": true,
+  "slack_notify_errors": true,
+  "slack_notify_risk": true
+}
+```
+
+### Eventos notificados
+| Evento MQL5 | Tipo Slack |
+|---|---|
+| `TRADE_OPEN` | 💹 Abertura de posição (verde) |
+| `TRADE_CLOSE` | 📈/📉 Fechamento (verde=lucro, vermelho=prejuízo) |
+| `CIRCUIT_BREAKER` | 🚨 Circuit breaker (vermelho) |
+| `SAFE_MODE` | ⚠️ Modo seguro |
+| `RISK_BLOCK` | ⚠️ Risco bloqueado |
+| `NEWS_BLOCK` | ⚠️ Notícia bloqueada |
+| `AI_ERROR` | ❌ Erro IA |
+| `SYSTEM_ERROR` | ❌ Erro de sistema |
+| `HEALTH_FAILURE` | ⚠️ Falha de saúde |
+
+### Testar rapidamente
+```bash
+cd Ultimate
+python slack_notifier.py        # envia mensagem de teste
+python slack_watcher.py         # monitora eventos (Ctrl+C para parar)
+```
+
+> ⚠️ **Segurança**: NUNCA commite a `SLACK_WEBHOOK_URL` no GitHub. O `config.json` já está no `.gitignore`.
+
 ## Arquivos novos nesta entrega (em Ultimate/)
 | Arquivo | Função |
 |---|---|
