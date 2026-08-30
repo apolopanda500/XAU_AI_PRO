@@ -12,9 +12,11 @@ sys.path.append(str(BASE_DIR))
 
 # Sentry integration (importar sentry_config já inicializa o SDK automaticamente)
 try:
-    from sentry_config import capture_prediction_error
+    from sentry_config import capture_prediction_error, get_logger
 except ImportError:
-    pass
+    get_logger = None
+
+log = get_logger(__name__) if get_logger else None
 
 from pipeline import Pipeline
 
@@ -24,6 +26,9 @@ def predict() -> None:
     print("=" * 30)
     print(" XAU_AI_PRO AI PREDICT (MULTI-SYMBOL)")
     print("=" * 30)
+    if log:
+        # exemplo: log estruturado com atributos (vira coluna pesquisavel no Logs)
+        log.info("predict iniciado", extra={"comando": "predict", "timeframe": "M5"})
 
     try:
         pipeline = Pipeline()
@@ -34,6 +39,8 @@ def predict() -> None:
 
         print()
         print("Predições geradas:", len(predictions))
+        if log:
+            log.info("predicoes geradas", extra={"total": len(predictions), "timeframes": "M5"})
         
         signals_count = 0
         errors_count = 0

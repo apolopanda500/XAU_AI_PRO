@@ -13,10 +13,12 @@ from pathlib import Path
 # Integracao Sentry tolerante (nao quebra se nao configurado)
 try:
     import sentry_sdk
-    from sentry_config import init_sentry
+    from sentry_config import init_sentry, get_logger
     _SENTRY_OK = True
+    _log = get_logger(__name__)
 except Exception:
     _SENTRY_OK = False
+    _log = None
 
 
 def _events_file() -> Path | None:
@@ -71,6 +73,11 @@ def report_errors_to_sentry() -> int:
     # Evita re-report: arquivo de offset simples (nao-persistente por sessao)
     reported = 0
     for ev in errors:
+        if _log:
+            _log.error("evento critico do event stream",
+                       extra={"module": ev.get("Module", ""),
+                              "symbol": ev.get("Symbol", ""),
+                              "event": ev.get("Event", "")})
         with sentry_sdk.isolation_scope() as scope:
             scope.set_tag("component", ev.get("Module", "unknown"))
             scope.set_tag("symbol", ev.get("Symbol", ""))

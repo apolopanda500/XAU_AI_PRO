@@ -3,12 +3,15 @@ import logging
 
 from openai import OpenAI
 
-# Sentry: ID de conversa por sinal (agrupa spans em Conversas).
+# Sentry: ID de conversa por sinal (agrupa spans em Conversas) + logging estruturado.
 try:
-    from sentry_config import set_ai_conversation_id
+    from sentry_config import set_ai_conversation_id, get_logger
 except Exception:
     def set_ai_conversation_id(_conv_id):  # noqa: E305
         pass
+    get_logger = None
+
+log = get_logger(__name__) if get_logger else None
 
 # Configuração do cliente para usar o LiteLLM Proxy local
 # O LiteLLM Proxy deve estar rodando na porta 4000
@@ -68,9 +71,17 @@ def validate_signal(symbol: str, signal: str, confidence: float, price: float) -
             content = content.split("```")[1].split("```")[0].strip()
 
         result = json.loads(content)
+        if log:
+            log.info("sinal validado pela IA",
+                     extra={"symbol": symbol, "signal": signal,
+                            "confidence": round(confidence, 4),
+                            "ai_valid": result.get("valid"),
+                            "ai_confidence": result.get("ai_confidence")})
         return result
     except Exception as e:
-        logging.error(f"Erro na validação IA: {e}")
+        if log:
+            log.error("erro na validacao IA", extra={"symbol": symbol,
+                                                      "error": str(e)}, exc_info=True)
         return {
             "valid": True,
             "reason": "Validação automática ignorada devido a erro técnico",

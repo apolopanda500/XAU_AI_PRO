@@ -35,6 +35,12 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger("XAU_AI_PRO.DECISION")
+# Sentry: usa get_logger quando disponivel (mantem fallback proprio)
+try:
+    from sentry_config import get_logger as _sg_logger
+    logger = _sg_logger("XAU_AI_PRO.DECISION")
+except Exception:
+    pass
 
 
 # ============================================================
