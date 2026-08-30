@@ -1,5 +1,15 @@
 ﻿# CHANGELOG
 
+## [1.3.2] - 2026-08-30
+### Integração Slack + Notificações
+- Novos módulos Python: `slack_notifier.py` (cliente Webhook) e `slack_watcher.py` (monitor de eventos MT5).
+- `integrations.py`: adicionado `SlackClient` (testar/send) com padrão GitHub/Figma/Brave.
+- `config_store.py`: campos `slack_webhook_url`, `slack_enabled`, `slack_notify_trades/errors/risk`.
+- GUI aba Integrações: seção "Slack Notifications" (webhook URL, checkboxes, teste de conexão).
+- `auto_engine.py`: notifica resultado do auto-approve no Slack.
+- `auto_watch.py`: inicia Slack watcher em background.
+- `.env.example`: variáveis `SLACK_WEBHOOK_URL`, `SLACK_ENABLED`, etc.
+- Docs: `README_APP.md` com guia completo de configuração Slack.
 
 ### 2026-08-24 - Correcoes de integracao EventEmitter
 - Removida duplicacao de EventSystemStart no OnInit (XAU_AI_PRO.mq5).
