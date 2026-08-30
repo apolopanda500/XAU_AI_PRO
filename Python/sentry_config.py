@@ -8,7 +8,14 @@ import sys
 from pathlib import Path
 import sentry_sdk
 from sentry_sdk.integrations.logging import LoggingIntegration
-from sentry_sdk.integrations.litellm import LiteLLMIntegration
+
+# LiteLLM e opcional: so registra a integracao se o pacote estiver instalado.
+try:
+    from sentry_sdk.integrations.litellm import LiteLLMIntegration
+    _LITELLM_OK = True
+except Exception:
+    _LITELLM_OK = False
+    LiteLLMIntegration = None  # type: ignore[assignment]
 import logging
 
 # Caminhos do projeto
@@ -92,7 +99,7 @@ def init_sentry():
         # Integracoes
         integrations=[
             logging_integration,
-            LiteLLMIntegration(include_prompts=True),
+            *([LiteLLMIntegration(include_prompts=True)] if _LITELLM_OK else []),
         ],
         
         # Filtros customizados para XAU AI Pro
