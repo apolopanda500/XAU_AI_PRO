@@ -9,6 +9,13 @@ import pandas as pd
 import streamlit as st
 from openai import OpenAI
 
+# Sentry: ID de conversa por chat (agrupa spans em Conversas).
+try:
+    from sentry_config import set_ai_conversation_id
+except Exception:
+    def set_ai_conversation_id(_conv_id):  # noqa: E305
+        pass
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATASET_PATH = PROJECT_ROOT / "MQL5" / "Files" / "Data" / "dataset.csv"
 PREDICTIONS_DIR = PROJECT_ROOT / "MQL5" / "Files" / "Data"
@@ -136,6 +143,10 @@ def main() -> None:
 
             with st.chat_message("assistant"):
                 try:
+                    # Sentry: agrupa spans desta conversa (gen_ai.conversation.id).
+                    set_ai_conversation_id(
+                        f"chat:{st.session_state.get('sentry_conv_id', 'default')}"
+                    )
                     response = client.chat.completions.create(
                         model="ollama/deepseek-v4-flash:cloud",
                         messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages]

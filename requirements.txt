@@ -27,7 +27,7 @@ litellm
 openai
 
 # Monitoring
-sentry-sdk>=2.44.0
+sentry-sdk[openai]>=2.44.0
 
 # Utilities
 MetaTrader5

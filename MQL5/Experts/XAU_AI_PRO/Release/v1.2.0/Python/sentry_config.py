@@ -8,7 +8,53 @@ import sys
 from pathlib import Path
 import sentry_sdk
 from sentry_sdk.integrations.logging import LoggingIntegration
+
+# OpenAI SDK e opcional: registra a integracao se o pacote estiver instalado.
+try:
+    from sentry_sdk.integrations.openai import OpenAIIntegration
+    _OPENAI_OK = True
+except Exception:
+    _OPENAI_OK = False
+    OpenAIIntegration = None  # type: ignore[assignment]
 import logging
+
+# ============================================================
+# Logging estruturado para o produto Logs do Sentry (Explore > Logs)
+# Regras:
+#  - use get_logger(__name__) nos modulos
+#  - debug/info/warning sao enviados como LOGS (com atributos via extra={})
+#  - error/critical sao enviados como ISSUES (event_level=ERROR)
+# ============================================================
+
+_LOGGER_NAME = os.getenv("SENTRY_LOGGER_NAME", "xau_ai_pro")
+logger = logging.getLogger(_LOGGER_NAME)
+
+
+def get_logger(name: str | None = None) -> logging.Logger:
+    """Retorna um logger filho do logger XAU AI Pro (herda a config do Sentry).
+
+    Uso:  log = get_logger(__name__)
+          log.info("sinal validado", extra={"sinal": "BUY", "conf": 0.72})
+          log.error("falha na predicao", exc_info=True)
+    """
+    base = name or "xau_ai_pro"
+    return logging.getLogger(base)
+
+
+def capture_log(level: str, message: str, **attrs) -> None:
+    """Envia um log estruturado ao Sentry (Logs) com atributos adicionais.
+
+    wrapper conveniente sobre o logger; so chama se o Sentry estiver ativo.
+    """
+    if not os.getenv("SENTRY_DSN"):
+        return
+    lvl = getattr(logging, str(level).upper(), logging.INFO)
+    logger.log(lvl, message, extra=attrs)
+
+
+# Bandeira de depuracao: checkpoints/diagnosticos so saem do processo
+# quando DEBUG_SENTRY=1. Em producao nunca geram ruido no Sentry.
+_DEBUG_SENTRY = os.getenv("DEBUG_SENTRY", "").strip().lower() in ("1", "true", "yes")
 
 # Caminhos do projeto
 BASE_DIR = Path(__file__).resolve().parent
@@ -67,9 +113,11 @@ def init_sentry():
         print("[SENTRY] SENTRY_DSN nao configurado")
         return
     
-    # Configuracao de logging
+    # Configuracao de logging -> envia LOGS ao Sentry (Explore > Logs)
+    # level: a partir de que nivel registra como log
+    # event_level: a partir de que nivel cria ISSUE
     logging_integration = LoggingIntegration(
-        level=logging.INFO,
+        level=logging.DEBUG,
         event_level=logging.ERROR,
     )
     
@@ -81,6 +129,8 @@ def init_sentry():
         # Performance monitoring para IA/Trading
         traces_sample_rate=0.2 if environment == "production" else 0.0,
         profiles_sample_rate=0.1 if environment == "production" else 0.0,
+        # Adiciona dados de inputs/respostas das LLMs e ferramentas (Conversas/Agentes)
+        stream_gen_ai_spans=True,
         
         # Seguranca
         send_default_pii=False,
@@ -90,7 +140,10 @@ def init_sentry():
         debug=(environment == "staging"),
         
         # Integracoes
-        integrations=[logging_integration],
+        integrations=[
+            logging_integration,
+            *([OpenAIIntegration(include_prompts=True)] if _OPENAI_OK else []),
+        ],
         
         # Filtros customizados para XAU AI Pro
         before_send=before_send_filter,
@@ -112,6 +165,106 @@ def init_sentry():
     print(f"[SENTRY] Environment: {environment}")
     print(f"[SENTRY] Asset: XAUUSD")
 
+def set_ai_conversation_id(conversation_id: str) -> None:
+    """Define o ID de conversa para o Sentry Conversas (gen_ai.conversation.id)."""
+    try:
+        try:
+            from sentry_sdk import ai as _sai
+            _sai.set_conversation_id(str(conversation_id))
+            return
+        except Exception:
+            pass
+        import sentry_sdk
+        sentry_sdk.get_current_scope().set_attribute(
+            "gen_ai.conversation.id", str(conversation_id)
+        )
+    except Exception:
+        pass
+
+
+def capture_checkpoint(message: str, level: str = "info", **tags) -> None:
+    """Checkpoint de verificacao/diagnostico.
+
+    So envia ao Sentry quando DEBUG_SENTRY=1. Em producao e um no-op
+    (nunca cria 'non-error issues'). Use para telemetria/diagnostico.
+    """
+    if not _DEBUG_SENTRY:
+        return
+    try:
+        with sentry_sdk.isolation_scope() as scope:
+            for k, v in tags.items():
+                scope.set_tag(str(k), str(v))
+            scope.set_tag("diagnostic", "true")
+            sentry_sdk.capture_message(message, level=level)
+    except Exception:
+        pass
+
+
+def _register_openai() -> bool:
+    """Registra a integracao OpenAI (register-first).
+
+    Garante que o client Sentry esteja inicializado antes de registrar a
+    OpenAIIntegration. Retorna True se a integracao ficou ativa.
+    """
+    if not _OPENAI_OK:
+        return False  # pacote openai / integracao indisponivel
+    try:
+        client = sentry_sdk.get_client()
+        if not getattr(client, "dsn", None):
+            init_sentry()  # garante bootstrap antes de registrar
+            client = sentry_sdk.get_client()
+        integrations = getattr(client, "integrations", {}) or {}
+        return "openai" in integrations
+    except Exception as exc:
+        logging.error("[SENTRY] Falha ao registrar OpenAI: %s", exc)
+        return False
+
+
+def ensure_openai_registered() -> None:
+    """Fail-fast (padrao Seer): registra OpenAI e valida logo em seguida.
+
+    Se a OpenAIIntegration nao estiver registrada apos o registro, registra
+    um erro estruturado (log + evento level=error, sem ruido info) e levanta
+    RuntimeError descritivo - acionavel, sem assert silencioso.
+    """
+    ok = _register_openai()
+    if ok:
+        logging.info("[SENTRY] OpenAIIntegration registrada.")
+        return
+    try:
+        client = sentry_sdk.get_client()
+        integrations = getattr(client, "integrations", {}) or {}
+        names = list(integrations.keys())
+    except Exception:
+        names = []
+    logging.error(
+        "[SENTRY] OpenAIIntegration NAO registrada. Integracoes ativas: %s", names
+    )
+    try:
+        with sentry_sdk.isolation_scope() as scope:
+            scope.set_tag("component", "sentry_bootstrap")
+            scope.set_context("integrations", {"active": names})
+            sentry_sdk.capture_message(
+                f"[SENTRY] OpenAIIntegration nao registrada apos init_sentry() "
+                f"(ativas: {names})",
+                level="error",
+            )
+    except Exception:
+        pass
+    raise RuntimeError(
+        "OpenAI provider not registered. Check your API key and provider initialization."
+    )
+
+
+def verify_openai_integration() -> bool:
+    """Versao fail-open de ensure_openai_registered(): retorna bool sem levantar.
+
+    Use em caminhos nao-criticos onde um RuntimeError nao deve derrubar o
+    processo; para bootstrap critico use ensure_openai_registered().
+    """
+    return _register_openai()
+
+
 def before_send_filter(event, hint):
     """Filtra eventos sensiveis antes de enviar"""
     
@@ -127,6 +280,16 @@ def before_send_filter(event, hint):
         if 'TimeoutError' in str(exc_type):
             return None
         if 'ConnectionError' in str(exc_type):
+            return None
+
+    # Defesa em camadas: checkpoints de verificacao/diagnostico (level=info)
+    # nunca viram issue no Sentry, a menos que DEBUG_SENTRY=1 (double-gate).
+    if not _DEBUG_SENTRY:
+        _lev = str(event.get('level', '') or '').lower()
+        _msg_obj = event.get('message') or ''
+        _msg = _msg_obj.get('formatted', '') if isinstance(_msg_obj, dict) else str(_msg_obj)
+        _markers = ('[VERIFY', '[VERIFY-FINAL', '[CHECKPOINT', '[DEBUG', '[DIAG')
+        if _lev == 'info' and any(m in _msg.upper() for m in _markers):
             return None
     
     # Adiciona tag do projeto
@@ -177,9 +340,9 @@ def capture_backtest_results(strategy_name, total_trades, win_rate, profit):
             "win_rate": f"{win_rate:.2f}%",
             "profit": f"{profit:.2f}",
         })
-        sentry_sdk.capture_message(
+        capture_checkpoint(
             f"Backtest completed: {strategy_name} - Win Rate: {win_rate:.2f}%",
-            level="info"
+            level="info", component="backtest", strategy=strategy_name,
         )
 
 def capture_model_performance(model_metrics):
@@ -187,10 +350,13 @@ def capture_model_performance(model_metrics):
     with sentry_sdk.isolation_scope() as scope:
         scope.set_tag("component", "model_performance")
         scope.set_context("metrics", model_metrics)
-        sentry_sdk.capture_message(
+        capture_checkpoint(
             f"Model performance: {model_metrics}",
-            level="info"
+            level="info", component="model_performance",
         )
 
 # Inicializa automaticamente ao importar
 init_sentry()
+# Padrao Seer: registra o provedor OpenAI ANTES de qualquer validacao.
+# Fail-fast em producao (levanta RuntimeError descritivo se ausente).
+_register_openai()

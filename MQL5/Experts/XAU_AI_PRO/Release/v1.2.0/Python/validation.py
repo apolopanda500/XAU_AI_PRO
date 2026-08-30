@@ -3,6 +3,13 @@ import logging
 
 from openai import OpenAI
 
+# Sentry: ID de conversa por sinal (agrupa spans em Conversas).
+try:
+    from sentry_config import set_ai_conversation_id
+except Exception:
+    def set_ai_conversation_id(_conv_id):  # noqa: E305
+        pass
+
 # Configuração do cliente para usar o LiteLLM Proxy local
 # O LiteLLM Proxy deve estar rodando na porta 4000
 client = OpenAI(api_key="anything", base_url="http://localhost:4000")
@@ -32,6 +39,9 @@ def validate_signal(symbol: str, signal: str, confidence: float, price: float) -
             "ai_confidence": 0.0 a 1.0
         }}
         """
+
+        # Sentry: agrupa spans desta validacao em Conversas (gen_ai.conversation.id).
+        set_ai_conversation_id(f"signal:{symbol}:{signal}:{confidence:.2f}")
 
         response = client.chat.completions.create(
             model="ollama/deepseek-v4-flash:cloud",
