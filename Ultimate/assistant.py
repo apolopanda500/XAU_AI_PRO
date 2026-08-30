@@ -185,6 +185,10 @@ class AIAssistant:
             return "O calculo de lote segue RiskPercent * Balance / (StopLoss * tickValue). Use a calculadora na aba 'Ferramentas' para simular."
         return "Entendido. Estou aprendendo com essa conversa. Pode detalhar mais o que voce precisa?"
 
+    def _conversation_id(self) -> str:
+        """ID de conversa para o Sentry Conversas (gen_ai.conversation.id)."""
+        return "chat-%s" % datetime.now().strftime("%Y%m%d")
+
     def chat(self, user_msg: str) -> str:
         self.memory.add_message("user", user_msg)
 
@@ -192,6 +196,13 @@ class AIAssistant:
         for h in self.memory.get_history(limit=10):
             messages.append({"role": h["role"], "content": h["content"]})
         messages.append({"role": "user", "content": user_msg})
+
+        # Sentry Conversas: agrupa os spans de IA desta conversa
+        try:
+            import sentry_config
+            sentry_config.set_ai_conversation_id(self._conversation_id())
+        except Exception:
+            pass
 
         reply = self._call_litellm(messages)
         model = "litellm"

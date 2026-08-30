@@ -79,7 +79,7 @@ def init_sentry():
         environment=environment,
         
         # Performance monitoring para IA/Trading
-        traces_sample_rate=0.2 if environment == "production" else 0.0,
+        traces_sample_rate=0.2 if environment == "production" else 1.0,
         profiles_sample_rate=0.1 if environment == "production" else 0.0,
         
         # Seguranca
@@ -111,6 +111,19 @@ def init_sentry():
     print(f"[SENTRY] Inicializado: {get_project_version()}")
     print(f"[SENTRY] Environment: {environment}")
     print(f"[SENTRY] Asset: XAUUSD")
+
+def set_ai_conversation_id(conversation_id: str) -> None:
+    """Define o ID de conversa para o Sentry Conversas.
+
+    O Sentry agrupa spans de IA pelo atributo gen_ai.conversation.id.
+    """
+    try:
+        sentry_sdk.get_current_scope().set_attribute(
+            "gen_ai.conversation.id", str(conversation_id)
+        )
+    except Exception:
+        pass
+
 
 def before_send_filter(event, hint):
     """Filtra eventos sensiveis antes de enviar"""
