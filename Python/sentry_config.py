@@ -78,11 +78,9 @@ def init_sentry():
         release=get_project_version(),
         environment=environment,
         
-        # Performance monitoring para IA/Trading
         traces_sample_rate=1.0,
-        profiles_sample_rate=0.1 if environment == "production" else 0.0,
-        
-        # Seguranca
+        # Add data like inputs and responses to/from LLMs and tools;
+        # see https://docs.sentry.io/platforms/python/data-management/data-collected/ for more info
         stream_gen_ai_spans=True,
         send_default_pii=True,
         attach_stacktrace=True,
@@ -226,6 +224,7 @@ def capture_model_performance(model_metrics):
 
 # Inicializa automaticamente ao importar
 init_sentry()
+
 
 
 
