@@ -634,6 +634,7 @@ def build_prediction_json(
         "volume": int(last_row.get("Volume", 0)),
         "sl": sl,
         "tp": tp,
+        "timeframe": timeframe,
     }
 
     return result
