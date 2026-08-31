@@ -24,13 +24,63 @@ app.get('/', async (req, res) => {
     console.error('Analytics tracking error:', e.message);
   }
   
-  res.json({
-    app: 'XAU_AI_PRO Backend',
-    status: 'online',
-    version: '1.2.0-RC1',
-    etapa: '17.3',
-    workflows_available: ['marketDataWorkflow', 'reconcileWorkflow'],
-  });
+  // Check if client prefers HTML (browser access)
+  const acceptsHtml = req.headers.accept?.includes('text/html');
+  
+  if (acceptsHtml) {
+    // Serve HTML status page with Speed Insights
+    res.setHeader('Content-Type', 'text/html');
+    res.send(`
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>XAU AI PRO Backend - Status</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
+    h1 { color: #0070f3; }
+    .status { background: #f0f0f0; padding: 20px; border-radius: 8px; margin: 20px 0; }
+    .online { color: #0070f0; font-weight: bold; }
+    ul { line-height: 1.8; }
+  </style>
+</head>
+<body>
+  <h1>XAU AI PRO Backend</h1>
+  <div class="status">
+    <p><strong>Status:</strong> <span class="online">Online</span></p>
+    <p><strong>Version:</strong> 1.2.0-RC1</p>
+    <p><strong>Stage:</strong> 17.3</p>
+  </div>
+  <h2>Available Workflows</h2>
+  <ul>
+    <li>Market Data Workflow</li>
+    <li>Reconcile Workflow</li>
+  </ul>
+  <h2>API Endpoints</h2>
+  <ul>
+    <li><code>GET /api/health</code> - Health check</li>
+    <li><code>POST /api/workflows/market-data</code> - Start market data workflow</li>
+    <li><code>POST /api/workflows/reconcile</code> - Start reconcile workflow</li>
+    <li><code>GET /api/workflows/:runId</code> - Check workflow run status</li>
+  </ul>
+  <script type="module">
+    import { injectSpeedInsights } from 'https://esm.sh/@vercel/speed-insights@2.0.0';
+    injectSpeedInsights();
+  </script>
+</body>
+</html>
+    `);
+  } else {
+    // Return JSON for API clients
+    res.json({
+      app: 'XAU_AI_PRO Backend',
+      status: 'online',
+      version: '1.2.0-RC1',
+      etapa: '17.3',
+      workflows_available: ['marketDataWorkflow', 'reconcileWorkflow'],
+    });
+  }
 });
 
 app.get('/api/health', async (req, res) => {
