@@ -376,6 +376,43 @@ def capture_model_performance(model_metrics):
             level="info", component="model_performance",
         )
 
+
+def start_sentry_session() -> None:
+    """Inicia uma sessao Release Health (crash-free sessions).
+
+    Para apps nao-web (bot/CLI) o SDK nao cria sessoes automaticamente;
+    chame no inicio de cada comando/execucao.
+    """
+    try:
+        import sentry_sdk
+        client = sentry_sdk.get_client()
+        if not getattr(client, "dsn", None):
+            return  # sentry nao inicializado (development sem DSN)
+        sentry_sdk.start_session()
+    except Exception:
+        pass  # nunca derrubar o bot por causa da sessao
+
+
+def end_sentry_session() -> None:
+    """Fecha a sessao Release Health como 'exited' (sucesso).
+
+    NOTA: o SDK 2.x nao aceita status em end_session(). O status 'crashed'
+    so e marcado pelo excepthook quando uma excecao NAO tratada escapa do
+    processo (mechanism.handled=False). Portanto, em caso de erro em main.py
+    NAO chame este helper: deixe a excecao propagar e o SDK marca crash.
+    """
+    try:
+        import sentry_sdk
+        client = sentry_sdk.get_client()
+        if not getattr(client, "dsn", None):
+            return
+        sentry_sdk.end_session()
+        sentry_sdk.flush(timeout=5)
+    except Exception:
+        pass
+
+
+
 # Inicializa automaticamente ao importar
 init_sentry()
 # Padrao Seer: registra o provedor OpenAI ANTES de qualquer validacao.

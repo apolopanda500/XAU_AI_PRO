@@ -10,11 +10,20 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = BASE_DIR.parent
 
-# Sentry: importar sentry_config já inicializa o SDK automaticamente (auto-init no final do módulo).
+# Sentry: importar sentry_config inicializa o SDK automaticamente (auto-init no final do modulo).
 try:
     from sentry_config import capture_training_error, capture_prediction_error
 except ImportError:
     logging.warning("Sentry nao disponivel - instale com: pip install sentry-sdk")
+
+try:
+    from sentry_config import start_sentry_session, end_sentry_session
+except Exception:
+    def start_sentry_session():  # noqa: E305
+        pass
+
+    def end_sentry_session():  # noqa: E305
+        pass
 
 COMMANDS = ("train", "predict", "dashboard", "help")
 
@@ -40,22 +49,32 @@ def main() -> None:
 
     sys.path.append(str(BASE_DIR))
 
-    if arg == "predict":
-        import predict
+    start_sentry_session()
+    try:
+        if arg == "predict":
+            import predict
 
-        predict.predict()
-    elif arg == "train":
-        import train
+            predict.predict()
+        elif arg == "train":
+            import train
 
-        train.train()
-    elif arg == "dashboard":
-        import dashboard.app as dashboard_app
+            train.train()
+        elif arg == "dashboard":
+            import dashboard.app as dashboard_app
 
-        dashboard_app.main()
+            dashboard_app.main()
+        else:
+            print(f"Unknown command: {arg}")
+            _usage()
+            sys.exit(1)
+    except SystemExit:
+        raise
+    except Exception:
+        # Nao fecha a sessao aqui: a excecao nao tratada abaixo faz o
+        # excepthook do SDK marcar a sessao como 'crashed' (Release Health).
+        raise
     else:
-        print(f"Unknown command: {arg}")
-        _usage()
-        sys.exit(1)
+        end_sentry_session()
 
 
 if __name__ == "__main__":
