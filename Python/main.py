@@ -32,7 +32,7 @@ logging.basicConfig(level=logging.INFO, format="%(message)s")
 
 def _usage() -> None:
     """Exibe mensagem de uso do CLI."""
-    print("Usage: python main.py [train|predict|dashboard|help]")
+    print("Uso: XAU_AI_PRO.exe [predict|train|help]")
 
 
 def main() -> None:

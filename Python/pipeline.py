@@ -1,4 +1,4 @@
-﻿"""
+"""
 XAU_AI_PRO - Multi-Asset Pipeline
 v1.2.0 Multi-Asset Engine
 
@@ -975,7 +975,10 @@ class Pipeline:
         self._last_timeframe_predictions = timeframe_predictions
         return predictions
 
-        """Executa predição de um símbolo/timeframe."""
+    def _predict_one(
+        self, symbol: str, df: pd.DataFrame, timeframe: str, category: str
+    ) -> dict[str, Any]:
+        """Executa predicao de um simbolo/timeframe."""
         _t0 = time.perf_counter()
         pred = predict_symbol(symbol, df, timeframe=timeframe)
         inference_ms = round((time.perf_counter() - _t0) * 1000.0, 2)

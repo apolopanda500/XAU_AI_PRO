@@ -1,6 +1,7 @@
-﻿"""LEGACY/ORFAO - NAO CONECTADO (15.3). Usar pipeline.py (predict_all -> save_prediction_json).
+"""LEGACY/ORFAO - NAO CONECTADO (15.3). Usar pipeline.py (predict_all -> save_prediction_json).
+
+Model loader and prediction helper for XAU_AI_PRO.
 """
-"""Model loader and prediction helper for XAU_AI_PRO."""
 
 from __future__ import annotations
 
