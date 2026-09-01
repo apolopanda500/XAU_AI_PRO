@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@opentelemetry/api": "^1.9.1",
+    "@sentry/node": "^10.72.0",
     "@vercel/analytics": "^2.0.1",
     "@vercel/speed-insights": "^2.0.0",
     "cors": "^2.8.6",

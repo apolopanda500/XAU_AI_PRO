@@ -57,7 +57,32 @@ class PositionsTab:
         self.hist_table.pack(fill="both", expand=True, padx=8, pady=8)
 
     def refresh(self) -> None:
-        info = self.robot.account_info()
+        """Atualiza a carteira SEM travar a GUI (coleta em background)."""
+        from app.utils.async_ui import run_bg
+        run_bg(
+            self.frame,
+            work=self._collect,
+            apply_result=self._apply,
+        )
+
+    def _collect(self) -> dict:
+        out = {"info": None, "positions": [], "deals": []}
+        try:
+            out["info"] = self.robot.account_info()
+        except Exception:
+            out["info"] = None
+        try:
+            out["positions"] = self.robot.get_positions()
+        except Exception:
+            out["positions"] = []
+        try:
+            out["deals"] = self.robot.get_history(days=7)
+        except Exception:
+            out["deals"] = []
+        return out
+
+    def _apply(self, data: dict) -> None:
+        info = data.get("info")
         if info:
             self.kpi_balance.set(f"{info['balance']:,.2f}")
             self.kpi_equity.set(f"{info['equity']:,.2f}")
@@ -71,7 +96,7 @@ class PositionsTab:
             self.kpi_margin_level.set("--")
             self.kpi_floating.set("--")
 
-        positions = self.robot.get_positions()
+        positions = data.get("positions") or []
         rows = []
         tags = []
         for p in positions:
@@ -80,7 +105,7 @@ class PositionsTab:
             tags.append("profit" if p.profit >= 0 else "loss")
         self.pos_table.tree.set_rows(rows, tags)
 
-        deals = self.robot.get_history(days=7)
+        deals = data.get("deals") or []
         rows2 = []
         tags2 = []
         for d in deals:

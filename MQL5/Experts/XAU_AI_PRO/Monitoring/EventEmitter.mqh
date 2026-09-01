@@ -57,11 +57,52 @@
 #define EV_SEV_CRIT    "CRITICAL"
 
 static string EV_FILE = "Data\\forward_test_events.csv";
+static string EV_LOCK_FILE = "Data\\forward_test_events.lock";
 static int    evHandle = INVALID_HANDLE;
 static bool   evInitialized = false;
 
 // Versao local (nao depende de VersionManager)
 #define EV_VERSION_STRING "1.2.0"
+
+//==================================================
+// LOCK ENTRE INSTANCIAS (correcao 17.5)
+// Multiplos EAs no mesmo terminal escrevem no mesmo CSV;
+// sem lock, FileWrite concorrentes corrompem o arquivo.
+// Usa um arquivo .lock aberto em modo exclusivo (sem FILE_SHARE_*)
+// como mutex entre instancias/processos.
+//==================================================
+static int  evLockHandle = INVALID_HANDLE;
+static bool evLockHeld   = false;
+
+bool EventLock()
+{
+   if(evLockHeld)
+      return true;
+
+   for(int i = 0; i < 50; i++)
+   {
+      ResetLastError();
+      int h = FileOpen(EV_LOCK_FILE, FILE_READ | FILE_WRITE, ',');
+      if(h != INVALID_HANDLE)
+      {
+         evLockHandle = h;
+         evLockHeld   = true;
+         return true;
+      }
+      Sleep(10);
+   }
+   return false;
+}
+
+void EventUnlock()
+{
+   if(evLockHeld && evLockHandle != INVALID_HANDLE)
+   {
+      FileClose(evLockHandle);
+      evLockHandle = INVALID_HANDLE;
+      evLockHeld   = false;
+   }
+}
 
 //==================================================
 // INIT - abre/garante header (append-only UTF-16)
@@ -87,12 +128,17 @@ bool EventInit()
 
    FileSeek(evHandle, 0, SEEK_END);
 
-   if(FileSize(evHandle) == 0)
+   if(FileSize(evHandle) == 0 && EventLock())
    {
-      FileWrite(evHandle,
-         "Time","Event","Symbol","TF","Ticket","Severity",
-         "Module","Message","Value","Status");
-      FileFlush(evHandle);
+      FileSeek(evHandle, 0, SEEK_END);
+      if(FileSize(evHandle) == 0)
+      {
+         FileWrite(evHandle,
+            "Time","Event","Symbol","TF","Ticket","Severity",
+            "Module","Message","Value","Status");
+         FileFlush(evHandle);
+      }
+      EventUnlock();
    }
 
    evInitialized = true;
@@ -122,6 +168,9 @@ bool EventEmit(
    string sym = (symbol == "" ? _Symbol : symbol);
    string tf  = EnumToString((ENUM_TIMEFRAMES)Period());
 
+   if(!EventLock())
+      return false;
+
    FileSeek(evHandle, 0, SEEK_END);
 
    FileWrite(evHandle,
@@ -137,6 +186,7 @@ bool EventEmit(
       status);
 
    FileFlush(evHandle);
+   EventUnlock();
    return true;
 }
 
@@ -292,6 +342,7 @@ void EventFlush()
 
 void EventShutdown()
 {
+   EventUnlock();
    if(evHandle != INVALID_HANDLE)
    {
       FileFlush(evHandle);

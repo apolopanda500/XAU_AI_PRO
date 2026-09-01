@@ -1,0 +1,13 @@
+name: xau_ai_pro
+channels:
+  - https://repo.anaconda.com/pkgs/snowflake
+  - conda-forge
+dependencies:
+  - python=3.11
+  - streamlit>=1.40
+  - pandas
+  - numpy
+  - snowflake-snowpark-python
+  - snowflake-ml-python
+  - altair
+  - plotly

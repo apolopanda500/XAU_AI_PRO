@@ -159,7 +159,7 @@ class XAUAProApp:
                     self.root.after(0, self.tabs["positions"].refresh)
                 elif self._current_tab == "robot":
                     self.root.after(0, self.tabs["robot"].check_ea)
-                time.sleep(5)
+                time.sleep(10)
             except Exception:
                 time.sleep(10)
 

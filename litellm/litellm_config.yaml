@@ -1,0 +1,60 @@
+# ============================================================
+# LiteLLM Proxy - config do XAU AI PRO
+# https://docs.litellm.ai/docs/proxy/docker_quick_start
+# ============================================================
+#
+# O dashboard (Python/dashboard/app.py) chama:
+#   OpenAI(api_key="anything", base_url="http://localhost:4000")
+#   model="ollama/deepseek-v4-flash:cloud"
+#
+# Escolha UM provedor abaixo (descomente o bloco desejado) e
+# preencha as chaves DEV_KEY_* com suas credenciais reais.
+# Depois:  docker compose up -d
+# Teste:   curl http://localhost:4000/v1/models
+
+model_list:
+  # ----------------------------------------------------------
+  # OPCAO 1 - Ollama local (mesmo modelo do start_proxy.bat)
+  # Requer: Ollama instalado na MAQUINA HOST e modelo baixado.
+  #   ollama pull deepseek-v4-flash   (ou outro modelo)
+  # host.docker.internal aponta p/ o Ollama do host (Windows/Mac).
+  # ----------------------------------------------------------
+  - model_name: ollama/deepseek-v4-flash:cloud
+    litellm_params:
+      model: ollama/deepseek-v4-flash:cloud
+      api_base: http://host.docker.internal:11434
+
+  # ----------------------------------------------------------
+  # OPCAO 2 - DeepSeek API oficial (nuvem, sem Ollama)
+  # Requer: DEEPSEEK_API_KEY valida.
+  # ----------------------------------------------------------
+  # - model_name: deepseek/deepseek-chat
+  #   litellm_params:
+  #     model: deepseek/deepseek-chat
+  #     api_key: os.environ/DEEPSEEK_API_KEY
+  #
+  # - model_name: ollama/deepseek-v4-flash:cloud
+  #   litellm_params:
+  #     model: deepseek/deepseek-chat
+  #     api_key: os.environ/DEEPSEEK_API_KEY
+
+  # ----------------------------------------------------------
+  # OPCAO 3 - OpenAI (nuvem)
+  # Requer: OPENAI_API_KEY valida.
+  # ----------------------------------------------------------
+  # - model_name: gpt-4o-mini
+  #   litellm_params:
+  #     model: gpt-4o-mini
+  #     api_key: os.environ/OPENAI_API_KEY
+  #
+  # - model_name: ollama/deepseek-v4-flash:cloud
+  #   litellm_params:
+  #     model: gpt-4o-mini
+  #     api_key: os.environ/OPENAI_API_KEY
+
+# ============================================================
+# Geral
+# ============================================================
+general_settings:
+  master_key: sk-xau-ai-pro-local
+  database_url: sqlite:////app/litellm.db

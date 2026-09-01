@@ -1,0 +1,14 @@
+[client]
+# "viewer" esconde os itens de desenvolvedor da toolbar/menu do Streamlit,
+# incluindo o botao "Deploy" (Streamlit Community Cloud). Em um app desktop
+# (EXE) sem repositorio GitHub, esse botao nao faz sentido - clicar nele
+# gera "Unable to deploy / not connected to a remote GitHub repository".
+toolbarMode = "viewer"
+
+[browser]
+gatherUsageStats = false
+
+[server]
+headless = true
+fileWatcherType = "none"
+address = "127.0.0.1"

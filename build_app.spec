@@ -5,7 +5,7 @@ from PyInstaller.building.build_main import Analysis, PYZ, EXE, COLLECT
 
 a = Analysis(
     ['app/main.py'],
-    pathex=[r'C:\Users\Micro\Downloads\XAU_AI_PRO'],
+    pathex=[r'C:\Users\Micro\AppData\Roaming\MetaQuotes\Terminal\D0E8209F77C8CF37AD8BF550E51FF075\MQL5\Files\XAU_AI_PRO'],
     binaries=[],
     datas=[
         ('app/assets', 'app/assets'),
@@ -15,6 +15,7 @@ a = Analysis(
     hiddenimports=[
         'MetaTrader5', 'yfinance', 'requests', 'pandas', 'numpy',
         'sklearn', 'xgboost', 'matplotlib', 'PIL',
+        'sentry_config', 'mt5_bridge', 'integrations_hub',
         'app.core', 'app.config_manager', 'app.market_data',
         'app.mt5_robot', 'app.learning_engine', 'app.utils.paths',
         'app.tabs.dashboard', 'app.tabs.market', 'app.tabs.positions',
@@ -54,5 +55,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=r'C:\Users\Micro\Downloads\XAU_AI_PRO\app\assets\icon.ico',
+    icon=r'C:\Users\Micro\AppData\Roaming\MetaQuotes\Terminal\D0E8209F77C8CF37AD8BF550E51FF075\MQL5\Files\XAU_AI_PRO\app\assets\icon.ico',
 )

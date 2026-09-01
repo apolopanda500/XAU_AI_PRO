@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """Cliente da API Backend (ETAPA 16.4) para o Dashboard (16.5).
 
 Consome a API unica do backend Node.js (porta 3001) que le o
@@ -27,19 +27,21 @@ ENDPOINTS = {
     "risk": "/api/risk",
     "execution": "/api/execution",
     "telemetry": "/api/telemetry",
-    "alerts": "/api/alerts","financial": "/api/financial",
+    "alerts": "/api/alerts",
+    "financial": "/api/financial",
+    "integrations": "/api/integrations",
 }
 
 
 def backend_online() -> bool:
     try:
-        with socket.create_connection((BACKEND_HOST, BACKEND_PORT), timeout=1.5):
+        with socket.create_connection((BACKEND_HOST, BACKEND_PORT), timeout=0.5):
             return True
     except OSError:
         return False
 
 
-def api_get(endpoint: str, timeout: float = 3.0) -> dict[str, Any] | None:
+def api_get(endpoint: str, timeout: float = 1.2) -> dict[str, Any] | None:
     url = BASE + ENDPOINTS.get(endpoint, endpoint)
     try:
         with urllib.request.urlopen(url, timeout=timeout) as r:

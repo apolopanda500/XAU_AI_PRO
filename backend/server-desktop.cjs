@@ -4,11 +4,21 @@ const http = require('http');
 const socketIo = require('socket.io');
 const fs = require('fs');
 const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
+require('dotenv').config({ path: path.join(__dirname, '.env.local') });
+// Tambem carrega .env da RAIZ do projeto (onde ficam SENTRY_DSN, SLACK, GITHUB)
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+require('dotenv').config({ path: path.join(__dirname, '..', '.env.local') });
+require('dotenv').config({ path: path.join(__dirname, '..', '.env.integrations') });
+const integrations = require('./integrations');
 
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, { cors: { origin: "*", methods: ["GET","POST"] } });
 const PORT = process.env.PORT || 3001;
+// 17.4+: Sentry ativo se DSN configurado e SDK instalado (nunca quebra o boot)
+const sentryClient = integrations.initSentry();
+if (sentryClient) console.log('[integrations] Sentry ativo com DSN');
 
 const DATA_DIR = 'C:/Users/Micro/AppData/Roaming/MetaQuotes/Terminal/D0E8209F77C8CF37AD8BF550E51FF075/MQL5/Files/Data';
 
@@ -65,22 +75,26 @@ function aiState() {
 // ---------- 17.3: ESTADO UNIFICADO (7 estados) ----------
 // HEALTHY / WARNING / DEGRADED / SAFE / RECOVERY / ERROR / OFFLINE
 function unifiedState(events, ai) {
-  const counts = {};
-  events.forEach(e => { const t = e.Event; if (t) counts[t] = (counts[t] || 0) + 1; });
-
-  // OFFLINE: sem eventos recentes (< 5min)
+  // Janela de recencia: considera apenas eventos dos ultimos 10 min
+  // para nao propagar falhas historicas como estado atual (correcao 17.5)
+  const WINDOW_MS = 600000;
+  const eventsWithTime = [];
   let newest = 0;
   events.forEach(e => {
     const m = /^(\d{4})\.(\d{2})\.(\d{2}) (\d{2}):(\d{2}):(\d{2})/.exec(e.Time || '');
     if (m) {
       const t = new Date(+m[1], +m[2]-1, +m[3], +m[4], +m[5], +m[6]).getTime();
+      eventsWithTime.push({ t, e });
       if (t > newest) newest = t;
     }
   });
   const recentMs = Math.max(0, Date.now() - newest);
-  if (!events.length || recentMs > 300000) {
+  if (!eventsWithTime.length || recentMs > 300000) {
     return { estado: 'OFFLINE', source: 'sem eventos recentes', recent_sec: Math.round(recentMs/1000) };
   }
+  const windowEvents = eventsWithTime.filter(x => newest - x.t <= WINDOW_MS).map(x => x.e);
+  const counts = {};
+  windowEvents.forEach(e => { const t = e.Event; if (t) counts[t] = (counts[t] || 0) + 1; });
 
   if (counts['HEALTH_FAILURE'] || counts['SYSTEM_ERROR'] || counts['BROKER_ERROR'] || counts['DATABASE_ERROR'])
     return { estado: 'ERROR', reasons: ['health_failure/system/broker/db'] };
@@ -122,6 +136,22 @@ app.get('/api/health', (req, res) => {
   const { source } = readEvents(1);
   res.json({ ok: true, uptime_sec: Math.round(process.uptime()), stream_ok: fs.existsSync(source), source, ts: new Date().toISOString() });
 });
+
+// 17.4+: status REAL das integracoes (valida GitHub via API, verifica SDK Sentry)
+app.get('/api/integrations', async (req, res) => {
+  try {
+    const st = await integrations.getIntegrationsStatus();
+    res.json(st);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// 17.5: envia um teste real no canal do Slack (retorna ok/erro do webhook)
+app.post('/api/integrations/slack/test', async (req, res) => {
+  const result = await integrations.sendSlackTest();
+  res.json(result);
+});
 app.get('/api/events', (req, res) => res.json(readEvents(parseInt(req.query.limit) || 100)));
 app.get('/api/events/latest', (req, res) => { const { source, events } = readEvents(1); res.json({ source, evento: events[events.length-1] || null, ts: new Date().toISOString() }); });
 
@@ -149,6 +179,23 @@ io.on('connection', (socket) => {
     const ai = aiState();
     const st = unifiedState(events, ai);
     socket.emit('system_state', { ts: new Date().toISOString(), estado: st.estado, razoes: st.reasons||[], ai, dominios: buildDomains(events) });
+    // 17.5: alerta Slack na transicao para estado critico (uma vez por estado)
+    try {
+      const critical = ['ERROR', 'OFFLINE', 'SAFE', 'DEGRADED'];
+      if (critical.includes(st.estado) && global.__lastAlertedState !== st.estado && integrations.slackConfigured()) {
+        global.__lastAlertedState = st.estado;
+        const razoes = (st.reasons || []).join(', ') || 'sem detalhe';
+        integrations.sendSlack(
+          `:warning: XAU AI PRO entrou em estado *${st.estado}* (${razoes}) - ${new Date().toISOString()}`
+        ).then(r => {
+          if (!r.ok) console.error('[slack] falha ao notificar estado critico:', r.error || r.status);
+        });
+      } else if (!critical.includes(st.estado)) {
+        global.__lastAlertedState = st.estado;
+      }
+    } catch (e) {
+      console.error('[slack] erro no alerta automatico:', e.message);
+    }
   };
   push();
   const iv = setInterval(push, 3000);

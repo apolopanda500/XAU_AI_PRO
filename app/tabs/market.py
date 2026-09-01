@@ -57,6 +57,19 @@ class MarketTab:
         self.refresh()
 
     def refresh(self) -> None:
+        """Dispara coleta em background; atualiza a tabela na GUI thread.
+
+        Nunca toca widgets de thread secundaria e nunca bloqueia a main
+        thread com chamadas de rede/MT5 (evita travamentos periodicos).
+        """
+        from app.utils.async_ui import run_bg
+        run_bg(
+            self.frame,
+            work=self._collect_quotes,
+            apply_result=self._apply_quotes,
+        )
+
+    def _collect_quotes(self) -> list[dict]:
         cfg = get_config()
         if self._mode == "spot":
             symbols = cfg.get("market", "symbols", default=[])
@@ -65,19 +78,30 @@ class MarketTab:
         else:
             symbols = cfg.get("market", "symbols", default=[]) + cfg.get("market", "futures", default=[])
         quotes = self.market.get_many(symbols)
-        rows = []
-        tags = []
+        rows: list[dict] = []
         for sym in symbols:
             q = quotes.get(sym)
             if q:
-                rows.append([
-                    q.symbol, q.price, q.bid, q.ask,
-                    q.change, f"{q.change_pct:+.2f}%", q.spread,
-                    q.source, q.time,
-                ])
-                tags.append("up" if q.change_pct >= 0 else "down")
-        self.table.tree.set_rows(rows, tags)
-        self.on_status(f"Mercado atualizado: {len(rows)} ativos")
+                rows.append({
+                    "symbol": q.symbol, "price": q.price, "bid": q.bid,
+                    "ask": q.ask, "change": q.change,
+                    "change_pct": q.change_pct, "spread": q.spread,
+                    "source": q.source, "time": q.time,
+                })
+        return rows
+
+    def _apply_quotes(self, rows: list[dict]) -> None:
+        out_rows = []
+        tags = []
+        for q in rows:
+            out_rows.append([
+                q["symbol"], q["price"], q["bid"], q["ask"],
+                q["change"], f"{q['change_pct']:+.2f}%", q["spread"],
+                q["source"], q["time"],
+            ])
+            tags.append("up" if q["change_pct"] >= 0 else "down")
+        self.table.tree.set_rows(out_rows, tags)
+        self.on_status(f"Mercado atualizado: {len(out_rows)} ativos")
 
     def start_auto_refresh(self) -> None:
         self._running = True
@@ -89,7 +113,7 @@ class MarketTab:
 
     def _auto_loop(self) -> None:
         cfg = get_config()
-        interval = int(cfg.get("market", "refresh_seconds", default=3))
+        interval = int(cfg.get("market", "refresh_seconds", default=5))
         while self._running:
             try:
                 self.refresh()

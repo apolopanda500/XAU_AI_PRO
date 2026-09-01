@@ -10,19 +10,63 @@ import { start } from 'workflow/api';
 import { marketDataWorkflow, reconcileWorkflow } from '../workflows/index.mjs';
 import { track } from '@vercel/analytics/server';
 
+// Pagina HTML de status servida a navegadores (com Vercel Speed Insights)
+const htmlStatusPage = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>XAU AI PRO - API Status</title>
+  <style>
+    body { font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #e2e8f0; margin: 0; padding: 40px 20px; }
+    .card { max-width: 720px; margin: 0 auto; background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 32px; }
+    h1 { font-size: 24px; margin: 0 0 8px; color: #f8fafc; }
+    .badge { display: inline-block; background: #16a34a; color: #fff; border-radius: 999px; padding: 2px 12px; font-size: 13px; font-weight: 600; }
+    .meta { color: #94a3b8; font-size: 14px; margin: 12px 0 24px; }
+    .endpoint { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 12px 16px; margin: 8px 0; font-family: monospace; font-size: 13px; }
+    .footer { margin-top: 24px; font-size: 12px; color: #64748b; }
+  </style>
+  <!-- Vercel Speed Insights: script oficial servido pela plataforma quando habilitado -->
+  <script defer src="/_vercel/speed-insights/script.js"></script>
+</head>
+<body>
+  <div class="card">
+    <h1>XAU AI PRO <span class="badge">ONLINE</span></h1>
+    <div class="meta">Backend v1.2.0-RC1 &middot; Etapa 17.3 &middot; Workflows: marketDataWorkflow, reconcileWorkflow</div>
+    <h3>Endpoints dispon&iacute;veis</h3>
+    <div class="endpoint">GET /api/health &mdash; Verifica&ccedil;&atilde;o de sa&uacute;de</div>
+    <div class="endpoint">GET /api/workflows/:runId &mdash; Inspe&ccedil;&atilde;o de run</div>
+    <div class="endpoint">POST /api/workflows/market-data &mdash; Inicia workflow de dados de mercado</div>
+    <div class="endpoint">POST /api/workflows/reconcile &mdash; Inicia workflow de reconcilia&ccedil;&atilde;o (body: { "symbol": "XAUUSD" })</div>
+    <div class="endpoint">GET /api/_diag &mdash; Diagn&oacute;stico do Workflow SDK</div>
+    <div class="footer">XAU AI PRO &middot; Vercel Speed Insights coletando Web Vitals nesta p&aacute;gina.</div>
+  </div>
+</body>
+</html>`;
+
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 // ---------- Rotas de saÃºde ----------
 app.get('/', async (req, res) => {
-  // Track homepage visits with Vercel Analytics
+  // Track homepage visits with Vercel Analytics (server-side)
   try {
     await track('api_home_visit', {}, { request: req });
   } catch (e) {
     // Silently fail analytics to not affect API response
     console.error('Analytics tracking error:', e.message);
   }
+
+  const accept = req.headers.accept || '';
+
+  // Navegador: serve pagina HTML de status com Vercel Speed Insights
+  if (accept.includes('text/html')) {
+    res.type('html').send(htmlStatusPage);
+    return;
+  }
+
+  // Cliente de API: resposta JSON preservada (comportamento original)
   
   // Check if client prefers HTML (browser access)
   const acceptsHtml = req.headers.accept?.includes('text/html');
