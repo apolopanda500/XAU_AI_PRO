@@ -6,6 +6,7 @@ GitHub, Sentry, Slack, CDN de modelos (Vercel) e MCP/Plugins/Extensoes.
 """
 from __future__ import annotations
 
+import os
 import threading
 import tkinter as tk
 from typing import Any, Callable
@@ -21,6 +22,7 @@ from app.integrations_client import (
     sentry_test,
     slack_test,
 )
+from app import updater
 from app.market_data import MarketData
 from app.mt5_robot import MT5Robot
 from app.theme.mexc import Theme
@@ -109,9 +111,36 @@ class IntegrationsTab:
             "mcp": self.res_mcp,
         }
 
+        self._card_updates(body)
+
         btns = tk.Frame(body, bg=Theme.BG)
         btns.pack(fill="x", padx=24, pady=(4, 24))
         PrimaryButton(btns, text="Salvar Integracoes", command=self.save, width=20).pack(side="left", padx=4)
+
+    # ------------------------------------------------------------------
+    def _card_updates(self, body) -> None:
+        """Card de auto-atualizacao do aplicativo (GitHub Releases)."""
+        card = Card(body, title="Atualizacoes do Aplicativo (ciclo mensal v1.3.x)")
+        card.pack(fill="x", padx=24, pady=10)
+        form = tk.Frame(card.body, bg=Theme.CARD)
+        form.pack(fill="x", padx=8, pady=8)
+        local = updater.local_version()
+        self.lbl_local = tk.Label(form, text=f"Versao instalada: v{local}",
+                                  bg=Theme.CARD, fg=Theme.TEXT,
+                                  font=(Theme.FONT_FAMILY, 10, "bold"))
+        self.lbl_local.grid(row=0, column=0, columnspan=2, sticky="w", padx=4, pady=3)
+        self.res_update = _result_label(form)
+        self.res_update.grid(row=1, column=0, columnspan=2, sticky="w", padx=4, pady=(4, 0))
+        self.lbl_progress = tk.Label(form, text="", bg=Theme.CARD, fg=Theme.PRIMARY,
+                                     font=(Theme.FONT_MONO, 9))
+        self.lbl_progress.grid(row=2, column=0, columnspan=2, sticky="w", padx=4)
+        row = tk.Frame(card.body, bg=Theme.CARD)
+        row.pack(fill="x", padx=8, pady=(0, 8))
+        SecondaryButton(row, text="Verificar atualizacao", command=self.do_check_update, width=20).pack(side="left", padx=4)
+        self.btn_install = SecondaryButton(row, text="Baixar e instalar", command=self.do_install_update, width=20)
+        self.btn_install.pack(side="left", padx=4)
+        self.btn_install.configure(state="disabled")
+        self._update_asset: dict | None = None
 
     # ------------------------------------------------------------------
     # Cards
@@ -291,6 +320,68 @@ class IntegrationsTab:
                                    fg=Theme.SUCCESS)
         except Exception as e:  # noqa: BLE001
             self.plugins_text.insert("1.0", f"Erro: {e}")
+
+    # ------------------------------------------------------------------
+    # Auto-atualizacao
+    # ------------------------------------------------------------------
+    def do_check_update(self) -> None:
+        self.res_update.configure(text="Consultando GitHub Releases...", fg=Theme.TEXT_SECONDARY)
+        self.on_status("Verificando atualizacoes...")
+
+        def worker() -> None:
+            r = updater.check_update()
+            def ui() -> None:
+                if not r.get("ok"):
+                    self.res_update.configure(text=f"✘ {r.get('error','')}", fg=Theme.DANGER)
+                    return
+                self._update_asset = r.get("asset")
+                if r.get("has_update") and self._update_asset:
+                    size_mb = self._update_asset.get("size", 0) / 1e6
+                    self.res_update.configure(
+                        text=f"✔ Nova versao disponivel: v{r['remote']} (atual v{r['local']}) | Setup {size_mb:.0f} MB",
+                        fg=Theme.SUCCESS)
+                    self.btn_install.configure(state="normal")
+                    self.on_status(f"Atualizacao v{r['remote']} disponivel")
+                else:
+                    self.res_update.configure(
+                        text=f"✔ Voce esta na versao mais recente (v{r['local']})", fg=Theme.SUCCESS)
+                    self.btn_install.configure(state="disabled")
+            self.frame.after(0, ui)
+        threading.Thread(target=worker, daemon=True).start()
+
+    def do_install_update(self) -> None:
+        if not self._update_asset:
+            return
+        url = self._update_asset.get("url", "")
+        if not url:
+            return
+        self.btn_install.configure(state="disabled")
+        size_total = self._update_asset.get("size", 0)
+        tmp = updater.Path(os.environ.get("TEMP", str(updater.Path.home()))) / "XAU_AI_PRO_Setup.exe"
+
+        def progress(done: int, total: int) -> None:
+            if total > 0:
+                pct = done * 100 // total
+                mb = done / 1e6
+                self.frame.after(0, lambda: self.lbl_progress.configure(
+                    text=f"Baixando... {pct:3d}%  ({mb:.1f} MB)"))
+
+        def worker() -> None:
+            r = updater.download_asset(url, tmp, progress)
+            def ui() -> None:
+                if not r.get("ok"):
+                    self.res_update.configure(text=f"✘ {r.get('error','')}", fg=Theme.DANGER)
+                    self.lbl_progress.configure(text="")
+                    self.btn_install.configure(state="normal")
+                    return
+                self.lbl_progress.configure(text="")
+                self.res_update.configure(text="✔ Download concluido. Iniciando instalador...", fg=Theme.SUCCESS)
+                self.on_status("Instalador da atualizacao iniciado")
+                inst = updater.install_update(tmp)
+                if not inst.get("ok"):
+                    self.res_update.configure(text=f"✘ {inst.get('error','')}", fg=Theme.DANGER)
+            self.frame.after(0, ui)
+        threading.Thread(target=worker, daemon=True).start()
 
     # ------------------------------------------------------------------
     # Persistencia

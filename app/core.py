@@ -22,6 +22,7 @@ from app.tabs.market import MarketTab
 from app.tabs.positions import PositionsTab
 from app.tabs.robot import RobotTab
 from app.tabs.settings import SettingsTab
+from app.tabs.subgraph import SubgraphTab
 from app.tabs.tools import ToolsTab
 from app.tabs.training import TrainingTab
 from app.theme.mexc import Theme
@@ -113,6 +114,7 @@ class XAUAProApp:
         self.tabs["assistant"] = AssistantTab(self.tab_container, self.robot, self.market, self._set_status)
         self.tabs["tools"] = ToolsTab(self.tab_container, self.robot, self.market, self._set_status)
         self.tabs["integrations"] = IntegrationsTab(self.tab_container, self.robot, self.market, self._set_status)
+        self.tabs["subgraph"] = SubgraphTab(self.tab_container, self)
         self.tabs["settings"] = SettingsTab(self.tab_container, self.robot, self.market, self._set_status)
 
         for key in self.tabs:
@@ -137,6 +139,7 @@ class XAUAProApp:
             "assistant": "Assistente",
             "tools": "Ferramentas",
             "integrations": "Integracoes",
+            "subgraph": "Subgraph",
             "settings": "Configuracoes",
         }
         self.header_title.configure(text=titles.get(key, key))

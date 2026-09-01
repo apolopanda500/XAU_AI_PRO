@@ -74,6 +74,7 @@ class Sidebar(tk.Frame):
             ("assistant", "Assistente", "💬"),
             ("tools", "Ferramentas", "🧰"),
             ("integrations", "Integracoes", "🔌"),
+            ("subgraph", "Subgraph", "🕸️"),
             ("settings", "Configuracoes", "⚙️"),
         ]
         for key, label, icon in self._items:
