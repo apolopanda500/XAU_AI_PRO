@@ -82,20 +82,23 @@ def build_manifest(files: list[Path]) -> dict:
 
 
 def gh_upload(files: list[Path], tag: str) -> int:
-    """Cria/atualiza o release e faz upload dos arquivos via gh CLI."""
+    """Cria release DRAFT, faz upload dos arquivos e publica ao final.
+
+    O GitHub (com 'immutable releases' habilitado) so aceita upload de
+    assets em releases DRAFT. Por isso: create --draft -> upload -> publish.
+    """
     gh = "gh"
     try:
         subprocess.run([gh, "--version"], capture_output=True, check=True)
     except Exception:
         print("[ERRO] gh CLI nao encontrado. Instale: winget install GitHub.cli && gh auth login")
         return 2
+    repo = f"{GITHUB_OWNER}/{GITHUB_REPO}"
     # release existe?
-    r = subprocess.run([gh, "release", "view", tag, "-R", f"{GITHUB_OWNER}/{GITHUB_REPO}"],
-                       capture_output=True, text=True)
+    r = subprocess.run([gh, "release", "view", tag, "-R", repo], capture_output=True, text=True)
     if r.returncode != 0:
-        print(f"[INFO] Release {tag} nao existe; criando...")
-        c = subprocess.run([gh, "release", "create", tag,
-                            "-R", f"{GITHUB_OWNER}/{GITHUB_REPO}",
+        print(f"[INFO] Release {tag} nao existe; criando como DRAFT...")
+        c = subprocess.run([gh, "release", "create", tag, "-R", repo, "--draft",
                             "--title", "XAU AI PRO - Modelos de IA pre-treinados",
                             "--notes", "Modelos .pkl por simbolo/timeframe. Baixados sob demanda pelo app."],
                            capture_output=True, text=True)
@@ -106,15 +109,23 @@ def gh_upload(files: list[Path], tag: str) -> int:
     for p in files:
         size_mb = p.stat().st_size / 1e6
         print(f"  upload {p.name} ({size_mb:.1f} MB)...")
-        u = subprocess.run([gh, "release", "upload", tag, str(p),
-                            "-R", f"{GITHUB_OWNER}/{GITHUB_REPO}", "--clobber"],
+        u = subprocess.run([gh, "release", "upload", tag, str(p), "-R", repo, "--clobber"],
                            capture_output=True, text=True)
         if u.returncode == 0:
             ok += 1
         else:
             print(f"    [ERRO] {u.stderr[:200]}")
-    print(f"[OK] {ok}/{len(files)} modelos no release {tag}")
-    return 0 if ok == len(files) else 1
+    if ok == len(files):
+        # publica o draft (torna o download publico/disponivel)
+        pub = subprocess.run([gh, "release", "edit", tag, "-R", repo, "--draft=false"],
+                             capture_output=True, text=True)
+        if pub.returncode == 0:
+            print(f"[OK] {ok}/{len(files)} modelos publicados no release {tag}")
+            return 0
+        print(f"[AVISO] uploads OK, mas falha ao publicar: {pub.stderr[:200]}")
+        return 1
+    print(f"[ERRO] apenas {ok}/{len(files)} modelos enviados; release permanece DRAFT.")
+    return 1
 
 
 def main() -> int:
