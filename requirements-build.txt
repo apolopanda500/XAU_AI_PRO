@@ -1,0 +1,16 @@
+# XAU_AI_PRO - Dependencias para BUILD do EXE (PyInstaller) e CI
+# Enxuto: apenas o que o launcher.spec realmente embute.
+# (requirements.txt completo continua valido para desenvolvimento)
+numpy
+pandas
+scikit-learn
+scipy
+joblib
+sentry-sdk[openai]>=2.44.0
+streamlit
+altair
+openai
+uvicorn
+Pillow
+MetaTrader5
+pyinstaller

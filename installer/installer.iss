@@ -17,7 +17,12 @@
 #define MyAppVersion "1.3.2"
 #define MyAppPublisher "XAU AI PRO"
 #define MyAppExeName "XAU_AI_PRO.exe"
+; MyRoot pode ser sobrescrito na linha de comando do ISCC (CI):
+;   ISCC.exe /DMyRoot="C:\caminho\do\checkout" installer.iss
+; Sem o define, usa o caminho local de desenvolvimento.
+#ifndef MyRoot
 #define MyRoot "C:\Users\Micro\AppData\Roaming\MetaQuotes\Terminal\D0E8209F77C8CF37AD8BF550E51FF075\MQL5\Files\XAU_AI_PRO"
+#endif
 
 [Setup]
 AppId={{8A1F2E34-9C57-4E6B-9A2D-1234567890AB}

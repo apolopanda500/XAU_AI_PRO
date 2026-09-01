@@ -1,0 +1,64 @@
+name: Build Installer
+
+on:
+  # Build automatico em tags v* (release) ou manual pela aba Actions
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: EXE + Setup (Windows)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Instalar dependencias de build
+        run: pip install -r requirements-build.txt
+
+      - name: Smoke test - versao do launcher
+        run: python Python\launcher.py versao
+
+      - name: Build do EXE (PyInstaller)
+        run: python -m PyInstaller --noconfirm --clean launcher.spec
+
+      - name: Smoke test do EXE
+        run: .\dist\XAU_AI_PRO.exe versao
+
+      - name: Instalar Inno Setup 6
+        run: choco install innosetup -y --no-progress
+
+      - name: Compilar instalador (ISCC)
+        shell: cmd
+        run: '"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyRoot="%CD%" installer\installer.iss'
+
+      - name: Publicar artefato (todas as execucoes)
+        uses: actions/upload-artifact@v4
+        with:
+          name: XAU_AI_PRO_Setup
+          path: installer\XAU_AI_PRO_Setup.exe
+          retention-days: 30
+
+      - name: Anexar ao release (somente tags)
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          gh release view $tag 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --title "XAU AI PRO $tag" --generate-notes
+          }
+          gh release upload $tag installer\XAU_AI_PRO_Setup.exe --clobber
+          Write-Host "Setup anexado ao release $tag"

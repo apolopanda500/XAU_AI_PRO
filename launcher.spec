@@ -19,6 +19,8 @@ console=True e OBRIGATORIO (comandos CLI imprimem no stdout).
 from PyInstaller.building.build_main import Analysis, PYZ, EXE
 from PyInstaller.utils.hooks import collect_data_files, copy_metadata, collect_submodules
 
+import os
+
 # Frontend estatico do Streamlit (UI web) + metadata de versao dos pacotes
 # Obs: '.agents/**' (diretorio OCULTO com os skills embutidos do streamlit,
 # ex.: 'streamlit skills') precisa ser incluido explicitamente - sem ele o
@@ -28,12 +30,14 @@ _STREAMLIT_DATAS = collect_data_files(
     includes=['static/**', 'web/**', 'components/**', '.agents/**'],)
 _METADATA = copy_metadata('streamlit') + copy_metadata('altair') + copy_metadata('openai')
 
-_ROOT = r'C:\Users\Micro\AppData\Roaming\MetaQuotes\Terminal\D0E8209F77C8CF37AD8BF550E51FF075\MQL5\Files\XAU_AI_PRO'
-_ICON = r'C:\Users\Micro\AppData\Roaming\MetaQuotes\Terminal\D0E8209F77C8CF37AD8BF550E51FF075\MQL5\Files\XAU_AI_PRO\app\assets\icon.ico'
+# Raiz do projeto = pasta onde este .spec esta (portavel: local e CI).
+# SPECPATH e fornecido pelo PyInstaller apontando para o diretorio do spec.
+_ROOT = SPECPATH
+_ICON = os.path.join(_ROOT, 'app', 'assets', 'icon.ico')
 
 a = Analysis(
-    [r'C:\Users\Micro\AppData\Roaming\MetaQuotes\Terminal\D0E8209F77C8CF37AD8BF550E51FF075\MQL5\Files\XAU_AI_PRO\Python\launcher.py'],
-    pathex=[_ROOT, _ROOT + r'\Python'],
+    [os.path.join(_ROOT, 'Python', 'launcher.py')],
+    pathex=[_ROOT, os.path.join(_ROOT, 'Python')],
     binaries=[],
     datas=_STREAMLIT_DATAS + _METADATA,  # frontend estatico do streamlit + metadata de versao
     hiddenimports=[
