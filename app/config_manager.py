@@ -74,6 +74,14 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "on_learning": True,
         "on_error": True,
     },
+    "integrations": {
+        "github": {"repo_url": "https://github.com/apolopanda500/XAU_AI_PRO.git", "token": ""},
+        "sentry": {"dsn": ""},
+        "slack": {"webhook": ""},
+        "models": {"base_url": "https://xau-ai-pro.vercel.app/api/models"},
+        "mcp": {"endpoint": ""},
+        "plugins_dir": "plugins",
+    },
     "updated_at": None,
 }
 

@@ -17,6 +17,7 @@ from app.market_data import MarketData
 from app.mt5_robot import MT5Robot
 from app.tabs.assistant import AssistantTab
 from app.tabs.dashboard import DashboardTab
+from app.tabs.integrations import IntegrationsTab
 from app.tabs.market import MarketTab
 from app.tabs.positions import PositionsTab
 from app.tabs.robot import RobotTab
@@ -111,6 +112,7 @@ class XAUAProApp:
         self.tabs["training"] = TrainingTab(self.tab_container, self.robot, self.market, self._set_status)
         self.tabs["assistant"] = AssistantTab(self.tab_container, self.robot, self.market, self._set_status)
         self.tabs["tools"] = ToolsTab(self.tab_container, self.robot, self.market, self._set_status)
+        self.tabs["integrations"] = IntegrationsTab(self.tab_container, self.robot, self.market, self._set_status)
         self.tabs["settings"] = SettingsTab(self.tab_container, self.robot, self.market, self._set_status)
 
         for key in self.tabs:
@@ -134,6 +136,7 @@ class XAUAProApp:
             "training": "Treinamento IA",
             "assistant": "Assistente",
             "tools": "Ferramentas",
+            "integrations": "Integracoes",
             "settings": "Configuracoes",
         }
         self.header_title.configure(text=titles.get(key, key))
