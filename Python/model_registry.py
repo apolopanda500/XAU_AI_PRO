@@ -14,7 +14,27 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-MODELS_DIR = Path(__file__).resolve().parent.parent / "Python" / "models"
+
+def _resolve_models_dir() -> Path:
+    """Resolve o diretorio de modelos.
+
+    Ordem de prioridade (para suporte a download sob demanda):
+      1. Variavel de ambiente XAU_AI_PRO_MODELS (maquina de destino / instalador);
+      2. Subpasta 'models' junto a este modulo (Python/models);
+      3. Fallback: <raiz>/Python/models.
+    Garante que o diretorio exista.
+    """
+    env = os.getenv("XAU_AI_PRO_MODELS", "").strip()
+    if env:
+        p = Path(env).expanduser()
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+    default = Path(__file__).resolve().parent.parent / "Python" / "models"
+    default.mkdir(parents=True, exist_ok=True)
+    return default
+
+
+MODELS_DIR = _resolve_models_dir()
 FEATURE_VERSION = "25F"          # contrato 25 features (ETAPA 15.2.2)
 MODEL_VERSION = "1.2.0"
 # idade maxima aceita como READY (segundos) - 5 dias

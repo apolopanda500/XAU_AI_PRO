@@ -192,6 +192,52 @@ class LearningEngine:
             return {"ok": False, "error": str(e)}
 
 
+    def download_models(self, symbols=None, timeframes=None) -> dict[str, Any]:
+        """Baixa modelos sob demanda (estrategia thin-installer).
+
+        Roda Python/model_manager.py via subprocess (consistente com o resto
+        do engine) e reporta como run no historico.
+        """
+        self._update_status(state="downloading", message="Baixando modelos...")
+        py_dir = get_base_dir() / "Python"
+        script = py_dir / "model_manager.py"
+        if not script.exists():
+            result = {"ok": False, "error": "model_manager.py nao encontrado", "time": datetime.now().isoformat()}
+            self._update_status(state="error", message=result["error"])
+            return result
+        symbols = [s.upper() for s in (symbols or ["XAUUSD"])]
+        timeframes = [(t.upper() if isinstance(t, str) else t) for t in (timeframes or ["M5"])]
+        args = [_python_exe(), str(script), "--symbols", ",".join(symbols), "--timeframes", ",".join(timeframes)]
+        try:
+            proc = subprocess.run(
+                args,
+                cwd=str(py_dir),
+                capture_output=True,
+                text=True,
+                timeout=1800,
+            )
+            ok = proc.returncode == 0
+            result = {
+                "ok": ok,
+                "returncode": proc.returncode,
+                "stdout": proc.stdout[-2000:] if proc.stdout else "",
+                "stderr": proc.stderr[-2000:] if proc.stderr else "",
+                "time": datetime.now().isoformat(),
+                "stage": "download_models",
+                "score": 0.0,
+            }
+            if ok:
+                self._update_status(state="idle", message="Modelos baixados")
+            else:
+                self._update_status(state="error", message=f"Erro download: {proc.returncode}")
+            self._add_run(result)
+            return result
+        except Exception as e:
+            result = {"ok": False, "error": str(e), "time": datetime.now().isoformat()}
+            self._update_status(state="error", message=str(e))
+            self._add_run(result)
+            return result
+
     def start_scheduler(self) -> None:
         if self._thread is not None and self._thread.is_alive():
             return

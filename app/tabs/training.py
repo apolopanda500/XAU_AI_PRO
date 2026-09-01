@@ -8,7 +8,7 @@ import threading
 import tkinter as tk
 from typing import Callable
 
-from app.components.cards import Card, PrimaryButton, SecondaryButton
+from app.components.cards import Card, PrimaryButton, SecondaryButton, AccentButton
 from app.config_manager import get_config
 from app.learning_engine import get_learning_engine
 from app.market_data import MarketData
@@ -42,6 +42,7 @@ class TrainingTab:
         SecondaryButton(row, text="Treinar", command=self.train_only, width=12).pack(side="left", padx=4)
         SecondaryButton(row, text="Predizer", command=self.predict_only, width=12).pack(side="left", padx=4)
         SecondaryButton(row, text="Iniciar agendador", command=self.start_scheduler, width=18).pack(side="left", padx=4)
+        AccentButton(row, text="Baixar modelos", command=self.download_models, width=16).pack(side="left", padx=4)
 
         cfg = Card(self.frame, title="Configuracao de Aprendizado")
         cfg.pack(fill="x", padx=24, pady=10)
@@ -81,6 +82,10 @@ class TrainingTab:
     def predict_only(self) -> None:
         self.on_status("Gerando predicoes...")
         self._threaded(lambda: self._show_result(get_learning_engine().run_prediction()))
+
+    def download_models(self) -> None:
+        self.on_status("Baixando modelos pre-treinados...")
+        self._threaded(lambda: self._show_result(get_learning_engine().download_models()))
 
     def start_scheduler(self) -> None:
         get_learning_engine().start_scheduler()
