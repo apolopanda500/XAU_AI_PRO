@@ -167,7 +167,13 @@ def ensure_models(
                 continue
 
             fname = "%s_%s.pkl" % (sym, tf.upper())
-            url = _hint_download_url(sym, tf, base)
+            m = models_map.get(fname)
+            # URL explicita no manifest tem prioridade (ex.: GitHub Releases);
+            # caso contrario, monta a URL padrao {base}/models/{arquivo}.
+            if m and m.get("url"):
+                url = m["url"]
+            else:
+                url = _hint_download_url(sym, tf, base)
 
             ok = False
             last_err = ""

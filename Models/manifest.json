@@ -1,0 +1,80 @@
+{
+  "generated": "2026-09-01T20:04:11Z",
+  "source": "github-releases",
+  "manifest_url": "https://raw.githubusercontent.com/apolopanda500/XAU_AI_PRO/main/Models/manifest.json",
+  "total_bytes": 928858536,
+  "models": [
+    {
+      "name": "AUDUSD_M5.pkl",
+      "sha256": "ba78316267856e225b45334173fcc75c535324fac1973c69ea1cdf666e3d391f",
+      "size": 18720098,
+      "url": "https://github.com/apolopanda500/XAU_AI_PRO/releases/download/models-v1.2.0/AUDUSD_M5.pkl"
+    },
+    {
+      "name": "BTCUSD_M5.pkl",
+      "sha256": "7c2209c99b888f00922de9789b0ffab033700762e0a46ec0ef0f4ad514ff4a52",
+      "size": 184705442,
+      "url": "https://github.com/apolopanda500/XAU_AI_PRO/releases/download/models-v1.2.0/BTCUSD_M5.pkl"
+    },
+    {
+      "name": "DOGEUSD_M5.pkl",
+      "sha256": "c83fe3b76368fd6808ee56537d71c7c617482a09f2d1c9ebefa63352dfb2f080",
+      "size": 163482434,
+      "url": "https://github.com/apolopanda500/XAU_AI_PRO/releases/download/models-v1.2.0/DOGEUSD_M5.pkl"
+    },
+    {
+      "name": "ETHUSD_M5.pkl",
+      "sha256": "8c81a9c61341626bb90e9a260f2df9851b3314af94ab96f9692dd8f861232f6f",
+      "size": 191891698,
+      "url": "https://github.com/apolopanda500/XAU_AI_PRO/releases/download/models-v1.2.0/ETHUSD_M5.pkl"
+    },
+    {
+      "name": "EURUSD_M5.pkl",
+      "sha256": "e0f146da787d8152b81a59511e74114b0300c5962e7079ce74a250f26b573038",
+      "size": 19013202,
+      "url": "https://github.com/apolopanda500/XAU_AI_PRO/releases/download/models-v1.2.0/EURUSD_M5.pkl"
+    },
+    {
+      "name": "GBPUSD_M5.pkl",
+      "sha256": "d10e213739d12f2426ff6b23cde88906688d0ebe2f84b608a0d11e91c9a1ea05",
+      "size": 19332322,
+      "url": "https://github.com/apolopanda500/XAU_AI_PRO/releases/download/models-v1.2.0/GBPUSD_M5.pkl"
+    },
+    {
+      "name": "NZDUSD_M5.pkl",
+      "sha256": "b920f1b2e6121e568445bab7f67eeed69e64c1bcb94677290555b65ea2e4eb25",
+      "size": 16891234,
+      "url": "https://github.com/apolopanda500/XAU_AI_PRO/releases/download/models-v1.2.0/NZDUSD_M5.pkl"
+    },
+    {
+      "name": "SOLUSD_M5.pkl",
+      "sha256": "8cb28d4265d2257fe2503ae33376f6c4ef5eeca8118477ae134c3b62d9fa1117",
+      "size": 196830994,
+      "url": "https://github.com/apolopanda500/XAU_AI_PRO/releases/download/models-v1.2.0/SOLUSD_M5.pkl"
+    },
+    {
+      "name": "USDCAD_M5.pkl",
+      "sha256": "1d91fe03b424d080f23fdbb76b336bc9929d1f5c4200e09a69ca2739d45038c4",
+      "size": 19547922,
+      "url": "https://github.com/apolopanda500/XAU_AI_PRO/releases/download/models-v1.2.0/USDCAD_M5.pkl"
+    },
+    {
+      "name": "USDJPY_M5.pkl",
+      "sha256": "9ab7d0de3c2d936bef9948e7dc6dc9a515e708195a4eacb5fdf0c00a27250098",
+      "size": 18473346,
+      "url": "https://github.com/apolopanda500/XAU_AI_PRO/releases/download/models-v1.2.0/USDJPY_M5.pkl"
+    },
+    {
+      "name": "XAUUSD_M5.pkl",
+      "sha256": "b6c0aaf860b81ce4fa49a6528b23670f05f3f0af9e37b460828a790cde3cca54",
+      "size": 58726226,
+      "url": "https://github.com/apolopanda500/XAU_AI_PRO/releases/download/models-v1.2.0/XAUUSD_M5.pkl"
+    },
+    {
+      "name": "XRPUSD_M5.pkl",
+      "sha256": "09596ae5bb1591d6d9ae8d26b5bd75aa1154aa4cbad7de7998ccc0da2cc58766",
+      "size": 21243618,
+      "url": "https://github.com/apolopanda500/XAU_AI_PRO/releases/download/models-v1.2.0/XRPUSD_M5.pkl"
+    }
+  ]
+}

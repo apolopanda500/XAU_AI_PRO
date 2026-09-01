@@ -195,8 +195,6 @@ begin
 end;
 
 procedure InitializeWizard;
-var
-  mt5: String;
 begin
   DetectedMT5 := FindTerminalDataPath();
   if DetectedMT5 <> '' then
