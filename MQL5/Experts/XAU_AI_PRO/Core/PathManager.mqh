@@ -9,7 +9,6 @@
 string DataPath      = "";
 string FilesPath     = "";
 string DatasetPath   = "";
-string PredictionPath= "";
 string ModelPath     = "";
 
 //==================================================
@@ -31,21 +30,19 @@ bool InitPathManager()
       FilesPath +
       "Data\\dataset.csv";
 
-   PredictionPath =
-      FilesPath +
-      "Data\\prediction.json";
-
+   // Predicao por simbolo (prediction_<SYMBOL>.json) - padrao real do pipeline.
+   // O caminho exato depende do simbolo; aqui guardamos apenas o prefixo,
+   // pois o AIConnector monta o nome completo (prediction_XAUUSD.json etc).
    ModelPath =
       FilesPath +
-      "Data\\model.pkl";
+      "Python\\models\\";
 
    Print("==============================");
    Print("PATH MANAGER");
    Print("DATA PATH      : ",DataPath);
    Print("FILES PATH     : ",FilesPath);
    Print("DATASET PATH   : ",DatasetPath);
-   Print("PREDICTION PATH: ",PredictionPath);
-   Print("MODEL PATH     : ",ModelPath);
+   Print("MODELS PATH    : ",ModelPath);
    Print("==============================");
 
    return true;
@@ -63,11 +60,6 @@ string GetFilesPath()
 string GetDatasetPath()
 {
    return DatasetPath;
-}
-
-string GetPredictionPath()
-{
-   return PredictionPath;
 }
 
 string GetModelPath()
