@@ -67,3 +67,4 @@ Logs/*
 Ultimate/.slack_watcher_offset
 installer/cert/ 
 dash_pid.txt
+*.bak
