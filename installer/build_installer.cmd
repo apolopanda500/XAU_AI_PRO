@@ -27,9 +27,15 @@ rem ---- 0) pre-flight ---------------------------------------------------
 if not exist "%PY%" goto :nopy
 if not exist "%ISCC%" goto :noiscc
 
-rem ---- 1) EXE (PyInstaller) -------------------------------------------
+rem ---- 1) Qualidade (testes automatizados) -----------------------------
 echo.
-echo == [1/3] PyInstaller: dist\XAU_AI_PRO.exe ==
+echo == [1/4] Testes automatizados ==
+"%PY%" -m pytest -q tests
+if errorlevel 1 goto :fail
+
+rem ---- 2) EXE (PyInstaller) -------------------------------------------
+echo.
+echo == [2/4] PyInstaller: dist\XAU_AI_PRO.exe ==
 "%PY%" -m PyInstaller --noconfirm --clean launcher.spec
 if errorlevel 1 goto :fail
 
@@ -37,16 +43,16 @@ echo.== Smoke test: XAU_AI_PRO.exe versao ==
 "%ROOT%\dist\XAU_AI_PRO.exe" versao
 if errorlevel 1 echo [AVISO] smoke test de versao falhou
 
-rem ---- 2) Installer (Inno Setup) ---------------------------------------
+rem ---- 3) Installer (Inno Setup) ---------------------------------------
 echo.
-echo == [2/3] Inno Setup: installer\XAU_AI_PRO_Setup.exe ==
+echo == [3/4] Inno Setup: installer\XAU_AI_PRO_Setup.exe ==
 "%ISCC%" "%ROOT%\installer\installer.iss" /Qp
 if errorlevel 1 goto :fail
 
-rem ---- 3) Signing (optional) -------------------------------------------
+rem ---- 4) Signing (optional) -------------------------------------------
 if "%~1"=="" goto :done
 echo.
-echo == [3/3] Authenticode signing ==
+echo == [4/4] Authenticode signing ==
 call installer\sign.cmd %*
 if errorlevel 1 goto :fail
 

@@ -24,7 +24,10 @@ jobs:
           cache: 'pip'
 
       - name: Instalar dependencias de build
-        run: pip install -r requirements-build.txt
+        run: pip install -r requirements-build.txt -r requirements-dev.txt
+
+      - name: Testes automatizados
+        run: python -m pytest -q tests
 
       - name: Smoke test - versao do launcher
         run: python Python\launcher.py versao

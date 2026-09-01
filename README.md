@@ -1,30 +1,46 @@
-﻿# XAU AI PRO v1.2.0 - Apolopanda500
-Plataforma Profissional de Trading XAU com IA Local e Integração MT5
+# XAU AI PRO v1.2.0
 
-## 🚀 Recursos Principais
-- Interface moderna (Electron.js + React)
-- Integração direta com MetaTrader 5
-- IA Local (TensorFlow.js) e Cloud (API própria)
-- Sistema de plugins extensível
-- Agentes MCP (LangChain + LangGraph)
-- Versionamento automático via GitHub Actions
+Plataforma desktop para acompanhamento do MetaTrader 5, análise de mercado e treinamento local de modelos. A interface atual usa **Python/Tkinter** e o robô opera no **MetaTrader 5** por meio do EA MQL5 distribuído com o projeto.
 
-## 📦 Instalação
-```bash
-git clone https://github.com/apopolopanda500/crypto-trader-pro.git
-cd crypto-trader-pro
-npm install
-npm start
+> Trading envolve risco. Valide qualquer estratégia primeiro em backtest e conta demo. O módulo **Subgraph** é somente leitura e não envia ordens.
+
+## Recursos
+
+- Painel para mercado, posições, robô, treino e configurações.
+- Conexão opcional com MetaTrader 5 oficial.
+- EA MQL5, arquivos `.mq5`, `.mqh` e presets `.set` incluídos no instalador.
+- Subgraph de mercado: indicadores, correlação de retornos e classificação de regime.
+- Integrações configuráveis: GitHub, Sentry, Slack, CDN de modelos e MCP.
+- Atualizações via GitHub Releases e instalador Inno Setup.
+
+## Desenvolvimento local
+
+```powershell
+Set-Location "C:\caminho\para\XAU_AI_PRO"
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt -r requirements-dev.txt
+.\.venv\Scripts\python.exe app\main.py
 ```
 
-## 🔧 Configuração
-1. Configure a conexão com MT5 em `/integracao_mt5/config.json`
-2. Ajuste as chaves da API de IA em `/ai/cloud_api/config.json`
-3. Configure os plugins em `/plugins/manifest.json`
+## Testes
 
-## 🔄 Atualizações
-- **Atualizações leves**: Diárias (automáticas)
-- **Atualizações pesadas**: Mensais (via release)
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q tests
+```
 
-## 📄 Licença
-MIT License - Desenvolvido por Apolopanda500
+## Instalador
+
+O arquivo `installer\installer.iss` detecta a pasta de dados do MT5 e instala em `MQL5\Files\XAU_AI_PRO`, sem privilégios de administrador.
+
+```powershell
+Set-Location "C:\caminho\para\XAU_AI_PRO\installer"
+.\build_installer.cmd
+```
+
+O resultado é `installer\XAU_AI_PRO_Setup.exe`.
+
+## Segurança operacional
+
+- Não versione tokens, senhas ou DSNs.
+- Use conta demo até haver histórico suficiente de backtest e forward test.
+- Revise limites de lote, spread, perda diária e drawdown antes de habilitar o robô.

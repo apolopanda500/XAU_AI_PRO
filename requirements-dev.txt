@@ -1,0 +1,2 @@
+# Dependências exclusivas de qualidade e testes.
+pytest>=8.0,<9.0

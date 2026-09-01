@@ -2,6 +2,7 @@
 XAU AI PRO - API Backend (FastAPI)
 Endpoints:
   GET  /                          -> status
+  GET  /health                    -> health (alias de /)
   GET  /prediction/{symbol}       -> predição de um símbolo
   GET  /account                   -> dados da conta (SQLite)
   GET  /market/live               -> cotações em tempo real (MT5/yfinance)
@@ -27,8 +28,19 @@ from pydantic import BaseModel
 app = FastAPI(title="XAU AI PRO API", version="1.2.0")
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
+# F4 fix: o EA grava em MQL5\Files\Data do terminal (caminho canônico).
+TERMINAL_DATA = Path(
+    r"C:\Users\Micro\AppData\Roaming\MetaQuotes\Terminal\D0E8209F77C8CF37AD8BF550E51FF075\MQL5\Files\Data"
+)
+DATA_DIR = TERMINAL_DATA if TERMINAL_DATA.is_dir() else PROJECT_ROOT / "MQL5" / "Files" / "Data"
+try:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+except Exception:
+    pass
+
 DB_PATH = PROJECT_ROOT / "database" / "trading.db"
-PREDICTIONS_DIR = PROJECT_ROOT / "MQL5" / "Files" / "Data"
+PREDICTIONS_DIR = DATA_DIR
 PY_DIR = PROJECT_ROOT / "Python"
 ULT = PROJECT_ROOT / "Ultimate"
 
@@ -72,6 +84,11 @@ def _py() -> str:
 @app.get("/")
 def read_root():
     return {"status": "online", "app": "XAU AI PRO API", "version": "1.2.0"}
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
 
 
 @app.get("/prediction/{symbol}")

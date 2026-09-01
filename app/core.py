@@ -114,7 +114,7 @@ class XAUAProApp:
         self.tabs["assistant"] = AssistantTab(self.tab_container, self.robot, self.market, self._set_status)
         self.tabs["tools"] = ToolsTab(self.tab_container, self.robot, self.market, self._set_status)
         self.tabs["integrations"] = IntegrationsTab(self.tab_container, self.robot, self.market, self._set_status)
-        self.tabs["subgraph"] = SubgraphTab(self.tab_container, self)
+        self.tabs["subgraph"] = SubgraphTab(self.tab_container, self.robot, self.market, self._set_status)
         self.tabs["settings"] = SettingsTab(self.tab_container, self.robot, self.market, self._set_status)
 
         for key in self.tabs:

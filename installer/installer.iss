@@ -14,7 +14,7 @@
 ; Compilacao: "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
 ; ============================================================
 #define MyAppName "XAU AI PRO"
-#define MyAppVersion "1.3.2"
+#define MyAppVersion "1.2.0"
 #define MyAppPublisher "XAU AI PRO"
 #define MyAppExeName "XAU_AI_PRO.exe"
 ; MyRoot pode ser sobrescrito na linha de comando do ISCC (CI):

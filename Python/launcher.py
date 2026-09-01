@@ -26,7 +26,7 @@ import urllib.request
 import webbrowser
 from pathlib import Path
 
-VERSION = "1.3.2"
+VERSION = "1.2.0"
 APP_NAME = "XAU_AI_PRO"
 
 # Portas padrão do dashboard web (Streamlit)

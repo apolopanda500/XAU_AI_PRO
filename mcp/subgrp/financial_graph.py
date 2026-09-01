@@ -1,13 +1,16 @@
-
 # -*- coding: utf-8 -*-
-"""Motor de analise por nografos (subgraphs) de mercado financeiro."""
+"""Análise de relações entre ativos, estritamente em modo somente leitura."""
 from __future__ import annotations
+
 import asyncio
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
-from datetime import datetime
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
+from typing import Any
+
 import numpy as np
 import pandas as pd
+
+_REQUIRED = {"open", "high", "low", "close"}
 
 
 @dataclass
@@ -15,11 +18,8 @@ class AssetNode:
     symbol: str
     asset_class: str
     timeframe: str
-    features: Dict[str, float] = field(default_factory=dict)
-
-    def __post_init__(self):
-        if not self.features:
-            self.features = dict(rsi=50.0, macd_hist=0.0, atr=0.0, volatility=0.0, returns=0.0, zscore=0.0)
+    features: dict[str, float] = field(default_factory=dict)
+    returns: pd.Series = field(default_factory=lambda: pd.Series(dtype=float), repr=False)
 
 
 @dataclass
@@ -29,111 +29,121 @@ class CorrelationEdge:
     correlation: float
     lag: int = 0
     strength: str = "weak"
+    samples: int = 0
 
 
-def _tech_features(df):
-    """Calcula features tecnicas."""
-    closes = df["close"]
-    diffs = closes.diff()
-    gains = diffs.clip(lower=0).rolling(14).mean()
-    losses = -diffs.clip(upper=0).rolling(14).mean()
-    rs = gains / losses.replace(0, np.nan)
-    rsi = float(100 - (100 / (1 + rs)).iloc[-1])
-    ema12 = closes.ewm(span=12, adjust=False).mean()
-    ema26 = closes.ewm(span=26, adjust=False).mean()
-    macd_line = ema12 - ema26
-    signal = macd_line.ewm(span=9, adjust=False).mean()
-    macd_hist = float((macd_line - signal).iloc[-1])
+def _number(value: Any, default: float = 0.0) -> float:
+    """Garante valor numérico finito para UI e JSON."""
+    try:
+        value = float(value)
+        return value if np.isfinite(value) else default
+    except (TypeError, ValueError):
+        return default
+
+
+def _candles(df: pd.DataFrame) -> pd.DataFrame:
+    """Valida candles OHLCV recebidos de fontes externas."""
+    missing = _REQUIRED.difference(df.columns)
+    if missing:
+        raise ValueError(f"Candles sem colunas: {', '.join(sorted(missing))}")
+    clean = df.copy()
+    for column in _REQUIRED:
+        clean[column] = pd.to_numeric(clean[column], errors="coerce")
+    clean = clean.dropna(subset=list(_REQUIRED))
+    if len(clean) < 30:
+        raise ValueError("São necessários pelo menos 30 candles válidos")
+    return clean
+
+
+def _features(df: pd.DataFrame) -> tuple[dict[str, float], pd.Series]:
+    """Calcula indicadores técnicos e retorna série de retornos logarítmicos."""
+    candles = _candles(df)
+    close = candles["close"].astype(float)
+    returns = np.log(close / close.shift()).replace([np.inf, -np.inf], np.nan).dropna()
+    if len(returns) < 20:
+        raise ValueError("Retornos insuficientes para análise")
+    delta = close.diff()
+    gains = delta.clip(lower=0).rolling(14, min_periods=14).mean()
+    losses = (-delta.clip(upper=0)).rolling(14, min_periods=14).mean()
+    rsi = 100 - (100 / (1 + gains / losses.replace(0, np.nan)))
+    macd = close.ewm(span=12, adjust=False).mean() - close.ewm(span=26, adjust=False).mean()
+    signal = macd.ewm(span=9, adjust=False).mean()
     tr = pd.concat([
-        (df["high"] - df["low"]).abs(),
-        (df["high"] - df["close"].shift()).abs(),
-        (df["low"] - df["close"].shift()).abs()
+        candles["high"] - candles["low"],
+        (candles["high"] - close.shift()).abs(),
+        (candles["low"] - close.shift()).abs(),
     ], axis=1).max(axis=1)
-    atr = float(tr.rolling(14).mean().iloc[-1])
-    vol = float(diffs.std())
-    return dict(
-        rsi=rsi, macd_hist=macd_hist, atr=atr, volatility=vol,
-        returns=float(diffs.iloc[-1]),
-        zscore=float((closes.iloc[-1] - closes.mean()) / closes.std())
-    )
+    std = close.std()
+    features = {
+        "rsi": _number(rsi.iloc[-1], 50.0),
+        "macd_hist": _number((macd - signal).iloc[-1]),
+        "atr": _number(tr.rolling(14, min_periods=14).mean().iloc[-1]),
+        "volatility": _number(returns.std()),
+        "returns": _number(returns.iloc[-1]),
+        "zscore": _number((close.iloc[-1] - close.mean()) / std if std else 0.0),
+    }
+    return features, returns
 
 
-def _cross_corr(s1, s2, max_lag=5):
-    """Correlacao cruzada com deteccao de lag."""
-    s1n = (s1 - s1.mean()) / s1.std()
-    s2n = (s2 - s2.mean()) / s2.std()
-    best_corr, best_lag = 0.0, 0
+def _best_correlation(first: pd.Series, second: pd.Series, max_lag: int) -> tuple[float, int, int]:
+    """Calcula a melhor correlação Pearson entre duas séries alinhadas."""
+    frame = pd.concat([first.rename("first"), second.rename("second")], axis=1).dropna()
+    best = (0.0, 0, len(frame))
     for lag in range(-max_lag, max_lag + 1):
-        if lag < 0:
-            corr = (s1n.iloc[:lag] * s2n.iloc[-lag:]).mean()
-        elif lag > 0:
-            corr = (s1n.iloc[lag:] * s2n.iloc[:-lag]).mean()
-        else:
-            corr = (s1n * s2n).mean()
-        if abs(corr) > abs(best_corr):
-            best_corr, best_lag = float(corr), lag
-    return best_corr, best_lag
+        pair = pd.concat([frame["first"], frame["second"].shift(lag)], axis=1).dropna()
+        if len(pair) < 20:
+            continue
+        corr = _number(pair.iloc[:, 0].corr(pair.iloc[:, 1]))
+        if abs(corr) > abs(best[0]):
+            best = (corr, lag, len(pair))
+    return best
 
 
 class FinancialSubgraph:
-    """Motor de analise por nografos de mercado financeiro."""
+    """Grafo financeiro em memória; não envia ordens nem altera o MT5."""
 
-    def __init__(self, lookback_bars=100, max_lag=5):
-        self.lookback_bars = lookback_bars
-        self.max_lag = max_lag
-        self.nodes = {}
-        self.edges = []
+    def __init__(self, lookback_bars: int = 300, max_lag: int = 5) -> None:
+        self.lookback_bars = max(30, int(lookback_bars))
+        self.max_lag = max(0, min(int(max_lag), 30))
+        self.nodes: dict[str, AssetNode] = {}
+        self.edges: list[CorrelationEdge] = []
         self._lock = asyncio.Lock()
 
-    async def ingest_asset(self, symbol, df, asset_class="metal", timeframe="M5"):
-        """Ingere dados OHLCV de um ativo."""
-        if df.empty or len(df) < 14:
-            raise ValueError(f"DataFrame para {symbol} muito pequeno")
-        df_tail = df.tail(self.lookback_bars)
-        features = _tech_features(df_tail)
-        node = AssetNode(symbol=symbol, asset_class=asset_class,
-                         timeframe=timeframe, features=features)
+    async def ingest_asset(self, symbol: str, df: pd.DataFrame, asset_class: str = "unknown", timeframe: str = "M5") -> AssetNode:
+        features, returns = _features(_candles(df).tail(self.lookback_bars))
+        node = AssetNode(symbol.upper().strip(), asset_class, timeframe.upper().strip(), features, returns)
         async with self._lock:
-            self.nodes[symbol] = node
+            self.nodes[node.symbol] = node
         return node
 
-    async def compute_correlations(self):
-        """Calcula correlacoes entre todos os nos."""
+    async def compute_correlations(self) -> list[CorrelationEdge]:
         async with self._lock:
-            symbols = list(self.nodes.keys())
-        if len(symbols) < 2:
-            return []
-        edges = []
-        for i, a in enumerate(symbols):
-            for b in symbols[i + 1:]:
-                ra = self.nodes[a].features.get("returns", 0.0)
-                rb = self.nodes[b].features.get("returns", 0.0)
-                corr, lag = _cross_corr(pd.Series([ra]), pd.Series([rb]), self.max_lag)
-                strength = "strong" if abs(corr) > 0.7 else "medium" if abs(corr) > 0.4 else "weak"
-                edges.append(CorrelationEdge(source=a, target=b, correlation=corr, lag=lag, strength=strength))
+            nodes = dict(self.nodes)
+        edges: list[CorrelationEdge] = []
+        symbols = sorted(nodes)
+        for index, source in enumerate(symbols):
+            for target in symbols[index + 1:]:
+                corr, lag, samples = _best_correlation(nodes[source].returns, nodes[target].returns, self.max_lag)
+                strength = "strong" if abs(corr) >= 0.70 else "medium" if abs(corr) >= 0.40 else "weak"
+                edges.append(CorrelationEdge(source, target, corr, lag, strength, samples))
+        edges.sort(key=lambda edge: abs(edge.correlation), reverse=True)
         async with self._lock:
-            self.edges = sorted(edges, key=lambda e: abs(e.correlation), reverse=True)
-        return self.edges
+            self.edges = edges
+        return edges
 
-    async def detect_regime_shift(self):
-        """Detecta mudanca de regime de mercado."""
+    async def detect_regime_shift(self) -> dict[str, Any]:
         async with self._lock:
-            snapshot = dict(self.nodes)
-        vols = [n.features.get("volatility", 0.0) for n in snapshot.values()]
-        avg_vol = float(np.mean(vols)) if vols else 0.0
-        moms = [n.features.get("returns", 0.0) for n in snapshot.values()]
-        avg_mom = float(np.mean(moms)) if moms else 0.0
-        regime = "risk_on" if avg_vol < 0.02 and avg_mom > 0 else "risk_off" if avg_vol > 0.04 and avg_mom < 0 else "neutral"
-        return dict(timestamp=datetime.utcnow().isoformat(), regime=regime, avg_volatility=avg_vol, avg_momentum=avg_mom, node_count=len(snapshot))
+            nodes = list(self.nodes.values())
+        volatility = _number(np.mean([node.features["volatility"] for node in nodes])) if nodes else 0.0
+        momentum = _number(np.mean([node.features["returns"] for node in nodes])) if nodes else 0.0
+        regime = "risk_on" if momentum > 0 and volatility < 0.02 else "risk_off" if momentum < 0 and volatility > 0.02 else "neutral"
+        return {"timestamp": datetime.now(timezone.utc).isoformat(), "regime": regime,
+                "avg_volatility": volatility, "avg_momentum": momentum,
+                "node_count": len(nodes), "mode": "analysis_only"}
 
-    async def to_dict(self):
-        """Serializa estado."""
+    async def to_dict(self) -> dict[str, Any]:
         async with self._lock:
-            nodes_data = {s: dict(symbol=n.symbol, asset_class=n.asset_class, timeframe=n.timeframe, features=n.features) for s, n in self.nodes.items()}
-            edges_data = [dict(source=e.source, target=e.target, correlation=round(e.correlation, 4), lag=e.lag, strength=e.strength) for e in self.edges]
-        return dict(timestamp=datetime.utcnow().isoformat(), lookback_bars=self.lookback_bars, nodes=nodes_data, edges=edges_data)
-
-
-async def create_financial_subgraph(lookback=100):
-    """Factory assincrona."""
-    return FinancialSubgraph(lookback_bars=lookback)
+            nodes = {key: {**asdict(value), "returns": None} for key, value in self.nodes.items()}
+            edges = [asdict(edge) for edge in self.edges]
+        return {"timestamp": datetime.now(timezone.utc).isoformat(), "lookback_bars": self.lookback_bars,
+                "max_lag": self.max_lag, "nodes": nodes, "edges": edges, "mode": "analysis_only"}
