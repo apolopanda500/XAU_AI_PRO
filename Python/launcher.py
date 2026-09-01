@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
 launcher.py — Entry point do EXE do XAU_AI_PRO.
 

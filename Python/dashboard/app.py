@@ -1,4 +1,4 @@
-"""Painel do AI Trade Engine."""
+﻿"""Painel do AI Trade Engine."""
 
 from __future__ import annotations
 
@@ -15,6 +15,9 @@ try:
     from sentry_config import set_ai_conversation_id, set_current_user
 except Exception:
     def set_ai_conversation_id(_conv_id):  # noqa: E305
+        pass
+
+    def set_current_user(_user_id, username=None):  # noqa: E305
         pass
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
