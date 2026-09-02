@@ -30,9 +30,9 @@ AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher={#MyAppPublisher}
-; O diretorio default (pasta de dados do MT5) e resolvido em tempo real
-; no InitializeSetup. Aqui usamos apenas um placeholder seguro.
-DefaultDirName={userappdata}\MetaQuotes\Terminal\_XAU_AI_PRO_PLACEHOLDER
+; O destino final e resolvido por GetDefaultDirName antes da tela do wizard.
+; Este fallback e usado apenas quando nao ha uma pasta de dados MT5 detectavel.
+DefaultDirName={userappdata}\XAU_AI_PRO
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 OutputDir=.
@@ -199,11 +199,13 @@ begin
   end;
 end;
 
-procedure InitializeWizard;
+function GetDefaultDirName(Param: String): String;
 begin
   DetectedMT5 := FindTerminalDataPath();
   if DetectedMT5 <> '' then
-    WizardForm.DirEdit.Text := DetectedMT5 + '\MQL5\Files\XAU_AI_PRO';
+    Result := DetectedMT5 + '\MQL5\Files\XAU_AI_PRO'
+  else
+    Result := ExpandConstant('{userappdata}\XAU_AI_PRO');
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);

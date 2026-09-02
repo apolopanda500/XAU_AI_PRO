@@ -1,11 +1,14 @@
 """
-Aba Assistente IA (chat simplificado).
+Aba Assistente IA (chat) - usa IA real quando configurada, com fallback local.
 """
 from __future__ import annotations
 
+import json
+import threading
 import tkinter as tk
 from typing import Callable
 
+from app.ai_client import ask_ai
 from app.components.cards import Card, PrimaryButton, SecondaryButton
 from app.market_data import MarketData
 from app.mt5_robot import MT5Robot
@@ -21,6 +24,7 @@ class AssistantTab:
         self.on_status = on_status
         self.frame = tk.Frame(parent, bg=Theme.BG)
         self.frame.pack(fill="both", expand=True)
+        self._busy = False
         self._build()
 
     def _build(self) -> None:
@@ -28,6 +32,9 @@ class AssistantTab:
         header.pack(fill="x", padx=24, pady=(20, 10))
         tk.Label(header, text="Assistente IA", bg=Theme.BG, fg=Theme.TEXT,
                  font=(Theme.FONT_FAMILY, 20, "bold")).pack(side="left")
+        self.status_lbl = tk.Label(header, text="", bg=Theme.BG, fg=Theme.TEXT_SECONDARY,
+                                   font=(Theme.FONT_FAMILY, 9))
+        self.status_lbl.pack(side="left", padx=12)
 
         card = Card(self.frame, title="Conversa")
         card.pack(fill="both", expand=True, padx=24, pady=10)
@@ -45,6 +52,14 @@ class AssistantTab:
         SecondaryButton(input_frame, text="Limpar", command=self.clear, width=10).pack(side="left", padx=4)
 
         self.add_message("Assistente", "Ola! Sou o assistente do XAU AI PRO. Pergunte sobre o mercado, o robo ou o treinamento.")
+        self._update_status()
+
+    def _update_status(self) -> None:
+        try:
+            from app.ai_client import health_text
+            self.status_lbl.configure(text=health_text())
+        except Exception:
+            pass
 
     def add_message(self, sender: str, text: str) -> None:
         self.chat.configure(state="normal")
@@ -58,16 +73,91 @@ class AssistantTab:
             return
         self.add_message("Voce", text)
         self.entry.delete(0, "end")
-        reply = self._generate_reply(text)
+        if self._busy:
+            self.add_message("Assistente", "Aguarde, ainda estou respondendo...")
+            return
+        self._busy = True
+        threading.Thread(target=self._worker, args=(text,), daemon=True).start()
+
+    def _worker(self, text: str) -> None:
+        try:
+            # 1) Tenta ferramentas MCP habilitadas para dados reais (se houver)
+            mcp_note = self._try_mcp_tools(text)
+            # 2) IA real configurada
+            result = ask_ai([{"role": "user", "content": text}])
+            if result.get("ok"):
+                reply = result["reply"]
+            else:
+                reply = self._local_reply(text)
+                err = result.get("error") or ""
+                if err:
+                    reply = f"(IA offline: {err})\n\n{reply}"
+            if mcp_note:
+                reply = mcp_note + "\n\n" + reply
+            self.frame.after(0, lambda: self._done(reply))
+        except Exception as e:  # noqa: BLE001
+            self.frame.after(0, lambda: self._done(self._local_reply(text) + f"\n\n(erro local: {e})"))
+
+    def _try_mcp_tools(self, text: str) -> str:
+        """Usa as MCP habilitadas para enriquecer a resposta com dados reais.
+
+        Retorna uma nota (string) com os dados obtidos, ou '' se nada aplicavel.
+        """
+        from app.mcp_tools import call_tool, enabled_tools
+        t = text.lower()
+        enabled = enabled_tools()
+        if not enabled:
+            return ""
+        notes = []
+
+        # Cotacao de simbolo (TradingView / Alpha Vantage habilitados)
+        import re
+        m = re.search(r"\b(XAUUSD|XAUUSDc|BTCUSD|ETHUSD|EURUSD|GBPUSD|USDJPY|AUDUSD|NZDUSD|USDCAD)\b", text.upper())
+        if m and ("tradingview" in enabled or "alpha_vantage" in enabled or "alpaca" in enabled):
+            sym = m.group(1)
+            if "tradingview" in enabled:
+                r = call_tool("tradingview", "quote", symbol=sym)
+                if r.get("ok"):
+                    items = r["result"].get("items", [])
+                    if items:
+                        it = items[0]
+                        notes.append(f"📊 TradingView {sym}: {it.get('price')} ({it.get('change_pct')})%")
+            if not notes and "alpha_vantage" in enabled:
+                r = call_tool("alpha_vantage", "quote", symbol=sym)
+                if r.get("ok"):
+                    g = r["result"]
+                    notes.append(f"📈 AlphaVantage {g.get('symbol')}: {g.get('price')} ({g.get('change_pct')})")
+
+        # Status MT5 via gateway
+        if "mt5_gateway" in enabled and ("conectar" in t or "mt5" in t or "gateway" in t):
+            r = call_tool("mt5_gateway", "health")
+            if r.get("ok"):
+                res = r["result"]
+                txt = json.dumps(res, ensure_ascii=False)[:120] if not isinstance(res, str) else res
+                notes.append(f"🔌 MT5 Gateway: {txt}")
+
+        # Banco: consultar trades recentes quando perguntar sobre historico/posicoes
+        if "postgres_sqlite" in enabled and ("historico" in t or "posico" in t or "trades" in t or "sql" in t):
+            r = call_tool("postgres_sqlite", "query",
+                          query="SELECT name FROM sqlite_master WHERE type='table' LIMIT 15")
+            if r.get("ok"):
+                tables = ", ".join(str(x[0]) for x in r["result"].get("rows", []))
+                notes.append(f"🗄️ SQLite tabelas: {tables or 'nenhuma'}")
+
+        return "\n".join(notes)
+
+    def _done(self, reply: str) -> None:
+        self._busy = False
         self.add_message("Assistente", reply)
         self.on_status("Mensagem enviada ao assistente")
+        self._update_status()
 
     def clear(self) -> None:
         self.chat.configure(state="normal")
         self.chat.delete("1.0", "end")
         self.chat.configure(state="disabled")
 
-    def _generate_reply(self, text: str) -> str:
+    def _local_reply(self, text: str) -> str:
         t = text.lower()
         if "conectar" in t or "mt5" in t:
             return "Va em 'Robo MT5' e clique em 'Conectar MT5'. Certifique-se de que o MetaTrader 5 esta aberto."

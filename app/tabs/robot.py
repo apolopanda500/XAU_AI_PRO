@@ -3,6 +3,7 @@ Aba de controle do Robo MT5.
 """
 from __future__ import annotations
 
+import json
 import threading
 import tkinter as tk
 from typing import Callable
@@ -85,6 +86,20 @@ class RobotTab:
                                   font=(Theme.FONT_FAMILY, 10))
         self.ai_status.pack(side="left", padx=16)
 
+        # MCP / Habilidades
+        mcp_card = Card(self.frame, title="Ferramentas MCP / Habilidades")
+        mcp_card.pack(fill="x", padx=24, pady=10)
+        mcp_row = tk.Frame(mcp_card.body, bg=Theme.CARD)
+        mcp_row.pack(fill="x", padx=8, pady=8)
+        SecondaryButton(mcp_row, text="Status MCP", command=self.mcp_status, width=14).pack(side="left", padx=4)
+        SecondaryButton(mcp_row, text="Testar TradingView", command=self.mcp_test_tv, width=18).pack(side="left", padx=4)
+        SecondaryButton(mcp_row, text="Testar SQLite", command=self.mcp_test_sql, width=16).pack(side="left", padx=4)
+        SecondaryButton(mcp_row, text="Testar MT5 Gateway", command=self.mcp_test_gw, width=18).pack(side="left", padx=4)
+        self.mcp_label = tk.Label(mcp_card.body, text="MCP: ferramentas reais integradas ao robo (TradingView, SQLite, Gateway, Alpha Vantage, Alpaca, Sequential Thinking)",
+                                  bg=Theme.CARD, fg=Theme.TEXT_MUTED, font=(Theme.FONT_FAMILY, 9),
+                                  anchor="w", justify="left", wraplength=800)
+        self.mcp_label.pack(fill="x", padx=8, pady=(0, 8))
+
 
     def connect(self) -> None:
         cfg_path = get_config().get("mt5", "terminal_path", default="")
@@ -150,4 +165,60 @@ class RobotTab:
             self.on_status(f"{res.get('copied', 0)} predicoes sincronizadas")
         else:
             self.on_status(f"Erro sync: {res.get('error')}")
+
+    # ------------------------------------------------------------------
+    # Ferramentas MCP (acao real)
+    # ------------------------------------------------------------------
+    def mcp_status(self) -> None:
+        from app.mcp_tools import tool_status
+        lines = []
+        for s in tool_status():
+            estado = "ATIVO" if s["enabled"] else "off"
+            lines.append(f"{'🟢' if s['enabled'] else '⚪'} {s['name']} [{estado}]")
+        self.mcp_label.configure(
+            text="\n".join(lines) or "Nenhum MCP configurado",
+            fg=Theme.TEXT,
+        )
+        self.on_status(f"MCP: {sum(1 for s in tool_status() if s['enabled'])} ferramentas ativas")
+
+    def mcp_test_tv(self) -> None:
+        from app.mcp_tools import call_tool
+        self.on_status("Consultando TradingView (top por volume)...")
+        def run():
+            r = call_tool("tradingview", "scan", market="crypto")
+            if r.get("ok"):
+                items = r["result"].get("items", [])[:5]
+                txt = "TradingView top:\n" + "\n".join(
+                    f"  {it['symbol']}: {it['price']} ({it['change_pct']}%)" for it in items)
+                self.mcp_label.after(0, lambda: self.mcp_label.configure(text=txt, fg=Theme.SUCCESS))
+                self.on_status(f"TradingView: {len(items)} ativos")
+            else:
+                self.mcp_label.after(0, lambda: self.mcp_label.configure(text="✘ " + r["error"], fg=Theme.DANGER))
+        threading.Thread(target=run, daemon=True).start()
+
+    def mcp_test_sql(self) -> None:
+        from app.mcp_tools import call_tool
+        self.on_status("Consultando SQLite (tabelas)...")
+        def run():
+            r = call_tool("postgres_sqlite", "query",
+                          query="SELECT name FROM sqlite_master WHERE type='table' LIMIT 15")
+            if r.get("ok"):
+                rows = [str(x[0]) for x in r["result"].get("rows", [])]
+                txt = "SQLite tabelas: " + ", ".join(rows) if rows else "SQLite: sem tabelas"
+                self.mcp_label.after(0, lambda: self.mcp_label.configure(text=txt, fg=Theme.SUCCESS))
+            else:
+                self.mcp_label.after(0, lambda: self.mcp_label.configure(text="✘ " + r["error"], fg=Theme.DANGER))
+        threading.Thread(target=run, daemon=True).start()
+
+    def mcp_test_gw(self) -> None:
+        from app.mcp_tools import call_tool
+        self.on_status("Testando MT5 Gateway...")
+        def run():
+            r = call_tool("mt5_gateway", "health")
+            if r.get("ok"):
+                txt = "MT5 Gateway: " + json.dumps(r["result"], ensure_ascii=False)[:150]
+                self.mcp_label.after(0, lambda: self.mcp_label.configure(text=txt, fg=Theme.SUCCESS))
+            else:
+                self.mcp_label.after(0, lambda: self.mcp_label.configure(text="✘ " + r["error"], fg=Theme.DANGER))
+        threading.Thread(target=run, daemon=True).start()
 

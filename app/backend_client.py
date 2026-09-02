@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 """Cliente da API Backend (ETAPA 16.4) para o Dashboard (16.5).
 
-Consome a API unica do backend Node.js (porta 3001) que le o
-forward_test_events.csv real do EA. Se o backend estiver OFF,
-retorna None (dashboard mostra indisponivel - sem quebrar).
+Consome a API do backend Node.js. Por padrao usa o backend local
+(porta 3001, que le o forward_test_events.csv real do EA). Se a config
+do app definir 'api.backend_url', usa o backend remoto (Vercel) com
+autenticacao via 'api.backend_api_key' (header Authorization Bearer).
+Se o backend estiver OFF, retorna None (dashboard mostra indisponivel).
 """
 from __future__ import annotations
 
@@ -33,20 +35,61 @@ ENDPOINTS = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Configuracao remota (Vercel): URL + API key vindas da config do app.
+# Fallback para o backend local (127.0.0.1:3001) quando nao configurado.
+# ---------------------------------------------------------------------------
+
+def _base_url() -> str:
+    """URL base do backend: config 'api.backend_url' ou local (3001)."""
+    try:
+        from app.config_manager import get_config  # noqa: PLC0415
+        url = (get_config().get("api", "backend_url", default="") or "").strip()
+        if url:
+            return url.rstrip("/")
+    except Exception:  # noqa: BLE001
+        pass
+    return f"http://{BACKEND_HOST}:{BACKEND_PORT}"
+
+
+def _api_key() -> str:
+    """API key do backend remoto (config 'api.backend_api_key')."""
+    try:
+        from app.config_manager import get_config  # noqa: PLC0415
+        return (get_config().get("api", "backend_api_key", default="") or "").strip()
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _auth_headers() -> dict[str, str]:
+    key = _api_key()
+    if key:
+        return {"Authorization": "Bearer " + key}
+    return {}
+
+
 def backend_online() -> bool:
+    """Checa se o backend responde (health local ou remoto)."""
+    url = _base_url() + "/api/health"
     try:
-        with socket.create_connection((BACKEND_HOST, BACKEND_PORT), timeout=0.5):
-            return True
-    except OSError:
-        return False
+        req = urllib.request.Request(url, headers=_auth_headers())
+        with urllib.request.urlopen(req, timeout=2.0) as r:
+            return r.status == 200
+    except Exception:  # noqa: BLE001
+        try:
+            with socket.create_connection((BACKEND_HOST, BACKEND_PORT), timeout=0.5):
+                return True
+        except OSError:
+            return False
 
 
-def api_get(endpoint: str, timeout: float = 1.2) -> dict[str, Any] | None:
-    url = BASE + ENDPOINTS.get(endpoint, endpoint)
+def api_get(endpoint: str, timeout: float = 3.0) -> dict[str, Any] | None:
+    url = _base_url() + ENDPOINTS.get(endpoint, endpoint)
     try:
-        with urllib.request.urlopen(url, timeout=timeout) as r:
+        req = urllib.request.Request(url, headers=_auth_headers())
+        with urllib.request.urlopen(req, timeout=timeout) as r:
             return json.loads(r.read().decode("utf-8", errors="replace"))
-    except Exception:
+    except Exception:  # noqa: BLE001
         return None
 
 

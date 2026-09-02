@@ -103,17 +103,21 @@ class MarketTab:
         self.table.tree.set_rows(out_rows, tags)
         self.on_status(f"Mercado atualizado: {len(out_rows)} ativos")
 
-    def start_auto_refresh(self) -> None:
+    def start_auto_refresh(self, interval_sec: int = 60) -> None:
+        """Auto-refresh a cada 1 min (sem travar a GUI)."""
         self._running = True
-        self._thread = threading.Thread(target=self._auto_loop, daemon=True)
+        self._thread = threading.Thread(
+            target=self._auto_loop,
+            args=(interval_sec,),
+            daemon=True,
+        )
         self._thread.start()
 
     def stop_auto_refresh(self) -> None:
         self._running = False
 
-    def _auto_loop(self) -> None:
-        cfg = get_config()
-        interval = int(cfg.get("market", "refresh_seconds", default=5))
+    def _auto_loop(self, interval_sec: int = 60) -> None:
+        interval = interval_sec
         while self._running:
             try:
                 self.refresh()

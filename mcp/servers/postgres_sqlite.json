@@ -1,0 +1,10 @@
+{
+  "name": "PostgreSQL/SQLite MCP Server",
+  "id": "postgres_sqlite",
+  "description": "Acesso a bancos de dados (PostgreSQL e SQLite) para consultas e persistencia.",
+  "type": "stdio",
+  "default_endpoint": "npx -y @modelcontextprotocol/server-postgres",
+  "needs_api_key": false,
+  "api_key_env": "DATABASE_URL",
+  "enabled": false
+}

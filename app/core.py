@@ -23,6 +23,8 @@ from app.tabs.positions import PositionsTab
 from app.tabs.robot import RobotTab
 from app.tabs.settings import SettingsTab
 from app.tabs.subgraph import SubgraphTab
+from app.tabs.system import SystemTab
+from app.tabs.charts import ChartsTab
 from app.tabs.tools import ToolsTab
 from app.tabs.training import TrainingTab
 from app.theme.mexc import Theme
@@ -37,9 +39,27 @@ class XAUAProApp:
         self.root = tk.Tk()
         self.root.title("XAU AI PRO v1.2.0 - Trading Desk")
         self.root.configure(bg=Theme.BG)
-        self.root.geometry(f"{self.cfg.get('window', 'width', default=1280)}x{self.cfg.get('window', 'height', default=800)}")
+        
+        # Centraliza a janela
+        width = self.cfg.get('window', 'width', default=1280)
+        height = self.cfg.get('window', 'height', default=800)
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        x = (screen_width // 2) - (width // 2)
+        y = (screen_height // 2) - (height // 2)
+        
+        # Garante que as coordenadas sejam positivas
+        x = max(0, x)
+        y = max(0, y)
+        
+        self.root.geometry(f"{width}x{height}+{x}+{y}")
+        
         if self.cfg.get("window", "maximized", default=False):
             self.root.state("zoomed")
+        
+        # Força a janela a ficar visível
+        self.root.deiconify()
+        self.root.focus_force()
 
         self.robot = MT5Robot()
         self.market = MarketData(provider=self.cfg.get("market", "provider", default="auto"))
@@ -47,7 +67,8 @@ class XAUAProApp:
         self._current_tab = ""
         self._running = True
 
-        self._build_login()
+        # Ignora o login por enquanto para testes de inicialização
+        self._build_main()
 
     def _build_login(self) -> None:
         self.login_frame = tk.Frame(self.root, bg=Theme.BG)
@@ -116,6 +137,8 @@ class XAUAProApp:
         self.tabs["integrations"] = IntegrationsTab(self.tab_container, self.robot, self.market, self._set_status)
         self.tabs["subgraph"] = SubgraphTab(self.tab_container, self.robot, self.market, self._set_status)
         self.tabs["settings"] = SettingsTab(self.tab_container, self.robot, self.market, self._set_status)
+        self.tabs["system"] = SystemTab(self.tab_container, self.robot, self.market, self._set_status)
+        self.tabs["charts"] = ChartsTab(self.tab_container, self.robot, self.market, self._set_status)
 
         for key in self.tabs:
             self.tabs[key].frame.pack_forget()
@@ -141,6 +164,8 @@ class XAUAProApp:
             "integrations": "Integracoes",
             "subgraph": "Subgraph",
             "settings": "Configuracoes",
+            "system": "Sistema",
+            "charts": "Graficos",
         }
         self.header_title.configure(text=titles.get(key, key))
 
@@ -149,30 +174,89 @@ class XAUAProApp:
         self.sidebar.set_status(text, Theme.TEXT_SECONDARY)
 
     def _start_threads(self) -> None:
-        threading.Thread(target=self._auto_refresh, daemon=True).start()
+        # v1.2.0 - Auto-refresh removido: o loop de 10s acumulava chamadas em
+        # background e travava a GUI (freeze). Atualizacao agora e MANUAL.
+        # Opcoes de CPU (prioridade/afinidade) definidas na aba Configuracoes.
+        try:
+            from app.cpu import apply_cpu_options, apply_model_limits
+            ok_p, ok_a = apply_cpu_options(self.cfg)
+            n_jobs, max_ram = apply_model_limits(self.cfg)
+            self._set_status(
+                f"CPU: prioridade {'ok' if ok_p else 'falhou'}, afinidade {'ok' if ok_a else 'falhou'}"
+                f", modelos: {n_jobs} nucleo(s), RAM {max_ram} MB"
+            )
+        except Exception:
+            pass
         if self.cfg.get("learning", "enabled", default=True):
             get_learning_engine().start_scheduler()
         if self.cfg.get("mt5", "auto_connect", default=True):
             threading.Thread(target=self.robot.connect, daemon=True).start()
-        self.tabs["market"].start_auto_refresh()
+        # self.tabs["market"].start_auto_refresh()  # desativado (auto-refresh)
+        self.tabs["system"].start_monitor()
+        self.tabs["charts"].start_auto()
+        # Carteira: auto-refresh a cada 1 min (posicoes criticas p/ fechamento).
+        try:
+            self.tabs["positions"].start_auto_refresh(interval_sec=60)
+        except Exception:
+            pass
+        # Dashboard e Mercado: auto-refresh a cada 1 min (funcoes suaves).
+        try:
+            self.tabs["dashboard"].start_auto_refresh(interval_sec=60)
+        except Exception:
+            pass
+        try:
+            self.tabs["market"].start_auto_refresh(interval_sec=60)
+        except Exception:
+            pass
+        try:
+            self.tabs["tools"].start_auto_refresh(interval_sec=60)
+        except Exception:
+            pass
+        # Refresh inicial (1x) ao entrar no app para iniciar as funcoes.
+        self.root.after(2000, self._initial_refresh)
 
-    def _auto_refresh(self) -> None:
-        while self._running:
+    def _initial_refresh(self) -> None:
+        """Atualiza uma unica vez as abas principais na abertura do app."""
+        for key in ("dashboard", "positions", "market"):
             try:
-                if self._current_tab == "dashboard":
-                    self.root.after(0, self.tabs["dashboard"].refresh)
-                elif self._current_tab == "positions":
-                    self.root.after(0, self.tabs["positions"].refresh)
-                elif self._current_tab == "robot":
-                    self.root.after(0, self.tabs["robot"].check_ea)
-                time.sleep(10)
+                self.tabs[key].refresh()
             except Exception:
-                time.sleep(10)
+                pass
+        try:
+            self.tabs["robot"].check_ea()
+        except Exception:
+            pass
+        try:
+            self.tabs["system"].refresh_now()
+        except Exception:
+            pass
+        try:
+            self.tabs["charts"].refresh_now()
+        except Exception:
+            pass
 
     def _on_close(self) -> None:
         if messagebox.askyesno("Sair", "Deseja realmente fechar o XAU AI PRO?"):
             self._running = False
-            self.tabs["market"].stop_auto_refresh()
+            # self.tabs["market"].stop_auto_refresh()  # desativado
+            self.tabs["system"].stop_monitor()
+            self.tabs["charts"].stop_auto()
+            try:
+                self.tabs["positions"].stop_auto_refresh()
+            except Exception:
+                pass
+            try:
+                self.tabs["dashboard"].stop_auto_refresh()
+            except Exception:
+                pass
+            try:
+                self.tabs["market"].stop_auto_refresh()
+            except Exception:
+                pass
+            try:
+                self.tabs["tools"].stop_auto_refresh()
+            except Exception:
+                pass
             get_learning_engine().stop_scheduler()
             self.market.disconnect()
             self.robot.disconnect()

@@ -6,7 +6,10 @@ import asyncio
 import json
 import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog
+try:
+    from tkinter import filedialog
+except ImportError:  # PyInstaller: submódulo nao embutido no bundle -> degrada
+    filedialog = None
 from typing import Any, Callable
 
 import pandas as pd
@@ -153,6 +156,9 @@ class SubgraphTab:
     def export_json(self) -> None:
         if not self._last_export:
             self.status_var.set("Execute uma análise antes de exportar")
+            return
+        if filedialog is None:
+            self.status_var.set("Exportar indisponível neste build (tkinter.filedialog)")
             return
         filename = filedialog.asksaveasfilename(
             defaultextension=".json", initialfile="subgraph_report.json", filetypes=[("JSON", "*.json")]

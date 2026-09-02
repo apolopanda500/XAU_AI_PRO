@@ -1,0 +1,10 @@
+{
+  "name": "Alpaca Markets MCP Server",
+  "id": "alpaca",
+  "description": "Execucao de ordens e dados de mercado (acoes/crypto) via Alpaca.",
+  "type": "http",
+  "default_endpoint": "https://paper-api.alpaca.markets/v2",
+  "needs_api_key": true,
+  "api_key_env": "ALPACA_API_KEY",
+  "enabled": false
+}

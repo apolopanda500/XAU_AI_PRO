@@ -18,6 +18,8 @@ Responsabilidades:
 from __future__ import annotations
 
 import json
+import json
+import os
 import hashlib
 import time
 from datetime import datetime, timezone
@@ -375,7 +377,7 @@ def train_symbol_model(
         min_samples_leaf=config["min_samples_leaf"],
         class_weight="balanced",
         random_state=42,
-        n_jobs=-1,
+        n_jobs=int(os.environ.get("XAU_AI_PRO_N_JOBS", "-1")),
     )
 
     logger.info("Treinando %s | %s | amostras=%d", symbol, timeframe, len(X_train))

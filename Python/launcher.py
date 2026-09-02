@@ -1,12 +1,12 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
-launcher.py — Entry point do EXE do XAU_AI_PRO.
+launcher.py ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Entry point do EXE do XAU_AI_PRO.
 
 Responsavel por:
   * Resolver a raiz do projeto em qualquer cenario de execucao
     (EXE empacotado, instalacao, fonte, ambiente XAU_AI_PRO_ROOT).
   * Abrir por padrao a INTERFACE NATIVA (Tkinter, app/core.py) quando
-    XAU_AI_PRO_USE_GUI=1 (default) — o dashboard web vira comando explicito.
+    XAU_AI_PRO_USE_GUI=1 (default) ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â o dashboard web vira comando explicito.
   * Comando 'dashboard': sobe o Streamlit com flags que corrigem
     - server.port ignorado em developmentMode (PyInstaller onefile);
     - botao "Deploy" (client.toolbarMode=viewer);
@@ -29,7 +29,7 @@ from pathlib import Path
 VERSION = "1.2.0"
 APP_NAME = "XAU_AI_PRO"
 
-# Portas padrão do dashboard web (Streamlit)
+# Portas padrÃƒÆ’Ã‚Â£o do dashboard web (Streamlit)
 DEFAULT_PORT = 8501
 FALLBACK_PORT = 8502
 
@@ -125,7 +125,7 @@ def _run_streamlit_cli(root: Path, port: int) -> int:
     """Sobe o Streamlit com as flags corretivas (deploy/developmentMode/telemetria)."""
     app_path = root / "Python" / "dashboard" / "app.py"
     if not app_path.exists():
-        _log(f"[ERRO] dashboard/app.py não encontrado: {app_path}")
+        _log(f"[ERRO] dashboard/app.py nÃƒÆ’Ã‚Â£o encontrado: {app_path}")
         return 2
 
     flags = [
@@ -152,11 +152,11 @@ def _run_dashboard(root: Path) -> int:
 
     # Servidor ja em execucao e saudavel -> apenas reutiliza
     if _port_healthy(DEFAULT_PORT):
-        _log(f"Painel {APP_NAME} já está em execução em {url_8501}")
+        _log(f"Painel {APP_NAME} jÃƒÆ’Ã‚Â¡ estÃƒÆ’Ã‚Â¡ em execuÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o em {url_8501}")
         webbrowser.open(url_8501)
         return 0
     if _port_healthy(FALLBACK_PORT):
-        _log(f"Painel {APP_NAME} já está em execução em {url_8502}")
+        _log(f"Painel {APP_NAME} jÃƒÆ’Ã‚Â¡ estÃƒÆ’Ã‚Â¡ em execuÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o em {url_8502}")
         webbrowser.open(url_8502)
         return 0
 
@@ -174,7 +174,7 @@ def _run_dashboard(root: Path) -> int:
 # ---------------------------------------------------------------------------
 
 def _run_gui(root: Path) -> int:
-    """Abre a interface nativa (Tkinter) do XAU_AI_PRO — app/core.py."""
+    """Abre a interface nativa (Tkinter) do XAU_AI_PRO ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â app/core.py."""
     root_str = str(root)
     if root_str not in sys.path:
         sys.path.insert(0, root_str)
@@ -199,19 +199,51 @@ def _run_skills(root: Path) -> int:
         items = sorted(p.name for p in agents.iterdir())
         _log(f"Skills embutidos ({len(items)}): {', '.join(items) or 'vazio'}")
     else:
-        _log("[AVISO] Diretório .agents não encontrado no pacote streamlit.")
+        _log("[AVISO] DiretÃƒÆ’Ã‚Â³rio .agents nÃƒÆ’Ã‚Â£o encontrado no pacote streamlit.")
+    return 0
+
+
+def _run_cpu(root: Path, extra: list[str]) -> int:
+    """Diagnostico e opcoes de CPU: prioridade, afinidade, uso do sistema."""
+    from app.cpu import (affinity_mask, cpu_usage, current_priority,
+                         logical_cores, parse_affinity, set_affinity,
+                         set_priority)
+    for arg in extra:
+        if "=" not in arg:
+            continue
+        key, _, value = arg.partition("=")
+        key = key.strip().lower()
+        value = value.strip()
+        if key in ("priority", "prioridade"):
+            set_priority(value)
+            _log(f"Prioridade -> {value}")
+        elif key in ("affinity", "afinidade", "nucleos"):
+            mask = parse_affinity(value)
+            if mask and set_affinity(mask):
+                _log(f"Afinidade -> 0x{mask:X} ({value})")
+            else:
+                _log(f"[AVISO] Afinidade invalida: {value}")
+        else:
+            _log(f"[AVISO] Opcao desconhecida: {key}")
+    _log(f"Nucleos logicos: {logical_cores()}")
+    _log(f"Prioridade atual: {current_priority()}")
+    _log(f"Mascara de afinidade: {affinity_mask():#x}")
+    _log(f"Uso de CPU do sistema: {cpu_usage():.1f}%")
+    _log("Uso: XAU_AI_PRO.exe cpu [prioridade=baixa|normal|alta] "
+         "[afinidade=todos|metade|quarto|um|0,2-3]")
     return 0
 
 
 def _show_menu() -> int:
-    _log(f"{APP_NAME} v{VERSION} — comandos:")
-    _log("  (sem argumento)  abre a interface nativa (padrão)")
+    _log(f"{APP_NAME} v{VERSION} ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â comandos:")
+    _log("  (sem argumento)  abre a interface nativa (padrÃƒÆ’Ã‚Â£o)")
     _log("  gui|desktop|app  abre a interface nativa (Tkinter)")
     _log("  dashboard        abre o painel web (Streamlit)")
     _log("  skills           lista os skills embutidos do Streamlit")
-    _log("  versao|version   mostra a versão")
+    _log("  cpu [prioridade=x] [afinidade=y]  diagnostico e opcoes de CPU")
+    _log("  versao|version   mostra a versÃƒÆ’Ã‚Â£o")
     _log("  menu|help        mostra esta ajuda")
-    _log("Dica: XAU_AI_PRO_USE_GUI=0 faz o padrão virar o dashboard.")
+    _log("Dica: XAU_AI_PRO_USE_GUI=0 faz o padrÃƒÆ’Ã‚Â£o virar o dashboard.")
     return 0
 
 
@@ -220,26 +252,46 @@ def _show_menu() -> int:
 # ---------------------------------------------------------------------------
 
 def _default_action(root: Path) -> int:
-    """Ação padrão ao executar sem argumentos."""
+    """AÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o padrÃƒÆ’Ã‚Â£o ao executar sem argumentos."""
     use_gui = os.environ.get("XAU_AI_PRO_USE_GUI", "1").strip() == "1"
     if use_gui:
         _log("Abrindo interface nativa do XAU AI PRO (Tkinter)...")
         return _run_gui(root)
-    _log("XAU_AI_PRO_USE_GUI=0 — abrindo dashboard web...")
+    _log("XAU_AI_PRO_USE_GUI=0 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â abrindo dashboard web...")
     return _run_dashboard(root)
 
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     root = _resolve_project_root()
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
 
-    # Variaveis de reforço do Streamlit (config.toml tem precedência máxima;
-    # flags de CLI vêm em segundo lugar; env serve para opções sensíveis).
+    # Variaveis de reforÃƒÆ’Ã‚Â§o do Streamlit (config.toml tem precedÃƒÆ’Ã‚Âªncia mÃƒÆ’Ã‚Â¡xima;
+    # flags de CLI vÃƒÆ’Ã‚Âªm em segundo lugar; env serve para opÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes sensÃƒÆ’Ã‚Â­veis).
     os.environ.setdefault("STREAMLIT_GLOBAL_DEVELOPMENT_MODE", "false")
     os.environ.setdefault("STREAMLIT_SERVER_ADDRESS", "127.0.0.1")
     os.environ.setdefault("STREAMLIT_SERVER_HEADLESS", "true")
     os.environ.setdefault("STREAMLIT_FILE_WATCHER_TYPE", "none")
     os.environ.setdefault("STREAMLIT_CLIENT_TOOLBAR_MODE", "viewer")
+
+    # Opcoes de CPU via ambiente (antes de abrir GUI/dashboard):
+    #   XAU_AI_PRO_CPU_PRIORITY=baixa|normal|alta
+    #   XAU_AI_PRO_CPU_AFFINITY=todos|metade|quarto|um|0,2-3
+    try:
+        env_priority = os.environ.get("XAU_AI_PRO_CPU_PRIORITY", "").strip()
+        env_affinity = os.environ.get("XAU_AI_PRO_CPU_AFFINITY", "").strip()
+        if env_priority or env_affinity:
+            from app.cpu import describe, parse_affinity, set_affinity, set_priority
+            if env_priority:
+                set_priority(env_priority)
+            if env_affinity:
+                mask = parse_affinity(env_affinity)
+                if mask:
+                    set_affinity(mask)
+            _log("CPU (env): " + describe(env_priority, env_affinity))
+    except Exception:
+        pass
 
     cmd = argv[0].lower() if argv else ""
 
@@ -251,6 +303,8 @@ def main(argv: list[str] | None = None) -> int:
         return _run_dashboard(root)
     if cmd == "skills":
         return _run_skills(root)
+    if cmd == "cpu":
+        return _run_cpu(root, argv[1:])
     if cmd in ("versao", "version", "-v", "--version"):
         _log(f"{APP_NAME} v{VERSION}")
         return 0

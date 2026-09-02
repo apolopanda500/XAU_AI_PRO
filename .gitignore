@@ -78,3 +78,8 @@ Temp/git_commit.bat
 Temp/run_validate.bat
 Temp/validate_*.py
 Temp/validate_*.bat
+
+debug_error.txt
+unins000.dat
+unins000.exe
+

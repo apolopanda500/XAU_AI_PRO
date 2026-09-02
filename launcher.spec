@@ -52,7 +52,8 @@ a = Analysis(
         # INTERFACE NATIVA (Tkinter): libs usadas pelo app/ desktop
         # (app/core.py, app/mt5_robot.py, app/tabs/*, app/theme/*).
         'tkinter', 'MetaTrader5', 'PIL', 'PIL.Image', 'PIL.ImageDraw',
-    ] + (collect_submodules('streamlit') + collect_submodules('altair')
+    ] + (collect_submodules('tkinter')  # filedialog/ttk/messagebox/etc.
+         + collect_submodules('streamlit') + collect_submodules('altair')
          + collect_submodules('openai') + collect_submodules('uvicorn')),
     hookspath=[],
     hooksconfig={},

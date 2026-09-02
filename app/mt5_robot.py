@@ -165,7 +165,7 @@ class MT5Robot:
                     tp=p.tp,
                     profit=p.profit,
                     swap=p.swap,
-                    commission=p.commission,
+                    commission=getattr(p, "commission", 0.0),
                     magic=p.magic,
                     open_time=datetime.fromtimestamp(p.time).strftime("%Y-%m-%d %H:%M:%S"),
                 ))
@@ -194,7 +194,7 @@ class MT5Robot:
                     volume=d.volume,
                     price=d.price,
                     profit=d.profit,
-                    commission=d.commission,
+                    commission=getattr(d, "commission", 0.0),
                     swap=d.swap,
                     magic=d.magic,
                     time=datetime.fromtimestamp(d.time).strftime("%Y-%m-%d %H:%M:%S"),

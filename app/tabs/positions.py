@@ -3,6 +3,7 @@ Aba Carteira: saldos, posicoes abertas e historico de trades.
 """
 from __future__ import annotations
 
+import time
 import tkinter as tk
 from typing import Callable
 
@@ -64,6 +65,33 @@ class PositionsTab:
             work=self._collect,
             apply_result=self._apply,
         )
+
+    # ------------------------------------------------------------------
+    # Auto-refresh (a cada 1 min) - posicoes sao criticas p/ possivel fechamento
+    # ------------------------------------------------------------------
+    def start_auto_refresh(self, interval_sec: int = 60) -> None:
+        """Inicia loop em thread daemon que atualiza a carteira a cada 1 min."""
+        self._auto_running = True
+        import threading
+
+        def loop() -> None:
+            while self._auto_running:
+                try:
+                    interval = interval_sec
+                    try:
+                        interval = max(30, int(self.interval_entry.get()))
+                    except (AttributeError, ValueError):
+                        pass
+                    time.sleep(interval)
+                    if self._auto_running:
+                        self.refresh()
+                except Exception:
+                    time.sleep(10)
+
+        threading.Thread(target=loop, daemon=True).start()
+
+    def stop_auto_refresh(self) -> None:
+        self._auto_running = False
 
     def _collect(self) -> dict:
         out = {"info": None, "positions": [], "deals": []}

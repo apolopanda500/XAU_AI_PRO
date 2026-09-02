@@ -1,0 +1,10 @@
+{
+  "name": "Sequential Thinking MCP Server",
+  "id": "sequential_thinking",
+  "description": "Raciocinio estruturado passo a passo para decisoes complexas (analise de trade).",
+  "type": "stdio",
+  "default_endpoint": "npx -y @modelcontextprotocol/server-sequential-thinking",
+  "needs_api_key": false,
+  "api_key_env": "",
+  "enabled": true
+}

@@ -1,0 +1,10 @@
+{
+  "name": "TradingView MCP Server",
+  "id": "tradingview",
+  "description": "Habilidades TradingView: analise tecnica, screener, sinais e dados de graficos em tempo real.",
+  "type": "http",
+  "default_endpoint": "https://scanner.tradingview.com",
+  "needs_api_key": false,
+  "api_key_env": "",
+  "enabled": false
+}

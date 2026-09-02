@@ -1,0 +1,10 @@
+{
+  "servers": [
+    "alpha_vantage.json",
+    "alpaca.json",
+    "mt5_gateway.json",
+    "sequential_thinking.json",
+    "postgres_sqlite.json",
+    "tradingview.json"
+  ]
+}

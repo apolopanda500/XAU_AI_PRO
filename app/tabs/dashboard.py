@@ -4,6 +4,7 @@ Aba Dashboard do app XAU_AI_PRO.
 from __future__ import annotations
 
 import socket
+import time
 import tkinter as tk
 from datetime import datetime
 from typing import Any, Callable
@@ -113,6 +114,32 @@ class DashboardTab:
             work=self._collect,
             apply_result=self._apply,
         )
+
+    # ------------------------------------------------------------------
+    # Auto-refresh (a cada 1 min)
+    # ------------------------------------------------------------------
+    def start_auto_refresh(self, interval_sec: int = 60) -> None:
+        self._auto_running = True
+        import threading as _t
+
+        def loop() -> None:
+            while self._auto_running:
+                try:
+                    interval = interval_sec
+                    try:
+                        interval = max(30, int(self.interval_entry.get()))
+                    except (AttributeError, ValueError):
+                        pass
+                    time.sleep(interval)
+                    if self._auto_running:
+                        self.refresh()
+                except Exception:
+                    time.sleep(10)
+
+        _t.Thread(target=loop, daemon=True).start()
+
+    def stop_auto_refresh(self) -> None:
+        self._auto_running = False
 
     # ------------------------- coletores (background) ---------------------
 

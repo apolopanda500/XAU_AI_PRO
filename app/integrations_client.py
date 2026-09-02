@@ -93,18 +93,14 @@ def sentry_test(dsn: str) -> dict[str, Any]:
         return _res(False, "DSN com formato inesperado (esperado https://<key>@<org>.ingest.sentry.io/<id>)")
     try:
         import sentry_sdk  # noqa: PLC0415
-        # Novo client isolado apenas para o teste (nao interfere no global)
-        client = sentry_sdk.Client(dsn=dsn)
-        transport_ok = client.transport is not None
-        if not transport_ok:
-            return _res(False, "Transporte do Sentry nao inicializado")
-        from sentry_sdk import Scope  # noqa: PLC0415
-        scope = Scope(client=client)
-        event_id = scope.capture_message("XAU AI PRO - teste de conexao", level="info")
-        client.close()
+        # init global + flush real (Client/Scope isolado nao faz flush confiavel)
+        sentry_sdk.init(dsn=dsn, traces_sample_rate=0.0)
+        event_id = sentry_sdk.capture_message("XAU AI PRO - teste de conexao", level="info")
+        sentry_sdk.flush(timeout=5)
+        sentry_sdk.init()  # reset (desativa o SDK global)
         if event_id:
             return _res(True, f"Evento de teste enviado (id {str(event_id)[:8]})")
-        return _res(False, "Evento nao enviado (DSN recusado?)")
+        return _res(False, "Evento nao enviado (flush vazio)")
     except ImportError:
         return _res(False, "sentry_sdk nao instalado neste ambiente")
     except Exception as e:  # noqa: BLE001
@@ -188,3 +184,79 @@ def mcp_ping(endpoint: str) -> dict[str, Any]:
         return _res(False, f"HTTP {e.code}")
     except Exception as e:  # noqa: BLE001
         return _res(False, f"Sem resposta: {e}")
+
+
+# ============================================================
+# MCP Servers (catalogo configurado em mcp/servers/*.json)
+# ============================================================
+
+def load_mcp_servers() -> dict[str, dict[str, Any]]:
+    """Carrega o catalogo de MCP servers de mcp/servers/*.json.
+
+    Estrutura por server:
+      {id: {name, description, type, default_endpoint, enabled, api_key, endpoint}}
+    Usa os valores persistidos na config (integrations.mcp.servers) como overlay.
+    """
+    import app.config_manager  # noqa: PLC0415
+
+    cfg = app.config_manager.get_config()
+    saved = cfg.get("integrations", "mcp", "servers", default={}) or {}
+    base = Path(__file__).resolve().parent.parent / "mcp" / "servers"
+    out: dict[str, dict[str, Any]] = {}
+    registry_files = ["alpha_vantage", "alpaca", "mt5_gateway",
+                      "sequential_thinking", "postgres_sqlite", "tradingview"]
+    for sid in registry_files:
+        f = base / f"{sid}.json"
+        rec = {}
+        if f.exists():
+            try:
+                rec = json.loads(f.read_text(encoding="utf-8"))
+            except Exception:  # noqa: BLE001
+                rec = {}
+        saved_rec = saved.get(sid, {}) or {}
+        out[sid] = {
+            "id": sid,
+            "name": rec.get("name", sid.replace("_", " ").title()),
+            "description": rec.get("description", ""),
+            "type": rec.get("type", "http"),
+            "default_endpoint": rec.get("default_endpoint", ""),
+            "enabled": bool(saved_rec.get("enabled", rec.get("enabled", False))),
+            "endpoint": str(saved_rec.get("endpoint") or rec.get("default_endpoint", "")),
+            "api_key": str(saved_rec.get("api_key", "") or ""),
+            "database_url": str(saved_rec.get("database_url", "") or ""),
+        }
+    return out
+
+
+def mcp_server_ping(server: dict[str, Any]) -> dict[str, Any]:
+    """Testa um MCP server: HTTP -> ping; stdio -> verifica comando disponivel."""
+    typ = server.get("type", "http")
+    endpoint = (server.get("endpoint") or "").strip()
+    if not endpoint:
+        return _res(False, "Endpoint vazio")
+    if typ == "http":
+        if not endpoint.startswith(("http://", "https://")):
+            return _res(False, "Endpoint HTTP deve ser http(s)://")
+        return mcp_ping(endpoint)
+    # stdio (ex.: npx ...)
+    db_url = (server.get("database_url") or "").strip()
+    if endpoint.lower().startswith(("npx ", "node ", "python ", "uvx ")):
+        cmd = endpoint.split()
+        if not cmd:
+            return _res(False, "Comando vazio")
+        try:
+            if db_url and "postgres" in cmd[0].lower():
+                proc = subprocess.run(
+                    f'"{cmd[0]}" "{db_url}" --version', shell=True,
+                    capture_output=True, text=True, timeout=8)
+            else:
+                proc = subprocess.run(cmd[0] + " --version", shell=True,
+                                      capture_output=True, text=True, timeout=8)
+            if proc.returncode == 0:
+                return _res(True, f"Comando disponivel: {cmd[0]}")
+            return _res(False, f"{cmd[0]} com erro (exit {proc.returncode}): {(proc.stderr or '').strip()[:80]}")
+        except FileNotFoundError:
+            return _res(False, f"Comando nao encontrado no PATH: {cmd[0]}")
+        except Exception as e:  # noqa: BLE001
+            return _res(False, f"Erro: {e}")
+    return _res(True, "Configuracao valida (sem teste disponivel)")

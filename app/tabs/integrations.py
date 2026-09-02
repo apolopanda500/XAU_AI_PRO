@@ -18,6 +18,7 @@ from app.integrations_client import (
     github_test,
     list_plugins,
     mcp_ping,
+    load_mcp_servers, mcp_server_ping,
     models_url_test,
     sentry_test,
     slack_test,
@@ -111,6 +112,7 @@ class IntegrationsTab:
             "mcp": self.res_mcp,
         }
 
+        self._card_mcp_servers(body)
         self._card_updates(body)
 
         btns = tk.Frame(body, bg=Theme.BG)
@@ -118,6 +120,103 @@ class IntegrationsTab:
         PrimaryButton(btns, text="Salvar Integracoes", command=self.save, width=20).pack(side="left", padx=4)
 
     # ------------------------------------------------------------------
+    def _card_mcp_servers(self, body) -> None:
+        """Catalogo de MCP servers (Alpha Vantage, QuantConnect, Alpaca, MT5,
+        Sequential Thinking, PostgreSQL/SQLite) com endpoint, chave e teste."""
+        card = Card(body, title="MCP Servers (catalogo)")
+        card.pack(fill="x", padx=24, pady=10)
+        form = tk.Frame(card.body, bg=Theme.CARD)
+        form.pack(fill="x", padx=8, pady=8)
+        self.mcp_servers = load_mcp_servers()
+        self.mcp_server_entries = {}
+        row = 0
+        for sid, server in self.mcp_servers.items():
+            lbl = tk.Label(form, text=server["name"], bg=Theme.CARD, fg=Theme.TEXT,
+                           font=(Theme.FONT_FAMILY, 9, "bold"))
+            lbl.grid(row=row, column=0, sticky="w", padx=4, pady=3)
+            tk.Label(form, text=server["description"], bg=Theme.CARD, fg=Theme.TEXT_MUTED,
+                     font=(Theme.FONT_FAMILY, 8)).grid(row=row + 1, column=0, columnspan=2,
+                                                       sticky="w", padx=4, pady=(0, 2))
+            e_end = _entry(form, width=46)
+            e_end.insert(0, server["endpoint"])
+            e_end.grid(row=row, column=2, columnspan=2, padx=4, pady=3)
+            e_key = _entry(form, width=20, show="*")
+            e_key.insert(0, server["api_key"])
+            e_key.grid(row=row + 1, column=2, columnspan=2, padx=4, pady=(0, 2))
+            # Campo DATABASE_URL extra apenas para o Postgres/SQLite
+            e_db = None
+            if sid == "postgres_sqlite":
+                e_db = _entry(form, width=46)
+                e_db.insert(0, server.get("database_url", ""))
+                e_db.grid(row=row + 2, column=2, columnspan=2, padx=4, pady=(0, 2))
+                tk.Label(form, text="DATABASE_URL", bg=Theme.CARD, fg=Theme.TEXT_SECONDARY,
+                         font=(Theme.FONT_FAMILY, 8)).grid(row=row + 2, column=0, columnspan=2, sticky="w", padx=4)
+            var = tk.BooleanVar(value=server["enabled"])
+            tk.Checkbutton(form, text="Ativo", variable=var, bg=Theme.CARD,
+                           fg=Theme.TEXT_SECONDARY, selectcolor=Theme.PANEL,
+                           activebackground=Theme.CARD, font=(Theme.FONT_FAMILY, 8)).grid(
+                row=row, column=4, sticky="w", padx=4, pady=3)
+            res = _result_label(form)
+            res.grid(row=row + 1, column=3, columnspan=2, sticky="w", padx=4, pady=(0, 2))
+            self.mcp_server_entries[sid] = {"endpoint": e_end, "api_key": e_key,
+                                            "enabled": var, "result": res}
+            if e_db is not None:
+                self.mcp_server_entries[sid]["database_url"] = e_db
+            row += 2
+        # Botoes de acao
+        row_btns = tk.Frame(card.body, bg=Theme.CARD)
+        row_btns.pack(fill="x", padx=8, pady=(0, 8))
+        SecondaryButton(row_btns, text="Testar todos", command=self.test_mcp_servers, width=16).pack(side="left", padx=4)
+        SecondaryButton(row_btns, text="Salvar MCP Servers", command=self.save_mcp_servers, width=20).pack(side="left", padx=4)
+
+    def test_mcp_servers(self) -> None:
+        for sid, widgets in self.mcp_server_entries.items():
+            server = self.mcp_servers.get(sid, {})
+            extra = {"database_url": ""}
+            if "database_url" in widgets:
+                extra["database_url"] = widgets["database_url"].get().strip()
+            server = dict(server, endpoint=widgets["endpoint"].get().strip(),
+                          api_key=widgets["api_key"].get().strip(),
+                          enabled=widgets["enabled"].get(), **extra)
+            server_id = sid
+
+            def worker(srv: dict[str, Any], sid: str) -> None:
+                result = mcp_server_ping(srv)
+                w = self.mcp_server_entries.get(sid)
+                if w is not None:
+                    try:
+                        w["result"].after(0, lambda r=result, sid=sid: self._apply_mcp_result(sid, r))
+                        return
+                    except Exception:  # noqa: BLE001
+                        pass
+                self._apply_mcp_result(sid, result)
+
+            threading.Thread(target=worker, args=(server, server_id), daemon=True).start()
+
+    def _apply_mcp_result(self, sid: str, result: dict) -> None:
+        w = self.mcp_server_entries.get(sid)
+        if w is None:
+            return
+        ok = bool(result.get("ok"))
+        w["result"].configure(text=("✔ " if ok else "✘ ") + str(result.get("message", "")),
+                              fg=(Theme.SUCCESS if ok else Theme.DANGER))
+
+    def save_mcp_servers(self) -> None:
+        c = get_config()
+        servers = {}
+        for sid, widgets in self.mcp_server_entries.items():
+            rec = {
+                "endpoint": widgets["endpoint"].get().strip(),
+                "api_key": widgets["api_key"].get().strip(),
+                "enabled": widgets["enabled"].get(),
+            }
+            if "database_url" in widgets:
+                rec["database_url"] = widgets["database_url"].get().strip()
+            servers[sid] = rec
+        c.set("integrations", "mcp", "servers", value=servers)
+        self.mcp_servers = load_mcp_servers()
+        self.on_status("MCP Servers salvos")
+
     def _card_updates(self, body) -> None:
         """Card de auto-atualizacao do aplicativo (GitHub Releases)."""
         card = Card(body, title="Atualizacoes do Aplicativo (ciclo mensal v1.3.x)")
@@ -395,4 +494,13 @@ class IntegrationsTab:
         c.set("integrations", "models", "base_url", value=self._get(self.models_url, "base_url"))
         c.set("integrations", "mcp", "endpoint", value=self.e_mcp.get().strip())
         c.set("integrations", "plugins_dir", value=self.e_plug.get().strip() or "plugins")
+        servers = {}
+        for sid, widgets in self.mcp_server_entries.items():
+            servers[sid] = {
+                "endpoint": widgets["endpoint"].get().strip(),
+                "api_key": widgets["api_key"].get().strip(),
+                "enabled": widgets["enabled"].get(),
+            }
+        c.set("integrations", "mcp", "servers", value=servers)
+        self.on_status("Integracoes salvas")
         self.on_status("Integracoes salvas")

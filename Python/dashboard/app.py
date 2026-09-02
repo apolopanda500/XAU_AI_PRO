@@ -1,7 +1,8 @@
-﻿"""Painel do AI Trade Engine."""
+"""Painel do AI Trade Engine."""
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import uuid
 from pathlib import Path
@@ -24,9 +25,35 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATASET_PATH = PROJECT_ROOT / "MQL5" / "Files" / "Data" / "dataset.csv"
 PREDICTIONS_DIR = PROJECT_ROOT / "MQL5" / "Files" / "Data"
 DB_PATH = PROJECT_ROOT / "database" / "trading.db"
+CONFIG_PATH = PROJECT_ROOT / "app" / "data" / "config.json"
 
-# Cliente IA (LiteLLM)
-client = OpenAI(api_key="anything", base_url="http://localhost:4000")
+
+def load_ai_config() -> dict:
+    """Le a config do app (api.ai_*) usada pelo chat."""
+    cfg = {}
+    try:
+        raw = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+        cfg = (raw.get("api") or {})
+    except Exception:
+        pass
+    return {
+        "enabled": bool(cfg.get("ai_enabled", False)),
+        "base_url": str(cfg.get("ai_base_url", "") or "").strip().rstrip("/"),
+        "api_key": str(cfg.get("ai_api_key", "") or "").strip(),
+        "model": str(cfg.get("ai_model", "ollama/deepseek-v4-flash:cloud") or ""),
+    }
+
+
+def make_client(cfg: dict) -> OpenAI | None:
+    """Cria o cliente OpenAI-compatible a partir da config (None se desativado)."""
+    if not cfg["enabled"]:
+        return None
+    base = cfg["base_url"] or "http://localhost:4000"
+    # Garante sufixo /v1 (LiteLLM local e gateways OpenAI-compatible)
+    if not base.endswith("/chat/completions"):
+        if not base.endswith("/v1"):
+            base = base + "/v1"
+    return OpenAI(api_key=cfg["api_key"] or "anything", base_url=base)
 
 
 @st.cache_data
@@ -96,6 +123,9 @@ def main() -> None:
     st.title("AI Trade Engine Pro")
     st.caption("Painel de status da IA multi-ativo")
 
+    ai_cfg = load_ai_config()
+    client = make_client(ai_cfg)
+
     tab1, tab2 = st.tabs(["Dashboard", "Chat IA"])
 
     with tab1:
@@ -132,7 +162,16 @@ def main() -> None:
 
     with tab2:
         st.subheader("Converse com o XAU AI PRO")
-        
+
+        if client is None:
+            st.info(
+                "IA desativada no aplicativo. Abra XAU AI PRO > Configuracoes > "
+                "Assistente IA, marque 'Habilitar IA real', preencha URL base / chave / "
+                "modelo e clique em Salvar. Depois recarregue esta pagina."
+            )
+        else:
+            st.caption(f"Modelo: {ai_cfg['model']} @ {ai_cfg['base_url'] or 'localhost:4000'}")
+
         # Sentry: identifica o usuario (coluna User em Conversas) e cria ID de conversa.
         if "sentry_user_id" not in st.session_state:
             st.session_state.sentry_user_id = "chat:" + uuid.uuid4().hex[:12]
@@ -153,20 +192,30 @@ def main() -> None:
                 st.markdown(prompt)
 
             with st.chat_message("assistant"):
-                try:
-                    # Sentry: agrupa spans desta conversa (gen_ai.conversation.id).
-                    set_ai_conversation_id(
-                        f"chat:{st.session_state.get('sentry_conv_id', 'default')}"
+                if client is None:
+                    st.warning("IA desativada - configure no aplicativo (Configuracoes > Assistente IA).")
+                    st.session_state.messages.append(
+                        {"role": "assistant", "content": "[IA desativada no aplicativo]"}
                     )
-                    response = client.chat.completions.create(
-                        model="ollama/deepseek-v4-flash:cloud",
-                        messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages]
-                    )
-                    full_response = response.choices[0].message.content
-                    st.markdown(full_response)
-                    st.session_state.messages.append({"role": "assistant", "content": full_response})
-                except Exception as e:
-                    st.error(f"Erro ao conectar com a IA: {e}")
+                else:
+                    try:
+                        # Sentry: agrupa spans desta conversa (gen_ai.conversation.id).
+                        set_ai_conversation_id(
+                            f"chat:{st.session_state.get('sentry_conv_id', 'default')}"
+                        )
+                        response = client.chat.completions.create(
+                            model=ai_cfg["model"],
+                            messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages]
+                        )
+                        full_response = response.choices[0].message.content
+                        st.markdown(full_response)
+                        st.session_state.messages.append({"role": "assistant", "content": full_response})
+                    except Exception as e:
+                        msg = str(e)
+                        hint = ""
+                        if "localhost" in msg or "Connection" in msg or "No connection" in msg:
+                            hint = " - o servico de IA (LiteLLM/gateway) nao esta respondendo na URL configurada"
+                        st.error(f"Erro ao conectar com a IA: {msg}{hint}")
 
 
 if __name__ == "__main__":
