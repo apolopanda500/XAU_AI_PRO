@@ -93,11 +93,11 @@ def sentry_test(dsn: str) -> dict[str, Any]:
         return _res(False, "DSN com formato inesperado (esperado https://<key>@<org>.ingest.sentry.io/<id>)")
     try:
         import sentry_sdk  # noqa: PLC0415
-        # init global + flush real (Client/Scope isolado nao faz flush confiavel)
-        sentry_sdk.init(dsn=dsn, traces_sample_rate=0.0)
-        event_id = sentry_sdk.capture_message("XAU AI PRO - teste de conexao", level="info")
-        sentry_sdk.flush(timeout=5)
-        sentry_sdk.init()  # reset (desativa o SDK global)
+        # Usa client isolado para nao poluir o SDK global nem gerar issues reais
+        client = sentry_sdk.Client(dsn=dsn, traces_sample_rate=0.0)
+        event_id = client.capture_message("XAU AI PRO - teste de conexao", level="info")
+        client.flush(timeout=5)
+        client.close()
         if event_id:
             return _res(True, f"Evento de teste enviado (id {str(event_id)[:8]})")
         return _res(False, "Evento nao enviado (flush vazio)")
