@@ -46,6 +46,23 @@ class MarketTab:
         self.btn_all.pack(side="left", padx=4)
         PrimaryButton(header, text="Atualizar", command=self.refresh, width=12).pack(side="right")
 
+        # Importar novos ativos
+        imp = tk.Frame(self.frame, bg=Theme.BG)
+        imp.pack(fill="x", padx=24, pady=(0, 6))
+        tk.Label(imp, text="Importar ativo:", bg=Theme.BG, fg=Theme.TEXT_SECONDARY,
+                 font=(Theme.FONT_FAMILY, 9)).pack(side="left")
+        self.import_entry = tk.Entry(imp, bg=Theme.PANEL, fg=Theme.TEXT,
+                                     insertbackground=Theme.TEXT, relief="flat",
+                                     highlightbackground=Theme.BORDER, highlightthickness=1,
+                                     width=18, font=(Theme.FONT_FAMILY, 10))
+        self.import_entry.pack(side="left", padx=6)
+        self.import_entry.bind("<Return>", lambda e: self.import_symbol())
+        SecondaryButton(imp, text="Adicionar", command=self.import_symbol, width=10).pack(side="left")
+        SecondaryButton(imp, text="Buscar no MT5", command=self.search_mt5, width=12).pack(side="left", padx=6)
+        self.import_status = tk.Label(imp, text="", bg=Theme.BG, fg=Theme.TEXT_SECONDARY,
+                                      font=(Theme.FONT_FAMILY, 9))
+        self.import_status.pack(side="left", padx=8)
+
         self.card = Card(self.frame, title="Cotacoes em tempo real")
         self.card.pack(fill="both", expand=True, padx=24, pady=10)
         self.table = MarketTable(self.card.body)
@@ -124,3 +141,59 @@ class MarketTab:
                 time.sleep(max(1, interval))
             except Exception:
                 time.sleep(5)
+
+    def import_symbol(self) -> None:
+        """Adiciona um novo ativo aos simbolos monitorados (spot) e atualiza."""
+        sym = self.import_entry.get().strip().upper()
+        if not sym:
+            self.import_status.configure(text="Informe o simbolo", fg=Theme.WARNING)
+            return
+        threading.Thread(target=self._do_import, args=(sym,), daemon=True).start()
+
+    def _do_import(self, sym: str) -> None:
+        cfg = get_config()
+        symbols = list(cfg.get("market", "symbols", default=[]) or [])
+        if sym in symbols:
+            msg, fg = f"{sym} ja esta na lista", Theme.WARNING
+        else:
+            symbols.append(sym)
+            try:
+                cfg.set("market", "symbols", value=symbols)
+                msg, fg = f"{sym} adicionado", Theme.SUCCESS
+            except Exception:
+                msg, fg = "erro ao salvar config", Theme.DANGER
+        self.frame.after(0, lambda: self._import_done(msg, fg, sym))
+
+    def _import_done(self, msg: str, fg: str, sym: str) -> None:
+        self.import_status.configure(text=msg, fg=fg)
+        if "adicionado" in msg:
+            self.import_entry.delete(0, "end")
+            self.refresh()
+
+    def search_mt5(self) -> None:
+        """Pesquisa simbolos no terminal MT5 (por fragmento)."""
+        frag = self.import_entry.get().strip().upper()
+        threading.Thread(target=self._search_mt5, args=(frag,), daemon=True).start()
+
+    def _search_mt5(self, frag: str) -> None:
+        try:
+            import MetaTrader5 as mt5  # noqa: PLC0415
+            from app.mt5_robot import get_robot
+            robot = get_robot()
+            if not (robot and robot.account_info()):
+                self.frame.after(0, lambda: self.import_status.configure(
+                    text="MT5 offline", fg=Theme.WARNING))
+                return
+            syms = mt5.symbols_get()
+            out = [s.name for s in (syms or []) if not frag or frag in s.name.upper()]
+            mt5.shutdown()
+            found = out[:20]
+            if not found:
+                self.frame.after(0, lambda: self.import_status.configure(
+                    text="Nada encontrado", fg=Theme.WARNING))
+            else:
+                txt = f"Encontrados: {', '.join(found[:6])}{'...' if len(found) > 6 else ''}"
+                self.frame.after(0, lambda: self.import_status.configure(text=txt, fg=Theme.TEXT))
+        except Exception:
+            self.frame.after(0, lambda: self.import_status.configure(
+                text="Erro na busca MT5", fg=Theme.DANGER))

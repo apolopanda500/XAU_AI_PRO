@@ -99,6 +99,16 @@ class DashboardTab:
         self.api_frame = tk.Frame(api_card.body, bg=Theme.CARD)
         self.api_frame.pack(fill='both', expand=True, padx=8, pady=8)
 
+        # Calendario economico + sync MT5 (novas camadas)
+        cal_card = Card(bottom, title="Calendario Economico + Sync MT5")
+        cal_card.grid(row=3, column=0, columnspan=2, sticky="nsew", pady=(10, 0))
+        self.cal_frame = tk.Frame(cal_card.body, bg=Theme.CARD)
+        self.cal_frame.pack(fill="both", expand=True, padx=8, pady=8)
+        self.cal_text = tk.Label(self.cal_frame, text="carregando...", bg=Theme.CARD,
+                                 fg=Theme.TEXT, font=(Theme.FONT_FAMILY, 9),
+                                 justify="left", anchor="w")
+        self.cal_text.pack(fill="x")
+
     def refresh(self) -> None:
         """Atualiza o dashboard SEM travar a GUI.
 
@@ -162,6 +172,14 @@ class DashboardTab:
             data["backend"] = self._collect_backend()
         except Exception:
             data["backend"] = []
+        try:
+            data["calendar"] = self._collect_calendar()
+        except Exception:
+            data["calendar"] = []
+        try:
+            data["sync"] = self._collect_sync()
+        except Exception:
+            data["sync"] = {}
         return data
 
     def _collect_account(self) -> dict[str, Any] | None:
@@ -231,6 +249,14 @@ class DashboardTab:
         except Exception:
             return [("Backend API", "ERRO DE LEITURA", "bad")]
 
+    def _collect_calendar(self) -> list[str]:
+        from app.economic_calendar import event_summary
+        return event_summary(tz="BRT")
+
+    def _collect_sync(self) -> dict[str, Any]:
+        from app.mt5_sync import to_export
+        return to_export()
+
     # ------------------------- aplicadores (GUI thread) -------------------
 
     def _apply(self, data: dict[str, Any] | None) -> None:
@@ -240,8 +266,30 @@ class DashboardTab:
         self._apply_services(data.get("services") or {})
         self._apply_system(data.get("system") or [])
         self._apply_backend(data.get("backend") or [])
+        self._apply_calendar(data.get("calendar") or [])
+        self._apply_sync(data.get("sync") or {})
         self.last_update.configure(text=f"Atualizado: {data.get('ts', '')}")
         self.on_status("Dashboard atualizado")
+
+    def _apply_calendar(self, lines: list[str]) -> None:
+        if not hasattr(self, "cal_text"):
+            return
+        txt = "\n".join(lines) if lines else "Sem eventos relevantes."
+        self.cal_text.configure(text=txt)
+
+    def _apply_sync(self, sync: dict[str, Any]) -> None:
+        if not hasattr(self, "cal_text"):
+            return
+        conectado = sync.get("conectado")
+        extra = f" | MT5: {'conectado' if conectado else 'offline'} | " \
+                f"pos: {sync.get('positions_count', 0)} | " \
+                f"hist: {sync.get('history_count', 0)}"
+        # anexa ao label do calendario sem quebrar a GUI
+        try:
+            atual = self.cal_text.cget("text")
+            self.cal_text.configure(text=atual + "\n🔄 Sync:" + extra)
+        except Exception:
+            pass
 
     def _apply_account(self, acct: dict[str, Any] | None) -> None:
         if not acct:

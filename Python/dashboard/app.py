@@ -21,6 +21,37 @@ except Exception:
     def set_current_user(_user_id, username=None):  # noqa: E305
         pass
 
+# Motor MCP local (Sequential Thinking etc.)
+try:
+    import sys as _sys
+
+    _APP_ROOT = Path(__file__).resolve().parent.parent.parent
+    # Raiz do projeto na frente do path: pacote app/ vence dashboard/app.py.
+    if str(_APP_ROOT) in _sys.path:
+        _sys.path.remove(str(_APP_ROOT))
+    _sys.path.insert(0, str(_APP_ROOT))
+    from app.mcp_tools import call_tool, enabled_tools  # noqa: E402
+
+    MCP_TOOLS_AVAILABLE = True
+except Exception:
+    call_tool = None  # type: ignore[assignment]
+    enabled_tools = lambda: []  # type: ignore[assignment]
+    MCP_TOOLS_AVAILABLE = False
+
+
+# Camadas adicionais: busca global, memoria, calendario e sync MT5.
+try:
+    from app.search_hub import search_all, quick_summary
+    from app.ai_memory import think, recall, remember, start_keepalive
+    from app.economic_calendar import event_summary, upcoming_events
+    from app.mt5_sync import to_export
+    EXTRA_LAYERS = True
+except Exception:
+    search_all = quick_summary = think = recall = remember = None  # type: ignore[assignment]
+    event_summary = upcoming_events = None  # type: ignore[assignment]
+    to_export = None  # type: ignore[assignment]
+    EXTRA_LAYERS = False
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATASET_PATH = PROJECT_ROOT / "MQL5" / "Files" / "Data" / "dataset.csv"
 PREDICTIONS_DIR = PROJECT_ROOT / "MQL5" / "Files" / "Data"
@@ -126,7 +157,34 @@ def main() -> None:
     ai_cfg = load_ai_config()
     client = make_client(ai_cfg)
 
-    tab1, tab2 = st.tabs(["Dashboard", "Chat IA"])
+    tab1, tab2, tab3 = st.tabs(["Dashboard", "Chat IA", "Pesquisa Global"])
+
+    # Barra lateral: calendario economico + sync MT5
+    if EXTRA_LAYERS:
+        with st.sidebar:
+            st.subheader("📅 Calendário Econômico (BRT)")
+            try:
+                for line in (event_summary(tz="BRT") or []):
+                    st.write(line)
+            except Exception:
+                st.write("Calendário indisponível")
+            st.divider()
+            st.subheader("🔄 Sync MT5")
+            try:
+                s = to_export() or {}
+                st.metric("MT5", "Conectado" if s.get("conectado") else "Offline")
+                st.metric("Posições", s.get("positions_count", 0))
+                st.metric("Histórico", s.get("history_count", 0))
+            except Exception:
+                st.write("Sync indisponível")
+            st.divider()
+            st.subheader("🔍 Resumo")
+            try:
+                qs = quick_summary() or {}
+                st.write(f"MCP: {qs.get('mcp', 0)} | Agentes: {qs.get('agentes', 0)}")
+                st.write(f"Ativos: {qs.get('ativos', 0)} | Chats: {qs.get('chats', 0)}")
+            except Exception:
+                pass
 
     with tab1:
         dataset = load_dataset()
@@ -172,6 +230,16 @@ def main() -> None:
         else:
             st.caption(f"Modelo: {ai_cfg['model']} @ {ai_cfg['base_url'] or 'localhost:4000'}")
 
+        # Modo raciocinio estruturado (MCP Sequential Thinking)
+        usar_sequencial = st.checkbox(
+            "🧠 Raciocínio sequencial (MCP)",
+            value=st.session_state.get("usar_sequencial", False),
+            help="Encadeia passos de análise (Sequential Thinking) antes de responder solo.",
+        )
+        st.session_state.usar_sequencial = usar_sequencial
+        if usar_sequencial and MCP_TOOLS_AVAILABLE:
+            st.caption("Ferramentas MCP: " + ", ".join(enabled_tools() or []))
+
         # Sentry: identifica o usuario (coluna User em Conversas) e cria ID de conversa.
         if "sentry_user_id" not in st.session_state:
             st.session_state.sentry_user_id = "chat:" + uuid.uuid4().hex[:12]
@@ -192,7 +260,28 @@ def main() -> None:
                 st.markdown(prompt)
 
             with st.chat_message("assistant"):
-                if client is None:
+                if usar_sequencial and MCP_TOOLS_AVAILABLE and call_tool is not None:
+                    try:
+                        r = call_tool(
+                            "sequential_thinking",
+                            thought=prompt,
+                            thoughtNumber=1,
+                            totalThoughts=5,
+                        )
+                        if r.get("ok"):
+                            res = r.get("result") or {}
+                            linhas = [f"**Pensamento {i + 1}:** {p.get('question', '')}"
+                                      for i, p in enumerate(res.get("steps", []))]
+                            full_response = "🧠 **Raciocínio sequencial (MCP)**\n\n" + "\n\n".join(linhas)
+                            if res.get("branches"):
+                                full_response += "\n\n**Ramos:** " + ", ".join(res["branches"])
+                        else:
+                            full_response = "MCP Sequential Thinking: erro → " + str(r.get("error", ""))
+                    except Exception as mcp_exc:
+                        full_response = f"MCP Sequential Thinking falhou: {mcp_exc}"
+                    st.markdown(full_response)
+                    st.session_state.messages.append({"role": "assistant", "content": full_response})
+                elif client is None:
                     st.warning("IA desativada - configure no aplicativo (Configuracoes > Assistente IA).")
                     st.session_state.messages.append(
                         {"role": "assistant", "content": "[IA desativada no aplicativo]"}
@@ -216,6 +305,26 @@ def main() -> None:
                         if "localhost" in msg or "Connection" in msg or "No connection" in msg:
                             hint = " - o servico de IA (LiteLLM/gateway) nao esta respondendo na URL configurada"
                         st.error(f"Erro ao conectar com a IA: {msg}{hint}")
+
+    with tab3:
+        st.subheader("🔍 Pesquisa Global no Aplicativo")
+        q = st.text_input("Buscar", placeholder="ex.: xau, mercado, posicao, FOMC, MCP")
+        if q and EXTRA_LAYERS and search_all is not None:
+            r = search_all(q)
+            st.caption(f"{r.get('total', 0)} resultado(s) para '{q}'")
+            secs = [("🛠️ MCP", r.get("mcp", [])),
+                    ("🤖 Agentes", r.get("agentes", [])),
+                    ("💬 Chats/Memória", r.get("chats", [])),
+                    ("📈 Ativos", r.get("ativos", [])),
+                    ("📅 Calendário", r.get("calendario", []))]
+            for titulo, items in secs:
+                with st.expander(f"{titulo} ({len(items)})", expanded=len(items) > 0):
+                    if not items:
+                        st.write("Nenhum resultado")
+                    for it in items:
+                        st.markdown(f"**{it.get('nome','')}** — {it.get('descricao','')}")
+        elif not EXTRA_LAYERS:
+            st.info("Camadas extras indisponíveis.")
 
 
 if __name__ == "__main__":

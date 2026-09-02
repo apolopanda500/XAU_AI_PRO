@@ -203,7 +203,7 @@ def load_mcp_servers() -> dict[str, dict[str, Any]]:
     saved = cfg.get("integrations", "mcp", "servers", default={}) or {}
     base = Path(__file__).resolve().parent.parent / "mcp" / "servers"
     out: dict[str, dict[str, Any]] = {}
-    registry_files = ["alpha_vantage", "alpaca", "mt5_gateway",
+    registry_files = ["alpha_vantage", "alpaca", "quantconnect", "mt5_gateway",
                       "sequential_thinking", "postgres_sqlite", "tradingview"]
     for sid in registry_files:
         f = base / f"{sid}.json"
@@ -224,6 +224,7 @@ def load_mcp_servers() -> dict[str, dict[str, Any]]:
             "endpoint": str(saved_rec.get("endpoint") or rec.get("default_endpoint", "")),
             "api_key": str(saved_rec.get("api_key", "") or ""),
             "database_url": str(saved_rec.get("database_url", "") or ""),
+            "user_id": str(saved_rec.get("user_id") or rec.get("user_id", "") or ""),
         }
     return out
 

@@ -108,6 +108,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "servers": {
                 "alpha_vantage": {"enabled": False, "endpoint": "https://www.alphavantage.co/query", "api_key": ""},
                 "alpaca": {"enabled": False, "endpoint": "https://paper-api.alpaca.markets/v2", "api_key": ""},
+                "quantconnect": {"enabled": True, "endpoint": "https://www.quantconnect.com/api/v2", "api_key": "", "user_id": "536051"},
                 "mt5_gateway": {"enabled": True, "endpoint": "http://127.0.0.1:9001", "api_key": ""},
                 "sequential_thinking": {"enabled": True, "endpoint": "npx -y @modelcontextprotocol/server-sequential-thinking", "api_key": ""},
                 "postgres_sqlite": {"enabled": True, "endpoint": "npx -y @modelcontextprotocol/server-postgres", "api_key": "", "database_url": ""},

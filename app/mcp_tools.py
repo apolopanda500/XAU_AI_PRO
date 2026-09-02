@@ -160,8 +160,16 @@ def _act_tradingview(action: str, **kw: Any) -> dict[str, Any]:
 def _act_mt5_gateway(action: str, **kw: Any) -> dict[str, Any]:
     s = _server("mt5_gateway")
     base = (kw.get("endpoint") or s.get("endpoint") or "http://127.0.0.1:9001").rstrip("/")
+    endpoint = {
+        "health": "/api/health",
+        "status": "/api/status",
+        "system": "/api/status",
+        "positions": "/api/positions",
+        "account": "/api/account",
+        "history": "/api/history",
+    }.get(action, "/api/health")
     try:
-        data = _http_json(base + "/api/health", timeout=4)
+        data = _http_json(base + endpoint, timeout=4)
         return _res(True, data)
     except Exception as e:  # noqa: BLE001
         return _res(False, error=f"MT5 Gateway: {e}")
@@ -203,6 +211,56 @@ def _act_postgres_sqlite(action: str, **kw: Any) -> dict[str, Any]:
         return _res(False, error=f"SQLite: {e}")
 
 
+
+
+def _act_quantconnect(action: str, **kw: Any) -> dict[str, Any]:
+    """QuantConnect API real: testa token e lista projetos.
+
+    Autenticacao: header Authorization Bearer <token> + QuantConnect-UserId.
+    """
+    s = _server("quantconnect")
+    token = (kw.get("api_key") or s.get("api_key") or "").strip()
+    uid = str(kw.get("user_id") or s.get("user_id") or "").strip()
+    if not token:
+        return _res(False, error="QuantConnect: token nao configurado (Integracoes > MCP Servers)")
+    base = (kw.get("endpoint") or s.get("endpoint") or "https://www.quantconnect.com/api/v2").rstrip("/")
+    hdrs = {"Authorization": "Bearer " + token}
+    if uid:
+        hdrs["QuantConnect-UserId"] = uid
+    try:
+        if action in ("health", "projects", "ping"):
+            data = _http_json(base + "/projects", timeout=15, headers=hdrs)
+        elif action in ("backtests", "results"):
+            data = _http_json(base + "/backtests", timeout=15, headers=hdrs)
+        else:
+            data = _http_json(base + "/projects", timeout=15, headers=hdrs)
+        if isinstance(data, dict):
+            if data.get("projects") is not None:
+                projects = []
+                for prj in data["projects"][:10]:
+                    projects.append({
+                        "id": prj.get("projectId"),
+                        "nome": prj.get("name"),
+                        "idioma": prj.get("language"),
+                    })
+                return _res(True, {"total": len(data["projects"]), "projects": projects})
+            if data.get("backtests") is not None:
+                return _res(True, {"total": len(data["backtests"])})
+            if data.get("success") is not None:
+                return _res(True, data)
+            if "message" in data or "errors" in data:
+                return _res(False, error="QuantConnect: " + str(data.get("message") or data.get("errors"))[:120])
+        return _res(True, data)
+    except urllib.error.HTTPError as e:
+        body = ""
+        try:
+            body = e.read().decode("utf-8", errors="replace")[:200]
+        except Exception:
+            pass
+        return _res(False, error=f"QuantConnect: HTTP {e.code} {body}")
+    except Exception as e:  # noqa: BLE001
+        return _res(False, error=f"QuantConnect: {e}")
+
 def _act_sequential_thinking(action: str, **kw: Any) -> dict[str, Any]:
     """Encadeia etapas de raciocinio (motor local; nao precisa de npx)."""
     thought = kw.get("thought", "").strip()
@@ -232,6 +290,7 @@ _ACTIONS = {
     "alpaca": _act_alpaca,
     "tradingview": _act_tradingview,
     "mt5_gateway": _act_mt5_gateway,
+    "quantconnect": _act_quantconnect,
     "postgres_sqlite": _act_postgres_sqlite,
     "sequential_thinking": _act_sequential_thinking,
 }

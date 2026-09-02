@@ -22,6 +22,7 @@ from app.tabs.market import MarketTab
 from app.tabs.positions import PositionsTab
 from app.tabs.robot import RobotTab
 from app.tabs.settings import SettingsTab
+from app.tabs.search import SearchTab
 from app.tabs.subgraph import SubgraphTab
 from app.tabs.system import SystemTab
 from app.tabs.charts import ChartsTab
@@ -139,6 +140,7 @@ class XAUAProApp:
         self.tabs["settings"] = SettingsTab(self.tab_container, self.robot, self.market, self._set_status)
         self.tabs["system"] = SystemTab(self.tab_container, self.robot, self.market, self._set_status)
         self.tabs["charts"] = ChartsTab(self.tab_container, self.robot, self.market, self._set_status)
+        self.tabs["search"] = SearchTab(self.tab_container, self.robot, self.market, self._set_status)
 
         for key in self.tabs:
             self.tabs[key].frame.pack_forget()
@@ -166,6 +168,7 @@ class XAUAProApp:
             "settings": "Configuracoes",
             "system": "Sistema",
             "charts": "Graficos",
+            "search": "Pesquisa",
         }
         self.header_title.configure(text=titles.get(key, key))
 
@@ -191,6 +194,12 @@ class XAUAProApp:
             get_learning_engine().start_scheduler()
         if self.cfg.get("mt5", "auto_connect", default=True):
             threading.Thread(target=self.robot.connect, daemon=True).start()
+        # MT5 Gateway local (porta 9001) - MCP em background, junto com o app.
+        try:
+            from app.mt5_gateway import start_gateway
+            threading.Thread(target=start_gateway, daemon=True).start()
+        except Exception:
+            pass
         # self.tabs["market"].start_auto_refresh()  # desativado (auto-refresh)
         self.tabs["system"].start_monitor()
         self.tabs["charts"].start_auto()
@@ -212,6 +221,13 @@ class XAUAProApp:
             self.tabs["tools"].start_auto_refresh(interval_sec=60)
         except Exception:
             pass
+        # IA em camadas: mantem o assistente vivo enquanto o app estiver aberto.
+        try:
+            from app.ai_memory import start_keepalive
+            self._ai_keepalive = start_keepalive(interval=300.0)
+        except Exception:
+            self._ai_keepalive = None
+
         # Refresh inicial (1x) ao entrar no app para iniciar as funcoes.
         self.root.after(2000, self._initial_refresh)
 
@@ -257,7 +273,17 @@ class XAUAProApp:
                 self.tabs["tools"].stop_auto_refresh()
             except Exception:
                 pass
+            try:
+                from app.mt5_gateway import stop_gateway
+                stop_gateway()
+            except Exception:
+                pass
             get_learning_engine().stop_scheduler()
+            try:
+                from app.ai_memory import stop_keepalive
+                stop_keepalive()
+            except Exception:
+                pass
             self.market.disconnect()
             self.robot.disconnect()
             self.root.destroy()

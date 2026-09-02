@@ -83,3 +83,12 @@ debug_error.txt
 unins000.dat
 unins000.exe
 
+
+# Runtime data e logs do app
+database/
+*.run.log
+dash_run.log
+dash_run.err
+dash_fix_run.*
+exe_test*.log
+exe_test*.err

@@ -2,6 +2,7 @@
   "servers": [
     "alpha_vantage.json",
     "alpaca.json",
+    "quantconnect.json",
     "mt5_gateway.json",
     "sequential_thinking.json",
     "postgres_sqlite.json",

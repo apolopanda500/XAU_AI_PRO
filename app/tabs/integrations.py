@@ -13,6 +13,7 @@ from typing import Any, Callable
 
 from app.components.cards import Card, PrimaryButton, SecondaryButton
 from app.config_manager import get_config
+from app.mcp_marketplace import catalogo, instalados, instalar, desinstalar, pesquisar as mcp_pesquisar
 from app.integrations_client import (
     github_push_test,
     github_test,
@@ -118,6 +119,10 @@ class IntegrationsTab:
         btns = tk.Frame(body, bg=Theme.BG)
         btns.pack(fill="x", padx=24, pady=(4, 24))
         PrimaryButton(btns, text="Salvar Integracoes", command=self.save, width=20).pack(side="left", padx=4)
+        # MCP Marketplace (instalar novos servidores dentro do app)
+        self._card_mcp_marketplace(body)
+
+
 
     # ------------------------------------------------------------------
     def _card_mcp_servers(self, body) -> None:
@@ -216,6 +221,79 @@ class IntegrationsTab:
         c.set("integrations", "mcp", "servers", value=servers)
         self.mcp_servers = load_mcp_servers()
         self.on_status("MCP Servers salvos")
+
+    def _card_mcp_marketplace(self, body) -> None:
+        """Pesquisa e instala MCP servers dentro do app."""
+        from app.components.cards import Card
+        card = Card(body, title="MCP Marketplace (instalar novos servidores)")
+        card.pack(fill="x", padx=24, pady=10)
+        fm = tk.Frame(card.body, bg=Theme.CARD)
+        fm.pack(fill="x", padx=8, pady=8)
+        tk.Label(fm, text="Buscar MCP:", bg=Theme.CARD, fg=Theme.TEXT_SECONDARY).pack(side="left", padx=4)
+        self.mcp_search_entry = tk.Entry(fm, width=28, bg=Theme.PANEL, fg=Theme.TEXT,
+                                         relief="flat", highlightbackground=Theme.BORDER,
+                                         highlightthickness=1)
+        self.mcp_search_entry.pack(side="left", padx=4)
+        SecondaryButton(fm, text="Buscar", command=self.mcp_market_search, width=10).pack(side="left", padx=4)
+        SecondaryButton(fm, text="Listar todos", command=self.mcp_market_list, width=12).pack(side="left", padx=4)
+        self.mcp_market_lbl = tk.Label(card.body, text="Digite um termo e clique em Buscar (ex.: 'github', 'fetch', 'memoria').",
+                                       bg=Theme.CARD, fg=Theme.TEXT_MUTED, font=(Theme.FONT_FAMILY, 9),
+                                       anchor="w", justify="left", wraplength=900)
+        self.mcp_market_lbl.pack(fill="x", padx=8, pady=(0, 6))
+        self.mcp_market_btns = tk.Frame(card.body, bg=Theme.CARD)
+        self.mcp_market_btns.pack(fill="x", padx=8, pady=(0, 8))
+        self._mcp_market_items = []
+        tk.Label(card.body, text="Instalados: " + (", ".join(instalados()) or "nenhum"),
+                 bg=Theme.CARD, fg=Theme.TEXT_SECONDARY, font=(Theme.FONT_FAMILY, 8)).pack(fill="x", padx=8, pady=(0, 8))
+
+    def mcp_market_search(self) -> None:
+        q = self.mcp_search_entry.get().strip()
+        self._mcp_market_render(mcp_pesquisar(q))
+
+    def mcp_market_list(self) -> None:
+        self._mcp_market_render(catalogo())
+
+    def _mcp_market_render(self, items: list) -> None:
+        for w in self.mcp_market_btns.winfo_children():
+            w.destroy()
+        self._mcp_market_items = items
+        if not items:
+            tk.Label(self.mcp_market_btns, text="Nenhum MCP encontrado.", bg=Theme.CARD,
+                     fg=Theme.TEXT_MUTED).pack(anchor="w")
+        for it in items[:14]:
+            mid = it.get("id", "")
+            nome = it.get("name", mid)
+            desc = it.get("desc", "")
+            linha = tk.Frame(self.mcp_market_btns, bg=Theme.CARD)
+            linha.pack(fill="x", pady=1)
+            tk.Label(linha, text=f"{nome}  [{it.get('type')}]", bg=Theme.CARD, fg=Theme.TEXT,
+                     font=(Theme.FONT_FAMILY, 9, "bold"), width=22, anchor="w").pack(side="left", padx=4)
+            tk.Label(linha, text=desc, bg=Theme.CARD, fg=Theme.TEXT_MUTED,
+                     font=(Theme.FONT_FAMILY, 8), anchor="w").pack(side="left", padx=4, expand=True)
+            ja = mid in instalados()
+            texto = "Instalar" if not ja else "Reinstalar"
+            b = SecondaryButton(linha, text=texto, width=10,
+                                command=lambda m=mid: self._mcp_market_install(m))
+            b.pack(side="right", padx=4)
+            if ja:
+                b2 = SecondaryButton(linha, text="Remover", width=9,
+                                     command=lambda m=mid: self._mcp_market_remove(m))
+                b2.pack(side="right", padx=2)
+
+    def _mcp_market_install(self, mid: str) -> None:
+        from app.mcp_marketplace import instalar
+        r = instalar(mid)
+        self.mcp_market_lbl.configure(text=("✔ " if r["ok"] else "✘ ") + r["message"],
+                                      fg=Theme.SUCCESS if r["ok"] else Theme.DANGER)
+        self.on_status(r["message"])
+        self.mcp_market_list()
+
+    def _mcp_market_remove(self, mid: str) -> None:
+        from app.mcp_marketplace import desinstalar
+        r = desinstalar(mid)
+        self.mcp_market_lbl.configure(text=("✔ " if r["ok"] else "✘ ") + r["message"],
+                                      fg=Theme.SUCCESS if r["ok"] else Theme.DANGER)
+        self.mcp_market_list()
 
     def _card_updates(self, body) -> None:
         """Card de auto-atualizacao do aplicativo (GitHub Releases)."""

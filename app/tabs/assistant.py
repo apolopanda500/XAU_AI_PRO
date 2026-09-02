@@ -81,14 +81,25 @@ class AssistantTab:
 
     def _worker(self, text: str) -> None:
         try:
+            # 0) Grava a pergunta do usuario na memoria
+            try:
+                from app.ai_memory import remember
+                remember("chat", text, {"sender": "user"})
+            except Exception:
+                pass
             # 1) Tenta ferramentas MCP habilitadas para dados reais (se houver)
             mcp_note = self._try_mcp_tools(text)
             # 2) IA real configurada
             result = ask_ai([{"role": "user", "content": text}])
             if result.get("ok"):
                 reply = result["reply"]
+                try:
+                    remember("chat", reply, {"sender": "assistant"})
+                except Exception:
+                    pass
             else:
-                reply = self._local_reply(text)
+                # 3) IA offline -> raciocinio em camadas (pensamentos) + memoria
+                reply = self._layered_reply(text)
                 err = result.get("error") or ""
                 if err:
                     reply = f"(IA offline: {err})\n\n{reply}"
@@ -96,7 +107,27 @@ class AssistantTab:
                 reply = mcp_note + "\n\n" + reply
             self.frame.after(0, lambda: self._done(reply))
         except Exception as e:  # noqa: BLE001
-            self.frame.after(0, lambda: self._done(self._local_reply(text) + f"\n\n(erro local: {e})"))
+            self.frame.after(0, lambda: self._done(self._layered_reply(text) + f"\n\n(erro local: {e})"))
+
+    def _layered_reply(self, text: str) -> str:
+        """Resposta em camadas usando o motor de pensamentos + memorias recentes."""
+        try:
+            from app.ai_memory import think, recall
+            t = think(text, layers=4)
+            parts = []
+            for th in t.get("thoughts", []):
+                parts.append(f"🧠 [{th['title']}] {th['answer']}")
+            # complementa com memorias relevantes
+            mems = recall(query=text, limit=3)
+            if mems:
+                parts.append("📚 **Memorias relevantes:**")
+                for m in mems[:3]:
+                    parts.append(f"  • {m['content'][:120]}")
+            if t.get("conclusion"):
+                parts.append(f"✅ **Conclusao:** {t['conclusion']}")
+            return "\n\n".join(parts) if parts else self._local_reply(text)
+        except Exception:
+            return self._local_reply(text)
 
     def _try_mcp_tools(self, text: str) -> str:
         """Usa as MCP habilitadas para enriquecer a resposta com dados reais.
