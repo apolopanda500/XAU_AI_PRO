@@ -11,15 +11,16 @@ function createWindow() {
     width: 1400,
     height: 900,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false
     }
   });
 
-  // Carrega a URL de desenvolvimento ou produção
-  const startUrl = process.env.ELECTRON_START_URL || `file://${path.join(__dirname, '../frontend/index.html')}`;
-  mainWindow.loadURL(startUrl);
+  // Carrega a URL de desenvolvimento ou o status do backend em produção.
+  const startUrl = process.env.ELECTRON_START_URL || 'http://localhost:3001';
+  mainWindow.loadURL(startUrl).catch((error) => {
+    console.error('[electron] Falha ao carregar a interface:', error.message);
+  });
 
   mainWindow.on('closed', async () => {
     if (backendProcess) {
@@ -31,7 +32,7 @@ function createWindow() {
 
 // Inicia backend Node.js junto com Electron
 function startBackend() {
-  const backendPath = path.join(__dirname, '../backend/server.js');
+  const backendPath = path.join(__dirname, '../backend/server-desktop.cjs');
   backendProcess = spawn('node', [backendPath], {
     stdio: 'inherit'
   });
