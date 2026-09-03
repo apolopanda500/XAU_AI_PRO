@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "xau-ai-pro",
   "version": "1.10.0",
   "description": "XAU AI PRO v1.2.0 - Plataforma Profissional com IA Local e Integração MT5",
@@ -15,6 +15,9 @@
       "output": "dist"
     },
     "files": [
+      "main.js",
+      "../backend/server-desktop.cjs",
+      "../backend/integrations.js",
       "dist/**/*",
       "node_modules/**/*",
       "package.json"
