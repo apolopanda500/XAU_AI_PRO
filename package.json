@@ -1,0 +1,33 @@
+{
+  "name": "v0-project",
+  "version": "1.0.0",
+  "description": "Plataforma desktop para acompanhamento do MetaTrader 5, análise de mercado e treinamento local de modelos. A interface atual usa **Python/Tkinter** e o robô opera no **MetaTrader 5** por meio do EA MQL5 distribuído com o projeto.",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "start:ai": "tsx index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/apolopanda500/XAU_AI_PRO.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/apolopanda500/XAU_AI_PRO/issues"
+  },
+  "homepage": "https://github.com/apolopanda500/XAU_AI_PRO#readme",
+  "dependencies": {
+    "@types/node": "^26.4.1",
+    "ai": "^7.0.92",
+    "dotenv": "^17.4.2",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2"
+  }
+}
