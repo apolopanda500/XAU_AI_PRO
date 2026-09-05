@@ -17,7 +17,7 @@ default:
   before_script:
     - apt-get update && apt-get install -y --no-install-recommends tcl8.6 tk8.6 && rm -rf /var/lib/apt/lists/*
     - python -m pip install --upgrade pip
-    - python -m pip install -r requirements-dev.txt numpy pandas requests joblib
+    - python -m pip install -r requirements-dev.txt numpy pandas requests joblib scikit-learn
 
 test:
   stage: test
