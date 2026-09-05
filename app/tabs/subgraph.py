@@ -35,6 +35,8 @@ class SubgraphTab:
         self._build()
 
     def _build(self) -> None:
+        from app.components.banner import TabBanner
+        TabBanner(self.frame, "subgraph")
         header = tk.Frame(self.frame, bg=Theme.BG)
         header.pack(fill="x", padx=24, pady=(20, 10))
         tk.Label(header, text="Subgraph de Mercado", bg=Theme.BG, fg=Theme.TEXT,

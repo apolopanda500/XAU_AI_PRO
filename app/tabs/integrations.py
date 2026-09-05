@@ -9,12 +9,16 @@ from __future__ import annotations
 import os
 import threading
 import tkinter as tk
+import webbrowser
+from pathlib import Path
 from typing import Any, Callable
 
 from app.components.cards import Card, PrimaryButton, SecondaryButton
 from app.config_manager import get_config
 from app.mcp_marketplace import catalogo, instalados, instalar, desinstalar, pesquisar as mcp_pesquisar
 from app.integrations_client import (
+    figma_test,
+    gitlab_test,
     github_push_test,
     github_test,
     list_plugins,
@@ -25,9 +29,13 @@ from app.integrations_client import (
     slack_test,
 )
 from app import updater
+from app.deploy_vercel import get_deploy_hook, trigger_deploy
 from app.market_data import MarketData
 from app.mt5_robot import MT5Robot
 from app.theme.mexc import Theme
+
+
+ROOT = Path(__file__).resolve().parent.parent
 
 
 def _entry(parent, width: int = 58, show: str = "") -> tk.Entry:
@@ -42,29 +50,12 @@ def _result_label(parent) -> tk.Label:
 
 
 class _ScrollFrame(tk.Frame):
-    """Frame com scroll vertical simples (padrao Tkinter)."""
+    """Conteudo da aba; a rolagem e controlada pelo contêiner principal."""
 
     def __init__(self, parent):
         super().__init__(parent, bg=Theme.BG)
-        self.canvas = tk.Canvas(self, bg=Theme.BG, highlightthickness=0)
-        self.vsb = tk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
-        self.inner = tk.Frame(self.canvas, bg=Theme.BG)
-        self.inner.bind("<Configure>",
-                        lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
-        self._win = self.canvas.create_window((0, 0), window=self.inner, anchor="nw")
-        self.canvas.bind("<Configure>",
-                         lambda e: self.canvas.itemconfigure(self._win, width=e.width))
-        self.canvas.configure(yscrollcommand=self.vsb.set)
-        self.canvas.pack(side="left", fill="both", expand=True)
-        self.vsb.pack(side="right", fill="y")
-        # Scroll com a roda do mouse
-        self.canvas.bind_all("<MouseWheel>", self._on_wheel)
-
-    def _on_wheel(self, event) -> None:
-        try:
-            self.canvas.yview_scroll(-1 * (event.delta // 120), "units")
-        except Exception:  # noqa: BLE001
-            pass
+        self.inner = tk.Frame(self, bg=Theme.BG)
+        self.inner.pack(fill="both", expand=True)
 
 
 class IntegrationsTab:
@@ -80,6 +71,8 @@ class IntegrationsTab:
 
     # ------------------------------------------------------------------
     def _build(self) -> None:
+        from app.components.banner import TabBanner
+        TabBanner(self.frame, "integrations")
         header = tk.Frame(self.frame, bg=Theme.BG)
         header.pack(fill="x", padx=24, pady=(20, 10))
         tk.Label(header, text="Integracoes", bg=Theme.BG, fg=Theme.TEXT,
@@ -98,6 +91,17 @@ class IntegrationsTab:
         c = get_config()
         self.github_url = self._card_github(body, c.get("integrations", "github", "repo_url", default=""),
                                             c.get("integrations", "github", "token", default=""))
+        self.gitlab_cfg = self._card_gitlab(
+            body,
+            c.get("integrations", "gitlab", "base_url", default="https://gitlab.com"),
+            c.get("integrations", "gitlab", "project_path", default=""),
+            c.get("integrations", "gitlab", "token", default=""),
+        )
+        self.figma_cfg = self._card_figma(
+            body,
+            c.get("integrations", "figma", "token", default=""),
+            c.get("integrations", "figma", "file_key", default=""),
+        )
         self.sentry_dsn = self._card_sentry(body, c.get("integrations", "sentry", "dsn", default=""))
         self.slack_hook = self._card_slack(body, c.get("integrations", "slack", "webhook", default=""))
         self.models_url = self._card_models(body, c.get("integrations", "models", "base_url", default=""))
@@ -107,6 +111,8 @@ class IntegrationsTab:
 
         self._widgets = {
             "github": self.github_url["result"],
+            "gitlab": self.gitlab_cfg["result"],
+            "figma": self.figma_cfg["result"],
             "sentry": self.sentry_dsn["result"],
             "slack": self.slack_hook["result"],
             "models": self.models_url["result"],
@@ -114,6 +120,7 @@ class IntegrationsTab:
         }
 
         self._card_mcp_servers(body)
+        self._card_vercel_deploy(body)
         self._card_updates(body)
 
         btns = tk.Frame(body, bg=Theme.BG)
@@ -133,6 +140,10 @@ class IntegrationsTab:
         form = tk.Frame(card.body, bg=Theme.CARD)
         form.pack(fill="x", padx=8, pady=8)
         self.mcp_servers = load_mcp_servers()
+        # O TradingView é público e deve ficar ativo por padrão para que a
+        # aba Mercado/Pesquisa consiga exibir cotações imediatamente.
+        if "tradingview" in self.mcp_servers and not self.mcp_servers["tradingview"].get("enabled"):
+            self.mcp_servers["tradingview"]["enabled"] = True
         self.mcp_server_entries = {}
         row = 0
         for sid, server in self.mcp_servers.items():
@@ -295,6 +306,60 @@ class IntegrationsTab:
                                       fg=Theme.SUCCESS if r["ok"] else Theme.DANGER)
         self.mcp_market_list()
 
+    # ------------------------------------------------------------------
+    # Deploy Vercel
+    # ------------------------------------------------------------------
+    def _card_vercel_deploy(self, body) -> None:
+        """Card para disparar deploy automatico do backend via Vercel Deploy Hook."""
+        card = Card(body, title="Deploy Vercel (backend)")
+        card.pack(fill="x", padx=24, pady=10)
+        form = tk.Frame(card.body, bg=Theme.CARD)
+        form.pack(fill="x", padx=8, pady=8)
+
+        tk.Label(form, text="Deploy Hook URL:", bg=Theme.CARD, fg=Theme.TEXT,
+                 font=(Theme.FONT_FAMILY, 10)).grid(row=0, column=0, sticky="w", pady=4)
+        self.e_vercel_hook = _entry(form, width=72)
+        self.e_vercel_hook.grid(row=0, column=1, sticky="ew", padx=8, pady=4)
+        self.e_vercel_hook.insert(0, get_deploy_hook())
+        form.grid_columnconfigure(1, weight=1)
+
+        info = tk.Label(form, text="Cole a URL do Deploy Hook do projeto Vercel. "
+                                    "O deploy e iniciado automaticamente via POST, sem necessidade de login.",
+                        bg=Theme.CARD, fg=Theme.TEXT_SECONDARY, font=(Theme.FONT_FAMILY, 9), justify="left")
+        info.grid(row=1, column=0, columnspan=2, sticky="w", pady=(4, 8))
+
+        row2 = tk.Frame(form, bg=Theme.CARD)
+        row2.grid(row=2, column=0, columnspan=2, sticky="w")
+        PrimaryButton(row2, text="Deploy Agora", command=self._do_vercel_deploy, width=16).pack(side="left", padx=(0, 8))
+        SecondaryButton(row2, text="Ver Status", command=self._check_vercel_deploy, width=14).pack(side="left", padx=(0, 8))
+
+        self.res_vercel_deploy = _result_label(form)
+        self.res_vercel_deploy.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+
+    def _do_vercel_deploy(self) -> None:
+        url = self.e_vercel_hook.get().strip()
+        self.res_vercel_deploy.config(text="Iniciando deploy...", fg=Theme.TEXT)
+        self.on_status("Deploy Vercel em andamento...")
+
+        def worker() -> None:
+            r = trigger_deploy(hook_url=url)
+            self.frame.after(0, lambda: self._show_vercel_result(r))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _check_vercel_deploy(self) -> None:
+        self.res_vercel_deploy.config(text="Consultando status...", fg=Theme.TEXT)
+
+        def worker() -> None:
+            from app.deploy_vercel import check_status
+            r = check_status(job_id="")
+            self.frame.after(0, lambda: self._show_vercel_result(r))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _show_vercel_result(self, r: dict[str, Any]) -> None:
+        color = Theme.SUCCESS if r.get("ok") else Theme.DANGER
+        self.res_vercel_deploy.config(text=r.get("message", ""), fg=color)
+        self.on_status(r.get("message", ""))
+
     def _card_updates(self, body) -> None:
         """Card de auto-atualizacao do aplicativo (GitHub Releases)."""
         card = Card(body, title="Atualizacoes do Aplicativo (ciclo mensal v1.3.x)")
@@ -342,6 +407,59 @@ class IntegrationsTab:
         SecondaryButton(row, text="Testar conexao", command=self.test_github, width=16).pack(side="left", padx=4)
         SecondaryButton(row, text="Status de push", command=self.test_github_push, width=16).pack(side="left", padx=4)
         return {"url": e_url, "token": e_tok, "result": res}
+
+    def _card_gitlab(self, body, base_url: str, project_path: str, token: str) -> dict[str, tk.Entry]:
+        card = Card(body, title="GitLab - Repositorio")
+        card.pack(fill="x", padx=24, pady=10)
+        form = tk.Frame(card.body, bg=Theme.CARD)
+        form.pack(fill="x", padx=8, pady=8)
+        tk.Label(form, text="URL GitLab", bg=Theme.CARD, fg=Theme.TEXT_SECONDARY).grid(row=0, column=0, sticky="w", padx=4)
+        e_url = _entry(form, width=62)
+        e_url.insert(0, base_url)
+        e_url.grid(row=0, column=1, padx=4, pady=3)
+        tk.Label(form, text="Projeto (grupo/repo)", bg=Theme.CARD, fg=Theme.TEXT_SECONDARY).grid(row=1, column=0, sticky="w", padx=4)
+        e_project = _entry(form, width=62)
+        e_project.insert(0, project_path)
+        e_project.grid(row=1, column=1, padx=4, pady=3)
+        tk.Label(form, text="Token (opcional)", bg=Theme.CARD, fg=Theme.TEXT_SECONDARY).grid(row=2, column=0, sticky="w", padx=4)
+        e_tok = _entry(form, width=62, show="*")
+        e_tok.insert(0, token)
+        e_tok.grid(row=2, column=1, padx=4, pady=3)
+        res = _result_label(form)
+        res.grid(row=3, column=0, columnspan=2, sticky="w", padx=4, pady=(4, 0))
+        row = tk.Frame(card.body, bg=Theme.CARD)
+        row.pack(fill="x", padx=8, pady=(0, 8))
+        SecondaryButton(row, text="Testar GitLab", command=self.test_gitlab, width=16).pack(side="left", padx=4)
+        return {"url": e_url, "project": e_project, "token": e_tok, "result": res}
+
+    def _card_figma(self, body, token: str, file_key: str) -> dict[str, tk.Entry]:
+        card = Card(body, title="Figma - Design")
+        card.pack(fill="x", padx=24, pady=10)
+        form = tk.Frame(card.body, bg=Theme.CARD)
+        form.pack(fill="x", padx=8, pady=8)
+        tk.Label(form, text="Token", bg=Theme.CARD, fg=Theme.TEXT_SECONDARY).grid(row=0, column=0, sticky="w", padx=4)
+        e_tok = _entry(form, width=62, show="*")
+        e_tok.insert(0, token)
+        e_tok.grid(row=0, column=1, padx=4, pady=3)
+        tk.Label(form, text="File Key (opcional)", bg=Theme.CARD, fg=Theme.TEXT_SECONDARY).grid(row=1, column=0, sticky="w", padx=4)
+        e_file = _entry(form, width=62)
+        e_file.insert(0, file_key)
+        e_file.grid(row=1, column=1, padx=4, pady=3)
+        res = _result_label(form)
+        res.grid(row=2, column=0, columnspan=2, sticky="w", padx=4, pady=(4, 0))
+        row = tk.Frame(card.body, bg=Theme.CARD)
+        row.pack(fill="x", padx=8, pady=(0, 8))
+        SecondaryButton(row, text="Testar Figma", command=self.test_figma, width=16).pack(side="left", padx=4)
+        SecondaryButton(row, text="Abrir projeto", command=self.open_figma, width=16).pack(side="left", padx=4)
+        return {"token": e_tok, "file_key": e_file, "result": res}
+
+    def open_figma(self) -> None:
+        file_key = self._get(self.figma_cfg, "file_key")
+        if not file_key:
+            self.figma_cfg["result"].configure(text="✘ Informe ou vincule um File Key", fg=Theme.DANGER)
+            return
+        webbrowser.open(f"https://www.figma.com/design/{file_key}")
+        self.figma_cfg["result"].configure(text="✔ Projeto Figma aberto", fg=Theme.SUCCESS)
 
     def _card_sentry(self, body, dsn: str) -> dict[str, tk.Entry]:
         card = Card(body, title="Sentry - Monitoramento de erros")
@@ -459,6 +577,19 @@ class IntegrationsTab:
         tok = self._get(self.github_url, "token")
         self._run_async(lambda: github_push_test("", tok), "github")
 
+    def test_gitlab(self) -> None:
+        url = self._get(self.gitlab_cfg, "url")
+        project = self._get(self.gitlab_cfg, "project")
+        tok = self._get(self.gitlab_cfg, "token")
+        self.on_status("Testando conexao com o GitLab...")
+        self._run_async(lambda: gitlab_test(url, tok, project), "gitlab")
+
+    def test_figma(self) -> None:
+        tok = self._get(self.figma_cfg, "token")
+        file_key = self._get(self.figma_cfg, "file_key")
+        self.on_status("Testando conexao com o Figma...")
+        self._run_async(lambda: figma_test(tok, file_key), "figma")
+
     def test_sentry(self) -> None:
         dsn = self._get(self.sentry_dsn, "dsn")
         self.on_status("Enviando evento de teste ao Sentry...")
@@ -563,15 +694,44 @@ class IntegrationsTab:
     # ------------------------------------------------------------------
     # Persistencia
     # ------------------------------------------------------------------
+    def _save_deploy_hook_env(self, url: str) -> None:
+        """Atualiza VERCEL_DEPLOY_HOOK_URL no .env.local, se possivel."""
+        try:
+            env_path = ROOT / ".env.local"
+            lines = []
+            found = False
+            if env_path.exists():
+                for line in env_path.read_text(encoding="utf-8").splitlines():
+                    if line.strip().startswith("VERCEL_DEPLOY_HOOK_URL="):
+                        lines.append(f"VERCEL_DEPLOY_HOOK_URL={url}")
+                        found = True
+                    else:
+                        lines.append(line)
+            if not found:
+                lines.append(f"VERCEL_DEPLOY_HOOK_URL={url}")
+            env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        except Exception:
+            pass
+
     def save(self) -> None:
         c = get_config()
         c.set("integrations", "github", "repo_url", value=self._get(self.github_url, "url"))
         c.set("integrations", "github", "token", value=self._get(self.github_url, "token"))
+        c.set("integrations", "gitlab", "base_url", value=self._get(self.gitlab_cfg, "url"))
+        c.set("integrations", "gitlab", "project_path", value=self._get(self.gitlab_cfg, "project"))
+        c.set("integrations", "gitlab", "token", value=self._get(self.gitlab_cfg, "token"))
+        c.set("integrations", "figma", "token", value=self._get(self.figma_cfg, "token"))
+        c.set("integrations", "figma", "file_key", value=self._get(self.figma_cfg, "file_key"))
         c.set("integrations", "sentry", "dsn", value=self._get(self.sentry_dsn, "dsn"))
         c.set("integrations", "slack", "webhook", value=self._get(self.slack_hook, "webhook"))
         c.set("integrations", "models", "base_url", value=self._get(self.models_url, "base_url"))
         c.set("integrations", "mcp", "endpoint", value=self.e_mcp.get().strip())
         c.set("integrations", "plugins_dir", value=self.e_plug.get().strip() or "plugins")
+        hook_url = getattr(self, "e_vercel_hook", None)
+        if hook_url is not None:
+            url = hook_url.get().strip()
+            c.set("integrations", "vercel", "deploy_hook_url", value=url)
+            self._save_deploy_hook_env(url)
         servers = {}
         for sid, widgets in self.mcp_server_entries.items():
             servers[sid] = {

@@ -74,8 +74,12 @@ DEFAULTS: dict = {
         "alpha_api_key": "",
         "brave_api_key": "",
         "github_token": "",
+        "gitlab_base_url": "https://gitlab.com",
+        "gitlab_project_path": "",
+        "gitlab_token": "",
         "figma_token": "",
         "figma_team_id": "",
+        "figma_file_key": "",
         "litellm_port": 4000,
         "backend_port": 8000,
         "dashboard_port": 8501,
@@ -87,6 +91,8 @@ DEFAULTS: dict = {
         "slack_notify_trades": True, # Notificar abertura/fechamento de posições
         "slack_notify_errors": True, # Notificar erros críticos
         "slack_notify_risk": True,   # Notificar drawdown, circuit breaker, etc.
+        "mcp_endpoint": "",
+        "mcp_plugins_dir": "mcp",
     },
     "ui": {
         "theme": "dark",

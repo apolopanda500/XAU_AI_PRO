@@ -11,6 +11,14 @@ import pandas as pd
 import streamlit as st
 from openai import OpenAI
 
+import sys as _sys
+
+_APP_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(_APP_ROOT) in _sys.path:
+    _sys.path.remove(str(_APP_ROOT))
+_sys.path.insert(0, str(_APP_ROOT))
+from app.utils.paths import get_config_path, get_mql_data_path  # noqa: E402
+
 # Sentry: ID de conversa por chat (agrupa spans em Conversas).
 try:
     from sentry_config import set_ai_conversation_id, set_current_user
@@ -23,13 +31,6 @@ except Exception:
 
 # Motor MCP local (Sequential Thinking etc.)
 try:
-    import sys as _sys
-
-    _APP_ROOT = Path(__file__).resolve().parent.parent.parent
-    # Raiz do projeto na frente do path: pacote app/ vence dashboard/app.py.
-    if str(_APP_ROOT) in _sys.path:
-        _sys.path.remove(str(_APP_ROOT))
-    _sys.path.insert(0, str(_APP_ROOT))
     from app.mcp_tools import call_tool, enabled_tools  # noqa: E402
 
     MCP_TOOLS_AVAILABLE = True
@@ -52,11 +53,11 @@ except Exception:
     to_export = None  # type: ignore[assignment]
     EXTRA_LAYERS = False
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DATASET_PATH = PROJECT_ROOT / "MQL5" / "Files" / "Data" / "dataset.csv"
-PREDICTIONS_DIR = PROJECT_ROOT / "MQL5" / "Files" / "Data"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+PREDICTIONS_DIR = get_mql_data_path()
+DATASET_PATH = PREDICTIONS_DIR / "dataset.csv"
 DB_PATH = PROJECT_ROOT / "database" / "trading.db"
-CONFIG_PATH = PROJECT_ROOT / "app" / "data" / "config.json"
+CONFIG_PATH = get_config_path()
 
 
 def load_ai_config() -> dict:
@@ -92,7 +93,12 @@ def load_dataset() -> pd.DataFrame | None:
     if not DATASET_PATH.exists():
         return None
     try:
-        return pd.read_csv(DATASET_PATH)
+        python_dir = PROJECT_ROOT / "Python"
+        if str(python_dir) not in _sys.path:
+            _sys.path.insert(0, str(python_dir))
+        from data.data_engine_xau import DataEngineXAU
+
+        return DataEngineXAU(DATASET_PATH).load()
     except Exception:
         return None
 

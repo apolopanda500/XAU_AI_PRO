@@ -1,0 +1,63 @@
+name: Manutencao Automatica Segura
+
+on:
+  schedule:
+    - cron: "17 10 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: maintenance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK || secrets.SLACK_WEBHOOK_URL }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Instalar dependencias Python
+        run: |
+          grep -viE "^\s*MetaTrader5" requirements.txt > /tmp/req-ci.txt
+          pip install -r /tmp/req-ci.txt
+      - name: Validar Python
+        run: |
+          python -m compileall -q Python app
+          python -m pytest -q tests
+      - name: Validar backend
+        working-directory: backend
+        run: |
+          npm ci --no-audit --no-fund
+          npm run lint
+          npm audit --audit-level=high
+      - name: Verificar API Vercel
+        run: curl --fail --silent --show-error --max-time 30 https://xau-ai-pro-api-apolopanda500.vercel.app/api/health
+      - name: Abrir issue de manutencao quando falhar
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TITLE="Falha automática de manutenção"
+          EXISTING=$(gh issue list --state open --search "$TITLE in:title" --json number --jq '.[0].number // empty')
+          BODY="A manutenção automática falhou no run $GITHUB_RUN_NUMBER. Analise os logs: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          if [ -n "$EXISTING" ]; then gh issue comment "$EXISTING" --body "$BODY"; else gh issue create --title "$TITLE" --body "$BODY" --label bug; fi
+      - name: Notificar Slack em falha
+        if: failure() && env.SLACK_WEBHOOK_URL != ''
+        uses: slackapi/slack-github-action@v4.0.0
+        with:
+          webhook-type: incoming-webhook
+          payload: |
+            {"text":":warning: Manutenção XAU AI PRO falhou: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"}

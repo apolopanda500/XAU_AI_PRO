@@ -1,10 +1,5 @@
 // ETAPA 22 - Endpoint de Reconciliação Financeira no backend
 // Sem tocar no EA. Consome dados do broker/audit via modulo financeiro.
-const fs = require('fs');
-const path = require('path');
-
-const DATA_DIR = 'C:/Users/Micro/AppData/Roaming/MetaQuotes/Terminal/D0E8209F77C8CF37AD8BF550E51FF075/MQL5/Files/Data';
-
 // Dados reais de posições fechadas (ETAPA 21 - broker MT5, magic XAU_AI_PRO)
 // Em uma integração completa, isso viria do MT5 via MT5 API/bridge.
 const POSITIONS = [

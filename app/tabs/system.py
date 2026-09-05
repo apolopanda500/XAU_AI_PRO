@@ -48,6 +48,8 @@ class SystemTab:
 
     # ------------------------------------------------------------------
     def _build(self) -> None:
+        from app.components.banner import TabBanner
+        TabBanner(self.frame, "system")
         header = tk.Frame(self.frame, bg=Theme.BG)
         header.pack(fill="x", padx=24, pady=(20, 10))
         tk.Label(header, text="Sistema", bg=Theme.BG, fg=Theme.TEXT,
@@ -353,13 +355,9 @@ class SystemTab:
             procs = len(os.popen("tasklist").read().splitlines()) - 4
         except Exception:
             procs = -1
-        # FPS estimado (refreshes por segundo)
-        now = time.time()
-        self._fps_count += 1
-        if now - self._last_fps_ts >= 1.0:
-            self._fps_value = self._fps_count / (now - self._last_fps_ts)
-            self._fps_count = 0
-            self._last_fps_ts = now
+        # FPS real medido pelo relógio da GUI, sem acessar Tk nesta thread.
+        from app.runtime_metrics import get_gui_fps
+        self._fps_value = get_gui_fps()
         return {
             "cpu_uso": usage, "cpu_nucleos": cores,
             "cpu_prioridade": current_priority(),

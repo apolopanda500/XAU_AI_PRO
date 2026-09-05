@@ -21,7 +21,7 @@ function requestJson(url, options = {}, body = null) {
       res.on('data', (c) => { data += c; });
       res.on('end', () => {
         let parsed = null;
-        try { parsed = data ? JSON.parse(data) : null; } catch (e) { parsed = null; }
+        try { parsed = data ? JSON.parse(data) : null; } catch { parsed = null; }
         resolve({ status: res.statusCode, headers: res.headers, body: parsed, raw: data });
       });
     });
@@ -131,7 +131,7 @@ function sentryStatus() {
   const dsn = sentryDsn();
   if (!dsn) return { service: 'sentry', ok: false, status: false, detail: 'sem SENTRY_DSN' };
   let sdk = false;
-  try { require.resolve('@sentry/node'); sdk = true; } catch (e) { sdk = false; }
+  try { require.resolve('@sentry/node'); sdk = true; } catch { sdk = false; }
   return { service: 'sentry', ok: sdk, status: sdk, detail: sdk ? `DSN configurado (env=${env('ENVIRONMENT') || 'production'})` : 'DSN configurado, mas @sentry/node nao instalado (npm i @sentry/node)' };
 }
 

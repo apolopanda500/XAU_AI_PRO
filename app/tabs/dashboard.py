@@ -1,5 +1,6 @@
 """
-Aba Dashboard do app XAU_AI_PRO.
+Aba Dashboard PRO do app XAU_AI_PRO.
+Layout profissional com KPIs, gráfico de equity e status de operações.
 """
 from __future__ import annotations
 
@@ -9,8 +10,8 @@ import tkinter as tk
 from datetime import datetime
 from typing import Any, Callable
 
-from app.components.cards import Card, KPI, PrimaryButton
-from app.components.charts import EquityChart
+from app.components.cards import Card, KPI, PrimaryButton, SecondaryButton, TerminalKPI, StatusBadge
+from app.tabs.charts import ChartCanvas
 from app.config_manager import get_config
 from app.market_data import MarketData
 from app.mt5_robot import MT5Robot
@@ -29,85 +30,94 @@ class DashboardTab:
         self.on_status = on_status
         self.frame = tk.Frame(parent, bg=Theme.BG)
         self.frame.pack(fill="both", expand=True)
-        self._equity_values: list[float] = []
         self._build()
 
     def _build(self) -> None:
-        header = tk.Frame(self.frame, bg=Theme.BG)
+        # Header com título e botão de atualização
+        header = Card(self.frame)
         header.pack(fill="x", padx=24, pady=(20, 10))
-        tk.Label(header, text="Dashboard", bg=Theme.BG, fg=Theme.TEXT,
-                 font=(Theme.FONT_FAMILY, 20, "bold")).pack(side="left")
-        self.last_update = tk.Label(header, text="Atualizado: --", bg=Theme.BG,
+        header.body.pack_forget()
+        tk.Label(header, text="Professional Control Center", bg=Theme.CARD, fg=Theme.TEXT,
+                 font=(Theme.FONT_FAMILY, 20, "bold")).pack(anchor="w", padx=20, pady=(14, 0))
+        tk.Label(header, text="MT5 sync, risk overview, execution status and chart intelligence",
+                 bg=Theme.CARD, fg=Theme.TEXT_SECONDARY,
+                 font=(Theme.FONT_FAMILY, 9)).pack(anchor="w", padx=20, pady=(2, 14))
+        self.last_update = tk.Label(header, text="Aguardando primeira leitura", bg=Theme.CARD,
                                     fg=Theme.TEXT_SECONDARY, font=(Theme.FONT_FAMILY, 9))
-        self.last_update.pack(side="right")
-        PrimaryButton(header, text="Atualizar agora", command=self.refresh, width=16).pack(side="right", padx=12)
+        self.last_update.pack(side="right", padx=20, pady=12)
+        PrimaryButton(header, text="Atualizar agora", command=self.refresh, width=16).place(relx=1, x=-120, y=13)
 
-        kpi_card = Card(self.frame)
-        kpi_card.pack(fill="x", padx=24, pady=10)
-        self.kpi_balance = KPI(kpi_card.body, "Saldo", "--", Theme.TEXT)
-        self.kpi_equity = KPI(kpi_card.body, "Equity", "--", Theme.TEXT)
-        self.kpi_profit = KPI(kpi_card.body, "Lucro Flutuante", "--", Theme.SUCCESS)
-        self.kpi_positions = KPI(kpi_card.body, "Posicoes Abertas", "--", Theme.PRIMARY)
-        self.kpi_margin = KPI(kpi_card.body, "Margem Livre", "--", Theme.TEXT_SECONDARY)
-        self.kpi_winrate = KPI(kpi_card.body, "Win Rate", "--", Theme.ACCENT)
-        for kpi in [self.kpi_balance, self.kpi_equity, self.kpi_profit,
-                    self.kpi_positions, self.kpi_margin, self.kpi_winrate]:
-            kpi.pack(side="left", expand=True, fill="both", padx=8, pady=8)
+        # KPIs em grid (4 principais + 2 secundários)
+        kpi_card = tk.Frame(self.frame, bg=Theme.BG)
+        kpi_card.pack(fill="x", padx=24, pady=(0, 10))
+        self.kpi_balance = TerminalKPI(kpi_card, "Saldo", "MT5 offline", Theme.PRIMARY)
+        self.kpi_equity = TerminalKPI(kpi_card, "Equity", "MT5 offline", Theme.SUCCESS)
+        self.kpi_profit = TerminalKPI(kpi_card, "PnL Flutuante", "MT5 offline", Theme.SUCCESS)
+        self.kpi_positions = TerminalKPI(kpi_card, "Posicoes", "MT5 offline", Theme.WARNING)
+        self.kpi_margin = TerminalKPI(kpi_card, "Margem Livre", "MT5 offline", Theme.TEXT_SECONDARY)
+        self.kpi_winrate = TerminalKPI(kpi_card, "Win Rate", "Sem historico", Theme.ACCENT)
+        for kpi in [self.kpi_balance, self.kpi_equity, self.kpi_profit, self.kpi_positions,
+                    self.kpi_margin, self.kpi_winrate]:
+            kpi.pack(side="left", expand=True, fill="both", padx=(0, 10), pady=0)
 
+        # Área inferior: gráfico + snapshot
         bottom = tk.Frame(self.frame, bg=Theme.BG)
         bottom.pack(fill="both", expand=True, padx=24, pady=10)
         bottom.grid_columnconfigure(0, weight=2)
         bottom.grid_columnconfigure(1, weight=1)
         bottom.grid_rowconfigure(0, weight=1)
 
-        chart_card = Card(bottom, title="Evolucao do Equity")
+        # Card do gráfico
+        chart_card = Card(bottom, title="XAUUSD M5 | Bollinger + RSI + Execution Zones")
         chart_card.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
-        self.chart = EquityChart(chart_card.body)
+        self.chart = ChartCanvas(chart_card.body)
         self.chart.pack(fill="both", expand=True, padx=8, pady=8)
 
-        status_card = Card(bottom, title="Status dos Servicos")
-        status_card.grid(row=0, column=1, sticky="nsew")
-        self.status_frame = tk.Frame(status_card.body, bg=Theme.CARD)
-        self.status_frame.pack(fill="both", expand=True, padx=8, pady=8)
+        ea_card = Card(bottom, title="EA Snapshot")
+        ea_card.grid(row=0, column=1, sticky="nsew")
+        self.account_label = tk.Label(
+            ea_card.body, text="Conta MT5: desconectada", bg=Theme.CARD,
+            fg=Theme.WARNING, font=(Theme.FONT_FAMILY, 9, "bold"), anchor="w",
+        )
+        self.account_label.pack(fill="x", padx=8, pady=(8, 2))
+        self.status_frame = tk.Frame(ea_card.body, bg=Theme.CARD)
+        self.status_frame.pack(fill="x", padx=8, pady=(8, 0))
         self.service_labels: dict[str, tk.Label] = {}
-        services = [
-            ("mt5", "MetaTrader 5"),
-            ("backend", "Backend API"),
-            ("dashboard", "Dashboard Streamlit"),
-            ("litellm", "LiteLLM Proxy"),
-            ("robot", "Robo EA"),
-        ]
+        services = [("mt5", "MetaTrader 5"), ("robot", "Robo EA"),
+                    ("backend", "Backend API"), ("dashboard", "Dashboard Web"),
+                    ("litellm", "LiteLLM")]
         for key, name in services:
             row = tk.Frame(self.status_frame, bg=Theme.CARD)
-            row.pack(fill="x", pady=6)
+            row.pack(fill="x", pady=2)
             tk.Label(row, text=name, bg=Theme.CARD, fg=Theme.TEXT,
-                     font=(Theme.FONT_FAMILY, 10)).pack(side="left")
+                     font=(Theme.FONT_FAMILY, 9)).pack(side="left")
             lbl = tk.Label(row, text="OFFLINE", bg=Theme.CARD, fg=Theme.TEXT_MUTED,
-                           font=(Theme.FONT_FAMILY, 9, "bold"))
+                           font=(Theme.FONT_FAMILY, 8, "bold"))
             lbl.pack(side="right")
             self.service_labels[key] = lbl
-
-        # ETAPA 15.6/15.10: snapshot operacional do EA (system_status.json)
-        ea_card = Card(bottom, title="EA Snapshot (system_status.json)")
-        ea_card.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=(10, 0))
         self.ea_frame = tk.Frame(ea_card.body, bg=Theme.CARD)
-        self.ea_frame.pack(fill="both", expand=True, padx=8, pady=8)
+        self.ea_frame.pack(fill="x", padx=8, pady=8)
+        self.ops_frame = tk.Frame(ea_card.body, bg=Theme.CARD)
+        self.ops_frame.pack(fill="both", expand=True, padx=8, pady=(0, 8))
 
-        # ETAPA 16.5: seccao Backend API (16.4)
-        api_card = Card(bottom, title='backend API (16.4)')
-        api_card.grid(row=2, column=0, columnspan=2, sticky='nsew', pady=(10, 0))
-        self.api_frame = tk.Frame(api_card.body, bg=Theme.CARD)
-        self.api_frame.pack(fill='both', expand=True, padx=8, pady=8)
 
-        # Calendario economico + sync MT5 (novas camadas)
-        cal_card = Card(bottom, title="Calendario Economico + Sync MT5")
-        cal_card.grid(row=3, column=0, columnspan=2, sticky="nsew", pady=(10, 0))
-        self.cal_frame = tk.Frame(cal_card.body, bg=Theme.CARD)
-        self.cal_frame.pack(fill="both", expand=True, padx=8, pady=8)
-        self.cal_text = tk.Label(self.cal_frame, text="carregando...", bg=Theme.CARD,
-                                 fg=Theme.TEXT, font=(Theme.FONT_FAMILY, 9),
-                                 justify="left", anchor="w")
-        self.cal_text.pack(fill="x")
+    def _on_banner_resize(self, event: tk.Event) -> None:
+        """Redimensiona o banner cripto conforme a largura da janela."""
+        if self._banner_pil is None or self._banner_label is None:
+            return
+        w = int(event.width) - 48  # desconta padx=24 de cada lado
+        if w < 240 or w == self._banner_last_w:
+            return
+        self._banner_last_w = w
+        try:
+            from PIL import Image, ImageTk
+            ratio = w / self._banner_pil.width
+            h = max(1, min(int(self._banner_pil.height * ratio), 260))
+            img = self._banner_pil.resize((w, h), Image.LANCZOS)
+            self._banner_photo = ImageTk.PhotoImage(img)
+            self._banner_label.configure(image=self._banner_photo, height=h)
+        except Exception:
+            pass
 
     def refresh(self) -> None:
         """Atualiza o dashboard SEM travar a GUI.
@@ -180,7 +190,31 @@ class DashboardTab:
             data["sync"] = self._collect_sync()
         except Exception:
             data["sync"] = {}
+        try:
+            data["candles"] = self._collect_candles()
+        except Exception:
+            data["candles"] = []
         return data
+
+    def _collect_candles(self) -> list[dict[str, Any]]:
+        """Obtém uma janela curta para o gráfico do desk sem bloquear o Tk."""
+        mt5 = getattr(self.market, "_mt5", None)
+        if mt5 is None:
+            return []
+        rates = mt5.copy_rates_from_pos("XAUUSD", mt5.TIMEFRAME_M5, 0, 120)
+        if rates is None:
+            return []
+        return [
+            {
+                "symbol": "XAUUSD",
+                "time": datetime.fromtimestamp(int(row["time"])).strftime("%d/%m %H:%M"),
+                "open": float(row["open"]),
+                "high": float(row["high"]),
+                "low": float(row["low"]),
+                "close": float(row["close"]),
+            }
+            for row in rates[-120:]
+        ]
 
     def _collect_account(self) -> dict[str, Any] | None:
         info = self.robot.account_info()
@@ -261,66 +295,53 @@ class DashboardTab:
 
     def _apply(self, data: dict[str, Any] | None) -> None:
         if not data:
+            self.last_update.configure(text="Falha ao coletar dados reais")
+            self.on_status("Dashboard sem resposta das fontes de dados")
             return
         self._apply_account(data.get("account"))
         self._apply_services(data.get("services") or {})
         self._apply_system(data.get("system") or [])
-        self._apply_backend(data.get("backend") or [])
-        self._apply_calendar(data.get("calendar") or [])
-        self._apply_sync(data.get("sync") or {})
+        self._apply_ops(data)
+        candles = data.get("candles") or []
+        if candles:
+            self.chart.set_data(candles, "candles")
+            self.chart.set_indicator("bollinger", {"type": "bollinger", "period": 20})
         self.last_update.configure(text=f"Atualizado: {data.get('ts', '')}")
         self.on_status("Dashboard atualizado")
 
-    def _apply_calendar(self, lines: list[str]) -> None:
-        if not hasattr(self, "cal_text"):
-            return
-        txt = "\n".join(lines) if lines else "Sem eventos relevantes."
-        self.cal_text.configure(text=txt)
-
-    def _apply_sync(self, sync: dict[str, Any]) -> None:
-        if not hasattr(self, "cal_text"):
-            return
-        conectado = sync.get("conectado")
-        extra = f" | MT5: {'conectado' if conectado else 'offline'} | " \
-                f"pos: {sync.get('positions_count', 0)} | " \
-                f"hist: {sync.get('history_count', 0)}"
-        # anexa ao label do calendario sem quebrar a GUI
-        try:
-            atual = self.cal_text.cget("text")
-            self.cal_text.configure(text=atual + "\n🔄 Sync:" + extra)
-        except Exception:
-            pass
-
     def _apply_account(self, acct: dict[str, Any] | None) -> None:
         if not acct:
-            self.kpi_balance.set("--")
-            self.kpi_equity.set("--")
-            self.kpi_profit.set("--")
-            self.kpi_margin.set("--")
-            self.kpi_positions.set("--")
+            self.kpi_balance.set("MT5 offline")
+            self.kpi_equity.set("MT5 offline")
+            self.kpi_profit.set("MT5 offline")
+            self.kpi_margin.set("MT5 offline")
+            self.kpi_positions.set("MT5 offline")
+            self.kpi_winrate.set("Sem historico")
+            self.account_label.configure(text="Conta MT5: desconectada", fg=Theme.WARNING)
             return
-        self.kpi_balance.set(f"{acct.get('balance', 0):,.2f}")
-        self.kpi_equity.set(f"{acct.get('equity', 0):,.2f}")
-        profit = acct.get("profit", 0)
+        currency = str(acct.get("currency") or "").strip()
+        suffix = f" {currency}" if currency else ""
+        self.kpi_balance.set(f"{float(acct.get('balance') or 0):,.2f}{suffix}")
+        self.kpi_equity.set(f"{float(acct.get('equity') or 0):,.2f}{suffix}")
+        profit = float(acct.get("profit") or 0)
         self.kpi_profit.set(f"{profit:,.2f}",
                             Theme.SUCCESS if profit >= 0 else Theme.DANGER)
-        self.kpi_margin.set(f"{acct.get('margin_free', 0):,.2f}")
+        self.kpi_margin.set(f"{float(acct.get('margin_free') or 0):,.2f}{suffix}")
         positions = acct.get("_positions") or []
         self.kpi_positions.set(str(len(positions)))
         winrate = acct.get("_winrate")
         if winrate is None:
-            self.kpi_winrate.set("--")
+            self.kpi_winrate.set("Sem historico")
         else:
             self.kpi_winrate.set(f"{winrate:.1f}%",
                                  Theme.SUCCESS if winrate >= 50 else Theme.ACCENT)
-        equity = acct.get("equity", 0)
-        try:
-            self._equity_values.append(float(equity))
-            if len(self._equity_values) > 50:
-                self._equity_values = self._equity_values[-50:]
-            self.chart.update_data(list(self._equity_values))
-        except Exception:
-            pass
+        login = acct.get("login") or "nao informado"
+        server = acct.get("server") or "servidor nao informado"
+        owner = acct.get("name") or "titular nao informado"
+        self.account_label.configure(
+            text=f"Conta {login} | {owner} | {server}",
+            fg=Theme.SUCCESS if acct.get("terminal_connected", True) else Theme.WARNING,
+        )
 
     def _apply_services(self, svc: dict[str, Any]) -> None:
         if svc.get("mt5"):
@@ -351,19 +372,60 @@ class DashboardTab:
                      fg=color_map.get(color, Theme.TEXT),
                      font=(Theme.FONT_FAMILY, 9, "bold")).pack(side="right")
 
-    def _apply_backend(self, lines: list[tuple[str, str, str]]) -> None:
-        for w in self.api_frame.winfo_children():
+    def _apply_ops(self, data: dict[str, Any]) -> None:
+        for w in self.ops_frame.winfo_children():
             w.destroy()
-        color_map = {"": Theme.TEXT, "ok": Theme.SUCCESS,
-                     "warn": Theme.WARNING, "bad": Theme.DANGER}
-        for name, value, color in lines:
-            row = tk.Frame(self.api_frame, bg=Theme.CARD)
-            row.pack(fill="x", pady=2)
-            tk.Label(row, text=name, bg=Theme.CARD, fg=Theme.TEXT,
-                     font=(Theme.FONT_FAMILY, 10)).pack(side="left")
+        self._ops_section("Backend", data.get("backend") or [])
+        self._ops_section("Calendario", self._calendar_to_lines(data.get("calendar") or []))
+        self._ops_section("Sync MT5", self._sync_to_lines(data.get("sync") or {}))
+
+    def _ops_section(self, title: str, lines: list[tuple[str, str, str]]) -> None:
+        title_row = tk.Frame(self.ops_frame, bg=Theme.CARD)
+        title_row.pack(fill="x", pady=(4, 2))
+        tk.Label(title_row, text=title, bg=Theme.CARD, fg=Theme.ACCENT,
+                 font=(Theme.FONT_FAMILY, 10, "bold")).pack(side="left")
+        if not lines:
+            lines = [("Status", "SEM DADOS", "warn")]
+        color_map = {
+            "": Theme.TEXT_SOFT,
+            "ok": Theme.SUCCESS,
+            "warn": Theme.WARNING,
+            "bad": Theme.DANGER,
+        }
+        for name, value, color in lines[:8]:
+            row = tk.Frame(self.ops_frame, bg=Theme.CARD)
+            row.pack(fill="x", pady=1)
+            tk.Label(row, text=name, bg=Theme.CARD, fg=Theme.TEXT_SECONDARY,
+                     font=(Theme.FONT_FAMILY, 9)).pack(side="left")
             tk.Label(row, text=value, bg=Theme.CARD,
-                     fg=color_map.get(color, Theme.TEXT),
-                     font=(Theme.FONT_FAMILY, 9, "bold")).pack(side="right")
+                     fg=color_map.get(color, Theme.TEXT_SOFT),
+                     font=(Theme.FONT_FAMILY, 9, "bold"),
+                     wraplength=340, justify="right").pack(side="right")
+
+    @staticmethod
+    def _calendar_to_lines(items: list[str]) -> list[tuple[str, str, str]]:
+        out: list[tuple[str, str, str]] = []
+        for item in items[:5]:
+            text = (item or "").strip()
+            if not text:
+                continue
+            color = "warn" if any(k in text.upper() for k in ("ALTA", "HIGH", "IMPACT")) else ""
+            out.append(("Evento", text[:90], color))
+        return out
+
+    @staticmethod
+    def _sync_to_lines(sync: dict[str, Any]) -> list[tuple[str, str, str]]:
+        if not sync:
+            return []
+        account = sync.get("account") or {}
+        lines = [
+            ("Conectado", "SIM" if sync.get("conectado") else "NAO", "ok" if sync.get("conectado") else "bad"),
+            ("Login", str(account.get("login") or "--"), ""),
+            ("Servidor", str(account.get("server") or "--"), ""),
+            ("Posicoes", str(sync.get("positions_count", 0)), ""),
+            ("Historico 30d", str(sync.get("history_count", 0)), ""),
+        ]
+        return lines
 
     def _set_service(self, key: str, online: bool, text: str | None = None, color: str | None = None) -> None:
         lbl = self.service_labels.get(key)

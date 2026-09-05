@@ -48,23 +48,30 @@ def get_mt5_terminal_id():
 
 def get_mt5_files_path():
     """Resolve o caminho MT5 Files dinamicamente."""
-    terminal_id = get_mt5_terminal_id()
-    if terminal_id:
-        return Path.home() / "AppData" / "Roaming" / "MetaQuotes" / "Terminal" / terminal_id / "MQL5" / "Files"
+    configured = os.getenv("XAU_AI_PRO_MT5_FILES")
+    if configured:
+        return Path(configured).expanduser()
 
-    # Fallback
-    home_path = os.path.expanduser("~")
-    fallback = Path(home_path) / "AppData" / "Roaming" / "MetaQuotes" / "Terminal"
-    if fallback.exists():
-        for item in fallback.iterdir():
-            if item.is_dir() and (item / "MQL5" / "Files").exists():
-                return item / "MQL5" / "Files"
+    project_root = Path(__file__).resolve().parent.parent
+    if project_root.parent.name.lower() == "files" and project_root.parent.parent.name.lower() == "mql5":
+        return project_root.parent
 
+    appdata = Path(os.getenv("APPDATA", Path.home() / "AppData" / "Roaming"))
+    terminal_root = appdata / "MetaQuotes" / "Terminal"
+    candidates = list(terminal_root.glob("*/MQL5/Files")) if terminal_root.exists() else []
+    populated = [path for path in candidates if (path / "Data" / "dataset.csv").exists()]
+    if populated:
+        return max(populated, key=lambda path: (path / "Data" / "dataset.csv").stat().st_mtime)
+    if candidates:
+        return max(candidates, key=lambda path: path.stat().st_mtime)
     return None
 
 
 def get_mt5_data_path():
     """Retorna o caminho do diretorio Data no MT5 Files."""
+    configured = os.getenv("XAU_AI_PRO_MQL_DATA")
+    if configured:
+        return Path(configured).expanduser()
     files_path = get_mt5_files_path()
     if files_path:
         return files_path / "Data"

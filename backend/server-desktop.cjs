@@ -11,16 +11,21 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 require('dotenv').config({ path: path.join(__dirname, '..', '.env.local') });
 require('dotenv').config({ path: path.join(__dirname, '..', '.env.integrations') });
 const integrations = require('./integrations');
+const { resolveDataDir } = require('./paths.cjs');
 
 const app = express();
 const server = http.createServer(app);
-const io = socketIo(server, { cors: { origin: "*", methods: ["GET","POST"] } });
+const HOST = process.env.HOST || '127.0.0.1';
+const ALLOWED_ORIGINS = (process.env.XAU_AI_PRO_ALLOWED_ORIGINS || 'http://127.0.0.1,http://localhost')
+  .split(',').map(value => value.trim()).filter(Boolean);
+const corsOptions = { origin: ALLOWED_ORIGINS, methods: ['GET', 'POST'] };
+const io = socketIo(server, { cors: corsOptions });
 const PORT = process.env.PORT || 3001;
 // 17.4+: Sentry ativo se DSN configurado e SDK instalado (nunca quebra o boot)
 const sentryClient = integrations.initSentry();
 if (sentryClient) console.log('[integrations] Sentry ativo com DSN');
 
-const DATA_DIR = 'C:/Users/Micro/AppData/Roaming/MetaQuotes/Terminal/D0E8209F77C8CF37AD8BF550E51FF075/MQL5/Files/Data';
+const DATA_DIR = resolveDataDir();
 
 function eventsFile() {
   const p = path.join(DATA_DIR, 'forward_test_events.csv');
@@ -44,7 +49,7 @@ function readEvents(limit = 200) {
       return o;
     }).filter(e => e.Event);
     return { source: f, events: events.slice(-limit) };
-  } catch (e) { return { source: f, events: [] }; }
+  } catch { return { source: f, events: [] }; }
 }
 
 // ---------- 17.1: Estado IA a partir do prediction JSON (staleness) ----------
@@ -69,7 +74,7 @@ function aiState() {
     else if (j.signal === 'ERROR') estado = 'ERROR';
     else if (!j.timestamp && !j.timestamp_utc) estado = 'STALE';
     return { estado, signal: j.signal || null, confidence: j.confidence ?? null, age_sec: ageSecNum, timestamp: ts, file: f };
-  } catch (e) { return { estado: 'ERROR', motivo: 'json invalido', file: f }; }
+  } catch { return { estado: 'ERROR', motivo: 'json invalido', file: f }; }
 }
 
 // ---------- 17.3: ESTADO UNIFICADO (7 estados) ----------
@@ -127,7 +132,7 @@ function buildDomains(events) {
   };
 }
 
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
 
 app.get('/', (req, res) => res.json({ app: 'XAU_AI_PRO Backend', status: 'online', version: '1.2.0-RC1', etapa: '17.3' }));
@@ -202,8 +207,8 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => clearInterval(iv));
 });
 
-server.listen(PORT, () => {
-  console.log(`XAU_AI_PRO Backend ETAPA 17.3 rodando na porta ${PORT}`);
+server.listen(PORT, HOST, () => {
+  console.log(`XAU_AI_PRO Backend ETAPA 17.3 rodando em ${HOST}:${PORT}`);
   console.log(`Event stream: ${eventsFile()}`);
 });
 app.get('/api/reconcile', (req, res) => { const { reconcile } = require('./reconcile'); res.json(reconcile()); });

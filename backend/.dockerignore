@@ -1,0 +1,13 @@
+# Reduz o build context (evita enviar node_modules/.output via /mnt/c)
+node_modules
+.output
+.swc
+.vercel
+__pycache__
+.git
+.agents
+.claude
+.env
+.env.local
+*.log
+install-workflow.bat

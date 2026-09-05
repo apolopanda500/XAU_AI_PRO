@@ -161,6 +161,7 @@ class SlackNotifier:
         status = "APROVADO" if approved else "NÃO APROVADO"
         color = "#2eb872" if approved else "#e01e5a"
         text = f"{emoji} *AUTO-APPROVE: {status}*\n{details}" if details else f"{emoji} *AUTO-APPROVE: {status}*"
+        return self._send_raw(text, color)
 
 
     # ── Métodos internos ──
@@ -168,14 +169,6 @@ class SlackNotifier:
         """Envia mensagem com formatação básica. Retorna True se sucesso."""
         if not self._enabled or not self.is_configured:
             return False
-
-        # Debounce global
-        with _debounce_lock:
-            global _last_send
-            now = time.time()
-            if now - _last_send < _DEBOUNCE_SEC:
-                return False
-            _last_send = now
 
         if requests is None:
             return False
@@ -193,12 +186,17 @@ class SlackNotifier:
         }
 
         try:
-            resp = requests.post(
-                self._webhook_url,
-                json=payload,
-                timeout=8,
-            )
-            return resp.status_code == 200
+            # Só consome o debounce após uma tentativa real. Assim, um
+            # evento bloqueado pelo debounce não impede o evento seguinte,
+            # e uma falha de rede não suprime a próxima notificação.
+            with _debounce_lock:
+                global _last_send
+                now = time.time()
+                if now - _last_send < _DEBOUNCE_SEC:
+                    return False
+                _last_send = now
+            resp = requests.post(self._webhook_url, json=payload, timeout=8)
+            return 200 <= resp.status_code < 300
         except Exception:
             return False
 

@@ -1,0 +1,112 @@
+# ============================================================
+# docker-compose.yml — XAU AI PRO
+# Orquestra todos os servicos Docker do projeto
+#
+# Servicos:
+#   - backend         -> API Node.js/Nitro (porta 3000) [CI/Vercel, workflows]
+#   - backend-desktop -> Backend desktop real (porta 3001) [EA, dashboard,
+#                        socket.io, arquivos MQL5/Files/Data via bind mount]
+#   - litellm         -> Proxy IA LiteLLM  (porta 4000)
+#
+# Uso:
+#   docker compose up -d                                    # sobe tudo
+#   docker compose up -d backend-desktop                    # modo EA/dashboard
+#   docker compose up -d litellm
+#   docker compose logs -f
+#   docker compose down
+#
+# Docker Build Cloud (CI):
+#   docker buildx create --use --driver cloud rickjax123/apolopanda500
+#   docker buildx build --platform linux/amd64 --push ./backend
+# ============================================================
+
+name: xau_ai_pro
+
+services:
+  # ----------------------------------------------------------
+  # Backend API (Nitro/Vercel) — mesmo Dockerfile do GitHub Actions
+  # Usado por CI/CD e deploy Vercel. NAO expoe os endpoints desktop.
+  # ----------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: rickjax123/xau-ai-pro-backend:latest
+    container_name: xau_ai_pro_backend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - LITELLM_URL=http://litellm:4000
+    depends_on:
+      - litellm
+    networks:
+      - xau_ai_pro_net
+
+  # ----------------------------------------------------------
+  # Backend Desktop — EXPRESS + SOCKET.IO (server-desktop.cjs)
+  # ESTE e o backend consumido pelo EA e pelo dashboard desktop:
+  #   - Carrega .env / .env.local / .env.integrations
+  #   - Le arquivos de MQL5/Files/Data/ (prediction_*.json, forward_test_events.csv)
+  #   - Expoe: /api/health /api/system /api/ai /api/trading /api/events...
+  #   - Porta 3001 (mesma do XAU_AI_PRO.exe desktop)
+  #
+  # Bind mounts:
+  #   ./backend           -> codigo fonte (read-only)
+  #   ./Data              -> MQL5/Files/Data (prediction, events)
+  #   ./.env / ./.env.local / ./.env.integrations -> configs reais
+  # ----------------------------------------------------------
+  backend-desktop:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.desktop
+    container_name: xau_ai_pro_backend_desktop
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - LITELLM_URL=http://litellm:4000
+    volumes:
+      # Codigo fonte do backend (read-only)
+      - ./backend:/app:ro
+      # Arquivos de dados do MT5 (prediction_XAUUSD.json, forward_test_events.csv)
+      - ./Data:/app/MQL5/Files/Data:rw
+      # Configuracoes reais (NUNCA commitar .env.local)
+      - ./.env:/app/.env:ro
+      - ./.env.local:/app/.env.local:ro
+      - ./.env.integrations:/app/.env.integrations:ro
+    depends_on:
+      - litellm
+    networks:
+      - xau_ai_pro_net
+
+  # ----------------------------------------------------------
+  # LiteLLM Proxy — porta 4000 (config em ./litellm/)
+  # ----------------------------------------------------------
+  litellm:
+    image: ghcr.io/berriai/litellm:main-stable
+    container_name: xau_ai_pro_litellm
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./litellm/litellm_config.yaml:/app/config.yaml
+    environment:
+      # Chave do proxy (o dashboard usa api_key="anything"; defina aqui algo simples)
+      - LITELLM_MASTER_KEY=sk-xau-ai-pro-local
+      # Salt usada p/ hash de chaves virtuais (obrigatorio em versoes recentes)
+      - LITELLM_SALT_KEY=${LITELLM_SALT_KEY:?configure LITELLM_SALT_KEY}
+      # Redefine o caminho do config
+      - CONFIG_FILE_PATH=/app/config.yaml
+    command: ["--config", "/app/config.yaml", "--port", "4000", "--num_workers", "1"]
+    networks:
+      - xau_ai_pro_net
+
+networks:
+  xau_ai_pro_net:
+    name: xau_ai_pro_net
+    driver: bridge

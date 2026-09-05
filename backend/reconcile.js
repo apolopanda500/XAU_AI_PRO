@@ -2,7 +2,8 @@
 const fs = require('fs');
 const path = require('path');
 
-const DATA_DIR = 'C:/Users/Micro/AppData/Roaming/MetaQuotes/Terminal/D0E8209F77C8CF37AD8BF550E51FF075/MQL5/Files/Data';
+const { resolveDataDir } = require('./paths.cjs');
+const DATA_DIR = resolveDataDir();
 
 function readCsv(file, delim, utf16) {
   if (!fs.existsSync(file)) return [];
@@ -10,7 +11,7 @@ function readCsv(file, delim, utf16) {
     const raw = utf16 ? fs.readFileSync(file, 'utf16le').replace(/^\uFEFF/, '')
                       : fs.readFileSync(file, 'utf8');
     return raw.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-  } catch (e) { return []; }
+  } catch { return []; }
 }
 
 function reconcile() {

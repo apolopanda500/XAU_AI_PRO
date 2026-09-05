@@ -144,7 +144,7 @@ class XauAiProApp:
         root.protocol("WM_DELETE_WINDOW", self._on_close)
 
         # Barra de status inferior
-        self.status_var = tk.StringVar(value="Pronto. Faça login para continuar.")
+        self.status_var = tk.StringVar(value="Pronto.")
         self._build_status_bar()
 
         # Slack watcher: eventos do EA -> Slack em tempo real (thread daemon)
@@ -161,8 +161,7 @@ class XauAiProApp:
         # Aplica tema salvo
         self.apply_theme(self._theme)
 
-        # Inicia na tela de login (ou auto-login se "lembrar")
-        # Auto-login sempre garantido: garante admin e abre direto nas abas
+        # Login removido: garante admin e abre direto nas abas
         try:
             cs.ensure_default_user()
             cs.set_session("admin")
@@ -179,18 +178,11 @@ class XauAiProApp:
             set_current_user("admin", username="admin")
         except Exception:
             pass
-        self.show_login()
-        self.root.after(300, self._auto_login)
+        # Login removido: abre direto na interface principal.
+        self.show_main()
 
         # Processador de mensagens da fila (threads -> UI)
         root.after(120, self._drain_queue)
-
-    def _auto_login(self) -> None:
-        user = cs.get_session()
-        if user:
-            cs.set_session(user)
-            self.set_status(f"Sessão automática: {user}")
-            self.show_main()
 
     # ----------------------------------------------------------
     # TEMA
@@ -266,6 +258,17 @@ class XauAiProApp:
                     res = item[1]
                     self.figma_status.set("OK" if res.ok else "Falhou")
                     self._ilog(f"[Figma] {res.message}")
+                elif kind == "gitlab_test":
+                    res = item[1]
+                    self.gitlab_status.set("OK" if res.ok else "Falhou")
+                    self._ilog(f"[GitLab] {res.message}")
+                elif kind == "mcp_test":
+                    res = item[1]
+                    self.mcp_status.set("OK" if res.ok else "Falhou")
+                    self._ilog(f"[MCP] {res.message}")
+                    if res.data:
+                        for path in res.data.get("files", [])[:12]:
+                            self._ilog(f"  - {path}")
                 elif kind == "brave_search":
                     res = item[1]
                     self.brave_status.set("OK" if res.ok else "Falhou")
@@ -309,103 +312,11 @@ class XauAiProApp:
                 pass
 
 
-    # ----------------------------------------------------------
-    # TELA DE LOGIN
-    # ----------------------------------------------------------
-    def show_login(self) -> None:
-        self._destroy_body()
-
-        # Wallpaper animado no fundo
-        ui_cfg = cs.get_ui_config()
-        if ui_cfg.get("wallpaper_enabled", True):
-            self._wallpaper = wallpaper.create_wallpaper(self.root, self._theme_colors)
-            self._wallpaper.pack(fill="both", expand=True)
-            container = self._wallpaper
-        else:
-            self.login_frame = ttk.Frame(self.root)
-            self.login_frame.pack(fill="both", expand=True)
-            container = self.login_frame
-
-        wrap = ttk.Frame(container)
-        wrap.place(relx=0.5, rely=0.5, anchor="center")
-
-        card = tk.Frame(wrap, bg=self._theme_colors["bsel"], padx=30, pady=30,
-                        highlightbackground=self._theme_colors["accent"],
-                        highlightthickness=2)
-        card.place(relx=0.5, rely=0.5, anchor="center")
-
-        tk.Label(card, text="XAU AI PRO", font=("Segoe UI", 24, "bold"),
-                 bg=self._theme_colors["bsel"], fg=self._theme_colors["fg"]).grid(
-            row=0, column=0, columnspan=2, pady=(0, 4)
-        )
-        tk.Label(card, text="Plataforma de Trading Quantitativo + IA",
-                 bg=self._theme_colors["bsel"], fg=self._theme_colors["accent"],
-                 font=("Segoe UI", 10)).grid(row=1, column=0, columnspan=2, pady=(0, 18))
-
-        tk.Label(card, text="Usuario:", bg=self._theme_colors["bsel"],
-                 fg=self._theme_colors["fg"]).grid(row=2, column=0, sticky="e", pady=4)
-        self.login_user = tk.Entry(card, bg=self._theme_colors["bg"],
-                                   fg=self._theme_colors["fg"], insertbackground=self._theme_colors["fg"])
-        self.login_user.grid(row=2, column=1, pady=4, padx=6)
-        self.login_user.insert(0, "admin")
-
-        tk.Label(card, text="Senha:", bg=self._theme_colors["bsel"],
-                 fg=self._theme_colors["fg"]).grid(row=3, column=0, sticky="e", pady=4)
-        self.login_pass = tk.Entry(card, show="*", bg=self._theme_colors["bg"],
-                                   fg=self._theme_colors["fg"], insertbackground=self._theme_colors["fg"])
-        self.login_pass.grid(row=3, column=1, pady=4, padx=6)
-        self.login_pass.insert(0, "admin")
-
-        # Remember me checkbox
-        self.login_remember = tk.BooleanVar(value=cs.get_remember_me())
-        tk.Checkbutton(card, text="Lembrar sessao", variable=self.login_remember,
-                       bg=self._theme_colors["bsel"], fg=self._theme_colors["fg"],
-                       selectcolor=self._theme_colors["bg"]).grid(
-            row=5, column=0, columnspan=2, pady=4
-        )
-
-        btns = tk.Frame(card, bg=self._theme_colors["bsel"])
-        btns.grid(row=4, column=0, columnspan=2, pady=14)
-        tk.Button(btns, text="Entrar", command=self._do_login,
-                  bg=self._theme_colors["accent"], fg="white",
-                  activebackground=self._theme_colors["accent_hover"]).pack(side="left", padx=6)
-        tk.Button(btns, text="Cadastrar", command=self._do_register,
-                  bg=self._theme_colors["bsel"], fg=self._theme_colors["fg"]).pack(side="left", padx=6)
-
-        tk.Label(card,
-                  text="Padrao: admin / admin — use Cadastrar para criar novos usuarios",
-                  bg=self._theme_colors["bsel"], fg="#999", font=("Segoe UI", 8)).grid(
-            row=6, column=0, columnspan=2, pady=(8, 0)
-        )
-        self.login_pass.bind("<Return>", lambda e: self._do_login())
-
     def _destroy_body(self) -> None:
         for w in self.root.winfo_children():
             if w is not self.statusbar_widget:
                 w.destroy()
 
-    def _do_login(self) -> None:
-        u = self.login_user.get()
-        p = self.login_pass.get()
-        if cs.authenticate(u, p):
-            cs.set_session(u)
-            if hasattr(self, "login_remember") and self.login_remember.get():
-                cs.set_remember_me(True)
-            self.set_status(f"Sessão iniciada: {u}")
-            self.show_main()
-        else:
-            messagebox.showerror("Login", "Usuário ou senha inválidos.")
-
-    def _do_register(self) -> None:
-        u = self.login_user.get()
-        p = self.login_pass.get()
-        if not u or not p:
-            messagebox.showwarning("Cadastro", "Informe usuário e senha.")
-            return
-        if cs.create_user(u, p):
-            messagebox.showinfo("Cadastro", "Usuário criado com sucesso! Faça login.")
-        else:
-            messagebox.showwarning("Cadastro", "Usuário já existe.")
     # ----------------------------------------------------------
     # TELA PRINCIPAL (ABAS)
     # ----------------------------------------------------------
@@ -1480,6 +1391,25 @@ class XauAiProApp:
             row=1, column=1, sticky="w", padx=6
         )
 
+        gl = ttk.LabelFrame(tab, text="GitLab")
+        gl.pack(fill="x", padx=10, pady=8)
+        ttk.Label(gl, text="Base URL:").grid(row=0, column=0, sticky="e", padx=4, pady=3)
+        self.gitlab_base = tk.StringVar(value=cfg.get("gitlab_base_url", "https://gitlab.com"))
+        ttk.Entry(gl, textvariable=self.gitlab_base, width=50).grid(row=0, column=1, padx=6, pady=3)
+        ttk.Label(gl, text="Projeto (grupo/projeto):").grid(row=1, column=0, sticky="e", padx=4, pady=3)
+        self.gitlab_project = tk.StringVar(value=cfg.get("gitlab_project_path", ""))
+        ttk.Entry(gl, textvariable=self.gitlab_project, width=50).grid(row=1, column=1, padx=6, pady=3)
+        ttk.Label(gl, text="Token:").grid(row=2, column=0, sticky="e", padx=4, pady=3)
+        self.gitlab_token = tk.StringVar(value=cfg.get("gitlab_token", ""))
+        ttk.Entry(gl, textvariable=self.gitlab_token, width=60, show="*").grid(row=2, column=1, padx=6, pady=3)
+        ttk.Button(gl, text="Testar / Validar projeto", command=self._test_gitlab).grid(
+            row=3, column=0, padx=4, pady=6
+        )
+        self.gitlab_status = tk.StringVar(value="Nao testado")
+        ttk.Label(gl, textvariable=self.gitlab_status, foreground="#888").grid(
+            row=3, column=1, sticky="w", padx=6
+        )
+
         fg = ttk.LabelFrame(tab, text="Figma")
         fg.pack(fill="x", padx=10, pady=8)
         ttk.Label(fg, text="Token:").grid(row=0, column=0, sticky="e", padx=4, pady=3)
@@ -1488,11 +1418,30 @@ class XauAiProApp:
         ttk.Label(fg, text="Team ID:").grid(row=1, column=0, sticky="e", padx=4, pady=3)
         self.figma_team = tk.StringVar(value=cfg.get("figma_team_id", ""))
         ttk.Entry(fg, textvariable=self.figma_team, width=40).grid(row=1, column=1, sticky="w", padx=6, pady=3)
+        ttk.Label(fg, text="File Key:").grid(row=2, column=0, sticky="e", padx=4, pady=3)
+        self.figma_file_key = tk.StringVar(value=cfg.get("figma_file_key", ""))
+        ttk.Entry(fg, textvariable=self.figma_file_key, width=40).grid(row=2, column=1, sticky="w", padx=6, pady=3)
         ttk.Button(fg, text="Testar / Listar projetos", command=self._test_figma).grid(
-            row=2, column=0, padx=4, pady=6
+            row=3, column=0, padx=4, pady=6
         )
         self.figma_status = tk.StringVar(value="Nao testado")
         ttk.Label(fg, textvariable=self.figma_status, foreground="#888").grid(
+            row=3, column=1, sticky="w", padx=6
+        )
+
+        mc = ttk.LabelFrame(tab, text="MCP / Plugins locais")
+        mc.pack(fill="x", padx=10, pady=8)
+        ttk.Label(mc, text="Endpoint HTTP:").grid(row=0, column=0, sticky="e", padx=4, pady=3)
+        self.mcp_endpoint = tk.StringVar(value=cfg.get("mcp_endpoint", ""))
+        ttk.Entry(mc, textvariable=self.mcp_endpoint, width=60).grid(row=0, column=1, padx=6, pady=3)
+        ttk.Label(mc, text="Pasta plugins/MCP:").grid(row=1, column=0, sticky="e", padx=4, pady=3)
+        self.mcp_plugins_dir = tk.StringVar(value=cfg.get("mcp_plugins_dir", "mcp"))
+        ttk.Entry(mc, textvariable=self.mcp_plugins_dir, width=40).grid(row=1, column=1, sticky="w", padx=6, pady=3)
+        ttk.Button(mc, text="Inspecionar MCP", command=self._test_mcp).grid(
+            row=2, column=0, padx=4, pady=6
+        )
+        self.mcp_status = tk.StringVar(value="Nao testado")
+        ttk.Label(mc, textvariable=self.mcp_status, foreground="#888").grid(
             row=2, column=1, sticky="w", padx=6
         )
 
@@ -1515,8 +1464,8 @@ class XauAiProApp:
         ttk.Label(sl, text="Webhook URL:").grid(row=0, column=0, sticky="e", padx=4, pady=3)
         self.slack_webhook = tk.StringVar(value=cfg.get("slack_webhook_url", ""))
         ttk.Entry(sl, textvariable=self.slack_webhook, width=60).grid(row=0, column=1, padx=6, pady=3)
-        ttk.Label(sl, text="(https://hooks.slack.com/services/...)").grid(
-            row=0, column=2, sticky="w", padx=2, foreground="#888"
+        ttk.Label(sl, text="(https://hooks.slack.com/services/...)", foreground="#888").grid(
+            row=0, column=2, sticky="w", padx=2
         )
         self.slack_enabled = tk.BooleanVar(value=cfg.get("slack_enabled", True))
         ttk.Checkbutton(sl, text="Ativar", variable=self.slack_enabled).grid(
@@ -1555,13 +1504,19 @@ class XauAiProApp:
     def _save_integration_tokens(self) -> None:
         cs.save_api_config({
             "github_token": self.gh_token.get(),
+            "gitlab_base_url": self.gitlab_base.get(),
+            "gitlab_project_path": self.gitlab_project.get(),
+            "gitlab_token": self.gitlab_token.get(),
             "figma_token": self.figma_token.get(),
             "figma_team_id": self.figma_team.get(),
+            "figma_file_key": self.figma_file_key.get(),
             "brave_api_key": self.brave_key.get(),
             "slack_webhook_url": self.slack_webhook.get(),
             "slack_enabled": self.slack_enabled.get(),
             "slack_notify_trades": self.slack_notify_trades.get(),
             "slack_notify_errors": self.slack_notify_errors.get(),
+            "mcp_endpoint": self.mcp_endpoint.get(),
+            "mcp_plugins_dir": self.mcp_plugins_dir.get(),
         })
         self._ilog("[OK] Tokens salvos.")
 
@@ -1583,6 +1538,15 @@ class XauAiProApp:
         res = client.test()
         self.msg_queue.put(("github_test", res))
 
+    def _test_gitlab(self) -> None:
+        self.gitlab_status.set("testando...")
+        threading.Thread(target=self._gitlab_thread, daemon=True).start()
+
+    def _gitlab_thread(self) -> None:
+        client = integrations.GitLabClient(self.gitlab_base.get(), self.gitlab_token.get())
+        res = client.project(self.gitlab_project.get())
+        self.msg_queue.put(("gitlab_test", res))
+
     def _test_figma(self) -> None:
         self.figma_status.set("testando...")
         threading.Thread(target=self._figma_thread, daemon=True).start()
@@ -1591,6 +1555,15 @@ class XauAiProApp:
         client = integrations.FigmaClient(self.figma_token.get())
         res = client.list_projects(self.figma_team.get()) if self.figma_team.get() else client.test()
         self.msg_queue.put(("figma_test", res))
+
+    def _test_mcp(self) -> None:
+        self.mcp_status.set("testando...")
+        threading.Thread(target=self._mcp_thread, daemon=True).start()
+
+    def _mcp_thread(self) -> None:
+        client = integrations.MCPClient(self.mcp_endpoint.get(), self.mcp_plugins_dir.get())
+        res = client.test()
+        self.msg_queue.put(("mcp_test", res))
 
     def _search_brave(self) -> None:
         query = self.brave_query.get().strip()

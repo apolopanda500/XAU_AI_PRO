@@ -3,9 +3,9 @@ Aba de controle do Robo MT5.
 """
 from __future__ import annotations
 
-import json
 import threading
 import tkinter as tk
+from tkinter import messagebox
 from typing import Callable
 
 from app.components.cards import Card, PrimaryButton, SecondaryButton, DangerButton, AccentButton
@@ -28,10 +28,15 @@ class RobotTab:
         self._build()
 
     def _build(self) -> None:
+        from app.components.banner import TabBanner
+        TabBanner(self.frame, "robot")
         header = tk.Frame(self.frame, bg=Theme.BG)
         header.pack(fill="x", padx=24, pady=(20, 10))
         tk.Label(header, text="Controle do Robo MT5", bg=Theme.BG, fg=Theme.TEXT,
                  font=(Theme.FONT_FAMILY, 20, "bold")).pack(side="left")
+        self.header_state = tk.Label(header, text="EA: aguardando", bg=Theme.BG, fg=Theme.WARNING,
+                                     font=(Theme.FONT_FAMILY, 10, "bold"))
+        self.header_state.pack(side="right")
 
         self.status_card = Card(self.frame, title="Status do Robo")
         self.status_card.pack(fill="x", padx=24, pady=10)
@@ -39,6 +44,18 @@ class RobotTab:
                                     fg=Theme.TEXT_MUTED, font=(Theme.FONT_FAMILY, 11),
                                     anchor="w", justify="left")
         self.status_text.pack(fill="x", padx=8, pady=8)
+        self.health_row = tk.Frame(self.status_card.body, bg=Theme.CARD)
+        self.health_row.pack(fill="x", padx=8, pady=(0, 8))
+        self.health_labels = {}
+        for key in ("Terminal", "EA", "Magic", "Predicoes"):
+            box = tk.Frame(self.health_row, bg=Theme.CARD)
+            box.pack(side="left", expand=True, fill="both", padx=6)
+            tk.Label(box, text=key, bg=Theme.CARD, fg=Theme.TEXT_SECONDARY,
+                     font=(Theme.FONT_FAMILY, 9)).pack(anchor="w")
+            lbl = tk.Label(box, text="--", bg=Theme.CARD, fg=Theme.TEXT,
+                           font=(Theme.FONT_FAMILY, 16, "bold"))
+            lbl.pack(anchor="w", pady=(4, 0))
+            self.health_labels[key] = lbl
         btn_row = tk.Frame(self.status_card.body, bg=Theme.CARD)
         btn_row.pack(fill="x", padx=8, pady=8)
         PrimaryButton(btn_row, text="Conectar MT5", command=self.connect, width=16).pack(side="left", padx=4)
@@ -84,22 +101,7 @@ class RobotTab:
         SecondaryButton(ai_row, text="Sincronizar predicoes", command=self.sync_predictions, width=20).pack(side="left", padx=4)
         self.ai_status = tk.Label(ai_row, text="Parado", bg=Theme.CARD, fg=Theme.TEXT_SECONDARY,
                                   font=(Theme.FONT_FAMILY, 10))
-        self.ai_status.pack(side="left", padx=16)
-
-        # MCP / Habilidades
-        mcp_card = Card(self.frame, title="Ferramentas MCP / Habilidades")
-        mcp_card.pack(fill="x", padx=24, pady=10)
-        mcp_row = tk.Frame(mcp_card.body, bg=Theme.CARD)
-        mcp_row.pack(fill="x", padx=8, pady=8)
-        SecondaryButton(mcp_row, text="Status MCP", command=self.mcp_status, width=14).pack(side="left", padx=4)
-        SecondaryButton(mcp_row, text="Testar TradingView", command=self.mcp_test_tv, width=18).pack(side="left", padx=4)
-        SecondaryButton(mcp_row, text="Testar SQLite", command=self.mcp_test_sql, width=16).pack(side="left", padx=4)
-        SecondaryButton(mcp_row, text="Testar MT5 Gateway", command=self.mcp_test_gw, width=18).pack(side="left", padx=4)
-        self.mcp_label = tk.Label(mcp_card.body, text="MCP: ferramentas reais integradas ao robo (TradingView, SQLite, Gateway, Alpha Vantage, Alpaca, Sequential Thinking)",
-                                  bg=Theme.CARD, fg=Theme.TEXT_MUTED, font=(Theme.FONT_FAMILY, 9),
-                                  anchor="w", justify="left", wraplength=800)
-        self.mcp_label.pack(fill="x", padx=8, pady=(0, 8))
-
+        self.ai_status.pack(side="left", padx=12)
 
     def connect(self) -> None:
         cfg_path = get_config().get("mt5", "terminal_path", default="")
@@ -117,6 +119,11 @@ class RobotTab:
     def check_ea(self) -> None:
         if not self.robot.connected:
             self.status_text.configure(text="Desconectado", fg=Theme.TEXT_MUTED)
+            self.header_state.configure(text="EA: offline", fg=Theme.DANGER)
+            self.health_labels["Terminal"].configure(text="OFF", fg=Theme.DANGER)
+            self.health_labels["EA"].configure(text="OFF", fg=Theme.DANGER)
+            self.health_labels["Magic"].configure(text="0", fg=Theme.TEXT_SECONDARY)
+            self.health_labels["Predicoes"].configure(text="N/D", fg=Theme.TEXT_SECONDARY)
             return
         ea = self.robot.is_ea_active()
         lines = [
@@ -125,8 +132,27 @@ class RobotTab:
             f"Predicoes recentes: {'sim' if ea.get('predictions_recent') else 'nao'}",
             f"Motivo: {ea.get('reason')}",
         ]
+        active = bool(ea.get("active"))
+        self.header_state.configure(text="EA: ativo" if active else "EA: atencao",
+                                    fg=Theme.SUCCESS if active else Theme.WARNING)
+        self.health_labels["Terminal"].configure(
+            text="ON" if ea.get("connected") else "OFF",
+            fg=Theme.SUCCESS if ea.get("connected") else Theme.DANGER,
+        )
+        self.health_labels["EA"].configure(
+            text="ATIVO" if active else "PARADO",
+            fg=Theme.SUCCESS if active else Theme.WARNING,
+        )
+        self.health_labels["Magic"].configure(
+            text=str(ea.get("positions_with_magic", 0)),
+            fg=Theme.PRIMARY,
+        )
+        self.health_labels["Predicoes"].configure(
+            text="RECENTES" if ea.get("predictions_recent") else "STALE",
+            fg=Theme.SUCCESS if ea.get("predictions_recent") else Theme.WARNING,
+        )
         self.status_text.configure(text="\n".join(lines),
-                                   fg=Theme.SUCCESS if ea.get("active") else Theme.WARNING)
+                                   fg=Theme.SUCCESS if active else Theme.WARNING)
 
     def buy(self) -> None:
         self._send("BUY")
@@ -142,6 +168,17 @@ class RobotTab:
             tp = float(self.entry_tp.get())
         except ValueError:
             self.on_status("Valores invalidos")
+            return
+        if not self.robot.connected:
+            self.on_status("Ordem nao enviada: MT5 desconectado")
+            return
+        account = self.robot.account_info()
+        if not account or not account.get("trade_allowed"):
+            self.on_status("Ordem nao enviada: negociacao nao autorizada no terminal")
+            return
+        action = "COMPRA" if side == "BUY" else "VENDA"
+        details = f"{action} REAL\nAtivo: {symbol}\nVolume: {volume}\nSL: {sl or 'nao definido'}\nTP: {tp or 'nao definido'}"
+        if not messagebox.askyesno("Confirmar ordem real", details):
             return
         res = self.robot.send_order(symbol, side, volume, sl=sl, tp=tp)
         if res.get("ok"):
@@ -165,60 +202,3 @@ class RobotTab:
             self.on_status(f"{res.get('copied', 0)} predicoes sincronizadas")
         else:
             self.on_status(f"Erro sync: {res.get('error')}")
-
-    # ------------------------------------------------------------------
-    # Ferramentas MCP (acao real)
-    # ------------------------------------------------------------------
-    def mcp_status(self) -> None:
-        from app.mcp_tools import tool_status
-        lines = []
-        for s in tool_status():
-            estado = "ATIVO" if s["enabled"] else "off"
-            lines.append(f"{'🟢' if s['enabled'] else '⚪'} {s['name']} [{estado}]")
-        self.mcp_label.configure(
-            text="\n".join(lines) or "Nenhum MCP configurado",
-            fg=Theme.TEXT,
-        )
-        self.on_status(f"MCP: {sum(1 for s in tool_status() if s['enabled'])} ferramentas ativas")
-
-    def mcp_test_tv(self) -> None:
-        from app.mcp_tools import call_tool
-        self.on_status("Consultando TradingView (top por volume)...")
-        def run():
-            r = call_tool("tradingview", "scan", market="crypto")
-            if r.get("ok"):
-                items = r["result"].get("items", [])[:5]
-                txt = "TradingView top:\n" + "\n".join(
-                    f"  {it['symbol']}: {it['price']} ({it['change_pct']}%)" for it in items)
-                self.mcp_label.after(0, lambda: self.mcp_label.configure(text=txt, fg=Theme.SUCCESS))
-                self.on_status(f"TradingView: {len(items)} ativos")
-            else:
-                self.mcp_label.after(0, lambda: self.mcp_label.configure(text="✘ " + r["error"], fg=Theme.DANGER))
-        threading.Thread(target=run, daemon=True).start()
-
-    def mcp_test_sql(self) -> None:
-        from app.mcp_tools import call_tool
-        self.on_status("Consultando SQLite (tabelas)...")
-        def run():
-            r = call_tool("postgres_sqlite", "query",
-                          query="SELECT name FROM sqlite_master WHERE type='table' LIMIT 15")
-            if r.get("ok"):
-                rows = [str(x[0]) for x in r["result"].get("rows", [])]
-                txt = "SQLite tabelas: " + ", ".join(rows) if rows else "SQLite: sem tabelas"
-                self.mcp_label.after(0, lambda: self.mcp_label.configure(text=txt, fg=Theme.SUCCESS))
-            else:
-                self.mcp_label.after(0, lambda: self.mcp_label.configure(text="✘ " + r["error"], fg=Theme.DANGER))
-        threading.Thread(target=run, daemon=True).start()
-
-    def mcp_test_gw(self) -> None:
-        from app.mcp_tools import call_tool
-        self.on_status("Testando MT5 Gateway...")
-        def run():
-            r = call_tool("mt5_gateway", "health")
-            if r.get("ok"):
-                txt = "MT5 Gateway: " + json.dumps(r["result"], ensure_ascii=False)[:150]
-                self.mcp_label.after(0, lambda: self.mcp_label.configure(text=txt, fg=Theme.SUCCESS))
-            else:
-                self.mcp_label.after(0, lambda: self.mcp_label.configure(text="✘ " + r["error"], fg=Theme.DANGER))
-        threading.Thread(target=run, daemon=True).start()
-

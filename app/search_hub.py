@@ -8,10 +8,25 @@ calendario economico. Usada pela GUI (aba de busca) e pelo dashboard web.
 from __future__ import annotations
 
 import time
+import sqlite3
 from pathlib import Path
 from typing import Any
 
 _APP_ROOT = Path(__file__).resolve().parent.parent
+_INDEX_DB = _APP_ROOT / "database" / "global_search.db"
+
+
+def _index_rows(rows: list[dict[str, Any]]) -> None:
+    """Atualiza o índice local sem tornar a pesquisa dependente dele."""
+    try:
+        _INDEX_DB.parent.mkdir(parents=True, exist_ok=True)
+        with sqlite3.connect(str(_INDEX_DB)) as db:
+            db.execute("CREATE TABLE IF NOT EXISTS search_index (kind TEXT, name TEXT, description TEXT, source TEXT, updated REAL)")
+            db.execute("DELETE FROM search_index")
+            db.executemany("INSERT INTO search_index VALUES (?,?,?,?,?)", [(r.get("tipo", ""), r.get("nome", ""), r.get("descricao", ""), r.get("origem", ""), time.time()) for r in rows])
+            db.commit()
+    except Exception:
+        pass
 
 
 def search_mcp(query: str) -> list[dict[str, Any]]:
@@ -25,9 +40,11 @@ def search_mcp(query: str) -> list[dict[str, Any]]:
             if not query or query in hay:
                 out.append({"tipo": "mcp", "nome": item.get("name", item.get("id", "")),
                             "descricao": item.get("description", ""), "origem": "catalogo"})
-        for sid in instalados():
-            out.append({"tipo": "mcp", "nome": sid, "descricao": "instalado",
-                        "origem": "instalados"})
+        # MCPs instalados só aparecem quando a busca é específica; não
+        # poluem uma busca de mercado com o catálogo inteiro.
+        if query in {"mcp", "server", "servidor", "instalado", "instalados"}:
+            for sid in instalados():
+                out.append({"tipo": "mcp", "nome": sid, "descricao": "instalado", "origem": "instalados"})
     except Exception:
         pass
     try:
@@ -135,7 +152,9 @@ def search_all(query: str, max_per: int = 10) -> dict[str, Any]:
         "calendario": search_calendar(q)[:max_per],
         "ts": time.time(),
     }
-    result["total"] = sum(len(v) for k, v in result.items() if isinstance(v, list))
+    all_rows = [item for key, values in result.items() if key in ("mcp", "agentes", "chats", "ativos", "calendario") for item in values]
+    _index_rows(all_rows)
+    result["total"] = len(all_rows)
     return result
 
 

@@ -34,7 +34,7 @@ def ensure_paths() -> None:
     """Garante que as pastas necessárias existam."""
     for p in (
         get_data_dir(),
-        get_base_dir() / "MQL5" / "Files" / "Data",
+        get_mql_data_path(),
         get_base_dir() / "Python" / "models",
         get_base_dir() / "Reports",
         get_base_dir() / "Logs",
@@ -51,7 +51,27 @@ def get_db_path() -> Path:
 
 
 def get_mql_data_path() -> Path:
-    return get_base_dir() / "MQL5" / "Files" / "Data"
+    configured = os.getenv("XAU_AI_PRO_MQL_DATA")
+    if configured:
+        return Path(configured).expanduser()
+
+    base = get_base_dir()
+    if base.parent.name.lower() == "files" and base.parent.parent.name.lower() == "mql5":
+        return base.parent / "Data"
+
+    bundled = base / "MQL5" / "Files" / "Data"
+    if bundled.exists():
+        return bundled
+
+    appdata = Path(os.getenv("APPDATA", Path.home() / "AppData" / "Roaming"))
+    terminal_root = appdata / "MetaQuotes" / "Terminal"
+    candidates = list(terminal_root.glob("*/MQL5/Files/Data")) if terminal_root.exists() else []
+    populated = [path for path in candidates if (path / "dataset.csv").exists()]
+    if populated:
+        return max(populated, key=lambda path: (path / "dataset.csv").stat().st_mtime)
+    if candidates:
+        return max(candidates, key=lambda path: path.stat().st_mtime)
+    return bundled
 
 
 def get_python_dir() -> Path:

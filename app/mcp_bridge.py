@@ -53,16 +53,11 @@ def bridge_market_to_memory(symbol: str = "XAUUSD") -> dict[str, Any]:
     quote = None
 
     # Tenta TradingView, depois Alpha Vantage, depois MT5
-    for sid, action in (("tradingview", "quote"), ("alpha_vantage", "quote")):
+    for sid in ("tradingview", "alpha_vantage"):
         try:
-            r = _call(sid, action, symbol=symbol)
+            r = _call(sid, symbol=symbol)
             if r.get("ok"):
                 res = r.get("result") or {}
-                items = res.get("items") if isinstance(res, dict) else None
-                if items:
-                    quote = items[0]
-                    steps.append({"server": sid, "ok": True, "result": quote})
-                    break
                 if isinstance(res, dict) and res.get("price"):
                     quote = res
                     steps.append({"server": sid, "ok": True, "result": quote})

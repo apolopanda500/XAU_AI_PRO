@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-launcher.py ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Entry point do EXE do XAU_AI_PRO.
+launcher.py  Entry point do EXE do XAU_AI_PRO.
 
 Responsavel por:
   * Resolver a raiz do projeto em qualquer cenario de execucao
     (EXE empacotado, instalacao, fonte, ambiente XAU_AI_PRO_ROOT).
   * Abrir por padrao a INTERFACE NATIVA (Tkinter, app/core.py) quando
-    XAU_AI_PRO_USE_GUI=1 (default) ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â o dashboard web vira comando explicito.
+    XAU_AI_PRO_USE_GUI=1 (default)  o dashboard web vira comando explicito.
   * Comando 'dashboard': sobe o Streamlit com flags que corrigem
     - server.port ignorado em developmentMode (PyInstaller onefile);
     - botao "Deploy" (client.toolbarMode=viewer);
@@ -24,12 +24,21 @@ import threading
 import time
 import urllib.request
 import webbrowser
+import ctypes
 from pathlib import Path
+
+# Forca UTF-8 no stdout/stderr para evitar UnicodeEncodeError em consoles
+# com encoding cp1252 (padrao no Windows).
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
 
 VERSION = "1.2.0"
 APP_NAME = "XAU_AI_PRO"
 
-# Portas padrÃƒÆ’Ã‚Â£o do dashboard web (Streamlit)
+# Portas padrao do dashboard web (Streamlit)
 DEFAULT_PORT = 8501
 FALLBACK_PORT = 8502
 
@@ -57,11 +66,19 @@ def _resolve_project_root() -> Path:
     if env_root:
         candidates.append(Path(env_root))
 
-    # sys.executable: python.exe (fonte) ou XAU_AI_PRO.exe (empacotado)
+        # sys.executable: python.exe (fonte) ou XAU_AI_PRO.exe (empacotado)
     exe_dir = Path(sys.executable).resolve().parent
     candidates.append(exe_dir)
     candidates.append(exe_dir.parent)
     candidates.append(Path.cwd())
+    # IMPORTANTE: quando rodado de Python/ via source (venv), o cwd e` Python/
+    # e o root e` o diretorio pai. Sem isso o app/ nunca e encontrado.
+    candidates.append(Path.cwd().parent)
+    # No modo EXE onefile, o root e` o diretorio onde o executavel foi extraido
+    # (sys._MEIPASS). Adiciona como candidato de ultimo recurso.
+    mei = os.environ.get("_MEIPASS", "")
+    if mei:
+        candidates.append(Path(mei))
 
     seen = set()
     for cand in candidates:
@@ -125,7 +142,7 @@ def _run_streamlit_cli(root: Path, port: int) -> int:
     """Sobe o Streamlit com as flags corretivas (deploy/developmentMode/telemetria)."""
     app_path = root / "Python" / "dashboard" / "app.py"
     if not app_path.exists():
-        _log(f"[ERRO] dashboard/app.py nÃƒÆ’Ã‚Â£o encontrado: {app_path}")
+        _log(f"[ERRO] dashboard/app.py nao encontrado: {app_path}")
         return 2
 
     flags = [
@@ -152,11 +169,11 @@ def _run_dashboard(root: Path) -> int:
 
     # Servidor ja em execucao e saudavel -> apenas reutiliza
     if _port_healthy(DEFAULT_PORT):
-        _log(f"Painel {APP_NAME} jÃƒÆ’Ã‚Â¡ estÃƒÆ’Ã‚Â¡ em execuÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o em {url_8501}")
+        _log(f"Painel {APP_NAME} ja esta em execucao em {url_8501}")
         webbrowser.open(url_8501)
         return 0
     if _port_healthy(FALLBACK_PORT):
-        _log(f"Painel {APP_NAME} jÃƒÆ’Ã‚Â¡ estÃƒÆ’Ã‚Â¡ em execuÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o em {url_8502}")
+        _log(f"Painel {APP_NAME} ja esta em execucao em {url_8502}")
         webbrowser.open(url_8502)
         return 0
 
@@ -174,7 +191,13 @@ def _run_dashboard(root: Path) -> int:
 # ---------------------------------------------------------------------------
 
 def _run_gui(root: Path) -> int:
-    """Abre a interface nativa (Tkinter) do XAU_AI_PRO ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â app/core.py."""
+    """Abre a interface nativa (Tkinter) do XAU_AI_PRO - app/core.py."""
+    # Impede duas janelas quando o atalho é clicado novamente ou quando um
+    # processo antigo ainda está inicializando.
+    mutex = ctypes.windll.kernel32.CreateMutexW(None, False, "Global\\XAU_AI_PRO_GUI_SINGLE_INSTANCE")
+    if ctypes.windll.kernel32.GetLastError() == 183:
+        _log("GUI já está em execução; nova instância ignorada.")
+        return 0
     root_str = str(root)
     if root_str not in sys.path:
         sys.path.insert(0, root_str)
@@ -183,6 +206,9 @@ def _run_gui(root: Path) -> int:
         return app.core.main()
     except Exception as exc:  # noqa: BLE001
         _log(f"[ERRO] Falha ao abrir a interface nativa: {exc}")
+        # Preserve o traceback no log para diagnostico, sem esconder a causa.
+        import traceback
+        _log(traceback.format_exc())
         return 1
 
 
@@ -199,7 +225,7 @@ def _run_skills(root: Path) -> int:
         items = sorted(p.name for p in agents.iterdir())
         _log(f"Skills embutidos ({len(items)}): {', '.join(items) or 'vazio'}")
     else:
-        _log("[AVISO] DiretÃƒÆ’Ã‚Â³rio .agents nÃƒÆ’Ã‚Â£o encontrado no pacote streamlit.")
+        _log("[AVISO] Diretorio .agents nao encontrado no pacote streamlit.")
     return 0
 
 
@@ -235,15 +261,15 @@ def _run_cpu(root: Path, extra: list[str]) -> int:
 
 
 def _show_menu() -> int:
-    _log(f"{APP_NAME} v{VERSION} ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â comandos:")
-    _log("  (sem argumento)  abre a interface nativa (padrÃƒÆ’Ã‚Â£o)")
+    _log(f"{APP_NAME} v{VERSION} - comandos:")
+    _log("  (sem argumento)  abre a interface nativa (padrao)")
     _log("  gui|desktop|app  abre a interface nativa (Tkinter)")
     _log("  dashboard        abre o painel web (Streamlit)")
     _log("  skills           lista os skills embutidos do Streamlit")
     _log("  cpu [prioridade=x] [afinidade=y]  diagnostico e opcoes de CPU")
-    _log("  versao|version   mostra a versÃƒÆ’Ã‚Â£o")
+    _log("  versao|version   mostra a versao")
     _log("  menu|help        mostra esta ajuda")
-    _log("Dica: XAU_AI_PRO_USE_GUI=0 faz o padrÃƒÆ’Ã‚Â£o virar o dashboard.")
+    _log("Dica: XAU_AI_PRO_USE_GUI=0 faz o padrao virar o dashboard.")
     return 0
 
 
@@ -252,12 +278,18 @@ def _show_menu() -> int:
 # ---------------------------------------------------------------------------
 
 def _default_action(root: Path) -> int:
-    """AÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o padrÃƒÆ’Ã‚Â£o ao executar sem argumentos."""
+    """
+    Acao padrao ao executar sem argumentos.
+
+    Por padrao abre a INTERFACE NATIVA (Tkinter) exclusivamente.
+    O dashboard web (Streamlit) so e aberto via comando explicito 'dashboard'.
+    Variavel XAU_AI_PRO_USE_GUI=0 ainda força o dashboard para compatibilidade.
+    """
     use_gui = os.environ.get("XAU_AI_PRO_USE_GUI", "1").strip() == "1"
     if use_gui:
         _log("Abrindo interface nativa do XAU AI PRO (Tkinter)...")
         return _run_gui(root)
-    _log("XAU_AI_PRO_USE_GUI=0 ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â abrindo dashboard web...")
+    _log("XAU_AI_PRO_USE_GUI=0  abrindo dashboard web...")
     return _run_dashboard(root)
 
 
@@ -267,8 +299,8 @@ def main(argv: list[str] | None = None) -> int:
     if str(root) not in sys.path:
         sys.path.insert(0, str(root))
 
-    # Variaveis de reforÃƒÆ’Ã‚Â§o do Streamlit (config.toml tem precedÃƒÆ’Ã‚Âªncia mÃƒÆ’Ã‚Â¡xima;
-    # flags de CLI vÃƒÆ’Ã‚Âªm em segundo lugar; env serve para opÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Âµes sensÃƒÆ’Ã‚Â­veis).
+    # Variaveis de reforco do Streamlit (config.toml tem precedencia maxima;
+    # flags de CLI vem em segundo lugar; env serve para opcoes sensiveis).
     os.environ.setdefault("STREAMLIT_GLOBAL_DEVELOPMENT_MODE", "false")
     os.environ.setdefault("STREAMLIT_SERVER_ADDRESS", "127.0.0.1")
     os.environ.setdefault("STREAMLIT_SERVER_HEADLESS", "true")

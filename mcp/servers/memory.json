@@ -1,0 +1,10 @@
+{
+  "name": "Memory MCP",
+  "id": "memory",
+  "description": "Memoria persistente de conhecimento.",
+  "type": "stdio",
+  "default_endpoint": "npx -y @modelcontextprotocol/server-memory",
+  "needs_api_key": false,
+  "api_key_env": "",
+  "enabled": true
+}

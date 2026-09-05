@@ -45,7 +45,9 @@ jobs:
           grep -viE "^\s*MetaTrader5" requirements.txt > /tmp/req-ci.txt
           pip install -r /tmp/req-ci.txt
       - name: Validar sintaxe Python
-        run: python -m compileall -q MQL5/Experts/XAU_AI_PRO/Release/v1.2.0/Python backend app
+        run: python -m compileall -q Python app
+      - name: Executar testes Python
+        run: python -m pytest -q tests
       - name: Empacotar bundle
         id: package
         env:
@@ -57,7 +59,7 @@ jobs:
           SAFE_REF="${REF_NAME//\//-}"
           PN="XAU_AI_PRO-${SAFE_REF}-$(date +%Y%m%d%H%M%S)"
           echo "Empacotando como: $PN"
-          zip -r "dist/${PN}.zip" MQL5/Experts/XAU_AI_PRO/Release/v1.2.0 Python backend app requirements.txt > /dev/null
+          zip -r "dist/${PN}.zip" Python backend app mcp requirements.txt > /dev/null
           echo "name=${PN}" >> "$GITHUB_OUTPUT"
       - name: Upload artefato
         uses: actions/upload-artifact@v7.0.1

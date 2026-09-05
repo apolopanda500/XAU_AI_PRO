@@ -16,6 +16,7 @@ Endpoints:
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import subprocess
 import sys
@@ -28,12 +29,11 @@ from pydantic import BaseModel
 app = FastAPI(title="XAU AI PRO API", version="1.2.0")
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+from app.utils.paths import get_mql_data_path
 
-# F4 fix: o EA grava em MQL5\Files\Data do terminal (caminho canônico).
-TERMINAL_DATA = Path(
-    r"C:\Users\Micro\AppData\Roaming\MetaQuotes\Terminal\D0E8209F77C8CF37AD8BF550E51FF075\MQL5\Files\Data"
-)
-DATA_DIR = TERMINAL_DATA if TERMINAL_DATA.is_dir() else PROJECT_ROOT / "MQL5" / "Files" / "Data"
+DATA_DIR = get_mql_data_path()
 try:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 except Exception:
@@ -175,4 +175,8 @@ def predict():
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(
+        app,
+        host=os.getenv("XAU_AI_PRO_API_HOST", "127.0.0.1"),
+        port=int(os.getenv("XAU_AI_PRO_API_PORT", "8000")),
+    )

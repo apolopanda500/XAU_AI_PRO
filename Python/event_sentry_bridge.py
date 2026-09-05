@@ -10,6 +10,11 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+from app.utils.paths import get_mql_data_path
+
 # Integracao Sentry tolerante (nao quebra se nao configurado)
 try:
     import sentry_sdk
@@ -22,9 +27,7 @@ except Exception:
 
 
 def _events_file() -> Path | None:
-    base = Path.home() / "AppData" / "Roaming" / "MetaQuotes" / "Terminal" \
-           / "D0E8209F77C8CF37AD8BF550E51FF075" / "MQL5" / "Files" / "Data"
-    f = base / "forward_test_events.csv"
+    f = get_mql_data_path() / "forward_test_events.csv"
     return f if f.exists() else None
 
 

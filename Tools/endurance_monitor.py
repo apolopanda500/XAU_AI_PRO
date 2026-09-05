@@ -16,13 +16,18 @@ Saida: Logs/endurance_metrics.jsonl
 """
 import argparse
 import json
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-BASE = Path(r"C:\Users\Micro\Downloads\XAU_AI_PRO")
-MQL_FILES = Path(r"C:\Users\Micro\AppData\Roaming\MetaQuotes\Terminal"
-                 r"\D0E8209F77C8CF37AD8BF550E51FF075\MQL5\Files")
+BASE = Path(__file__).resolve().parents[1]
+if str(BASE) not in sys.path:
+    sys.path.insert(0, str(BASE))
+
+from app.utils.paths import get_mql_data_path
+
+DATA_DIR = get_mql_data_path()
 OUT = BASE / "Logs" / "endurance_metrics.jsonl"
 INTERVAL = 300  # 5 minutos
 
@@ -55,7 +60,7 @@ def collect(last_dataset_bytes):
     sample = {"ts_utc": now.isoformat()}
 
     # 1. Heartbeat do EA
-    ss = MQL_FILES / "Data" / "system_status.json"
+    ss = DATA_DIR / "system_status.json"
     if ss.exists():
         age = time.time() - ss.stat().st_mtime
         sample["status_age_sec"] = int(age)
@@ -65,7 +70,7 @@ def collect(last_dataset_bytes):
         sample["ea_heartbeat_ok"] = False
 
     # 2. Crescimento do dataset
-    ds = MQL_FILES / "Data" / "dataset.csv"
+    ds = DATA_DIR / "dataset.csv"
     if ds.exists():
         b = ds.stat().st_size
         sample["dataset_bytes"] = b
@@ -76,7 +81,7 @@ def collect(last_dataset_bytes):
 
     # 3. Predicoes frescas (< 600s)
     fresh = 0
-    pred_dir = MQL_FILES
+    pred_dir = DATA_DIR.parent
     if pred_dir.exists():
         for f in pred_dir.glob("prediction_*.json"):
             try:

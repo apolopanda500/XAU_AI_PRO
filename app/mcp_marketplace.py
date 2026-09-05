@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 """MCP Marketplace - pesquisa e instala MCP servers dentro do app.
 
-Catalogo embutido de MCPs conhecidos (OpenAI, GitHub, Brave, Filesystem,
-Fetch, Memory, Time, Puppeteer, Playwright, etc.) + registro local.
+Catalogo embutido de MCPs compativeis + registro local.
 Instalar = cria o json em mcp/servers e registra no registry.
 """
 from __future__ import annotations
@@ -16,36 +15,16 @@ _SERVERS_DIR = Path(__file__).resolve().parent.parent / "mcp" / "servers"
 
 # Catalogo embutido (instalacao offline, sem depender de API externa)
 CATALOGO: list[dict[str, Any]] = [
-    {"id": "openai", "name": "OpenAI MCP", "type": "stdio",
-     "endpoint": "npx -y @openai/mcp", "desc": "Executa modelos OpenAI via npx.", "chave": True},
     {"id": "github_mcp", "name": "GitHub MCP", "type": "stdio",
      "endpoint": "npx -y @modelcontextprotocol/server-github", "desc": "Repos, issues e PRs do GitHub.", "chave": True},
     {"id": "brave", "name": "Brave Search MCP", "type": "stdio",
      "endpoint": "npx -y @modelcontextprotocol/server-brave-search", "desc": "Pesquisa web com Brave Search.", "chave": True},
     {"id": "filesystem", "name": "Filesystem MCP", "type": "stdio",
-     "endpoint": "npx -y @modelcontextprotocol/server-filesystem", "desc": "Acesso a arquivos locais.", "chave": False},
-    {"id": "fetch", "name": "Fetch MCP", "type": "stdio",
-     "endpoint": "npx -y @modelcontextprotocol/server-fetch", "desc": "Baixa paginas web (scraping).", "chave": False},
+     "endpoint": "npx -y @modelcontextprotocol/server-filesystem .", "desc": "Acesso a arquivos locais.", "chave": False},
     {"id": "memory", "name": "Memory MCP", "type": "stdio",
      "endpoint": "npx -y @modelcontextprotocol/server-memory", "desc": "Memoria persistente de conhecimento.", "chave": False},
-    {"id": "time", "name": "Time MCP", "type": "stdio",
-     "endpoint": "npx -y @modelcontextprotocol/server-time", "desc": "Data/hora e fuso em varios formatos.", "chave": False},
-    {"id": "puppeteer", "name": "Puppeteer MCP", "type": "stdio",
-     "endpoint": "npx -y @modelcontextprotocol/server-puppeteer", "desc": "Automacao de navegador (browser).", "chave": False},
     {"id": "playwright", "name": "Playwright MCP", "type": "stdio",
      "endpoint": "npx -y @playwright/mcp@latest", "desc": "Automacao de navegador alternativa.", "chave": False},
-    {"id": "sqlite_db", "name": "SQLite MCP (tabela PCA)", "type": "stdio",
-     "endpoint": "npx -y @modelcontextprotocol/server-sqlite", "desc": "SQLite com esquema de trading.", "chave": False},
-    {"id": "databases", "name": "MCP Databases", "type": "stdio",
-     "endpoint": "npx -y @databases/mcp", "desc": "Postgres, MySQL, SQLite via uma lib.", "chave": True},
-    {"id": "mongodb", "name": "MongoDB MCP", "type": "stdio",
-     "endpoint": "npx -y @mongodb-ya/mcp", "desc": "Banco MongoDB.", "chave": True},
-    {"id": "redis", "name": "Redis MCP", "type": "stdio",
-     "endpoint": "npx -y @redis-io/mcp", "desc": "Cache/Filas Redis.", "chave": True},
-    {"id": "sentry_mcp", "name": "Sentry MCP", "type": "stdio",
-     "endpoint": "npx -y @sentry/mcp", "desc": "Erros e traces do Sentry.", "chave": True},
-    {"id": "clickhouse", "name": "ClickHouse MCP", "type": "stdio",
-     "endpoint": "npx -y @clickhouse/mcp", "desc": "Analise de dados ClickHouse.", "chave": True},
 ]
 
 

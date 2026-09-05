@@ -1,0 +1,13 @@
+{
+  "runs": [
+    {
+      "ok": false,
+      "returncode": 1,
+      "stdout": "[SENTRY] Inicializado: xau-ai-pro@1.3.2\n[SENTRY] Environment: production\n[SENTRY] Asset: XAUUSD\n==============================\n XAU_AI_PRO TRAINING ENGINE\n==============================\nErro critico no treinamento: Arquivo nÃ£o encontrado: C:\\Users\\Micro\\AppData\\Roaming\\MetaQuotes\\Terminal\\D0E8209F77C8CF37AD8BF550E51FF075\\MQL5\\Files\\XAU_AI_PRO\\MQL5\\Files\\Data\\dataset.csv\n",
+      "stderr": "\\Files\\XAU_AI_PRO\\Python\\entry\\entry_stats.json\nEstado de risco carregado: C:\\Users\\Micro\\AppData\\Roaming\\MetaQuotes\\Terminal\\D0E8209F77C8CF37AD8BF550E51FF075\\MQL5\\Files\\XAU_AI_PRO\\Python\\risk\\risk_state.json\nDecisÃµes carregadas: C:\\Users\\Micro\\AppData\\Roaming\\MetaQuotes\\Terminal\\D0E8209F77C8CF37AD8BF550E51FF075\\MQL5\\Files\\XAU_AI_PRO\\Python\\decision\\decisions.json\nCarregando dataset: C:\\Users\\Micro\\AppData\\Roaming\\MetaQuotes\\Terminal\\D0E8209F77C8CF37AD8BF550E51FF075\\MQL5\\Files\\XAU_AI_PRO\\MQL5\\Files\\Data\\dataset.csv\nTraceback (most recent call last):\n  File \"C:\\Users\\Micro\\AppData\\Roaming\\MetaQuotes\\Terminal\\D0E8209F77C8CF37AD8BF550E51FF075\\MQL5\\Files\\XAU_AI_PRO\\Python\\main.py\", line 89, in <module>\n    main()\n  File \"C:\\Users\\Micro\\AppData\\Roaming\\MetaQuotes\\Terminal\\D0E8209F77C8CF37AD8BF550E51FF075\\MQL5\\Files\\XAU_AI_PRO\\Python\\main.py\", line 69, in main\n    train.train()\n  File \"C:\\Users\\Micro\\AppData\\Roaming\\MetaQuotes\\Terminal\\D0E8209F77C8CF37AD8BF550E51FF075\\MQL5\\Files\\XAU_AI_PRO\\Python\\train.py\", line 30, in train\n    pipeline.load_dataset()\n  File \"C:\\Users\\Micro\\AppData\\Roaming\\MetaQuotes\\Terminal\\D0E8209F77C8CF37AD8BF550E51FF075\\MQL5\\Files\\XAU_AI_PRO\\Python\\pipeline.py\", line 706, in load_dataset\n    df = engine.load()\n         ^^^^^^^^^^^^^\n  File \"C:\\Users\\Micro\\AppData\\Roaming\\MetaQuotes\\Terminal\\D0E8209F77C8CF37AD8BF550E51FF075\\MQL5\\Files\\XAU_AI_PRO\\Python\\data\\data_engine.py\", line 14, in load\n    return self.engine.load()\n           ^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Micro\\AppData\\Roaming\\MetaQuotes\\Terminal\\D0E8209F77C8CF37AD8BF550E51FF075\\MQL5\\Files\\XAU_AI_PRO\\Python\\data\\data_engine_xau.py\", line 26, in load\n    raise FileNotFoundError(f\"Arquivo nÃ£o encontrado: {self.dataset}\")\nFileNotFoundError: Arquivo nÃ£o encontrado: C:\\Users\\Micro\\AppData\\Roaming\\MetaQuotes\\Terminal\\D0E8209F77C8CF37AD8BF550E51FF075\\MQL5\\Files\\XAU_AI_PRO\\MQL5\\Files\\Data\\dataset.csv\nSentry is attempting to send 4 pending events\nWaiting up to 2 seconds\nPress Ctrl-Break to quit\n",
+      "time": "2026-09-02T19:00:15.346326",
+      "score": 0.0
+    }
+  ],
+  "best_model": null
+}

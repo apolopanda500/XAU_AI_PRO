@@ -30,7 +30,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "futures": ["BTC=F", "ES=F", "NQ=F", "YM=F", "GC=F"],
         "mode": "spot",
         "provider": "auto",
-        "refresh_seconds": 3,
+        "refresh_seconds": 1,
         "alert_change_pct": 2.0,
     },
     "mt5": {
@@ -100,6 +100,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
     },
     "integrations": {
         "github": {"repo_url": "https://github.com/apolopanda500/XAU_AI_PRO.git", "token": ""},
+        "gitlab": {"base_url": "https://gitlab.com", "project_path": "", "token": ""},
+        "figma": {"token": "", "file_key": "", "team_id": ""},
         "sentry": {"dsn": ""},
         "slack": {"webhook": ""},
         "models": {"base_url": "https://xau-ai-pro.vercel.app/api/models", "api_key": ""},

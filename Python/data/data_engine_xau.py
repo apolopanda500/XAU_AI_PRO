@@ -9,12 +9,13 @@ class DataEngineXAU:
         if dataset_path is not None:
             self.dataset = Path(dataset_path).expanduser()
         else:
-            # Caminho padrão sincronizado com o terminal MT5
-            MT5_FILES_PATH = Path(r"C:\Users\Micro\AppData\Roaming\MetaQuotes\Terminal\D0E8209F77C8CF37AD8BF550E51FF075\MQL5\Files")
-            default_dataset = MT5_FILES_PATH / "Data" / "dataset.csv"
-            self.dataset = Path(
-                os.getenv("XAU_AI_PRO_DATASET", default_dataset)
-            ).expanduser()
+            try:
+                from mt5_bridge import get_mt5_data_path
+
+                default_dataset = get_mt5_data_path() / "dataset.csv"
+            except ImportError:
+                default_dataset = Path.cwd() / "MQL5" / "Files" / "Data" / "dataset.csv"
+            self.dataset = Path(os.getenv("XAU_AI_PRO_DATASET", default_dataset)).expanduser()
 
         self.df: pd.DataFrame | None = None
 
@@ -125,13 +126,6 @@ class DataEngineXAU:
         self.df = self.df[self.df["Open"].notna() & (self.df["Open"] > 0)]
 
         self.df.reset_index(drop=True, inplace=True)
-
-        print("DATASET CARREGADO")
-        print(self.df.head())
-
-        print()
-
-        print(self.df["Symbol"].value_counts())
 
         return self.df
 

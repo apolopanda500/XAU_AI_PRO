@@ -14,7 +14,7 @@ Estrategia de tamanho:
      (collect_data_files) e metadata de versao (copy_metadata).
   4) Excludes defensivos das libs pesadas nao usadas.
 
-console=True e OBRIGATORIO (comandos CLI imprimem no stdout).
+console=False evita uma janela de terminal ao abrir a interface nativa.
 """
 from PyInstaller.building.build_main import Analysis, PYZ, EXE
 from PyInstaller.utils.hooks import collect_data_files, copy_metadata, collect_submodules
@@ -35,11 +35,24 @@ _METADATA = copy_metadata('streamlit') + copy_metadata('altair') + copy_metadata
 _ROOT = SPECPATH
 _ICON = os.path.join(_ROOT, 'app', 'assets', 'icon.ico')
 
+# INTERFACE NATIVA (Tkinter): embute o diretorio inteiro app/ (core.py, tabs/,
+# banners, assets, etc.) para que o EXE funcione sem depender do disco.
+# IMPORTANTE: app/ nao e um pacote Python (sem __init__.py), entao usamos
+# Tree manualmente em vez de collect_data_files (que pula diretorios nao-pacote).
+from PyInstaller.building.datastruct import Tree as _Tree
+_raw_app = _Tree(os.path.join(_ROOT, 'app'), prefix='app')
+# PyInstaller 6.x Tree retorna tuplas (dest_abs, src, type); Analysis espera (dest_rel_dir, src)
+_APP_DATAS = []
+for dest_abs, src, _ in _raw_app:
+    rel = os.path.relpath(dest_abs, _ROOT).replace(os.sep, '/')
+    dest_dir = os.path.dirname(rel) or '.'
+    _APP_DATAS.append((src, dest_dir))
+
 a = Analysis(
     [os.path.join(_ROOT, 'Python', 'launcher.py')],
     pathex=[_ROOT, os.path.join(_ROOT, 'Python')],
     binaries=[],
-    datas=_STREAMLIT_DATAS + _METADATA,  # frontend estatico do streamlit + metadata de versao
+    datas=_STREAMLIT_DATAS + _METADATA + _APP_DATAS,  # streamlit + libs + app/ (GUI)
     hiddenimports=[
         # libs de runtime do CLI (numpy/pandas/sklearn/joblib/sentry_sdk)
         'numpy', 'pandas', 'sklearn', 'joblib', 'sentry_sdk',
@@ -88,7 +101,7 @@ exe = EXE(
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=True,
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,

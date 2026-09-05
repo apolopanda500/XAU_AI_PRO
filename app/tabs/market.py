@@ -31,6 +31,8 @@ class MarketTab:
         self._build()
 
     def _build(self) -> None:
+        from app.components.banner import TabBanner
+        TabBanner(self.frame, "market")
         header = tk.Frame(self.frame, bg=Theme.BG)
         header.pack(fill="x", padx=24, pady=(20, 10))
         tk.Label(header, text="Mercado", bg=Theme.BG, fg=Theme.TEXT,
@@ -45,6 +47,19 @@ class MarketTab:
         self.btn_all = SecondaryButton(header, text="Todos", command=lambda: self.set_mode("all"), width=10)
         self.btn_all.pack(side="left", padx=4)
         PrimaryButton(header, text="Atualizar", command=self.refresh, width=12).pack(side="right")
+
+        summary = Card(self.frame, title="Radar de Mercado")
+        summary.pack(fill="x", padx=24, pady=(0, 10))
+        self.market_stats = {}
+        for label in ("Ativos", "Altas", "Baixas", "Fonte"):
+            box = tk.Frame(summary.body, bg=Theme.CARD)
+            box.pack(side="left", expand=True, fill="both", padx=8, pady=8)
+            tk.Label(box, text=label, bg=Theme.CARD, fg=Theme.TEXT_SECONDARY,
+                     font=(Theme.FONT_FAMILY, 9)).pack(anchor="w")
+            val = tk.Label(box, text="--", bg=Theme.CARD, fg=Theme.TEXT,
+                           font=(Theme.FONT_FAMILY, 18, "bold"))
+            val.pack(anchor="w", pady=(4, 0))
+            self.market_stats[label] = val
 
         # Importar novos ativos
         imp = tk.Frame(self.frame, bg=Theme.BG)
@@ -110,14 +125,26 @@ class MarketTab:
     def _apply_quotes(self, rows: list[dict]) -> None:
         out_rows = []
         tags = []
+        up_count = 0
+        down_count = 0
+        sources = set()
         for q in rows:
             out_rows.append([
                 q["symbol"], q["price"], q["bid"], q["ask"],
                 q["change"], f"{q['change_pct']:+.2f}%", q["spread"],
                 q["source"], q["time"],
             ])
-            tags.append("up" if q["change_pct"] >= 0 else "down")
+            is_up = q["change_pct"] >= 0
+            tags.append("up" if is_up else "down")
+            up_count += 1 if is_up else 0
+            down_count += 0 if is_up else 1
+            sources.add(str(q.get("source") or "--"))
         self.table.tree.set_rows(out_rows, tags)
+        self.market_stats["Ativos"].configure(text=str(len(out_rows)), fg=Theme.TEXT)
+        self.market_stats["Altas"].configure(text=str(up_count), fg=Theme.SUCCESS)
+        self.market_stats["Baixas"].configure(text=str(down_count), fg=Theme.DANGER)
+        self.market_stats["Fonte"].configure(text=", ".join(sorted(sources)[:2]) if sources else "--",
+                                              fg=Theme.PRIMARY)
         self.on_status(f"Mercado atualizado: {len(out_rows)} ativos")
 
     def start_auto_refresh(self, interval_sec: int = 60) -> None:

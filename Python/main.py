@@ -6,6 +6,14 @@ import logging
 import sys
 from pathlib import Path
 
+# Forca UTF-8 no stdout/stderr para evitar UnicodeEncodeError em consoles
+# com encoding cp1252 (padrao no Windows).
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
 # Constantes
 BASE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = BASE_DIR.parent

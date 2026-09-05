@@ -15,7 +15,9 @@ Nunca levanta: erros retornam ok=False com mensagem.
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
+import subprocess
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -110,51 +112,52 @@ def _act_alpaca(action: str, **kw: Any) -> dict[str, Any]:
 
 
 def _act_tradingview(action: str, **kw: Any) -> dict[str, Any]:
-    """Scanner TradingView real: busca simbolos por mercado/filtro."""
-    market = kw.get("market", "crypto").lower()
-    symbol = kw.get("symbol", "")
-    # Prefixos conhecidos por mercado (tickers TradingView)
-    if market in ("forex", "fx"):
-        exchange = "OANDA"
-        emarket = "forex"
-    elif market == "crypto":
-        exchange = "BINANCE"
-        emarket = "crypto"
-    else:
-        exchange = "NASDAQ"
-        emarket = "america"
-    if symbol:
-        tickers = ["%s:%sUSDT" % (exchange, symbol.upper()) if emarket == "crypto" else "%s:%s" % (exchange, symbol.upper())]
-    else:
-        tickers = [
-            "%s:BTCUSDT" % exchange, "%s:ETHUSDT" % exchange,
-            "%s:XAUUSD" % exchange, "%s:BTCUSD" % exchange,
-        ] if emarket != "crypto" else [
-            "BINANCE:BTCUSDT", "BINANCE:ETHUSDT", "BINANCE:BNBUSDT",
-            "BINANCE:SOLUSDT", "BINANCE:XRPUSDT",
-        ]
-    payload = {
-        "symbols": {"tickers": tickers},
-        "columns": ["name", "close", "change", "change_abs", "volume"],
+    """TradingView real: cotacao via endpoint /symbol (preco em tempo real).
+
+    Exemplos de tickers: XAUUSD, EURUSD, FOREXCOM:XAUUSD, TVC:GOLD,
+    BINANCE:BTCUSDT, NASDAQ:AAPL. Busca o primeiro que retornar dados.
+    """
+    symbol = (kw.get("symbol") or "XAUUSD").upper().replace("/", "")
+    if action in ("symbols", "screener", "assets", "list"):
+        symbols = kw.get("symbols") or ["XAUUSD", "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "BTCUSD", "ETHUSD"]
+        results = []
+        for item in symbols:
+            r = _act_tradingview("quote", symbol=str(item))
+            if r.get("ok"):
+                results.append(r["result"])
+        return _res(bool(results), {"items": results}, "TradingView: nenhum ativo retornou dados" if not results else "")
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Origin": "https://www.tradingview.com",
+        "Referer": "https://www.tradingview.com/",
     }
-    try:
-        data = _http_json("https://scanner.tradingview.com/%s/scan" % emarket,
-                          timeout=12, method="POST", body=payload)
-        if isinstance(data, dict) and data.get("totalCount", -1) >= 0:
-            items = []
-            for row in data.get("data", [])[:10]:
-                d = row.get("d", [])
-                items.append({
-                    "symbol": str(d[0]) if len(d) > 0 else "",
-                    "price": d[1] if len(d) > 1 else None,
-                    "change_pct": d[2] if len(d) > 2 else None,
-                    "change_abs": d[3] if len(d) > 3 else None,
-                    "volume": d[4] if len(d) > 4 else None,
+    # Lista de prefixos para tentar (do mais generico ao mais especifico)
+    candidates = [symbol]
+    if symbol in ("XAUUSD", "XAGUSD", "GOLD", "SILVER"):
+        candidates += ["FOREXCOM:" + symbol, "OANDA:" + symbol, "FX:" + symbol, "TVC:GOLD"]
+    elif len(symbol) == 6 and symbol.isalpha():
+        candidates += ["FX:" + symbol, "FOREXCOM:" + symbol, "OANDA:" + symbol]
+    elif symbol in ("BTC", "ETH", "BNB", "SOL", "XRP") or symbol.endswith("USD") and symbol[:3] in ("BTC", "ETH", "BNB", "SOL", "XRP"):
+        base_crypto = symbol[:3]
+        candidates += ["BINANCE:" + base_crypto + "USDT", "COINBASE:" + base_crypto + "USD"]
+    last_err = ""
+    for ticker in candidates:
+        url = ("https://scanner.tradingview.com/symbol"
+               f"?symbol={ticker}&fields=close,change,change_abs,volume,description")
+        try:
+            data = _http_json(url, timeout=10, headers=headers)
+            if isinstance(data, dict) and data.get("close"):
+                return _res(True, {
+                    "symbol": ticker,
+                    "price": data.get("close"),
+                    "change_pct": data.get("change"),
+                    "change_abs": data.get("change_abs"),
+                    "volume": data.get("volume"),
                 })
-            return _res(True, {"total": data.get("totalCount", 0), "items": items})
-        return _res(False, error="TradingView: resposta inesperada")
-    except Exception as e:  # noqa: BLE001
-        return _res(False, error=f"TradingView: {e}")
+            last_err = f"sem dados para {ticker}"
+        except Exception as e:  # noqa: BLE001
+            last_err = f"{ticker}: {e}"
+    return _res(False, error=f"TradingView: {last_err}")
 
 
 def _act_mt5_gateway(action: str, **kw: Any) -> dict[str, Any]:
@@ -214,42 +217,49 @@ def _act_postgres_sqlite(action: str, **kw: Any) -> dict[str, Any]:
 
 
 def _act_quantconnect(action: str, **kw: Any) -> dict[str, Any]:
-    """QuantConnect API real: testa token e lista projetos.
+    """QuantConnect API v2 real: autentica com hash SHA256 + timestamp.
 
-    Autenticacao: header Authorization Bearer <token> + QuantConnect-UserId.
+    O token pode vir do parametro api_key, da config salva ou da variavel
+    de ambiente QUANTCONNECT_TOKEN (preferencia nessa ordem).
+    Documentacao: https://www.quantconnect.com/docs/v2/cloud-platform/api-reference/authentication
     """
+    import base64
+    import hashlib
+    import time as _time
+
     s = _server("quantconnect")
-    token = (kw.get("api_key") or s.get("api_key") or "").strip()
-    uid = str(kw.get("user_id") or s.get("user_id") or "").strip()
+    token = (kw.get("api_key") or os.environ.get("QUANTCONNECT_TOKEN") or s.get("api_key") or "").strip()
+    uid = str(kw.get("user_id") or os.environ.get("QUANTCONNECT_USER_ID") or s.get("user_id") or "").strip()
     if not token:
-        return _res(False, error="QuantConnect: token nao configurado (Integracoes > MCP Servers)")
+        return _res(False, error="QuantConnect: token nao configurado (Integracoes > MCP Servers ou env QUANTCONNECT_TOKEN)")
+    if not uid:
+        return _res(False, error="QuantConnect: user_id nao configurado (env QUANTCONNECT_USER_ID)")
+
     base = (kw.get("endpoint") or s.get("endpoint") or "https://www.quantconnect.com/api/v2").rstrip("/")
-    hdrs = {"Authorization": "Bearer " + token}
-    if uid:
-        hdrs["QuantConnect-UserId"] = uid
+    timestamp = str(int(_time.time()))
+    time_stamped_token = f"{token}:{timestamp}"
+    hash_token = hashlib.sha256(time_stamped_token.encode("utf-8")).hexdigest()
+    auth = base64.b64encode(f"{uid}:{hash_token}".encode("utf-8")).decode("ascii")
+    hdrs = {
+        "Authorization": f"Basic {auth}",
+        "Timestamp": timestamp,
+    }
+
+    endpoint_map = {
+        "health": "/authenticate",
+        "ping": "/authenticate",
+        "projects": "/projects",
+        "backtests": "/backtests",
+    }
+    url = base + endpoint_map.get(action, "/authenticate")
+
     try:
-        if action in ("health", "projects", "ping"):
-            data = _http_json(base + "/projects", timeout=15, headers=hdrs)
-        elif action in ("backtests", "results"):
-            data = _http_json(base + "/backtests", timeout=15, headers=hdrs)
-        else:
-            data = _http_json(base + "/projects", timeout=15, headers=hdrs)
+        data = _http_json(url, timeout=15, headers=hdrs, method="POST", body={})
         if isinstance(data, dict):
-            if data.get("projects") is not None:
-                projects = []
-                for prj in data["projects"][:10]:
-                    projects.append({
-                        "id": prj.get("projectId"),
-                        "nome": prj.get("name"),
-                        "idioma": prj.get("language"),
-                    })
-                return _res(True, {"total": len(data["projects"]), "projects": projects})
-            if data.get("backtests") is not None:
-                return _res(True, {"total": len(data["backtests"])})
-            if data.get("success") is not None:
+            if data.get("success") is True:
                 return _res(True, data)
-            if "message" in data or "errors" in data:
-                return _res(False, error="QuantConnect: " + str(data.get("message") or data.get("errors"))[:120])
+            if data.get("success") is False or data.get("errors"):
+                return _res(False, error="QuantConnect: " + str(data.get("errors") or data.get("message"))[:200])
         return _res(True, data)
     except urllib.error.HTTPError as e:
         body = ""
@@ -260,6 +270,68 @@ def _act_quantconnect(action: str, **kw: Any) -> dict[str, Any]:
         return _res(False, error=f"QuantConnect: HTTP {e.code} {body}")
     except Exception as e:  # noqa: BLE001
         return _res(False, error=f"QuantConnect: {e}")
+
+
+def _act_cline(action: str, **kw: Any) -> dict[str, Any]:
+    """Cline / OpenAI-compatible: chat ou health-check via API REST.
+
+    O token pode vir do parametro api_key, da config salva ou da variavel
+    de ambiente CLINE_API_KEY. O endpoint padrao e OpenAI-compatible.
+    """
+    s = _server("cline")
+    key = (kw.get("api_key") or os.environ.get("CLINE_API_KEY") or os.environ.get("OPENAI_API_KEY") or s.get("api_key") or "").strip()
+    base = (kw.get("endpoint") or os.environ.get("CLINE_BASE_URL") or s.get("endpoint") or "https://api.openai.com/v1").rstrip("/")
+    model = (kw.get("model") or os.environ.get("CLINE_MODEL") or s.get("model") or "gpt-4o-mini").strip()
+    if not key:
+        return _res(False, error="Cline: API key nao configurada (env CLINE_API_KEY)")
+
+    hdrs = {"Authorization": f"Bearer {key}"}
+
+    if action in ("health", "ping"):
+        try:
+            data = _http_json(base + "/models", timeout=15, headers=hdrs)
+            if isinstance(data, dict) and "data" in data:
+                return _res(True, {"models": len(data["data"]), "first_model": data["data"][0].get("id") if data["data"] else None})
+            return _res(True, data)
+        except urllib.error.HTTPError as e:
+            body = ""
+            try:
+                body = e.read().decode("utf-8", errors="replace")[:200]
+            except Exception:
+                pass
+            return _res(False, error=f"Cline: HTTP {e.code} {body}")
+        except Exception as e:  # noqa: BLE001
+            return _res(False, error=f"Cline: {e}")
+
+    if action == "chat":
+        prompt = kw.get("prompt", kw.get("message", "Ola, voce e o agente Cline integrado ao XAU_AI_PRO."))
+        messages = [{"role": "user", "content": prompt}]
+        try:
+            data = _http_json(
+                base + "/chat/completions",
+                timeout=30,
+                headers={**hdrs, "Content-Type": "application/json"},
+                method="POST",
+                body={"model": model, "messages": messages, "max_tokens": 512},
+            )
+            if isinstance(data, dict) and data.get("choices"):
+                content = data["choices"][0].get("message", {}).get("content", "")
+                return _res(True, {"reply": content, "model": model, "usage": data.get("usage")})
+            if isinstance(data, dict) and (data.get("error") or data.get("message")):
+                return _res(False, error="Cline: " + str(data.get("error") or data.get("message"))[:200])
+            return _res(True, data)
+        except urllib.error.HTTPError as e:
+            body = ""
+            try:
+                body = e.read().decode("utf-8", errors="replace")[:200]
+            except Exception:
+                pass
+            return _res(False, error=f"Cline: HTTP {e.code} {body}")
+        except Exception as e:  # noqa: BLE001
+            return _res(False, error=f"Cline: {e}")
+
+    return _res(False, error=f"Cline: acao '{action}' nao suportada (use health, ping, chat)")
+
 
 def _act_sequential_thinking(action: str, **kw: Any) -> dict[str, Any]:
     """Encadeia etapas de raciocinio (motor local; nao precisa de npx)."""
@@ -281,30 +353,135 @@ def _act_sequential_thinking(action: str, **kw: Any) -> dict[str, Any]:
     return _res(True, {"thought": thought, "steps": out})
 
 
+def _act_stdio(action: str, **kw: Any) -> dict[str, Any]:
+    """Handler generico para MCPs stdio (npx/node/python/uvx).
+
+    Verifica se o comando base esta disponivel no PATH — o teste real
+    de "instalacao" desses MCPs (redis, mongodb, github, etc).
+    """
+    endpoint = kw.get("_endpoint", "")
+    name = kw.get("_name", "stdio")
+    if not endpoint:
+        return _res(False, f"{name}: endpoint vazio")
+    import shlex
+
+    cmd = shlex.split(endpoint, posix=False)
+    base = cmd[0]
+    if action in ("health", "ping", "tools", "list_tools", "call"):
+        try:
+            from app.mcp_stdio import stdio_from_endpoint
+            client = stdio_from_endpoint(endpoint, kw.get("_env"))
+            try:
+                init = client.start()
+                if not init.get("ok"):
+                    return _res(False, error=f"{name}: {init.get('error', 'initialize falhou')}")
+                tools = init.get("tools", [])
+                if action in ("tools", "list_tools"):
+                    return _res(True, {"tools": tools, "count": len(tools)})
+                if action == "call":
+                    tool_name = kw.get("tool") or kw.get("name")
+                    if not tool_name:
+                        return _res(False, error=f"{name}: informe tool")
+                    result = client.call_tool(str(tool_name), kw.get("arguments") or {})
+                    return result if result.get("ok") else _res(False, error=str(result.get("error", "tools/call falhou")))
+                return _res(True, {"initialized": True, "tools": tools, "count": len(tools)})
+            finally:
+                client.close()
+        except Exception as exc:
+            return _res(False, error=f"{name}: handshake MCP falhou: {exc}")
+    if base.lower().startswith(("npx", "node", "python", "uvx")):
+        try:
+            from app.mcp_stdio import stdio_from_endpoint
+            client = stdio_from_endpoint(endpoint, kw.get("_env"))
+            init = client.start()
+            client.close()
+            if init.get("ok"):
+                return _res(True, f"{name}: handshake MCP concluído ({len(init.get('tools', []))} ferramentas)")
+            return _res(False, f"{name}: handshake MCP falhou: {init.get('error', '')}")
+        except Exception as e:
+            return _res(False, f"{name}: erro no handshake: {e}")
+    return _res(True, f"{name}: configurado")
+
+
 # ---------------------------------------------------------------------------
-# Dispatcher
+# Dispatcher (servidores com logica especifica + fallback stdio generico)
 # ---------------------------------------------------------------------------
 
-_ACTIONS = {
+_ACTIONS_SPECIFIC = {
     "alpha_vantage": _act_alpha_vantage,
     "alpaca": _act_alpaca,
     "tradingview": _act_tradingview,
     "mt5_gateway": _act_mt5_gateway,
     "quantconnect": _act_quantconnect,
+    "cline": _act_cline,
     "postgres_sqlite": _act_postgres_sqlite,
-    "sequential_thinking": _act_sequential_thinking,
 }
+
+# Todos os demais servidores (redis, mongodb, github, brave, etc) usam stdio
+_ALL_SERVER_IDS: set[str] = set()
+
+
+def _get_all_server_ids() -> set[str]:
+    """Descobre dinamicamente todos os ids de servidores instalados."""
+    global _ALL_SERVER_IDS
+    if _ALL_SERVER_IDS:
+        return _ALL_SERVER_IDS
+    base = Path(__file__).resolve().parent.parent / "mcp" / "servers"
+    if base.is_dir():
+        for f in base.glob("*.json"):
+            if f.name != "registry.json":
+                _ALL_SERVER_IDS.add(f.stem)
+    return _ALL_SERVER_IDS
 
 
 def call_tool(server_id: str, action: str = "quote", **params: Any) -> dict[str, Any]:
-    """Chama uma ferramenta MCP real. Retorna {"ok", "result"/"error"}."""
+    """Chama uma ferramenta MCP real. Retorna {"ok", "result"/"error"}.
+
+    Servidores com logica especifica (alpha_vantage, mt5_gateway, etc) usam
+    handlers dedicados. Os demais (redis, mongodb, github, brave, etc) sao
+    tratados como stdio genericos — verifica disponibilidade do comando.
+    """
     try:
-        fn = _ACTIONS.get(server_id)
-        if not fn:
-            return _res(False, error=f"Server MCP desconhecido: {server_id}")
-        return fn(action, **params)
+        fn = _ACTIONS_SPECIFIC.get(server_id)
+        if fn:
+            return fn(action, **params)
+        # fallback: qualquer outro servidor instalado -> stdio generico
+        if server_id in _get_all_server_ids():
+            s = _server(server_id)
+            params.setdefault("_endpoint", s.get("endpoint") or s.get("default_endpoint", ""))
+            if server_id == "filesystem" and params["_endpoint"].strip().endswith("server-filesystem"):
+                params["_endpoint"] += " ."
+            params.setdefault("_name", s.get("name", server_id))
+            key = str(s.get("api_key") or "").strip()
+            if server_id == "github_mcp":
+                token = key or os.environ.get("GITHUB_MCP_TOKEN", "")
+                if token:
+                    params.setdefault("_env", {"GITHUB_PERSONAL_ACCESS_TOKEN": token})
+            elif server_id == "brave":
+                token = key or os.environ.get("BRAVE_API_KEY", "")
+                if token:
+                    params.setdefault("_env", {"BRAVE_API_KEY": token})
+            return _act_stdio(action, **params)
+        return _res(False, error=f"Server MCP desconhecido: {server_id}")
     except Exception as e:  # noqa: BLE001
         return _res(False, error=str(e))
+
+
+def _availability(sid: str, server: dict[str, Any]) -> tuple[bool, str]:
+    if not server.get("enabled", False):
+        return False, "desativado pelo usuario"
+    key = str(server.get("api_key") or "").strip()
+    required_keys = {
+        "alpaca": ("APCA_API_KEY_ID", "chave Alpaca ausente"),
+        "alpha_vantage": ("ALPHA_VANTAGE_API_KEY", "chave Alpha Vantage ausente"),
+        "brave": ("BRAVE_API_KEY", "chave Brave Search ausente"),
+        "github_mcp": ("GITHUB_MCP_TOKEN", "token GitHub ausente"),
+        "quantconnect": ("QUANTCONNECT_TOKEN", "token QuantConnect ausente"),
+    }
+    requirement = required_keys.get(sid)
+    if requirement and not (key or os.environ.get(requirement[0])):
+        return False, requirement[1]
+    return True, "configurado"
 
 
 def tool_status() -> list[dict[str, Any]]:
@@ -312,10 +489,13 @@ def tool_status() -> list[dict[str, Any]]:
     servers = load_mcp_servers()
     out = []
     for sid, s in servers.items():
+        available, reason = _availability(sid, s)
         out.append({
             "id": sid,
             "name": s.get("name", sid),
-            "enabled": bool(s.get("enabled", False)),
+            "configured": bool(s.get("enabled", False)),
+            "enabled": available,
+            "reason": reason,
             "type": s.get("type", "http"),
             "endpoint": s.get("endpoint", ""),
         })

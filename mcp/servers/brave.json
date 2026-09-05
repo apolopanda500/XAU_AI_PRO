@@ -1,0 +1,10 @@
+{
+  "name": "Brave Search MCP",
+  "id": "brave",
+  "description": "Pesquisa web com Brave Search.",
+  "type": "stdio",
+  "default_endpoint": "npx -y @modelcontextprotocol/server-brave-search",
+  "needs_api_key": true,
+  "api_key_env": "",
+  "enabled": true
+}

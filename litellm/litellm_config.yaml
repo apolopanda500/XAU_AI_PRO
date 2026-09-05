@@ -55,6 +55,9 @@ model_list:
 # ============================================================
 # Geral
 # ============================================================
+# database_url REMOVIDO: o LiteLLM main-stable nao suporta
+# sqlite. Sem este campo, o proxy sobe sem DB (modo dev).
+# Features desativadas: virtual keys, store_model_in_db, spend tracking.
+# Para producao, use:  database_url: postgresql://user:pass@db:5432/litellm
 general_settings:
   master_key: sk-xau-ai-pro-local
-  database_url: sqlite:////app/litellm.db

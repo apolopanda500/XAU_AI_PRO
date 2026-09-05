@@ -13,7 +13,7 @@ services:
       # Chave do proxy (o dashboard usa api_key="anything"; defina aqui algo simples)
       - LITELLM_MASTER_KEY=sk-xau-ai-pro-local
       # Salt usada p/ hash de chaves virtuais (obrigatorio em versoes recentes)
-      - LITELLM_SALT_KEY=sk-salt-xau-ai-pro-local
+      - LITELLM_SALT_KEY=${LITELLM_SALT_KEY:?configure LITELLM_SALT_KEY}
       # Redefine o caminho do config
       - CONFIG_FILE_PATH=/app/config.yaml
     command: ["--config", "/app/config.yaml", "--port", "4000", "--num_workers", "1"]

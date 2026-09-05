@@ -1,0 +1,39 @@
+# ============================================================
+# Dockerfile.desktop — XAU AI PRO Backend Desktop Mode
+# ============================================================
+# Roda server-desktop.cjs (Express + Socket.IO):
+#   - API REST: /api/health /api/system /api/ai /api/trading...
+#   - Socket.IO em tempo real para o dashboard
+#   - Le arquivos MQL5/Files/Data/ via bind mount
+#   - Carrega .env, .env.local, .env.integrations via bind mount
+#
+# Build:  docker build -f backend/Dockerfile.desktop -t xau-ai-pro-backend-desktop ./backend
+# Run:    docker run -p 3001:3001 --mount type=bind,source=./Data,target=/app/MQL5/Files/Data ...
+#
+# Obs: mantenha este Dockerfile SEPARADO de backend/Dockerfile (Nitro/Vercel)
+#      para nao interferir no CI de producao.
+# ============================================================
+
+FROM node:22-bookworm-slim AS base
+
+WORKDIR /app
+
+# Instala dependencias de producao (Node.js puros — sem native build tools extras)
+COPY package*.json ./
+RUN npm ci --omit=dev
+
+# Copia codigo fonte do backend
+COPY . .
+
+# Porta do server-desktop.cjs (PORT=3001 via env)
+ENV NODE_ENV=production
+ENV PORT=3001
+
+EXPOSE 3001
+
+# Healthcheck simples (o endpoint /api/health existe em server-desktop.cjs)
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD node -e "const r=require('http').get('http://127.0.0.1:3001/api/health',res=>{process.exit(res.statusCode===200?0:1)}).on('error',()=>process.exit(1))" || exit 1
+
+# Entry: server-desktop.cjs (modo desktop real)
+CMD ["node", "server-desktop.cjs"]

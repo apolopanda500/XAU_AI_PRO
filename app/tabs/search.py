@@ -24,6 +24,8 @@ class SearchTab:
         self._build()
 
     def _build(self) -> None:
+        from app.components.banner import TabBanner
+        TabBanner(self.frame, "search")
         header = tk.Frame(self.frame, bg=Theme.BG)
         header.pack(fill="x", padx=24, pady=(20, 10))
         tk.Label(header, text="Pesquisa Global", bg=Theme.BG, fg=Theme.TEXT,
@@ -43,6 +45,7 @@ class SearchTab:
         self.entry.bind("<Return>", lambda e: self.search())
         PrimaryButton(row, text="Buscar", command=self.search, width=10).pack(side="left", padx=4)
         SecondaryButton(row, text="Limpar", command=self.clear, width=10).pack(side="left", padx=4)
+        SecondaryButton(row, text="Atualizar índice", command=self.refresh_index, width=15).pack(side="left", padx=4)
 
         # Resultado
         res_card = Card(self.frame, title="Resultados")
@@ -70,7 +73,19 @@ class SearchTab:
             self.on_status("Informe um termo de busca")
             return
         import threading
+        self.on_status("Pesquisando...")
         threading.Thread(target=self._worker, args=(q,), daemon=True).start()
+
+    def refresh_index(self) -> None:
+        """Reconstrói o índice em background e informa o resultado."""
+        import threading
+        self.on_status("Atualizando índice global...")
+        threading.Thread(target=self._index_worker, daemon=True).start()
+
+    def _index_worker(self) -> None:
+        from app.search_hub import search_all
+        result = search_all("")
+        self.frame.after(0, lambda: self.on_status(f"Índice atualizado: {result.get('total', 0)} itens"))
 
     def _worker(self, q: str) -> None:
         from app.search_hub import search_all

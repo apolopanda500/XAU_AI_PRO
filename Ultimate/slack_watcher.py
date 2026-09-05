@@ -21,15 +21,19 @@ from __future__ import annotations
 
 import csv
 import os
+import sys
 import threading
 import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-# ── Caminhos (mesmos do ai_event_stream.py) ──
-TERMINAL_DATA = Path(os.getenv("APPDATA", "")) / "MetaQuotes" / "Terminal" \
-    / "D0E8209F77C8CF37AD8BF550E51FF075" / "MQL5" / "Files" / "Data"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+from app.utils.paths import get_mql_data_path
+
+TERMINAL_DATA = get_mql_data_path()
 LOCAL_DATA = Path(__file__).resolve().parent.parent / "MQL5" / "Files" / "Data"
 
 _EVENTS_FILE = "forward_test_events.csv"
@@ -48,7 +52,7 @@ _EVENT_MAP: dict[str, dict[str, Any]] = {
     "PYTHON_ERROR":    {"handler": "python_error",     "severity": "error"},
     "DATABASE_ERROR":  {"handler": "database_error",   "severity": "error"},
     "BROKER_ERROR":    {"handler": "broker_error",     "severity": "error"},
-        "HEALTH_FAILURE":  {"handler": "health_failure",   "severity": "critical"},
+    "HEALTH_FAILURE":  {"handler": "health_failure",   "severity": "critical"},
 }
 
 
@@ -74,24 +78,35 @@ def _read_events(offset: int) -> tuple[list[list[str]], int]:
         return [], 0
 
     try:
-        with open(f, "r", encoding="utf-16", errors="replace", newline="") as fh:
+        # O offset persistido é de bytes. Não usar seek() em TextIOWrapper:
+        # em UTF-16 ele é um offset de caracteres/opaco e pode iniciar no
+        # meio de um code unit, produzindo linhas corrompidas ou eventos
+        # silenciosamente perdidos.
+        with open(f, "rb") as fh:
+            size = fh.seek(0, os.SEEK_END)
+            if offset < 0 or offset > size:
+                offset = 0
             fh.seek(offset)
-            content = fh.read()
+            raw = fh.read()
             new_offset = fh.tell()
+        content = raw.decode("utf-16", errors="replace")
     except Exception:
         return [], offset
 
     if not content:
         return [], offset
 
-    lines = [ln.strip() for ln in content.splitlines() if ln.strip()]
+    lines = [ln.replace("\r", "").strip() for ln in content.splitlines() if ln.strip()]
     if not lines:
         return [], new_offset
 
     rows = []
     for line in lines:
-        parts = line.split(",")
-        if len(parts) >= 10:
+        try:
+            parts = next(csv.reader([line]))
+        except (csv.Error, StopIteration):
+            continue
+        if len(parts) >= 10 and parts[1].strip() != "Event":
             rows.append(parts[:10])
 
     return rows, new_offset
@@ -185,6 +200,7 @@ class SlackWatcher:
         self._running = False
         self._thread: threading.Thread | None = None
         self._offset: int = 0
+        self._file_path: Path | None = None
 
     def start(self) -> None:
         """Inicia o watcher em thread background."""
@@ -192,6 +208,15 @@ class SlackWatcher:
             return
         self._running = True
         self._offset = _OffsetStore.load()
+        self._file_path = _events_file()
+        # Offset pertence ao arquivo. Se o arquivo foi recriado/truncado,
+        # reinicia do início para não perder o cabeçalho/eventos novos.
+        if self._file_path is not None:
+            try:
+                if self._offset > self._file_path.stat().st_size:
+                    self._offset = 0
+            except OSError:
+                self._offset = 0
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self._thread.start()
 

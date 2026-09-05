@@ -1,0 +1,84 @@
+# ============================================================
+# Dockerfile.vercel — XAU AI PRO
+# Imagem para Vercel Functions + Vercel Sandbox (coding agents)
+#
+# Repositorio VCR: vcr.vercel.com/apolopanda500/xau-ai-pro-api/apolopanda500
+#
+# Esta imagem e usada por:
+#   1) Vercel Functions (deploy da API backend)
+#   2) Vercel Sandbox   (execucao de coding agents - claude, etc.)
+#
+# Comandos:
+#   vercel link
+#   vercel vcr login docker
+#   vercel vcr build docker ./backend --push
+#   docker push --all-tags vcr.vercel.com/apolopanda500/xau-ai-pro-api/apolopanda500
+# ============================================================
+
+# ------------------------------------------------------------
+# Stage base — ferramentas essenciais para agents/CI
+# ------------------------------------------------------------
+FROM node:22-bookworm-slim AS base
+
+# Ferramentas de sistema (essenciais p/ sandbox e agentes)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    curl \
+    wget \
+    ca-certificates \
+    jq \
+    python3 \
+    python3-pip \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Node global tools
+RUN npm install -g --no-audit --no-fund \
+    pnpm \
+    yarn \
+    typescript \
+    @vercel/cli
+
+WORKDIR /app
+
+# ------------------------------------------------------------
+# Stage builder — build do Nitro server
+# ------------------------------------------------------------
+FROM base AS builder
+
+# Copia apenas os arquivos de dependencias primeiro (cache eficiente)
+COPY backend/package*.json ./
+RUN npm ci
+
+# Copia o codigo fonte completo
+COPY backend/ ./
+
+# Build do Nitro (falha deve interromper o build da imagem)
+ENV NODE_ENV=production
+RUN npm run build
+
+# ------------------------------------------------------------
+# Stage runtime — imagem final
+# ------------------------------------------------------------
+FROM base AS runtime
+
+WORKDIR /app
+
+# Copia o build do nitro
+COPY --from=builder /app/.output ./.output
+
+# Copia os arquivos backend nao-build
+COPY backend/package*.json ./
+COPY backend/server-desktop.cjs ./server-desktop.cjs
+COPY backend/nitro.config.mjs ./
+
+ENV NODE_ENV=production
+ENV PORT=3000
+
+EXPOSE 3000
+
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD curl -f http://localhost:3000/api/health || exit 1
+
+CMD ["node", ".output/server/index.mjs"]

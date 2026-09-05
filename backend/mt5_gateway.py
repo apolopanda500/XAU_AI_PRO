@@ -45,9 +45,14 @@ def _payload() -> dict:
         info = mt5.account_info()
         if info:
             out["account"] = {
-                "login": info.login, "balance": info.balance,
+                "login": info.login, "name": info.name,
+                "company": info.company, "server": info.server,
+                "balance": info.balance,
                 "equity": info.equity, "profit": info.profit,
+                "margin": info.margin, "margin_free": info.margin_free,
                 "margin_level": info.margin_level, "currency": info.currency,
+                "trade_allowed": bool(getattr(ti, "trade_allowed", False)) if ti else False,
+                "terminal_connected": bool(getattr(ti, "connected", False)) if ti else False,
             }
     except Exception:
         pass

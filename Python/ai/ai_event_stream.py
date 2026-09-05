@@ -13,15 +13,17 @@ nao reescreve nem apaga. Se o arquivo nao existir, tenta em fallbacks.
 """
 from __future__ import annotations
 
-import os
 import csv
 import sys
 from datetime import datetime
 from pathlib import Path
 
-# Caminhos candidatos (mesma ordem do backend)
-TERMINAL_DATA = Path(os.getenv("APPDATA", "")) / "MetaQuotes" / "Terminal" / \
-    "D0E8209F77C8CF37AD8BF550E51FF075" / "MQL5" / "Files" / "Data" / "forward_test_events.csv"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+from app.utils.paths import get_mql_data_path
+
+TERMINAL_DATA = get_mql_data_path() / "forward_test_events.csv"
 LOCAL_DATA = Path(__file__).resolve().parent.parent / "MQL5" / "Files" / "Data" / "forward_test_events.csv"
 
 HEADER = ["Time", "Event", "Symbol", "TF", "Ticket", "Severity",

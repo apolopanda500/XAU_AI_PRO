@@ -7,18 +7,33 @@
     "dev": "node server-desktop.cjs",
     "build": "nitro build",
     "vercel-build": "nitro build",
+    "lint": "eslint .",
     "start": "node src/index.mjs"
   },
   "dependencies": {
     "@opentelemetry/api": "^1.9.1",
-    "@sentry/node": "^10.72.0",
+    "@sentry/node": "^10.73.0",
     "@vercel/analytics": "^2.0.1",
     "@vercel/speed-insights": "^2.0.0",
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "nitro": "3.0.260610-beta",
-    "rollup": "4.63.0",
+    "rollup": "4.63.1",
     "socket.io": "^4.8.3",
     "workflow": "^4.8.5"
+  },
+  "devDependencies": {
+    "eslint": "^10.10.0",
+    "globals": "^17.12.0"
+  },
+  "overrides": {
+    "nanoid": "5.1.16",
+    "qs": "6.16.0",
+    "undici": "7.29.0"
+  },
+  "allowScripts": {
+    "@swc/core@1.15.3": true,
+    "cbor-extract@2.2.2": true,
+    "esbuild@0.28.2": true
   }
 }

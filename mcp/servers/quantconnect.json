@@ -1,11 +1,12 @@
 {
   "name": "QuantConnect MCP Server",
   "id": "quantconnect",
-  "description": "Backtest e dados historicos via QuantConnect/LEAN.",
+  "description": "Backtest, projetos e publicacoes de pesquisa via QuantConnect/LEAN API v2.",
   "type": "http",
   "default_endpoint": "https://www.quantconnect.com/api/v2",
   "needs_api_key": true,
   "api_key_env": "QUANTCONNECT_TOKEN",
+  "user_id_env": "QUANTCONNECT_USER_ID",
   "user_id": "536051",
   "enabled": true
 }

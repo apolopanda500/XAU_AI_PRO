@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import csv
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -45,12 +46,55 @@ def _ensure_tables() -> None:
           id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT, source TEXT, text TEXT
         );
         """)
+        # migracao: adiciona colunas que possam estar faltando em versoes antigas
+        existing = {r[1] for r in c.execute("PRAGMA table_info(account)").fetchall()}
+        for col, typ in (("login","INTEGER"),("free_margin","REAL"),("currency","TEXT"),("server","TEXT"),("ts","TEXT")):
+            if col not in existing:
+                c.execute(f"ALTER TABLE account ADD COLUMN {col} {typ}")
         c.commit()
     finally:
         c.close()
 
 
+def _http_get(path: str) -> dict[str, Any] | None:
+    """Consulta o MT5 Gateway local (127.0.0.1:9001). Retorna dict ou None."""
+    import urllib.request
+    import urllib.error
+    try:
+        req = urllib.request.Request(f"http://127.0.0.1:9001{path}",
+                                     headers={"User-Agent": "XAU_AI_PRO/1.3.2"})
+        with urllib.request.urlopen(req, timeout=5) as r:
+            return json.loads(r.read().decode("utf-8", "replace"))
+    except Exception:
+        return None
+
+
+def _read_csv_rows(path: Path, limit: int) -> list[dict[str, str]]:
+    encodings = ("utf-16", "utf-8-sig", "utf-8", "latin-1")
+    for enc in encodings:
+        try:
+            with open(path, encoding=enc, newline="") as fh:
+                rows = list(csv.DictReader(fh))
+            return rows[-limit:]
+        except Exception:
+            continue
+    return []
+
+
 def _snapshot_account() -> dict[str, Any]:
+    # 1) Tenta o Gateway local (ja esta rodando, sem precisar de conexao extra)
+    gw = _http_get("/api/account")
+    if gw:
+        # aceita ambos os formatos: {"account": {...}} ou {"login":...} direto
+        a = gw.get("account") or gw
+        if a.get("login") or a.get("balance"):
+            return {
+                "login": a.get("login"), "balance": a.get("balance"),
+                "equity": a.get("equity"), "margin": a.get("margin"),
+                "free_margin": a.get("margin_free") or a.get("free_margin"),
+                "currency": a.get("currency"), "server": a.get("server") or "MT5",
+            }
+    # 2) Fallback: MT5Robot (conexao direta)
     try:
         from app.mt5_robot import get_robot
         robot = get_robot()
@@ -68,6 +112,11 @@ def _snapshot_account() -> dict[str, Any]:
 
 
 def _snapshot_positions() -> list[dict[str, Any]]:
+    # 1) Gateway
+    gw = _http_get("/api/positions")
+    if gw and gw.get("positions") is not None:
+        return [p if isinstance(p, dict) else dict(p) for p in gw["positions"]]
+    # 2) Fallback MT5Robot
     try:
         from app.mt5_robot import get_robot
         robot = get_robot()
@@ -80,6 +129,11 @@ def _snapshot_positions() -> list[dict[str, Any]]:
 
 
 def _snapshot_history(days: int = 30) -> list[dict[str, Any]]:
+    # 1) Gateway
+    gw = _http_get("/api/history")
+    if gw is not None:
+        return [gw] if isinstance(gw, dict) else list(gw)
+    # 2) Fallback MT5Robot
     try:
         from app.mt5_robot import get_robot
         robot = get_robot()
@@ -164,11 +218,16 @@ def sync_journal(limit: int = 60) -> dict[str, Any]:
     lines: list[dict[str, Any]] = []
     if _JOURNAL_HINT.exists():
         try:
-            for raw in _JOURNAL_HINT.read_text(encoding="utf-8", errors="ignore").splitlines()[-limit:]:
-                if not raw.strip():
-                    continue
-                parts = raw.split(",")
-                lines.append({"ts": parts[0] if parts else "", "text": raw[:300]})
+            for row in _read_csv_rows(_JOURNAL_HINT, limit):
+                ts = (row.get("Time") or row.get("time") or "").replace("\x00", "").strip()
+                event = (row.get("Event") or row.get("event") or "").replace("\x00", "").strip()
+                symbol = (row.get("Symbol") or row.get("symbol") or "").replace("\x00", "").strip()
+                module = (row.get("Module") or row.get("module") or "").replace("\x00", "").strip()
+                message = (row.get("Message") or row.get("message") or "").replace("\x00", "").strip()
+                status = (row.get("Status") or row.get("status") or "").replace("\x00", "").strip()
+                text = " | ".join(part for part in (event, symbol, module, message, status) if part)
+                if ("." in ts and ":" in ts) or text:
+                    lines.append({"ts": ts, "text": text[:300]})
         except Exception:
             pass
     c = _conn()
@@ -211,7 +270,7 @@ def run_full_sync() -> dict[str, Any]:
         "positions": r_pos,
         "history": r_hist,
         "journal": r_journal,
-        "ok": bool(r_account.get("ok")) or True,  # conta pode estar offline
+        "ok": bool(r_account.get("ok") and r_pos.get("ok") and r_hist.get("ok") and r_journal.get("ok")),
     }
 
 

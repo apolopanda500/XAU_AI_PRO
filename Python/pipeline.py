@@ -18,7 +18,6 @@ Responsabilidades:
 from __future__ import annotations
 
 import json
-import json
 import os
 import hashlib
 import time
@@ -676,7 +675,7 @@ class Pipeline:
         self.dataset_path = (
             Path(dataset_path).expanduser()
             if dataset_path is not None
-            else (PROJECT_ROOT / "MQL5" / "Files" / "Data" / "dataset.csv")
+            else (get_mt5_data_path() / "dataset.csv")
         )
 
         self.entry_filter = EntryFilter(EntryConfig())
@@ -688,7 +687,6 @@ class Pipeline:
         self.feature_df: pd.DataFrame | None = None
         self.symbols: list[str] = []
         self.max_workers = max_workers
-        self._last_timeframe_predictions: dict[str, dict[str, Any]] = {}
         self._last_timeframe_predictions: dict[str, dict[str, Any]] = {}
 
     # ========================================================

@@ -145,15 +145,16 @@ Source: "{#MyRoot}\README.md"; DestDir: "{app}\Docs"; Flags: ignoreversion
 ; 8) Wrapper que define XAU_AI_PRO_ROOT (Start In = {app})
 ; ============================================================
 Source: "XAU_AI_PRO.cmd"; DestDir: "{app}"; Flags: ignoreversion
+Source: "XAU_AI_PRO_START.vbs"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\XAU_AI_PRO.cmd"; IconFilename: "{app}\assets\icon.ico"; WorkingDir: "{app}"
+Name: "{group}\{#MyAppName}"; Filename: "{app}\XAU_AI_PRO_START.vbs"; IconFilename: "{app}\assets\icon.ico"; WorkingDir: "{app}"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\XAU_AI_PRO.cmd"; IconFilename: "{app}\assets\icon.ico"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\XAU_AI_PRO_START.vbs"; IconFilename: "{app}\assets\icon.ico"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\XAU_AI_PRO.cmd"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
-Filename: "{app}\XAU_AI_PRO.cmd"; Description: "Iniciar XAU AI PRO automaticamente"; Flags: nowait postinstall skipifsilent; Tasks: autostart
+Filename: "{app}\XAU_AI_PRO_START.vbs"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\XAU_AI_PRO_START.vbs"; Description: "Iniciar XAU AI PRO automaticamente"; Flags: nowait postinstall skipifsilent; Tasks: autostart
 
 [Code]
 // ============================================================

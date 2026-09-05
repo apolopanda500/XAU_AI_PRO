@@ -83,11 +83,13 @@ class ToolsTab:
         self._build()
 
     def _build(self) -> None:
+        from app.components.banner import TabBanner
+        TabBanner(self.frame, "tools")
         header = tk.Frame(self.frame, bg=Theme.BG)
         header.pack(fill="x", padx=24, pady=(20, 10))
-        tk.Label(header, text="Ferramentas", bg=Theme.BG, fg=Theme.TEXT,
+        tk.Label(header, text="Auditoria e Ferramentas", bg=Theme.BG, fg=Theme.TEXT,
                  font=(Theme.FONT_FAMILY, 20, "bold")).pack(side="left")
-        tk.Label(header, text="Historico, movimentos e utilitarios",
+        tk.Label(header, text="Historico operacional, journal e utilitarios do trader",
                  bg=Theme.BG, fg=Theme.TEXT_SECONDARY,
                  font=(Theme.FONT_FAMILY, 10)).pack(side="left", padx=12)
         self.last_lbl = tk.Label(header, text="Atualizado: --", bg=Theme.BG,

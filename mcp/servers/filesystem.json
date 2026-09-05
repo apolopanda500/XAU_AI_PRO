@@ -1,0 +1,10 @@
+{
+  "name": "Filesystem MCP",
+  "id": "filesystem",
+  "description": "Acesso a arquivos locais.",
+  "type": "stdio",
+  "default_endpoint": "npx -y @modelcontextprotocol/server-filesystem .",
+  "needs_api_key": false,
+  "api_key_env": "",
+  "enabled": true
+}

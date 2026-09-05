@@ -79,6 +79,8 @@ Temp/run_validate.bat
 Temp/validate_*.py
 Temp/validate_*.bat
 
+vercel_*.json
+vercel_*.txt
 debug_error.txt
 unins000.dat
 unins000.exe

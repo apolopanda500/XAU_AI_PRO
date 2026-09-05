@@ -1,5 +1,6 @@
 """
-Tabelas estilo exchange MEXC usando Treeview customizado.
+Tabelas PRO estilo terminal de trading (MetaTrader 5 / TradingView).
+Cores de bid/ask, formatação condicional e cabeçalho estilizado.
 """
 from __future__ import annotations
 
@@ -11,7 +12,7 @@ from app.theme.mexc import Theme
 
 
 class MexcTreeview(ttk.Treeview):
-    """Treeview com estilo MEXC escuro."""
+    """Treeview com estilo terminal de trading (fundo escuro, grid sutil)."""
 
     def __init__(self, parent, columns: list[tuple[str, str, int]], height: int = 14, **kwargs):
         col_ids = [c[0] for c in columns]
@@ -27,24 +28,27 @@ class MexcTreeview(ttk.Treeview):
     def _setup_style(self) -> None:
         style = ttk.Style()
         style.theme_use("clam")
+        # Grid/trading terminal look
         style.configure(
             "Mexc.Treeview",
-            background=Theme.CARD,
+            background=Theme.CARD_ALT,
             foreground=Theme.TEXT,
-            fieldbackground=Theme.CARD,
+            fieldbackground=Theme.CARD_ALT,
             bordercolor=Theme.BORDER,
             borderwidth=0,
             rowheight=32,
-            font=(Theme.FONT_FAMILY, 10),
+            font=(Theme.FONT_MONO, 10),  # Mono para alinhamento numérico
         )
+        # Cabeçalho estilo terminal
         style.configure(
             "Mexc.Treeview.Heading",
             background=Theme.PANEL,
             foreground=Theme.TEXT_SECONDARY,
             bordercolor=Theme.BORDER,
-            borderwidth=0,
+            borderwidth=1,
             font=(Theme.FONT_FAMILY, 9, "bold"),
         )
+        # Linhas alternadas (zebra)
         style.map(
             "Mexc.Treeview",
             background=[("selected", Theme.CARD_HOVER)],
@@ -60,6 +64,9 @@ class MexcTreeview(ttk.Treeview):
         self.clear()
         for i, row in enumerate(rows):
             tag = (tags[i] if tags and i < len(tags) else "")
+            # Alternar cor de fundo (zebra striping)
+            if not tag:
+                tag = "even" if i % 2 == 0 else "odd"
             self.insert("", "end", values=row, tags=(tag,))
 
 
@@ -76,7 +83,7 @@ class ScrollableTable(tk.Frame):
 
 
 class MarketTable(ScrollableTable):
-    """Tabela de mercado com colunas padrao."""
+    """Tabela de mercado com colunas padrão (bid/ask colors)."""
 
     def __init__(self, parent, height: int = 16, **kwargs):
         columns = [
@@ -91,12 +98,14 @@ class MarketTable(ScrollableTable):
             ("time", "Hora", 70),
         ]
         super().__init__(parent, columns=columns, height=height, **kwargs)
-        self.tree.tag_configure("up", foreground=Theme.CHART_UP)
-        self.tree.tag_configure("down", foreground=Theme.CHART_DOWN)
+        self.tree.tag_configure("up", foreground=Theme.BID)
+        self.tree.tag_configure("down", foreground=Theme.ASK)
+        self.tree.tag_configure("even", background=Theme.CARD_ALT)
+        self.tree.tag_configure("odd", background=Theme.CARD)
 
 
 class PositionTable(ScrollableTable):
-    """Tabela de posicoes abertas."""
+    """Tabela de posições abertas (profit/loss colors)."""
 
     def __init__(self, parent, height: int = 12, **kwargs):
         columns = [
@@ -113,10 +122,14 @@ class PositionTable(ScrollableTable):
         super().__init__(parent, columns=columns, height=height, **kwargs)
         self.tree.tag_configure("profit", foreground=Theme.SUCCESS)
         self.tree.tag_configure("loss", foreground=Theme.DANGER)
+        self.tree.tag_configure("buy", foreground=Theme.BID)
+        self.tree.tag_configure("sell", foreground=Theme.ASK)
+        self.tree.tag_configure("even", background=Theme.CARD_ALT)
+        self.tree.tag_configure("odd", background=Theme.CARD)
 
 
 class HistoryTable(ScrollableTable):
-    """Tabela de historico de trades."""
+    """Tabela de histórico de trades."""
 
     def __init__(self, parent, height: int = 12, **kwargs):
         columns = [
@@ -131,3 +144,5 @@ class HistoryTable(ScrollableTable):
         super().__init__(parent, columns=columns, height=height, **kwargs)
         self.tree.tag_configure("profit", foreground=Theme.SUCCESS)
         self.tree.tag_configure("loss", foreground=Theme.DANGER)
+        self.tree.tag_configure("even", background=Theme.CARD_ALT)
+        self.tree.tag_configure("odd", background=Theme.CARD)

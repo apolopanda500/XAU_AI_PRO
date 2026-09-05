@@ -1,0 +1,20 @@
+{
+  "name": "sandbox-quickstart",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "tsx index.ts",
+    "setup-claude": "tsx setup_claude.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@vercel/sandbox": "^3.2.1",
+    "dotenv": "^17.4.2",
+    "tsx": "^4.23.13"
+  }
+}

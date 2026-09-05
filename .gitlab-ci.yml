@@ -1,0 +1,28 @@
+stages:
+  - test
+
+variables:
+  AUTO_DEVOPS_EXPLICITLY_ENABLED: "0"
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  PYTHONDONTWRITEBYTECODE: "1"
+
+default:
+  image: python:3.11-slim
+  cache:
+    key:
+      files:
+        - requirements-dev.txt
+    paths:
+      - .cache/pip
+  before_script:
+    - python -m pip install --upgrade pip
+    - python -m pip install -r requirements-dev.txt numpy pandas requests
+
+test:
+  stage: test
+  script:
+    - python -m compileall -q app mcp Python
+    - python -m pytest -q tests
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH'

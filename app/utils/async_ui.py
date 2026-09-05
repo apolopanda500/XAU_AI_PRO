@@ -53,7 +53,10 @@ def run_bg(
                 pass
         finally:
             try:
-                root._bg_busy = False
+                # A flag deve ser liberada na thread da GUI. Isso evita uma
+                # corrida em que um refresh novo e iniciado antes da entrega
+                # do resultado anterior e mantem no maximo uma tarefa ativa.
+                root.after(0, lambda: setattr(root, "_bg_busy", False))
             except Exception:
                 pass
 
