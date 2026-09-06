@@ -291,6 +291,7 @@ def temperature_c() -> float:
             ["wmic", "/namespace:\\\\root\\wmi", "PATH", "MSAcpi_ThermalZoneTemperature",
              "get", "CurrentTemperature", "/value"],
             capture_output=True, text=True, timeout=5,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         for line in (out.stdout or "").splitlines():
             if "CurrentTemperature=" in line:
@@ -455,6 +456,7 @@ def system_specs() -> dict:
         out = subprocess.run(
             ["wmic", "cpu", "get", "NumberOfCores,NumberOfLogicalProcessors", "/value"],
             capture_output=True, text=True, timeout=6,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         for line in (out.stdout or "").splitlines():
             if "=" in line:
@@ -496,6 +498,7 @@ def system_specs() -> dict:
         out = subprocess.run(
             ["wmic", "path", "win32_VideoController", "get", "Name", "/value"],
             capture_output=True, text=True, timeout=6,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         for line in (out.stdout or "").splitlines():
             if "=" in line and "Name=" in line:
@@ -505,7 +508,59 @@ def system_specs() -> dict:
     except Exception:
         gpu = ""
     specs["gpu_name"] = gpu or "N/A"
+
+    # ---- Frequencia da CPU (via WMI, sem deps externas) ----
+    specs["freq_mhz"] = core_frequencies_mhz()
     return specs
+
+
+def core_frequencies_mhz() -> float:
+    """Frequencia (MHz) da CPU informada pelo Windows (CurrentClockSpeed).
+
+    Sem dependências externas: lê via WMI e retorna 0.0 se indisponível.
+    """
+    import subprocess  # noqa: PLC0415
+    try:
+        out = subprocess.run(
+            ["wmic", "cpu", "get", "CurrentClockSpeed", "/value"],
+            capture_output=True, text=True, timeout=6,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        for line in (out.stdout or "").splitlines():
+            if "=" in line and line.strip().startswith("CurrentClockSpeed="):
+                val = line.partition("=")[2].strip()
+                if val.isdigit():
+                    return float(val)
+    except Exception:
+        pass
+    return 0.0
+
+
+def battery_status() -> dict:
+    """Estado da bateria/AC (Windows). Retorna dict com pct e principal.
+
+    Sem dependências externas: usa GetSystemPowerStatus.
+    """
+    class _SYSTEM_POWER_STATUS(ctypes.Structure):
+        _fields_ = [
+            ("ACLineStatus", wintypes.BYTE),
+            ("BatteryFlag", wintypes.BYTE),
+            ("BatteryLifePercent", wintypes.BYTE),
+            ("SystemStatusFlag", wintypes.BYTE),
+            ("BatteryLifeTime", wintypes.DWORD),
+            ("BatteryFullLifeTime", wintypes.DWORD),
+        ]
+
+    out = {"ac": None, "pct": -1}
+    try:
+        status = _SYSTEM_POWER_STATUS()
+        ok = _kernel32().GetSystemPowerStatus(ctypes.byref(status))
+        if ok:
+            out["ac"] = int(status.ACLineStatus)
+            out["pct"] = int(status.BatteryLifePercent)
+    except Exception:
+        pass
+    return out
 
 
 # ---------------------------------------------------------------------------

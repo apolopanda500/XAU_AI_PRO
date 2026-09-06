@@ -11,7 +11,6 @@ from datetime import datetime
 from typing import Any, Callable
 
 from app.components.cards import Card, KPI, PrimaryButton, SecondaryButton, TerminalKPI, StatusBadge
-from app.tabs.charts import ChartCanvas
 from app.config_manager import get_config
 from app.market_data import MarketData
 from app.mt5_robot import MT5Robot
@@ -30,6 +29,9 @@ class DashboardTab:
         self.on_status = on_status
         self.frame = tk.Frame(parent, bg=Theme.BG)
         self.frame.pack(fill="both", expand=True)
+        self._next_detail_refresh = 0.0
+        self._system_signature: tuple[tuple[str, str, str], ...] | None = None
+        self._ops_signature: tuple[tuple[str, tuple[tuple[str, str, str], ...]], ...] | None = None
         self._build()
 
     def _build(self) -> None:
@@ -37,9 +39,9 @@ class DashboardTab:
         header = Card(self.frame)
         header.pack(fill="x", padx=24, pady=(20, 10))
         header.body.pack_forget()
-        tk.Label(header, text="Professional Control Center", bg=Theme.CARD, fg=Theme.TEXT,
+        tk.Label(header, text="Painel de Trading", bg=Theme.CARD, fg=Theme.TEXT,
                  font=(Theme.FONT_FAMILY, 20, "bold")).pack(anchor="w", padx=20, pady=(14, 0))
-        tk.Label(header, text="MT5 sync, risk overview, execution status and chart intelligence",
+        tk.Label(header, text="XAUUSD · execução assistida · dados validados pelo MT5",
                  bg=Theme.CARD, fg=Theme.TEXT_SECONDARY,
                  font=(Theme.FONT_FAMILY, 9)).pack(anchor="w", padx=20, pady=(2, 14))
         self.last_update = tk.Label(header, text="Aguardando primeira leitura", bg=Theme.CARD,
@@ -52,29 +54,20 @@ class DashboardTab:
         kpi_card.pack(fill="x", padx=24, pady=(0, 10))
         self.kpi_balance = TerminalKPI(kpi_card, "Saldo", "MT5 offline", Theme.PRIMARY)
         self.kpi_equity = TerminalKPI(kpi_card, "Equity", "MT5 offline", Theme.SUCCESS)
-        self.kpi_profit = TerminalKPI(kpi_card, "PnL Flutuante", "MT5 offline", Theme.SUCCESS)
-        self.kpi_positions = TerminalKPI(kpi_card, "Posicoes", "MT5 offline", Theme.WARNING)
+        self.kpi_profit = TerminalKPI(kpi_card, "PnL Aberto", "MT5 offline", Theme.SUCCESS)
+        self.kpi_positions = TerminalKPI(kpi_card, "Posições", "MT5 offline", Theme.WARNING)
         self.kpi_margin = TerminalKPI(kpi_card, "Margem Livre", "MT5 offline", Theme.TEXT_SECONDARY)
-        self.kpi_winrate = TerminalKPI(kpi_card, "Win Rate", "Sem historico", Theme.ACCENT)
+        self.kpi_winrate = TerminalKPI(kpi_card, "Acerto 30d", "Sem histórico", Theme.ACCENT)
         for kpi in [self.kpi_balance, self.kpi_equity, self.kpi_profit, self.kpi_positions,
                     self.kpi_margin, self.kpi_winrate]:
             kpi.pack(side="left", expand=True, fill="both", padx=(0, 10), pady=0)
 
-        # Área inferior: gráfico + snapshot
+        # Área inferior: resumo operacional. Os gráficos ficam exclusivamente
+        # na aba Mercado para não duplicar renderização no Painel.
         bottom = tk.Frame(self.frame, bg=Theme.BG)
         bottom.pack(fill="both", expand=True, padx=24, pady=10)
-        bottom.grid_columnconfigure(0, weight=2)
-        bottom.grid_columnconfigure(1, weight=1)
-        bottom.grid_rowconfigure(0, weight=1)
-
-        # Card do gráfico
-        chart_card = Card(bottom, title="XAUUSD M5 | Bollinger + RSI + Execution Zones")
-        chart_card.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
-        self.chart = ChartCanvas(chart_card.body)
-        self.chart.pack(fill="both", expand=True, padx=8, pady=8)
-
-        ea_card = Card(bottom, title="EA Snapshot")
-        ea_card.grid(row=0, column=1, sticky="nsew")
+        ea_card = Card(bottom, title="Status Operacional")
+        ea_card.pack(fill="both", expand=True)
         self.account_label = tk.Label(
             ea_card.body, text="Conta MT5: desconectada", bg=Theme.CARD,
             fg=Theme.WARNING, font=(Theme.FONT_FAMILY, 9, "bold"), anchor="w",
@@ -83,9 +76,7 @@ class DashboardTab:
         self.status_frame = tk.Frame(ea_card.body, bg=Theme.CARD)
         self.status_frame.pack(fill="x", padx=8, pady=(8, 0))
         self.service_labels: dict[str, tk.Label] = {}
-        services = [("mt5", "MetaTrader 5"), ("robot", "Robo EA"),
-                    ("backend", "Backend API"), ("dashboard", "Dashboard Web"),
-                    ("litellm", "LiteLLM")]
+        services = [("mt5", "MetaTrader 5"), ("robot", "Robo EA")]
         for key, name in services:
             row = tk.Frame(self.status_frame, bg=Theme.CARD)
             row.pack(fill="x", pady=2)
@@ -127,7 +118,8 @@ class DashboardTab:
         (na thread principal, via after). Elimina os travamentos periodicos
         de segundos causados pelo refresh sincrono na main thread.
         """
-        self.last_update.configure(text="Atualizando...")
+        if getattr(self.frame, "_bg_busy", False):
+            return
         from app.utils.async_ui import run_bg
         run_bg(
             self.frame,
@@ -174,47 +166,21 @@ class DashboardTab:
             data["services"] = self._collect_services()
         except Exception:
             data["services"] = {}
-        try:
-            data["system"] = self._collect_system()
-        except Exception:
-            data["system"] = []
-        try:
-            data["backend"] = self._collect_backend()
-        except Exception:
-            data["backend"] = []
-        try:
-            data["calendar"] = self._collect_calendar()
-        except Exception:
-            data["calendar"] = []
-        try:
-            data["sync"] = self._collect_sync()
-        except Exception:
-            data["sync"] = {}
-        try:
-            data["candles"] = self._collect_candles()
-        except Exception:
-            data["candles"] = []
+        if time.monotonic() >= self._next_detail_refresh:
+            self._next_detail_refresh = time.monotonic() + 15.0
+            try:
+                data["system"] = self._collect_system()
+            except Exception:
+                data["system"] = []
+            try:
+                data["calendar"] = self._collect_calendar()
+            except Exception:
+                data["calendar"] = []
+            try:
+                data["sync"] = self._collect_sync()
+            except Exception:
+                data["sync"] = {}
         return data
-
-    def _collect_candles(self) -> list[dict[str, Any]]:
-        """Obtém uma janela curta para o gráfico do desk sem bloquear o Tk."""
-        mt5 = getattr(self.market, "_mt5", None)
-        if mt5 is None:
-            return []
-        rates = mt5.copy_rates_from_pos("XAUUSD", mt5.TIMEFRAME_M5, 0, 120)
-        if rates is None:
-            return []
-        return [
-            {
-                "symbol": "XAUUSD",
-                "time": datetime.fromtimestamp(int(row["time"])).strftime("%d/%m %H:%M"),
-                "open": float(row["open"]),
-                "high": float(row["high"]),
-                "low": float(row["low"]),
-                "close": float(row["close"]),
-            }
-            for row in rates[-120:]
-        ]
 
     def _collect_account(self) -> dict[str, Any] | None:
         info = self.robot.account_info()
@@ -300,14 +266,11 @@ class DashboardTab:
             return
         self._apply_account(data.get("account"))
         self._apply_services(data.get("services") or {})
-        self._apply_system(data.get("system") or [])
-        self._apply_ops(data)
-        candles = data.get("candles") or []
-        if candles:
-            self.chart.set_data(candles, "candles")
-            self.chart.set_indicator("bollinger", {"type": "bollinger", "period": 20})
+        if "system" in data:
+            self._apply_system(data["system"])
+        if "calendar" in data or "sync" in data:
+            self._apply_ops(data)
         self.last_update.configure(text=f"Atualizado: {data.get('ts', '')}")
-        self.on_status("Dashboard atualizado")
 
     def _apply_account(self, acct: dict[str, Any] | None) -> None:
         if not acct:
@@ -355,6 +318,10 @@ class DashboardTab:
         self._set_service("robot", bool(svc.get("robot", False)))
 
     def _apply_system(self, lines: list[tuple[str, str, str]]) -> None:
+        signature = tuple(lines)
+        if signature == self._system_signature:
+            return
+        self._system_signature = signature
         for w in self.ea_frame.winfo_children():
             w.destroy()
         color_map = {
@@ -373,11 +340,17 @@ class DashboardTab:
                      font=(Theme.FONT_FAMILY, 9, "bold")).pack(side="right")
 
     def _apply_ops(self, data: dict[str, Any]) -> None:
+        sections = (
+            ("Agenda econômica", tuple(self._calendar_to_lines(data.get("calendar") or []))),
+            ("Conta MT5", tuple(self._sync_to_lines(data.get("sync") or {}))),
+        )
+        if sections == self._ops_signature:
+            return
+        self._ops_signature = sections
         for w in self.ops_frame.winfo_children():
             w.destroy()
-        self._ops_section("Backend", data.get("backend") or [])
-        self._ops_section("Calendario", self._calendar_to_lines(data.get("calendar") or []))
-        self._ops_section("Sync MT5", self._sync_to_lines(data.get("sync") or {}))
+        for title, lines in sections:
+            self._ops_section(title, list(lines))
 
     def _ops_section(self, title: str, lines: list[tuple[str, str, str]]) -> None:
         title_row = tk.Frame(self.ops_frame, bg=Theme.CARD)

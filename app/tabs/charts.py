@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Aba Graficos - visual profissional com custo de renderizacao controlado."""
+"""Aba Grafico - chart profissional com indicadores, crosshair e desenho."""
 from __future__ import annotations
 
 import csv
@@ -10,73 +10,94 @@ import tkinter as tk
 from datetime import datetime
 from pathlib import Path
 
-from app.components.cards import Card, SecondaryButton
+from app.components.cards import Card, SecondaryButton, AccentButton
 from app.config_manager import get_config
 from app.theme.mexc import Theme
 
 TFMAP = {"M1": 1, "M5": 5, "M15": 15, "M30": 30, "H1": 60, "H4": 240, "D1": 1440, "W1": 10080}
+TFORDER = ["M1", "M5", "M15", "M30", "H1", "H4", "D1", "W1"]
+
+
+def _sma(vals, n):
+    out, s, q = [], 0.0, []
+    for v in vals:
+        q.append(v); s += v
+        if len(q) > n: s -= q.pop(0)
+        out.append(s / len(q) if len(q) < n else s / n)
+    return out
+
+
+def _ema(vals, n):
+    out, k = [], 2.0 / (n + 1)
+    e = None
+    for v in vals:
+        e = v if e is None else v * k + e * (1 - k)
+        out.append(e)
+    return out
+
+
+def _bb(vals, n=20, mult=2.0):
+    mid = _sma(vals, n)
+    up, lo = [], []
+    for i in range(len(vals)):
+        w = vals[max(0, i - n + 1):i + 1]
+        m = mid[i]
+        var = sum((x - m) ** 2 for x in w) / len(w)
+        sd = math.sqrt(var)
+        up.append(m + mult * sd); lo.append(m - mult * sd)
+    return mid, up, lo
+
+
+def _rsi(vals, n=14):
+    out, gains, losses, prev = [], [], [], None
+    for v in vals:
+        if prev is None:
+            out.append(50.0)
+        else:
+            ch = v - prev
+            gains.append(max(ch, 0.0)); losses.append(max(-ch, 0.0))
+            if len(gains) >= n:
+                ag = sum(gains[-n:]) / n; al = sum(losses[-n:]) / n
+                rs = ag / al if al > 0 else 100.0
+                out.append(100.0 - 100.0 / (1.0 + rs))
+            else:
+                out.append(50.0)
+        prev = v
+    return out
 
 
 class ChartCanvas(tk.Canvas):
-    """Canvas com candles, overlays e desenhos simples."""
-
     def __init__(self, parent, **kw):
         super().__init__(parent, bg=Theme.CARD, highlightthickness=0, **kw)
-        self._candles = []
-        self._kind = "candles"
-        self._indicators = {}
-        self._drawings = []
-        self._pan_x = 0
-        self._zoom = 1.0
-        self._pan_start = None
-        self._drag = None
-        self._draw_tool = None
-        self._subinfo = ""
+        self._candles = []; self._kind = "candles"; self._indicators = {}
+        self._drawings = []; self._draw_tool = None; self._pan_x = 0
+        self._zoom = 1.0; self._pan_start = None; self._hover = None
+        self._grid = True; self._show_volume = True
+        self._pad_l = 70; self._pad_r = 12; self._pad_t = 16; self._pad_b = 28
+        self._vol_ratio = 0.22; self._subinfo = ""
         self.bind("<Configure>", lambda e: self._draw())
         self.bind("<Button-1>", self._on_click)
         self.bind("<B1-Motion>", self._on_drag)
         self.bind("<ButtonRelease-1>", self._on_release)
         self.bind("<MouseWheel>", self._on_wheel)
-        self.bind("<Button-2>", self._on_pan_start)
-        self.bind("<B2-Motion>", self._on_pan)
-        self.bind("<ButtonRelease-2>", lambda e: setattr(self, "_pan_start", None))
-
-    def _on_wheel(self, event) -> None:
-        self._zoom = max(0.5, min(3.0, self._zoom * (1.1 if event.delta > 0 else 0.9)))
-        self._draw()
-
-    def _on_pan_start(self, event) -> None:
-        self._pan_start = event.x
-
-    def _on_pan(self, event) -> None:
-        if self._pan_start is None:
-            return
-        self._pan_x += event.x - self._pan_start
-        self._pan_start = event.x
-        self._draw()
+        self.bind("<Motion>", self._on_motion)
+        self.bind("<Leave>", self._on_leave)
 
     def set_data(self, candles, kind="candles"):
-        self._candles = candles or []
-        self._kind = kind
-        self._draw()
+        self._candles = candles or []; self._kind = kind; self._draw()
 
-    def set_indicator(self, name: str, spec: dict) -> None:
-        self._indicators[name] = spec
-        self._draw()
+    def set_indicator(self, name, spec):
+        self._indicators[name] = spec; self._draw()
 
-    def clear_indicators(self) -> None:
-        self._indicators = {}
-        self._draw()
+    def clear_indicators(self):
+        self._indicators = {}; self._draw()
 
-    def add_drawing(self, tool: str) -> None:
-        self._draw_tool = tool
+    def add_drawing(self, tool): self._draw_tool = tool
 
-    def clear_drawings(self) -> None:
-        self._drawings = []
-        self._draw_tool = None
-        self._draw()
+    def clear_drawings(self):
+        self._drawings = []; self._draw_tool = None; self._draw()
 
-    def export_csv(self, path: Path) -> int:
+    def export_csv(self, path):
         with open(path, "w", newline="", encoding="utf-8") as fh:
             w = csv.writer(fh)
             w.writerow(["time", "open", "high", "low", "close"])
@@ -84,517 +105,286 @@ class ChartCanvas(tk.Canvas):
                 w.writerow([c["time"], c["open"], c["high"], c["low"], c["close"]])
         return len(self._candles)
 
-    def _xy(self, i, v, w, h, lo, hi, rng, pad=44):
-        x = pad + self._pan_x + (w - 2 * pad) * i / max(1, len(self._candles) - 1) * self._zoom
-        y = h - pad - (h - 2 * pad) * (v - lo) / rng
-        return x, y
+    def save_screenshot(self, path):
+        ps = self.postscript(colormode="color", pagewidth=self.winfo_width() * 2, pageheight=self.winfo_height() * 2)
+        with open(path, "w", encoding="utf-8") as fh: fh.write(ps)
+        return len(ps)
 
     def _metrics(self):
-        w = max(self.winfo_width(), 320)
-        h = max(self.winfo_height(), 220)
+        w = max(self.winfo_width(), 320); h = max(self.winfo_height(), 220)
         lows = [c["low"] for c in self._candles] or [0]
         highs = [c["high"] for c in self._candles] or [1]
-        lo = min(lows)
-        hi = max(highs)
-        rng = (hi - lo) or 1.0
+        lo = min(lows); hi = max(highs); rng = (hi - lo) or 1.0
+        pad = rng * 0.05; lo -= pad; hi += pad; rng = (hi - lo) or 1.0
         return w, h, lo, hi, rng
 
-    def _visible_points(self, w, h, lo, hi, rng, pad=80):
-        return [
-            (i, c)
-            for i, c in enumerate(self._candles)
-            if -pad <= self._xy(i, c["close"], w, h, lo, hi, rng)[0] <= w + pad
-        ]
+    def _chart_rect(self, w, h):
+        top = self._pad_t; bot = h - self._pad_b
+        if self._show_volume: bot -= int((h - self._pad_t - self._pad_b) * self._vol_ratio)
+        return self._pad_l, top, w - self._pad_r, bot
 
-    def _series_points(self, values, w, h, lo, hi, rng):
-        pts = []
-        for i, v in enumerate(values):
-            if v is None:
-                continue
-            x, y = self._xy(i, v, w, h, lo, hi, rng)
-            if -80 <= x <= w + 80:
-                pts.extend([x, y])
-        return pts
+    def _vol_rect(self, w, h):
+        ch = h - self._pad_t - self._pad_b
+        top = h - self._pad_b - int(ch * self._vol_ratio) + 4
+        return self._pad_l, top, w - self._pad_r, h - self._pad_b
 
-    def _on_click(self, ev):
-        if not self._draw_tool or not self._candles:
-            return
-        if self._draw_tool == "hline":
-            self._drawings.append({"tool": "hline", "y": ev.y})
-            self._draw_tool = None
-        elif self._draw_tool in ("trend", "fib"):
-            self._drag = {"tool": self._draw_tool, "x0": ev.x, "y0": ev.y}
+    def _x(self, i, left, right):
+        n = max(1, len(self._candles) - 1)
+        return left + self._pan_x + (right - left) * i / n * self._zoom
 
-    def _on_drag(self, ev):
-        if self._drag:
-            self._drag["x1"], self._drag["y1"] = ev.x, ev.y
-            self._draw()
-
-    def _on_release(self, ev):
-        if self._drag:
-            self._drawings.append(self._drag)
-            self._drag = None
-            self._draw_tool = None
-            self._draw()
+    def _y(self, v, top, bot, lo, rng):
+        return bot - (bot - top) * (v - lo) / rng
 
     def _draw(self):
         self.delete("all")
         if not self._candles:
-            self.create_text(self.winfo_width() // 2, self.winfo_height() // 2,
-                             text="Sem dados - aguardando...", fill=Theme.TEXT_SECONDARY,
-                             font=(Theme.FONT_FAMILY, 11))
+            self.create_text(self.winfo_width() / 2, self.winfo_height() / 2, text="Sem dados - clique Atualizar", fill=Theme.TEXT_MUTED, font=(Theme.FONT_FAMILY, 12))
             return
         w, h, lo, hi, rng = self._metrics()
-        pad = 44
+        left, top, right, bot = self._chart_rect(w, h)
+        self._draw_grid(left, top, right, bot)
+        self._draw_price_axis(left, top, bot, lo, hi, rng)
+        if self._show_volume: self._draw_volume(w, h, left, right)
+        self._draw_candles(left, top, right, bot, lo, hi, rng)
+        self._draw_indicators(left, top, right, bot, lo, hi, rng)
+        self._draw_time_axis(left, right, bot)
+        self._draw_crosshair(w, h)
 
-        for i in range(5):
-            gy = pad + (h - 2 * pad) * i / 4
-            self.create_line(pad, gy, w - pad, gy, fill=Theme.GRID)
-            val = hi - rng * i / 4
-            self.create_text(w - pad + 4, gy, text=f"{val:.2f}", anchor="w",
-                             fill=Theme.TEXT_MUTED, font=(Theme.FONT_FAMILY, 8))
+    def _draw_grid(self, left, top, right, bot):
+        if not self._grid: return
+        for i in range(1, 6):
+            y = top + (bot - top) * i / 6
+            self.create_line(left, y, right, y, fill=Theme.BORDER, dash=(2, 4))
+        for i in range(1, 8):
+            x = left + (right - left) * i / 8
+            self.create_line(x, top, x, bot, fill=Theme.BORDER, dash=(2, 4))
 
-        visible = self._visible_points(w, h, lo, hi, rng, pad=120)
-        if self._kind == "linha":
-            pts = []
-            for i, c in visible:
-                x, y = self._xy(i, c["close"], w, h, lo, hi, rng)
-                pts.extend([x, y])
-            if len(pts) >= 4:
-                color = Theme.SUCCESS if self._candles[-1]["close"] >= self._candles[0]["close"] else Theme.DANGER
-                self.create_line(pts, fill=color, width=2, smooth=True)
-        elif self._kind == "area":
-            pts = []
-            for i, c in visible:
-                x, y = self._xy(i, c["close"], w, h, lo, hi, rng)
-                pts.extend([x, y])
-            if len(pts) >= 4:
-                self.create_polygon(list(pts) + [w - pad, h - pad, pad, h - pad],
-                                    fill=Theme.PRIMARY, outline="", stipple="gray50")
-                self.create_line(pts, fill=Theme.PRIMARY, width=2, smooth=True)
-        else:
-            bw = max(2.0, (w - 2 * pad) / max(1, len(self._candles)) * 0.6)
-            for i, c in visible:
-                x = pad + self._pan_x + (w - 2 * pad) * i / max(1, len(self._candles) - 1) * self._zoom
-                up = c["close"] >= c["open"]
-                col = Theme.SUCCESS if up else Theme.DANGER
-                yh, yl, yo, yc = (self._xy(i, v, w, h, lo, hi, rng)[1] for v in
-                                  (c["high"], c["low"], c["open"], c["close"]))
-                self.create_line(x, yh, x, yl, fill=col, width=1)
-                if abs(yo - yc) < 1:
-                    self.create_line(x - bw / 2, yo, x + bw / 2, yo, fill=col, width=2)
-                else:
-                    self.create_rectangle(x - bw / 2, yo, x + bw / 2, yc, fill=col, outline=col)
+    def _draw_price_axis(self, left, top, bot, lo, hi, rng):
+        for i in range(7):
+            v = lo + rng * (6 - i) / 6
+            y = top + (bot - top) * i / 6
+            self.create_text(left - 6, y, text=f"{v:,.2f}", fill=Theme.TEXT_MUTED, anchor="e", font=(Theme.FONT_MONO, 8))
 
-        if "sma" in self._indicators:
-            pts = self._series_points(self._sma(int(self._indicators["sma"].get("period", 20))), w, h, lo, hi, rng)
-            if len(pts) >= 4:
-                self.create_line(pts, fill="#FFD166", width=2)
-        if "ema" in self._indicators:
-            pts = self._series_points(self._ema(int(self._indicators["ema"].get("period", 20))), w, h, lo, hi, rng)
-            if len(pts) >= 4:
-                self.create_line(pts, fill="#EF476F", width=2)
-        if "bollinger" in self._indicators:
-            upper, middle, lower = self._bollinger(int(self._indicators["bollinger"].get("period", 20)))
-            for vals, color, dash in ((upper, "#4CC9F0", (4, 2)), (middle, "#FFD166", ()), (lower, "#4CC9F0", (4, 2))):
-                pts = self._series_points(vals, w, h, lo, hi, rng)
-                if len(pts) >= 4:
-                    self.create_line(pts, fill=color, width=1, dash=dash)
+    def _draw_time_axis(self, left, right, bot):
+        n = len(self._candles); step = max(1, n // 6)
+        for i in range(0, n, step):
+            x = self._x(i, left, right)
+            if x < left or x > right: continue
+            self.create_text(x, bot + 14, text=self._candles[i]["time"], fill=Theme.TEXT_MUTED, font=(Theme.FONT_MONO, 7), anchor="n")
 
-        for d in self._drawings:
-            if d["tool"] == "hline":
-                self.create_line(pad, d["y"], w - pad, d["y"], fill="#06D6A0", dash=(4, 2))
-            elif d["tool"] == "trend":
-                self.create_line(d["x0"], d["y0"], d["x1"], d["y1"], fill="#118AB2", width=2)
-            elif d["tool"] == "fib":
-                self._draw_fib(d)
+    def _draw_volume(self, w, h, left, right):
+        vl, vt, vr, vb = self._vol_rect(w, h)
+        self.create_rectangle(vl, vt, vr, vb, outline=Theme.BORDER, fill=Theme.CARD)
+        vols = [c.get("volume", 0) for c in self._candles]
+        mx = max(vols) if vols else 1
+        if mx <= 0: return
+        n = len(self._candles)
+        for i in range(n):
+            x0 = self._x(i, left, right)
+            x1 = self._x(i + 0.5, left, right) if i < n - 1 else x0 + 4
+            v = vols[i]; y_top = vb - (vb - vt) * v / mx
+            color = Theme.SUCCESS if self._candles[i]["close"] >= self._candles[i]["open"] else Theme.DANGER
+            self.create_rectangle(x0, y_top, x1, vb, outline=color, fill=color)
 
-        last = self._candles[-1]
-        self._subinfo = self._build_subinfo()
-        self.create_text(pad, 14, text=f"{last.get('symbol', '')}  {last.get('time', '')}",
-                         fill=Theme.TEXT, anchor="w", font=(Theme.FONT_FAMILY, 9, "bold"))
-        self.create_text(w - pad, 14, text=f"Fech: {last['close']:.2f}",
-                         fill=Theme.TEXT, anchor="e", font=(Theme.FONT_FAMILY, 9, "bold"))
-        if self._subinfo:
-            self.create_text(pad, h - 18, text=self._subinfo, fill=Theme.TEXT_SOFT,
-                             anchor="w", font=(Theme.FONT_FAMILY, 8))
+    def _draw_candles(self, left, top, right, bot, lo, hi, rng):
+        n = len(self._candles)
+        for i in range(n):
+            c = self._candles[i]; x = self._x(i, left, right)
+            up = c["close"] >= c["open"]; color = Theme.SUCCESS if up else Theme.DANGER
+            o = self._y(c["open"], top, bot, lo, rng)
+            cl = self._y(c["close"], top, bot, lo, rng)
+            hh = self._y(c["high"], top, bot, lo, rng)
+            ll = self._y(c["low"], top, bot, lo, rng)
+            self.create_line(x, hh, x, ll, fill=color, width=1)
+            body_top = min(o, cl); body_bot = max(o, cl)
+            wick_w = max(1, int((right - left) / n / 2 * self._zoom))
+            fill = color if up else Theme.CARD
+            self.create_rectangle(x - wick_w, body_top, x + wick_w, body_bot, outline=color, fill=fill)
 
-    def _draw_fib(self, d):
-        try:
-            levels = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1]
-            ymin, ymax = min(d["y0"], d["y1"]), max(d["y0"], d["y1"])
-            for lvl in levels:
-                y = ymin + (ymax - ymin) * lvl
-                self.create_line(d["x0"], y, d["x1"], y, fill="#F72585", dash=(3, 3))
-                self.create_text(d["x1"] + 6, y, text=f"{lvl:.3f}", fill="#F72585",
-                                 font=(Theme.FONT_FAMILY, 8))
-        except Exception:
-            pass
-
-    def _sma(self, period):
-        out = []
-        for i in range(len(self._candles)):
-            if i < period - 1:
-                out.append(None)
-                continue
-            out.append(sum(c["close"] for c in self._candles[i - period + 1:i + 1]) / period)
-        return out
-
-    def _ema(self, period):
-        out = [None] * (period - 1)
-        if len(self._candles) < period:
-            return out
-        k = 2 / (period + 1)
-        ema = sum(c["close"] for c in self._candles[:period]) / period
-        out.append(ema)
-        for c in self._candles[period:]:
-            ema = c["close"] * k + ema * (1 - k)
-            out.append(ema)
-        return out
-
-    def _stddev(self, values):
-        if not values:
-            return 0.0
-        mean = sum(values) / len(values)
-        return math.sqrt(sum((v - mean) ** 2 for v in values) / len(values))
-
-    def _bollinger(self, period):
-        upper, middle, lower = [], [], []
+    def _draw_indicators(self, left, top, right, bot, lo, hi, rng):
         closes = [c["close"] for c in self._candles]
-        for i in range(len(closes)):
-            if i < period - 1:
-                upper.append(None)
-                middle.append(None)
-                lower.append(None)
-                continue
-            window = closes[i - period + 1:i + 1]
-            avg = sum(window) / period
-            dev = self._stddev(window)
-            upper.append(avg + 2 * dev)
-            middle.append(avg)
-            lower.append(avg - 2 * dev)
-        return upper, middle, lower
+        for name, spec in self._indicators.items():
+            t = spec.get("type", "")
+            if t == "sma":
+                vals = _sma(closes, spec.get("period", 20))
+                self._draw_line(vals, left, top, right, bot, lo, rng, spec.get("color", Theme.ACCENT), name)
+            elif t == "ema":
+                vals = _ema(closes, spec.get("period", 12))
+                self._draw_line(vals, left, top, right, bot, lo, rng, spec.get("color", Theme.WARNING), name)
+            elif t == "bollinger":
+                mid, up, lo_bb = _bb(closes, spec.get("period", 20), spec.get("mult", 2.0))
+                self._draw_line(mid, left, top, right, bot, lo, rng, Theme.ACCENT, "BB Mid")
+                self._draw_line(up, left, top, right, bot, lo, rng, Theme.SUCCESS, "BB Up")
+                self._draw_line(lo_bb, left, top, right, bot, lo, rng, Theme.DANGER, "BB Lo")
 
-    def _rsi(self, period=14):
-        closes = [c["close"] for c in self._candles]
-        if len(closes) <= period:
-            return None
-        gains, losses = [], []
-        for i in range(1, period + 1):
-            delta = closes[i] - closes[i - 1]
-            gains.append(max(delta, 0.0))
-            losses.append(max(-delta, 0.0))
-        avg_gain = sum(gains) / period
-        avg_loss = sum(losses) / period
-        for i in range(period + 1, len(closes)):
-            delta = closes[i] - closes[i - 1]
-            avg_gain = ((avg_gain * (period - 1)) + max(delta, 0.0)) / period
-            avg_loss = ((avg_loss * (period - 1)) + max(-delta, 0.0)) / period
-        if avg_loss == 0:
-            return 100.0
-        rs = avg_gain / avg_loss
-        return 100 - (100 / (1 + rs))
+    def _draw_line(self, vals, left, top, right, bot, lo, rng, color, label):
+        pts = []
+        for i, v in enumerate(vals):
+            x = self._x(i, left, right); y = self._y(v, top, bot, lo, rng)
+            pts.extend([x, y])
+        if len(pts) >= 4: self.create_line(pts, fill=color, width=1.2)
 
-    def _build_subinfo(self) -> str:
-        parts = []
-        if "sma" in self._indicators:
-            vals = self._sma(int(self._indicators["sma"].get("period", 20)))
-            if vals and vals[-1] is not None:
-                parts.append(f"SMA20 {vals[-1]:.2f}")
-        if "ema" in self._indicators:
-            vals = self._ema(int(self._indicators["ema"].get("period", 20)))
-            if vals and vals[-1] is not None:
-                parts.append(f"EMA20 {vals[-1]:.2f}")
-        if "bollinger" in self._indicators:
-            upper, middle, lower = self._bollinger(int(self._indicators["bollinger"].get("period", 20)))
-            if upper and upper[-1] is not None:
-                parts.append(f"BB {lower[-1]:.2f}/{middle[-1]:.2f}/{upper[-1]:.2f}")
-        rsi = self._rsi(14)
-        if rsi is not None:
-            parts.append(f"RSI14 {rsi:.1f}")
-        return "  |  ".join(parts[:4])
+    def _draw_crosshair(self, w, h):
+        if self._hover is None: return
+        x, y = self._hover
+        self.create_line(x, self._pad_t, x, h - self._pad_b, fill=Theme.TEXT_MUTED, dash=(3, 3))
+        self.create_line(self._pad_l, y, w - self._pad_r, y, fill=Theme.TEXT_MUTED, dash=(3, 3))
+
+    def _on_wheel(self, event):
+        self._zoom = max(0.5, min(3.0, self._zoom * (1.1 if event.delta > 0 else 0.9))); self._draw()
+
+    def _on_click(self, event):
+        if self._draw_tool:
+            self._drawings.append({"tool": self._draw_tool, "points": [(event.x, event.y)]})
+        else: self._pan_start = event.x
+
+    def _on_drag(self, event):
+        if self._draw_tool and self._drawings:
+            self._drawings[-1]["points"].append((event.x, event.y)); self._draw()
+        elif self._pan_start is not None:
+            self._pan_x += event.x - self._pan_start; self._pan_start = event.x; self._draw()
+
+    def _on_release(self, event): self._pan_start = None
+
+    def _on_motion(self, event): self._hover = (event.x, event.y); self._draw()
+
+    def _on_leave(self, event): self._hover = None; self._draw()
 
 
 class ChartsTab:
     def __init__(self, parent, robot, market, on_status):
-        self.parent = parent
-        self.robot = robot
-        self.market = market
+        self.parent = parent; self.robot = robot; self.market = market
         self.on_status = on_status
-        self.frame = tk.Frame(parent, bg=Theme.BG)
-        self.frame.pack(fill="both", expand=True)
-        self._running = False
-        self._charts = {}
-        self._tab_id = 0
+        self.frame = tk.Frame(parent, bg=Theme.BG); self.frame.pack(fill="both", expand=True)
+        self._running = False; self._refresh_busy = False; self._last_data = None
         self._build()
 
     def _build(self):
         from app.components.banner import TabBanner
         TabBanner(self.frame, "charts")
         header = tk.Frame(self.frame, bg=Theme.BG)
-        header.pack(fill="x", padx=24, pady=(20, 8))
-        tk.Label(header, text="Graficos", bg=Theme.BG, fg=Theme.TEXT,
-                 font=(Theme.FONT_FAMILY, 20, "bold")).pack(side="left")
-        tk.Label(header, text="Leitura operacional com overlays profissionais", bg=Theme.BG,
-                 fg=Theme.TEXT_SECONDARY, font=(Theme.FONT_FAMILY, 10)).pack(side="left", padx=12)
-
-        ctrl = tk.Frame(self.frame, bg=Theme.BG)
-        ctrl.pack(fill="x", padx=24, pady=(0, 8))
-        cfg = get_config()
-        symbols = cfg.get("market", "symbols", default=["XAUUSD", "BTCUSD", "ETHUSD", "EURUSD", "GBPUSD"])
-
-        self.sym_var = tk.StringVar(value=symbols[0] if symbols else "XAUUSD")
-        tk.Label(ctrl, text="Simbolo", bg=Theme.BG, fg=Theme.TEXT_SECONDARY).pack(side="left", padx=4)
-        self.sym_menu = tk.OptionMenu(ctrl, self.sym_var, *symbols)
-        self.sym_menu.config(bg=Theme.PANEL, fg=Theme.TEXT, highlightthickness=0)
-        self.sym_menu.pack(side="left", padx=4)
-
+        header.pack(fill="x", padx=24, pady=(20, 10))
+        tk.Label(header, text="Grafico", bg=Theme.BG, fg=Theme.TEXT, font=(Theme.FONT_FAMILY, 20, "bold")).pack(side="left")
+        tk.Label(header, text="Analise tecnica profissional", bg=Theme.BG, fg=Theme.TEXT_SECONDARY, font=(Theme.FONT_FAMILY, 10)).pack(side="left", padx=12)
+        toolbar = tk.Frame(self.frame, bg=Theme.BG); toolbar.pack(fill="x", padx=24, pady=(0, 8))
+        tk.Label(toolbar, text="Ativo", bg=Theme.BG, fg=Theme.TEXT_SECONDARY).pack(side="left")
+        self.sym_var = tk.StringVar(value="XAUUSD")
+        tk.Entry(toolbar, textvariable=self.sym_var, width=10, bg=Theme.PANEL, fg=Theme.TEXT, insertbackground=Theme.TEXT, relief="flat").pack(side="left", padx=(4, 12))
+        tk.Label(toolbar, text="Timeframe", bg=Theme.BG, fg=Theme.TEXT_SECONDARY).pack(side="left")
         self.tf_var = tk.StringVar(value="M5")
-        tk.Label(ctrl, text="TF", bg=Theme.BG, fg=Theme.TEXT_SECONDARY).pack(side="left", padx=4)
-        tk.OptionMenu(ctrl, self.tf_var, *list(TFMAP.keys())).pack(side="left", padx=4)
-
+        for tf in TFORDER:
+            tk.Radiobutton(toolbar, text=tf, variable=self.tf_var, value=tf, bg=Theme.BG, fg=Theme.TEXT_SECONDARY, selectcolor=Theme.PANEL, activebackground=Theme.BG, font=(Theme.FONT_FAMILY, 8)).pack(side="left")
+        tk.Label(toolbar, text="Tipo", bg=Theme.BG, fg=Theme.TEXT_SECONDARY).pack(side="left", padx=(12, 0))
         self.kind_var = tk.StringVar(value="candles")
-        tk.Label(ctrl, text="Tipo", bg=Theme.BG, fg=Theme.TEXT_SECONDARY).pack(side="left", padx=4)
-        tk.OptionMenu(ctrl, self.kind_var, "candles", "linha", "area").pack(side="left", padx=4)
-
-        self.ind_var = tk.StringVar(value="sma")
-        tk.Label(ctrl, text="Indicador", bg=Theme.BG, fg=Theme.TEXT_SECONDARY).pack(side="left", padx=4)
-        tk.OptionMenu(ctrl, self.ind_var, "sma", "ema", "bollinger").pack(side="left", padx=4)
-        SecondaryButton(ctrl, text="Aplicar Ind", command=self.apply_indicator, width=12).pack(side="left", padx=2)
-        SecondaryButton(ctrl, text="Limpar Ind", command=self.clear_indicator, width=12).pack(side="left", padx=2)
-
-        tk.Label(ctrl, text="Desenhar", bg=Theme.BG, fg=Theme.TEXT_SECONDARY).pack(side="left", padx=4)
-        SecondaryButton(ctrl, text="Linha H", command=lambda: self.chart.add_drawing("hline"), width=8).pack(side="left", padx=2)
-        SecondaryButton(ctrl, text="Tendencia", command=lambda: self.chart.add_drawing("trend"), width=10).pack(side="left", padx=2)
-        SecondaryButton(ctrl, text="Fib", command=lambda: self.chart.add_drawing("fib"), width=6).pack(side="left", padx=2)
-        SecondaryButton(ctrl, text="Limpar desenhos", command=self.clear_drawings, width=14).pack(side="left", padx=2)
-
-        SecondaryButton(ctrl, text="+ Nova aba", command=self.new_tab, width=12).pack(side="right", padx=4)
-        SecondaryButton(ctrl, text="Salvar CSV", command=self.save_csv, width=12).pack(side="right", padx=4)
-        SecondaryButton(ctrl, text="Importar ativo", command=self.import_symbol, width=14).pack(side="right", padx=4)
-        self.auto_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(ctrl, text="Auto 1min", variable=self.auto_var, bg=Theme.BG, fg=Theme.TEXT,
-                       selectcolor=Theme.PANEL, activebackground=Theme.BG,
-                       font=(Theme.FONT_FAMILY, 9)).pack(side="right", padx=8)
-
-        tab_bar = tk.Frame(self.frame, bg=Theme.PANEL)
-        tab_bar.pack(fill="x", padx=24)
-        self.tab_buttons = tk.Frame(tab_bar, bg=Theme.PANEL)
-        self.tab_buttons.pack(side="left")
-        self._build_tab_bar()
-
-        card = Card(self.frame, title="Grafico em tempo real")
-        card.pack(fill="both", expand=True, padx=24, pady=8)
-        self.chart = ChartCanvas(card.body)
-        self.chart.pack(fill="both", expand=True, padx=8, pady=8)
-
-        self.info_lbl = tk.Label(self.frame, text="", bg=Theme.BG, fg=Theme.TEXT_SECONDARY,
-                                 font=(Theme.FONT_FAMILY, 9))
+        for k, lbl in [("candles", "Candle"), ("line", "Linha"), ("bar", "OHLC")]:
+            tk.Radiobutton(toolbar, text=lbl, variable=self.kind_var, value=k, bg=Theme.BG, fg=Theme.TEXT_SECONDARY, selectcolor=Theme.PANEL, activebackground=Theme.BG, font=(Theme.FONT_FAMILY, 8)).pack(side="left")
+        ind_bar = tk.Frame(self.frame, bg=Theme.BG); ind_bar.pack(fill="x", padx=24, pady=(0, 8))
+        tk.Label(ind_bar, text="Indicadores:", bg=Theme.BG, fg=Theme.TEXT_SECONDARY).pack(side="left")
+        self.sma_var = tk.BooleanVar(value=False)
+        self.ema_var = tk.BooleanVar(value=False)
+        self.bb_var = tk.BooleanVar(value=False)
+        self.vol_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(ind_bar, text="SMA", variable=self.sma_var, bg=Theme.BG, fg=Theme.TEXT_SECONDARY, selectcolor=Theme.PANEL, activebackground=Theme.BG, command=self._refresh).pack(side="left", padx=4)
+        tk.Checkbutton(ind_bar, text="EMA", variable=self.ema_var, bg=Theme.BG, fg=Theme.TEXT_SECONDARY, selectcolor=Theme.PANEL, activebackground=Theme.BG, command=self._refresh).pack(side="left", padx=4)
+        tk.Checkbutton(ind_bar, text="Bollinger", variable=self.bb_var, bg=Theme.BG, fg=Theme.TEXT_SECONDARY, selectcolor=Theme.PANEL, activebackground=Theme.BG, command=self._refresh).pack(side="left", padx=4)
+        tk.Checkbutton(ind_bar, text="Volume", variable=self.vol_var, bg=Theme.BG, fg=Theme.TEXT_SECONDARY, selectcolor=Theme.PANEL, activebackground=Theme.BG, command=self._refresh).pack(side="left", padx=4)
+        btn_bar = tk.Frame(self.frame, bg=Theme.BG); btn_bar.pack(fill="x", padx=24, pady=(0, 8))
+        AccentButton(btn_bar, text="Atualizar", command=self._refresh, width=12).pack(side="left", padx=4)
+        SecondaryButton(btn_bar, text="Limpar", command=self._clear_ind, width=10).pack(side="left", padx=4)
+        SecondaryButton(btn_bar, text="Exportar CSV", command=self._export_csv, width=14).pack(side="left", padx=4)
+        SecondaryButton(btn_bar, text="Salvar imagem", command=self._save_img, width=14).pack(side="left", padx=4)
+        chart_card = Card(self.frame, title=""); chart_card.pack(fill="both", expand=True, padx=24, pady=(0, 12))
+        self.chart = ChartCanvas(chart_card.body, height=420); self.chart.pack(fill="both", expand=True)
+        self.info_lbl = tk.Label(self.frame, text="Pronto", bg=Theme.BG, fg=Theme.TEXT_MUTED, font=(Theme.FONT_FAMILY, 9), anchor="w")
         self.info_lbl.pack(fill="x", padx=24, pady=(0, 8))
 
-        self.new_tab()
+    def _clear_ind(self):
+        self.chart.clear_indicators(); self.on_status("Indicadores limpos")
 
-    def _build_tab_bar(self):
-        for w in self.tab_buttons.winfo_children():
-            w.destroy()
-        for tid in list(self._charts.keys()):
-            t = self._charts[tid]
-            b = tk.Button(self.tab_buttons, text=f"{t['symbol']} {t['tf']}  x",
-                          command=lambda i=tid: self.show_tab(i),
-                          bg=Theme.PANEL, fg=Theme.TEXT, relief="flat",
-                          font=(Theme.FONT_FAMILY, 9), padx=8, cursor="hand2")
-            b.pack(side="left", padx=2)
-
-    def new_tab(self):
-        self._tab_id += 1
-        self._charts[self._tab_id] = {
-            "symbol": self.sym_var.get(),
-            "tf": self.tf_var.get(),
-            "kind": self.kind_var.get(),
-        }
-        self._rebuild_menu()
-        self._build_tab_bar()
-        self.show_tab(self._tab_id)
-
-    def show_tab(self, tid):
-        if tid not in self._charts:
-            return
-        tab = self._charts[tid]
-        self.sym_var.set(tab["symbol"])
-        self.tf_var.set(tab["tf"])
-        self.kind_var.set(tab.get("kind", "candles"))
-        self._build_tab_bar()
-        self.refresh_now()
-
-    def _rebuild_menu(self):
-        cfg = get_config()
-        all_syms = list(dict.fromkeys((cfg.get("market", "symbols", default=[]) or []) +
-                                      [t["symbol"] for t in self._charts.values()]))
-        menu = self.sym_menu["menu"]
-        menu.delete(0, "end")
-        for sym in all_syms:
-            menu.add_command(label=sym, command=lambda v=sym: self.sym_var.set(v))
-
-    def apply_indicator(self):
-        name = self.ind_var.get()
-        self.chart.set_indicator(name, {"type": name, "period": 20})
-        self.on_status(f"Indicador {name.upper()} aplicado")
-
-    def clear_indicator(self):
-        self.chart.clear_indicators()
-        self.on_status("Indicadores limpos")
-
-    def clear_drawings(self):
-        self.chart.clear_drawings()
-        self.on_status("Desenhos limpos")
-
-    def save_csv(self):
+    def _export_csv(self):
+        path = Path.home() / "Desktop" / f"chart_{self.sym_var.get()}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
         try:
-            from tkinter import filedialog
-        except Exception:
-            filedialog = None
-        if filedialog is None:
-            self.on_status("Exportar CSV indisponivel no EXE (use o fonte)")
-            return
-        path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV", "*.csv")])
-        if path:
-            total = self.chart.export_csv(Path(path))
-            self.on_status(f"Grafico salvo: {total} candles -> {path}")
+            n = self.chart.export_csv(path); self.on_status(f"CSV exportado: {n} candles")
+        except Exception as e: self.on_status(f"Erro CSV: {e}")
 
-    def import_symbol(self):
+    def _save_img(self):
+        path = Path.home() / "Desktop" / f"chart_{self.sym_var.get()}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.ps"
         try:
-            from tkinter import simpledialog
-        except Exception:
-            simpledialog = None
-        if simpledialog is None:
-            self.on_status("Importar ativo indisponivel no EXE (use o fonte)")
-            return
-        sym = simpledialog.askstring("Importar ativo", "Simbolo (ex.: SOLUSD, DOGEUSD):", parent=self.frame)
-        if sym:
-            sym = sym.strip().upper()
-            cfg = get_config()
-            syms = list(cfg.get("market", "symbols", default=[]) or [])
-            if sym not in syms:
-                syms.append(sym)
-                cfg.set("market", "symbols", value=syms)
-                self.sym_var.set(sym)
-                self._rebuild_menu()
-                self.on_status(f"Ativo {sym} importado")
-                self.refresh_now()
-            else:
-                self.sym_var.set(sym)
-                self.on_status(f"{sym} ja listado")
+            self.chart.save_screenshot(path); self.on_status(f"Imagem salva: {path.name}")
+        except Exception as e: self.on_status(f"Erro imagem: {e}")
 
-    def start_auto(self):
-        self._running = True
-        threading.Thread(target=self._loop, daemon=True).start()
-        self.refresh_now()
+    def _refresh(self):
+        if self._refresh_busy: return
+        self._refresh_busy = True; self.on_status("Atualizando grafico...")
+        threading.Thread(target=self._collect_thread, daemon=True).start()
 
-    def stop_auto(self):
-        self._running = False
+    def _collect_thread(self):
+        try:
+            data = self._collect(); self.frame.after(0, lambda: self._finish_refresh(data))
+        except Exception as e: self.frame.after(0, lambda: self._finish_refresh_error(e))
 
-    def _loop(self):
-        while self._running:
-            try:
-                time.sleep(60)
-                if self.auto_var.get():
-                    self.refresh_now()
-            except Exception:
-                time.sleep(10)
+    def _finish_refresh(self, data):
+        self._refresh_busy = False; self._last_data = data; self._apply(data)
 
-    def refresh_now(self):
-        if getattr(self, "_refresh_busy", False):
-            return
-        self._refresh_busy = True
-        self.on_status("Carregando grafico...")
-
-        def worker() -> None:
-            try:
-                data = self._collect()
-                self.frame.after(0, lambda d=data: self._finish_refresh(d))
-            except Exception as exc:
-                self.frame.after(0, lambda e=exc: self._finish_refresh_error(e))
-
-        threading.Thread(target=worker, daemon=True).start()
-
-    def _finish_refresh(self, data) -> None:
-        self._refresh_busy = False
-        self._apply(data)
-
-    def _finish_refresh_error(self, exc) -> None:
-        self._refresh_busy = False
-        self.on_status(f"Grafico: {exc}")
+    def _finish_refresh_error(self, exc):
+        self._refresh_busy = False; self.on_status(f"Grafico: {exc}")
 
     def _collect(self):
-        symbol = self.sym_var.get()
-        tf = self.tf_var.get()
+        symbol = self.sym_var.get(); tf = self.tf_var.get()
         minutes = TFMAP.get(tf, 5)
         limit = max(60, min(500, 240 // max(1, minutes // 5)))
-        candles = []
-        source = "mt5"
+        candles = []; source = "mt5"
         try:
             import MetaTrader5 as mt5
             if mt5.initialize():
-                tfmap = {
-                    1: mt5.TIMEFRAME_M1, 5: mt5.TIMEFRAME_M5, 15: mt5.TIMEFRAME_M15,
-                    30: mt5.TIMEFRAME_M30, 60: mt5.TIMEFRAME_H1, 240: mt5.TIMEFRAME_H4,
-                    1440: mt5.TIMEFRAME_D1, 10080: mt5.TIMEFRAME_W1,
-                }
+                tfmap = {1: mt5.TIMEFRAME_M1, 5: mt5.TIMEFRAME_M5, 15: mt5.TIMEFRAME_M15, 30: mt5.TIMEFRAME_M30, 60: mt5.TIMEFRAME_H1, 240: mt5.TIMEFRAME_H4, 1440: mt5.TIMEFRAME_D1, 10080: mt5.TIMEFRAME_W1}
                 rates = mt5.copy_rates_from_pos(symbol, tfmap.get(minutes, mt5.TIMEFRAME_M5), 0, limit)
                 if rates is not None and len(rates):
                     for r in rates[-limit:]:
-                        candles.append({
-                            "symbol": symbol,
-                            "time": datetime.fromtimestamp(int(r["time"])).strftime("%d/%m %H:%M"),
-                            "open": float(r["open"]),
-                            "high": float(r["high"]),
-                            "low": float(r["low"]),
-                            "close": float(r["close"]),
-                        })
+                        candles.append({"symbol": symbol, "time": datetime.fromtimestamp(int(r["time"])).strftime("%d/%m %H:%M"), "open": float(r["open"]), "high": float(r["high"]), "low": float(r["low"]), "close": float(r["close"]), "volume": float(r.get("tick_volume", 0))})
                 mt5.shutdown()
-        except Exception:
-            pass
+        except Exception: pass
         if not candles:
-            candles = self._from_csv(symbol, limit)
-            source = "csv" if candles else "sem dados"
+            candles = self._from_csv(symbol, limit); source = "csv" if candles else "sem dados"
         return {"candles": candles, "symbol": symbol, "tf": tf, "source": source}
 
     def _from_csv(self, symbol, limit):
         base = Path(__file__).resolve().parent.parent.parent.parent / "MQL5" / "Files" / "Data"
-        ds = base / "dataset.csv"
-        out = []
-        if not ds.exists():
-            return out
+        ds = base / "dataset.csv"; out = []
+        if not ds.exists(): return out
         for enc in ("utf-16", "utf-8-sig", "utf-8", "latin-1"):
             try:
                 rows = []
                 with open(ds, encoding=enc, newline="") as fh:
                     for row in csv.DictReader(fh):
-                        if (row.get("Symbol") or row.get("symbol") or "").strip().upper() != symbol.upper():
-                            continue
+                        if (row.get("Symbol") or row.get("symbol") or "").strip().upper() != symbol.upper(): continue
                         try:
-                            rows.append({
-                                "symbol": symbol,
-                                "time": row.get("Time", ""),
-                                "open": float(row.get("Open", 0)),
-                                "high": float(row.get("High", 0)),
-                                "low": float(row.get("Low", 0)),
-                                "close": float(row.get("Close", 0)),
-                            })
-                        except (TypeError, ValueError):
-                            continue
-                if rows:
-                    out = rows
-                    break
-            except Exception:
-                continue
+                            rows.append({"symbol": symbol, "time": row.get("Time", ""), "open": float(row.get("Open", 0)), "high": float(row.get("High", 0)), "low": float(row.get("Low", 0)), "close": float(row.get("Close", 0)), "volume": float(row.get("Volume", row.get("volume", 0)))})
+                        except (TypeError, ValueError): continue
+                if rows: out = rows; break
+            except Exception: continue
         return out[-limit:]
 
     def _apply(self, data):
         self.chart.set_data(data["candles"], self.kind_var.get())
+        self.chart._show_volume = self.vol_var.get()
+        inds = {}
+        if self.sma_var.get():
+            inds["sma20"] = {"type": "sma", "period": 20, "color": Theme.ACCENT}
+            inds["sma50"] = {"type": "sma", "period": 50, "color": Theme.WARNING}
+        if self.ema_var.get():
+            inds["ema12"] = {"type": "ema", "period": 12, "color": Theme.PRIMARY}
+        if self.bb_var.get():
+            inds["bb"] = {"type": "bollinger", "period": 20, "mult": 2.0}
+        for name, spec in inds.items():
+            self.chart.set_indicator(name, spec)
         total = len(data["candles"])
-        self.info_lbl.configure(
-            text=f"{data['symbol']} {data['tf']} | {total} candle(s) | fonte: {data.get('source')} | "
-                 f"atualizado: {datetime.now().strftime('%H:%M:%S')}"
-        )
+        self.info_lbl.configure(text=f"{data['symbol']} {data['tf']} | {total} candle(s) | fonte: {data.get('source')} | atualizado: {datetime.now().strftime('%H:%M:%S')}")
         self.on_status(f"Grafico atualizado: {data['symbol']} {data['tf']} ({total})")
+
+    def refresh(self): self._refresh()
+    def refresh_now(self): self._refresh()
+    def start_auto(self):
+        if self._running: return
+        self._running = True; self._refresh()
+    def stop_auto(self): self._running = False

@@ -28,8 +28,7 @@ NEON = {
 class TabBanner(tk.Canvas):
     """Banner com arte tematica + particulas interativas."""
 
-    N_PARTICLES = 14
-    TICK_MS = 80
+    N_PARTICLES = 0
 
     def __init__(self, parent, key: str, height: int = 110, **kw):
         self._neon = NEON.get(key, "#00e5ff")
@@ -60,7 +59,7 @@ class TabBanner(tk.Canvas):
         self.bind("<Configure>", self._on_resize)
         self.bind("<Motion>", self._on_motion)
         self.bind("<Leave>", lambda e: setattr(self, "_mouse", (-999, -999)))
-        self._after_id = self.after(self.TICK_MS, self._tick)
+        self._after_id = None
 
     # ------------------------------------------------------------------
     def _on_resize(self, event) -> None:
@@ -101,6 +100,9 @@ class TabBanner(tk.Canvas):
 
     def _tick(self) -> None:
         try:
+            if not self.winfo_ismapped():
+                self._after_id = self.after(self.IDLE_TICK_MS, self._tick)
+                return
             w = max(1, self.winfo_width())
             h = max(1, self.winfo_height())
             mx, my = self._mouse

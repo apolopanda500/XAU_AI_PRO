@@ -4,6 +4,7 @@ Aba Configuracoes do app XAU_AI_PRO.
 from __future__ import annotations
 
 import tkinter as tk
+import shutil
 from typing import Callable
 
 from app.components.cards import Card, PrimaryButton, SecondaryButton, AccentButton
@@ -125,6 +126,34 @@ class SettingsTab:
                                          font=(Theme.FONT_FAMILY, 9))
         self.cpu_status_label.grid(row=5, column=0, columnspan=4, sticky="w", padx=4, pady=(6, 0))
 
+        resources_card = Card(self.frame, title="Diagnostico do Desk")
+        resources_card.pack(fill="x", padx=24, pady=10)
+        self.resources_label = tk.Label(resources_card.body, text="Carregue o diagnostico sob demanda.",
+                                        bg=Theme.CARD, fg=Theme.TEXT_SECONDARY,
+                                        justify="left", anchor="w", font=(Theme.FONT_FAMILY, 9))
+        self.resources_label.pack(fill="x", padx=12, pady=(10, 6))
+        SecondaryButton(resources_card.body, text="Atualizar diagnostico", command=self.refresh_resources,
+                        width=20).pack(anchor="w", padx=12, pady=(0, 10))
+
+        profile_card = Card(self.frame, title="Perfil Operacional")
+        profile_card.pack(fill="x", padx=24, pady=10)
+        profile_row = tk.Frame(profile_card.body, bg=Theme.CARD)
+        profile_row.pack(fill="x", padx=12, pady=10)
+        self.desk_profile_var = tk.StringVar(value=str(get_config().get("cpu", "desk_profile", default="Equilibrado")))
+        tk.Label(profile_row, text="Perfil", bg=Theme.CARD, fg=Theme.TEXT_SECONDARY).pack(side="left")
+        tk.OptionMenu(profile_row, self.desk_profile_var, "Conservador", "Equilibrado", "Baixa latencia").pack(side="left", padx=8)
+        AccentButton(profile_row, text="Aplicar perfil", command=self.apply_desk_profile, width=16).pack(side="left", padx=4)
+        tk.Label(profile_card.body, text="Ajusta somente prioridade, afinidade e limites do XAU AI PRO. Nunca envia ordens nem altera o Windows globalmente.",
+                 bg=Theme.CARD, fg=Theme.TEXT_MUTED, font=(Theme.FONT_FAMILY, 8)).pack(anchor="w", padx=12, pady=(0, 10))
+
+        storage_card = Card(self.frame, title="Armazenamento e Auditoria")
+        storage_card.pack(fill="x", padx=24, pady=10)
+        self.storage_label = tk.Label(storage_card.body, text="Lendo armazenamento local...", bg=Theme.CARD,
+                                      fg=Theme.TEXT_SECONDARY, justify="left", anchor="w", font=(Theme.FONT_FAMILY, 9))
+        self.storage_label.pack(fill="x", padx=12, pady=(10, 6))
+        SecondaryButton(storage_card.body, text="Atualizar armazenamento", command=self.refresh_storage,
+                        width=22).pack(anchor="w", padx=12, pady=(0, 10))
+
         # Modelos IA - CDN Vercel (download sob demanda)
         models_card = Card(self.frame, title="Modelos IA - CDN Vercel")
         models_card.pack(fill="x", padx=24, pady=10)
@@ -145,42 +174,6 @@ class SettingsTab:
         self.models_res.grid(row=2, column=0, columnspan=4, sticky="w", padx=4, pady=(4, 0))
         SecondaryButton(mf, text="Testar manifest", command=self.test_models, width=16).grid(row=3, column=0, padx=4, pady=4, sticky="w")
         AccentButton(mf, text="Salvar modelos", command=self.save_models, width=16).grid(row=3, column=1, padx=4, pady=4, sticky="w")
-
-        # Chat IA - configuracao do assistente
-        ai_card = Card(self.frame, title="Assistente IA (chat)")
-        ai_card.pack(fill="x", padx=24, pady=10)
-        af = tk.Frame(ai_card.body, bg=Theme.CARD)
-        af.pack(fill="x", padx=8, pady=8)
-        cfg_ai = get_config()
-        self.ai_enabled_var = tk.BooleanVar(value=bool(cfg_ai.get("api", "ai_enabled", default=False)))
-        tk.Checkbutton(af, text="Habilitar IA real (caso contrario usa respostas locais)",
-                       variable=self.ai_enabled_var, bg=Theme.CARD, fg=Theme.TEXT,
-                       selectcolor=Theme.PANEL, activebackground=Theme.CARD,
-                       font=(Theme.FONT_FAMILY, 9)).grid(row=0, column=0, columnspan=4, sticky="w", padx=4, pady=3)
-        tk.Label(af, text="URL base", bg=Theme.CARD, fg=Theme.TEXT_SECONDARY).grid(row=1, column=0, sticky="w", padx=4)
-        self.ai_url_entry = tk.Entry(af, width=54, bg=Theme.PANEL, fg=Theme.TEXT, relief="flat",
-                                     highlightbackground=Theme.BORDER, highlightthickness=1)
-        self.ai_url_entry.insert(0, cfg_ai.get("api", "ai_base_url", default=""))
-        self.ai_url_entry.grid(row=1, column=1, columnspan=3, padx=4, pady=3)
-        tk.Label(af, text="API key", bg=Theme.CARD, fg=Theme.TEXT_SECONDARY).grid(row=2, column=0, sticky="w", padx=4)
-        self.ai_key_entry = tk.Entry(af, width=54, bg=Theme.PANEL, fg=Theme.TEXT, show="*", relief="flat",
-                                     highlightbackground=Theme.BORDER, highlightthickness=1)
-        self.ai_key_entry.insert(0, cfg_ai.get("api", "ai_api_key", default=""))
-        self.ai_key_entry.grid(row=2, column=1, columnspan=3, padx=4, pady=3)
-        tk.Label(af, text="Modelo", bg=Theme.CARD, fg=Theme.TEXT_SECONDARY).grid(row=3, column=0, sticky="w", padx=4)
-        self.ai_model_entry = tk.Entry(af, width=54, bg=Theme.PANEL, fg=Theme.TEXT, relief="flat",
-                                       highlightbackground=Theme.BORDER, highlightthickness=1)
-        self.ai_model_entry.insert(0, cfg_ai.get("api", "ai_model", default="ollama/deepseek-v4-flash:cloud"))
-        self.ai_model_entry.grid(row=3, column=1, columnspan=3, padx=4, pady=3)
-        tk.Label(af, text="Ex.: http://localhost:4000/v1 ou https://ai-gateway.vercel.sh/v1 | "
-                          "modelo: openai/gpt-5.6-sol ou ollama/deepseek-v4-flash:cloud",
-                 bg=Theme.CARD, fg=Theme.TEXT_MUTED, font=(Theme.FONT_FAMILY, 8)).grid(
-            row=4, column=0, columnspan=4, sticky="w", padx=4)
-        self.ai_res = tk.Label(af, text="", bg=Theme.CARD, fg=Theme.TEXT_SECONDARY,
-                               font=(Theme.FONT_FAMILY, 9), anchor="w")
-        self.ai_res.grid(row=5, column=0, columnspan=4, sticky="w", padx=4, pady=(4, 0))
-        SecondaryButton(af, text="Testar IA", command=self.test_ai, width=14).grid(row=6, column=0, padx=4, pady=4, sticky="w")
-        AccentButton(af, text="Salvar IA", command=self.save_ai, width=14).grid(row=6, column=1, padx=4, pady=4, sticky="w")
 
         # Botoes
         btn_row = tk.Frame(self.frame, bg=Theme.BG)
@@ -230,15 +223,70 @@ class SettingsTab:
             return self.cpu_affinity_entry.get().strip() or "todos"
         return aff
 
+    def refresh_resources(self) -> None:
+        self.resources_label.configure(text="Lendo recursos do desk...", fg=Theme.TEXT_SECONDARY)
+
+        def worker() -> None:
+            from app.cpu import memory_info, system_specs
+            specs = system_specs()
+            memory = memory_info()
+            text = (f"CPU: {specs.get('cpu_name', 'N/D')} | "
+                    f"GPU: {specs.get('gpu_name', 'N/D')}\n"
+                    f"RAM: {memory.get('used_mb', 0):,} / {memory.get('total_mb', 0):,} MB "
+                    f"({memory.get('usage_pct', 0):.0f}%) | "
+                    f"Disco C: {specs.get('disco_livre_gb', 'N/D')} GB livres\n"
+                    f"Limite IA local: {self.cpu_cores_entry.get() or 'auto'} nucleos | "
+                    f"RAM maxima: {self.cpu_ram_entry.get() or '80'}%")
+            self.frame.after(0, lambda: self.resources_label.configure(text=text, fg=Theme.TEXT))
+
+        import threading
+        threading.Thread(target=worker, daemon=True).start()
+
+    def refresh_storage(self) -> None:
+        from app.market_store import get_market_db_path
+        from app.utils.paths import get_data_dir
+        data_dir = get_data_dir()
+        database = get_market_db_path()
+        usage = shutil.disk_usage(data_dir)
+        db_size = database.stat().st_size / (1024 * 1024) if database.exists() else 0.0
+        text = (f"Dados locais: {data_dir}\nSQLite de mercado: {db_size:.2f} MB | "
+                f"Disco livre: {usage.free / (1024 ** 3):.1f} GB | Retencao de ticks: 7 dias")
+        self.storage_label.configure(text=text, fg=Theme.TEXT)
+
+    def apply_desk_profile(self) -> None:
+        profiles = {
+            "Conservador": ("normal", "todos", "auto", 65.0),
+            "Equilibrado": ("normal", "todos", "auto", 75.0),
+            "Baixa latencia": ("alta", "todos", "auto", 75.0),
+        }
+        priority, affinity, cores, ram_pct = profiles[self.desk_profile_var.get()]
+        self.cpu_priority_var.set(priority)
+        self.cpu_affinity_var.set(affinity)
+        self.cpu_cores_entry.delete(0, "end")
+        self.cpu_cores_entry.insert(0, cores)
+        self.cpu_ram_entry.delete(0, "end")
+        self.cpu_ram_entry.insert(0, str(int(ram_pct)))
+        c = get_config()
+        c.set("cpu", "desk_profile", value=self.desk_profile_var.get())
+        self.apply_cpu()
+
     def apply_cpu(self) -> None:
         """Aplica prioridade, afinidade e limites de recursos imediatamente."""
         from app.cpu import (apply_model_limits, memory_info, model_max_ram_mb,
                              model_n_jobs, parse_affinity, set_affinity,
                              set_priority, temperature_c)  # noqa: PLC0415
+        c = get_config()
+        c.set("cpu", "priority", value=self.cpu_priority_var.get())
+        c.set("cpu", "affinity", value=self._affinity_value())
+        c.set("cpu", "model_cores", value=self.cpu_cores_entry.get().strip() or "auto")
+        try:
+            c.set("cpu", "max_ram_pct", value=float(self.cpu_ram_entry.get()))
+        except ValueError:
+            pass
         ok_p = set_priority(self.cpu_priority_var.get())
         mask = parse_affinity(self._affinity_value())
         ok_a = bool(mask) and set_affinity(mask)
-        n_jobs, max_ram = apply_model_limits(get_config())
+        n_jobs, max_ram = apply_model_limits(c)
         mem = memory_info()
         temp = temperature_c()
         msg = f"Prioridade {'OK' if ok_p else 'FALHOU'} | afinidade {'OK' if ok_a else 'FALHOU'}"
@@ -280,39 +328,6 @@ class SettingsTab:
         c.set("integrations", "models", "api_key", value=self.models_key_entry.get().strip())
         self.models_res.configure(text="✔ Modelos Vercel salvos", fg=Theme.SUCCESS)
         self.on_status("Modelos Vercel salvos")
-
-    def test_ai(self) -> None:
-        """Testa a conexao com a IA configurada (em thread)."""
-        self._apply_ai_config()  # salva temporariamente para o teste usar
-        self.on_status("Testando conexao com a IA...")
-        self.ai_res.configure(text="Testando...", fg=Theme.TEXT_SECONDARY)
-
-        def worker() -> None:
-            from app.ai_client import ask_ai
-            result = ask_ai([{"role": "user", "content": "Diga apenas: OK"}])
-            ok = bool(result.get("ok"))
-            msg = result.get("reply", "").strip()[:80] if ok else str(result.get("error", ""))
-            def ui() -> None:
-                self.ai_res.configure(text=("✔ " + msg) if ok else ("✘ " + msg),
-                                      fg=Theme.SUCCESS if ok else Theme.DANGER)
-            try:
-                self.ai_res.after(0, ui)
-            except Exception:
-                pass
-
-        threading.Thread(target=worker, daemon=True).start()
-
-    def save_ai(self) -> None:
-        self._apply_ai_config()
-        self.ai_res.configure(text="✔ Configuracao de IA salva", fg=Theme.SUCCESS)
-        self.on_status("Configuracao de IA salva")
-
-    def _apply_ai_config(self) -> None:
-        c = get_config()
-        c.set("api", "ai_enabled", value=bool(self.ai_enabled_var.get()))
-        c.set("api", "ai_base_url", value=self.ai_url_entry.get().strip())
-        c.set("api", "ai_api_key", value=self.ai_key_entry.get().strip())
-        c.set("api", "ai_model", value=self.ai_model_entry.get().strip() or "ollama/deepseek-v4-flash:cloud")
 
     def test_mt5(self) -> None:
         if self.robot.connect():

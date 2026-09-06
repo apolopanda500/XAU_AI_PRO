@@ -43,7 +43,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           grep -viE "^\s*MetaTrader5" requirements.txt > /tmp/req-ci.txt
-          pip install -r /tmp/req-ci.txt
+          pip install -r /tmp/req-ci.txt -r requirements-dev.txt
       - name: Validar sintaxe Python
         run: python -m compileall -q Python app
       - name: Executar testes Python

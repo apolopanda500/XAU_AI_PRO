@@ -61,13 +61,44 @@ class MexcTreeview(ttk.Treeview):
             self.delete(item)
 
     def set_rows(self, rows: list[list[Any]], tags: list[str] | None = None) -> None:
-        self.clear()
-        for i, row in enumerate(rows):
+        view_position = self.yview()[0]
+        # A seleção é re-mantida pela CHAVE estável (primeira coluna: símbolo,
+        # ticket, etc.) e não por todos os valores — assim preço/PNL alterado
+        # não "perde" a linha selecionada durante atualizações em tempo real.
+        selected_keys = {self._row_key(self.item(item, "values")) for item in self.selection()}
+        items = list(self.get_children())
+        row_tags: list[str] = []
+        for i, _ in enumerate(rows):
             tag = (tags[i] if tags and i < len(tags) else "")
-            # Alternar cor de fundo (zebra striping)
             if not tag:
                 tag = "even" if i % 2 == 0 else "odd"
-            self.insert("", "end", values=row, tags=(tag,))
+            row_tags.append(tag)
+
+        if len(items) == len(rows):
+            for item, row, tag in zip(items, rows, row_tags):
+                values = tuple(str(value) for value in row)
+                if self.item(item, "values") != values:
+                    self.item(item, values=row)
+                if self.item(item, "tags") != (tag,):
+                    self.item(item, tags=(tag,))
+        else:
+            self.clear()
+            for row, tag in zip(rows, row_tags):
+                self.insert("", "end", values=row, tags=(tag,))
+
+        self.selection_remove(self.selection())
+        if selected_keys:
+            for item in self.get_children():
+                if self.item(item, "values") and self._row_key(self.item(item, "values")) in selected_keys:
+                    self.selection_add(item)
+        self.after_idle(lambda: self.yview_moveto(view_position))
+
+    @staticmethod
+    def _row_key(values: tuple) -> Any:
+        """Chave estável de uma linha para preservar a seleção (1ª coluna)."""
+        if values:
+            return values[0]
+        return None
 
 
 class ScrollableTable(tk.Frame):

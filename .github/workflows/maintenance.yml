@@ -32,7 +32,7 @@ jobs:
       - name: Instalar dependencias Python
         run: |
           grep -viE "^\s*MetaTrader5" requirements.txt > /tmp/req-ci.txt
-          pip install -r /tmp/req-ci.txt
+          pip install -r /tmp/req-ci.txt -r requirements-dev.txt
       - name: Validar Python
         run: |
           python -m compileall -q Python app

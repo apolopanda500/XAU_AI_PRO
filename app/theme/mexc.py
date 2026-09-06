@@ -9,17 +9,17 @@ class MexcTheme:
     # === FUNDOS ===
     BG = "#0a0b0e"
     BG_SECONDARY = "#0d1117"
-    PANEL = "#11141a"
-    PANEL_HOVER = "#151923"
-    CARD = "#161920"
-    CARD_HOVER = "#1c212e"
-    CARD_ALT = "#10151d"
+    PANEL = "#101720"
+    PANEL_HOVER = "#152130"
+    CARD = "#151d28"
+    CARD_HOVER = "#1a2635"
+    CARD_ALT = "#0e1620"
     GLASS = "#1a1f2e"  # Glassmorphism base
     GLASS_HOVER = "#1f2538"
 
     # === BORDAS ===
-    BORDER = "#1f232c"
-    BORDER_LIGHT = "#2a2f3a"
+    BORDER = "#243244"
+    BORDER_LIGHT = "#34465d"
     BORDER_ACCENT = "#00c6fb"
     GRID = "#233043"
     DIVIDER = "#1a1f2e"
@@ -51,8 +51,8 @@ class MexcTheme:
 
     # === TEXTO ===
     TEXT = "#f0f2f5"
-    TEXT_SECONDARY = "#8b93a7"
-    TEXT_MUTED = "#5c6477"
+    TEXT_SECONDARY = "#9ca9bd"
+    TEXT_MUTED = "#68778c"
     TEXT_SOFT = "#aab4c8"
     TEXT_DISABLED = "#3d4555"
 
@@ -75,8 +75,8 @@ class MexcTheme:
     FONT_DIGITAL = "Courier New"
 
     # === DIMENSÕES ===
-    SIDEBAR_WIDTH = 240
-    HEADER_HEIGHT = 56
+    SIDEBAR_WIDTH = 260
+    HEADER_HEIGHT = 68
     FOOTER_HEIGHT = 32
     BORDER_RADIUS = 8
 

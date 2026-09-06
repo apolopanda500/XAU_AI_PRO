@@ -1,29 +1,39 @@
-stages:
-  - test
+default:
+  image: docker:24-dind
+  services:
+    - docker:24-dind
+  before_script:
+    - docker info
+    - echo "$DOCKER_PAT" | docker login --username "$DOCKER_USER" --password-stdin
+    - |
+      apk add curl jq
+      ARCH=${CI_RUNNER_EXECUTABLE_ARCH#*/}
+      BUILDX_URL=$(curl -s https://raw.githubusercontent.com/docker/actions-toolkit/main/.github/buildx-lab-releases.json | jq -r ".latest.assets[] | select(endswith(\"linux-$ARCH\"))")
+      mkdir -vp ~/.docker/cli-plugins/
+      curl --silent -L --output ~/.docker/cli-plugins/docker-buildx $BUILDX_URL
+      chmod a+x ~/.docker/cli-plugins/docker-buildx
+    - docker buildx create --use --driver cloud rickjax123/apolopanda500
 
 variables:
-  AUTO_DEVOPS_EXPLICITLY_ENABLED: "0"
-  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
-  PYTHONDONTWRITEBYTECODE: "1"
+  IMAGE_NAME: rickjax123/docker-build-cloud-demo
 
-default:
-  image: python:3.11-slim
-  cache:
-    key:
-      files:
-        - requirements-dev.txt
-    paths:
-      - .cache/pip
-  before_script:
-    - apt-get update && apt-get install -y --no-install-recommends tcl8.6 tk8.6 && rm -rf /var/lib/apt/lists/*
-    - python -m pip install --upgrade pip
-    - python -m pip install -r requirements-dev.txt numpy pandas requests joblib scikit-learn
-
-test:
-  stage: test
+# Build multi-platform image and push to a registry
+build_push:
+  stage: build
   script:
-    - python -m compileall -q app mcp Python
-    - python -m pytest -q tests
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_COMMIT_BRANCH'
+    - |
+      docker buildx build \
+        --platform linux/amd64,linux/arm64 \
+        --tag "${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}" \
+        --push .
+
+# Build an image and discard the result
+build_cache:
+  stage: build
+  script:
+    - |
+      docker buildx build \
+        --platform linux/amd64,linux/arm64 \
+        --tag "${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}" \
+        --output type=cacheonly \
+        .

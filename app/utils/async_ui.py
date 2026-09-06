@@ -16,6 +16,22 @@ from typing import Any, Callable, TypeVar
 T = TypeVar("T")
 
 
+def _find_scroll_host(widget: tk.Widget):
+    current: tk.Widget | None = widget
+    while current is not None:
+        host = getattr(current, "_scroll_host", None)
+        if host is not None:
+            return host
+        parent_name = current.winfo_parent()
+        if not parent_name:
+            return None
+        try:
+            current = current.nametowidget(parent_name)
+        except tk.TclError:
+            return None
+    return None
+
+
 def run_bg(
     root: tk.Widget,
     work: Callable[[], T],
@@ -31,6 +47,15 @@ def run_bg(
     if getattr(root, "_bg_busy", False):
         return
     root._bg_busy = True
+    scroll_host = _find_scroll_host(root)
+    scroll_snapshot = scroll_host.capture_view() if scroll_host is not None else None
+
+    def _apply_with_viewport(result: T) -> None:
+        try:
+            apply_result(result)
+        finally:
+            if scroll_host is not None and scroll_snapshot is not None:
+                scroll_host.restore_view(scroll_snapshot)
 
     def _background() -> None:
         try:
@@ -43,12 +68,12 @@ def run_bg(
                     pass
             else:
                 try:
-                    root.after(0, lambda: apply_result(None))  # type: ignore[arg-type]
+                    root.after(0, lambda: _apply_with_viewport(None))  # type: ignore[arg-type]
                 except Exception:
                     pass
         else:
             try:
-                root.after(0, lambda: apply_result(result))
+                root.after(0, lambda: _apply_with_viewport(result))
             except Exception:
                 pass
         finally:

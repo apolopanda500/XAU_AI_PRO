@@ -15,7 +15,6 @@ from typing import Any, Callable
 
 from app.components.cards import Card, PrimaryButton, SecondaryButton
 from app.config_manager import get_config
-from app.mcp_marketplace import catalogo, instalados, instalar, desinstalar, pesquisar as mcp_pesquisar
 from app.integrations_client import (
     figma_test,
     gitlab_test,
@@ -105,9 +104,6 @@ class IntegrationsTab:
         self.sentry_dsn = self._card_sentry(body, c.get("integrations", "sentry", "dsn", default=""))
         self.slack_hook = self._card_slack(body, c.get("integrations", "slack", "webhook", default=""))
         self.models_url = self._card_models(body, c.get("integrations", "models", "base_url", default=""))
-        self._card_mcp(body,
-                       c.get("integrations", "mcp", "endpoint", default=""),
-                       c.get("integrations", "plugins_dir", default="plugins"))
 
         self._widgets = {
             "github": self.github_url["result"],
@@ -116,26 +112,20 @@ class IntegrationsTab:
             "sentry": self.sentry_dsn["result"],
             "slack": self.slack_hook["result"],
             "models": self.models_url["result"],
-            "mcp": self.res_mcp,
         }
 
         self._card_mcp_servers(body)
-        self._card_vercel_deploy(body)
-        self._card_updates(body)
 
         btns = tk.Frame(body, bg=Theme.BG)
         btns.pack(fill="x", padx=24, pady=(4, 24))
         PrimaryButton(btns, text="Salvar Integracoes", command=self.save, width=20).pack(side="left", padx=4)
-        # MCP Marketplace (instalar novos servidores dentro do app)
-        self._card_mcp_marketplace(body)
 
 
 
     # ------------------------------------------------------------------
     def _card_mcp_servers(self, body) -> None:
-        """Catalogo de MCP servers (Alpha Vantage, QuantConnect, Alpaca, MT5,
-        Sequential Thinking, PostgreSQL/SQLite) com endpoint, chave e teste."""
-        card = Card(body, title="MCP Servers (catalogo)")
+        """Mostra somente os conectores operacionais aprovados para o desk."""
+        card = Card(body, title="Conectores operacionais")
         card.pack(fill="x", padx=24, pady=10)
         form = tk.Frame(card.body, bg=Theme.CARD)
         form.pack(fill="x", padx=8, pady=8)
@@ -292,19 +282,10 @@ class IntegrationsTab:
                 b2.pack(side="right", padx=2)
 
     def _mcp_market_install(self, mid: str) -> None:
-        from app.mcp_marketplace import instalar
-        r = instalar(mid)
-        self.mcp_market_lbl.configure(text=("✔ " if r["ok"] else "✘ ") + r["message"],
-                                      fg=Theme.SUCCESS if r["ok"] else Theme.DANGER)
-        self.on_status(r["message"])
-        self.mcp_market_list()
+        self.on_status("Instalação de MCPs não aprovados está desativada")
 
     def _mcp_market_remove(self, mid: str) -> None:
-        from app.mcp_marketplace import desinstalar
-        r = desinstalar(mid)
-        self.mcp_market_lbl.configure(text=("✔ " if r["ok"] else "✘ ") + r["message"],
-                                      fg=Theme.SUCCESS if r["ok"] else Theme.DANGER)
-        self.mcp_market_list()
+        self.on_status("Remoção é gerenciada pelo catálogo operacional")
 
     # ------------------------------------------------------------------
     # Deploy Vercel
@@ -725,13 +706,6 @@ class IntegrationsTab:
         c.set("integrations", "sentry", "dsn", value=self._get(self.sentry_dsn, "dsn"))
         c.set("integrations", "slack", "webhook", value=self._get(self.slack_hook, "webhook"))
         c.set("integrations", "models", "base_url", value=self._get(self.models_url, "base_url"))
-        c.set("integrations", "mcp", "endpoint", value=self.e_mcp.get().strip())
-        c.set("integrations", "plugins_dir", value=self.e_plug.get().strip() or "plugins")
-        hook_url = getattr(self, "e_vercel_hook", None)
-        if hook_url is not None:
-            url = hook_url.get().strip()
-            c.set("integrations", "vercel", "deploy_hook_url", value=url)
-            self._save_deploy_hook_env(url)
         servers = {}
         for sid, widgets in self.mcp_server_entries.items():
             servers[sid] = {

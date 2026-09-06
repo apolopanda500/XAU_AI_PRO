@@ -144,8 +144,8 @@ Source: "{#MyRoot}\README.md"; DestDir: "{app}\Docs"; Flags: ignoreversion
 ; ============================================================
 ; 8) Wrapper que define XAU_AI_PRO_ROOT (Start In = {app})
 ; ============================================================
-Source: "XAU_AI_PRO.cmd"; DestDir: "{app}"; Flags: ignoreversion
-Source: "XAU_AI_PRO_START.vbs"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#MyRoot}\XAU_AI_PRO.cmd"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#MyRoot}\XAU_AI_PRO_START.vbs"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\XAU_AI_PRO_START.vbs"; IconFilename: "{app}\assets\icon.ico"; WorkingDir: "{app}"

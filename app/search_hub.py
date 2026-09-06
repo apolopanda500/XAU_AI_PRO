@@ -34,20 +34,6 @@ def search_mcp(query: str) -> list[dict[str, Any]]:
     query = (query or "").strip().lower()
     out: list[dict[str, Any]] = []
     try:
-        from app.mcp_marketplace import catalogo, instalados
-        for item in catalogo():
-            hay = f"{item.get('name','')} {item.get('id','')} {item.get('description','')}".lower()
-            if not query or query in hay:
-                out.append({"tipo": "mcp", "nome": item.get("name", item.get("id", "")),
-                            "descricao": item.get("description", ""), "origem": "catalogo"})
-        # MCPs instalados só aparecem quando a busca é específica; não
-        # poluem uma busca de mercado com o catálogo inteiro.
-        if query in {"mcp", "server", "servidor", "instalado", "instalados"}:
-            for sid in instalados():
-                out.append({"tipo": "mcp", "nome": sid, "descricao": "instalado", "origem": "instalados"})
-    except Exception:
-        pass
-    try:
         from app.mcp_tools import enabled_tools
         for t in enabled_tools():
             if not query or query in t.lower():

@@ -1,6 +1,15 @@
-﻿"""
-Sidebar de navegacao PRO estilo TradingView para o app XAU_AI_PRO.
-Agrupa abas relacionadas em secoes colapsaveis com indicadores de status.
+# -*- coding: utf-8 -*-
+"""Barra lateral compacta e recolhível do XAU_AI_PRO.
+
+Design:
+  - Recolhida por padrão (faixa de ícones à esquerda); expande ao passar o
+    mouse (hover) mostrando os rótulos.
+  - Itens de navegação: Painel, Mercado, Robô, Assistente e Configuração,
+    cada qual com ícone próprio e destaque do item ativo.
+  - Mantém apenas marca, versão e um indicador compacto de estado — sem os
+    textos institucionais redundantes (execução assistida, risco monitorado,
+    trilha de auditoria).
+  - Navegação também por teclado (Up/Down/Enter) quando a lateral tem foco.
 """
 from __future__ import annotations
 
@@ -9,228 +18,244 @@ from typing import Callable
 
 from app.theme.mexc import Theme
 
+# (chave, rótulo, ícone)
+NAV_ITEMS: list[tuple[str, str, str]] = [
+    ("dashboard", "Painel", "📊"),
+    ("market", "Mercado", "📈"),
+    ("robot", "Robô", "🤖"),
+    ("system", "Configuração", "⚙️"),
+]
 
-class SidebarButton(tk.Button):
-    """Botao de menu lateral com icone/emoji, indicador ativo e badge de status."""
+COLLAPSED_WIDTH = 74
+EXPANDED_WIDTH = Theme.SIDEBAR_WIDTH  # 260
 
-    def __init__(self, parent, text: str, icon: str, command: Callable, **kwargs):
-        super().__init__(
-            parent, text=f"{icon}  {text}", anchor="w",
-            bg=Theme.PANEL, fg=Theme.TEXT_SECONDARY,
-            font=(Theme.FONT_FAMILY, 11), relief="flat", cursor="hand2",
-            borderwidth=0, highlightthickness=0, padx=20, pady=10,
-            command=command, **kwargs
-        )
+
+class SidebarItem(tk.Frame):
+    """Item de navegação da lateral: ícone (+ rótulo quando expandido)."""
+
+    def __init__(self, parent, key: str, label: str, icon: str,
+                 command: Callable[[str], None]) -> None:
+        super().__init__(parent, bg=Theme.PANEL, cursor="hand2")
+        self.key = key
+        self.label = label
+        self.icon = icon
+        self.command = command
         self.active = False
-        self.bind("<Enter>", lambda e: self._on_enter())
-        self.bind("<Leave>", lambda e: self._on_leave())
+
+        self.body = tk.Frame(self, bg=Theme.PANEL)
+        self.body.pack(fill="x", padx=6, pady=2)
+        self.icon_lbl = tk.Label(
+            self.body, text=icon, bg=Theme.PANEL, fg=Theme.TEXT_SECONDARY,
+            font=(Theme.FONT_FAMILY, 14), width=3, anchor="center"
+        )
+        self.icon_lbl.pack(side="left", pady=8)
+        self.text_lbl = tk.Label(
+            self.body, text=label, bg=Theme.PANEL, fg=Theme.TEXT_SECONDARY,
+            font=(Theme.FONT_FAMILY, 11), anchor="w"
+        )
+        self.text_lbl.pack(side="left", padx=(4, 12))
+
+        for w in (self, self.body, self.icon_lbl, self.text_lbl):
+            w.bind("<Button-1>", self._on_click)
+            w.bind("<Enter>", lambda e: self._on_enter())
+            w.bind("<Leave>", lambda e: self._on_leave())
+
+    def _on_click(self, _event=None) -> None:
+        self.command(self.key)
 
     def _on_enter(self) -> None:
         if not self.active:
-            self.config(bg=Theme.CARD_HOVER, fg=Theme.TEXT)
+            self._set_bg(Theme.CARD_HOVER, hover=True)
 
     def _on_leave(self) -> None:
         if not self.active:
-            self.config(bg=Theme.PANEL, fg=Theme.TEXT_SECONDARY)
+            self._set_bg(Theme.PANEL, hover=False)
+
+    def _set_bg(self, bg, hover: bool) -> None:
+        for w in (self, self.body, self.icon_lbl, self.text_lbl):
+            w.configure(bg=bg)
+        fg = Theme.TEXT if hover or not self.active else Theme.TEXT_SECONDARY
+        self.icon_lbl.configure(fg=Theme.PRIMARY if self.active else fg)
+        self.text_lbl.configure(fg=Theme.TEXT if self.active else fg)
 
     def set_active(self, active: bool) -> None:
         self.active = active
         if active:
-            self.config(bg=Theme.CARD, fg=Theme.PRIMARY, font=(Theme.FONT_FAMILY, 11, "bold"))
+            for w in (self, self.body, self.icon_lbl, self.text_lbl):
+                w.configure(bg=Theme.CARD)
+            self.icon_lbl.configure(fg=Theme.PRIMARY)
+            self.text_lbl.configure(fg=Theme.PRIMARY, font=(Theme.FONT_FAMILY, 11, "bold"))
         else:
-            self.config(bg=Theme.PANEL, fg=Theme.TEXT_SECONDARY, font=(Theme.FONT_FAMILY, 11))
+            for w in (self, self.body, self.icon_lbl, self.text_lbl):
+                w.configure(bg=Theme.PANEL)
+            self.icon_lbl.configure(fg=Theme.TEXT_SECONDARY)
+            self.text_lbl.configure(fg=Theme.TEXT_SECONDARY, font=(Theme.FONT_FAMILY, 11))
 
-
-class SidebarGroup(tk.Frame):
-    """Grupo colapsavel de botoes no sidebar."""
-
-    def __init__(self, parent, title: str, icon: str,
-                 items: list[tuple[str, str, str]],
-                 on_navigate: Callable[[str], None], default_open: bool = False):
-        super().__init__(parent, bg=Theme.PANEL)
-        self.on_navigate = on_navigate
-        self._buttons: dict[str, SidebarButton] = {}
-        self._open = default_open
-
-        self.header = tk.Frame(self, bg=Theme.PANEL, cursor="hand2")
-        self.header.pack(fill="x")
-        self.header.bind("<Button-1>", lambda e: self.toggle())
-        self.indicator = tk.Label(self.header, text="v" if default_open else ">",
-                                  bg=Theme.PANEL, fg=Theme.TEXT_MUTED,
-                                  font=(Theme.FONT_FAMILY, 8), cursor="hand2")
-        self.indicator.pack(side="left", padx=(16, 0))
-        self.indicator.bind("<Button-1>", lambda e: self.toggle())
-        self.title_label = tk.Label(
-            self.header,
-            text=f"{icon}  {title}",
-            bg=Theme.PANEL,
-            fg=Theme.TEXT_SECONDARY,
-            font=(Theme.FONT_FAMILY, 11, "bold"),
-            anchor="w",
-            cursor="hand2",
+    def show_text(self, visible: bool) -> None:
+        """Mostra/oculta o rótulo (expansão por hover)."""
+        if visible:
+            self.text_lbl.pack(side="left", padx=(4, 12))
+        else:
+            self.text_lbl.pack_forget()
+        self.text_lbl.configure(
+            font=(Theme.FONT_FAMILY, 11, "bold") if self.active and visible
+            else (Theme.FONT_FAMILY, 11)
         )
-        self.title_label.pack(side="left", padx=8, pady=10)
-        self.title_label.bind("<Button-1>", lambda e: self.toggle())
+class Sidebar(tk.Frame):
+    """Barra lateral compacta e recolhível com ícones de navegação."""
 
-        self.body = tk.Frame(self, bg=Theme.PANEL)
-        if default_open:
-            self.body.pack(fill="x")
+    def __init__(self, parent, on_navigate: Callable[[str], None], **kwargs) -> None:
+        super().__init__(parent, bg=Theme.PANEL, width=COLLAPSED_WIDTH, **kwargs)
+        self.pack_propagate(False)
+        self.on_navigate = on_navigate
+        self._expanded = False
+        self._hidden = False
+        # Larguras por estado (False=recolhida, True=expandida). O grip de
+        # arraste atualiza o estado atual e a escolha fica persistente.
+        self._widths: dict[bool, int] = {False: COLLAPSED_WIDTH, True: EXPANDED_WIDTH}
+        self._items: dict[str, SidebarItem] = {}
+        self._order = [key for key, _label, _icon in NAV_ITEMS]
+        self._index: dict[str, int] = {k: i for i, (k, _l, _i) in enumerate(NAV_ITEMS)}
 
-        for key, label, item_icon in items:
-            btn = SidebarButton(self.body, label, item_icon,
-                                command=lambda k=key: self._navigate(k))
-            btn.pack(fill="x")
-            self._buttons[key] = btn
+        # ---- Marca + versão (compacto) ---------------------------------
+        logo = tk.Frame(self, bg=Theme.PANEL)
+        logo.pack(fill="x", pady=(14, 6))
+        self.logo_label = tk.Label(logo, text="XAU", bg=Theme.PANEL,
+                                   fg=Theme.PRIMARY, font=(Theme.FONT_FAMILY, 16, "bold"))
+        self.logo_label.pack(anchor="w", padx=16)
+        self.brand_label = tk.Label(logo, text="v1.2.0", bg=Theme.PANEL,
+                                    fg=Theme.TEXT_MUTED, font=(Theme.FONT_FAMILY, 8))
+        self.brand_label.pack(anchor="w", padx=16)
+        tk.Frame(self, bg=Theme.BORDER, height=1).pack(fill="x", padx=10, pady=8)
 
-    def toggle(self) -> None:
-        self._open = not self._open
-        self.indicator.config(text="v" if self._open else ">")
-        if self._open:
-            self.body.pack(fill="x")
-        else:
-            self.body.pack_forget()
+        # ---- Navegação -------------------------------------------------
+        nav = tk.Frame(self, bg=Theme.PANEL)
+        nav.pack(fill="both", expand=True)
+        for key, label, icon in NAV_ITEMS:
+            item = SidebarItem(nav, key, label, icon, self._navigate)
+            item.pack(fill="x")
+            self._items[key] = item
 
+        # ---- Rodapé: indicador compacto de estado -----------------------
+        tk.Frame(self, bg=Theme.BORDER, height=1).pack(fill="x", padx=10, pady=8)
+        self.footer_status = tk.Label(
+            self, text="● offline", bg=Theme.PANEL, fg=Theme.TEXT_MUTED,
+            font=(Theme.FONT_FAMILY, 9), anchor="w", padx=16
+        )
+        self.footer_status.pack(fill="x", side="bottom", pady=(0, 14))
+
+        # ---- Expansão por hover -----------------------------------------
+        self.bind("<Enter>", self._on_enter_self)
+        self.bind("<Leave>", self._on_leave_self)
+        for w in (logo, nav, self.brand_label, self.logo_label, self.footer_status):
+            w.bind("<Enter>", self._on_enter_self)
+            w.bind("<Leave>", self._on_leave_self)
+
+        # ---- Navegação por teclado (quando a lateral tem foco) ----------
+        self._selected_idx = 0
+        self.bind("<Up>", self._key_up)
+        self.bind("<Down>", self._key_down)
+        self.bind("<Return>", self._key_enter)
+        self.bind("<space>", self._key_enter)
+
+        # ---- Alça de redimensionamento (arraste para diminuir/aumentar) --
+        self.grip = tk.Frame(self, bg=Theme.BORDER, width=4,
+                             cursor="sb_h_double_arrow")
+        self.grip.pack(side="right", fill="y")
+        self.grip.bind("<B1-Motion>", self._on_grip_drag)
+        self.grip.bind("<Double-Button-1>", self._on_grip_reset)
+
+    # ------------------------------------------------------------------
     def _navigate(self, key: str) -> None:
         self.on_navigate(key)
 
+    def _on_enter_self(self, _event=None) -> None:
+        self.set_expanded(True)
+
+    def _on_leave_self(self, _event=None) -> None:
+        self.set_expanded(False)
+
+    def set_expanded(self, expanded: bool) -> None:
+        if expanded == self._expanded:
+            return
+        self._expanded = expanded
+        self.configure(width=self._widths[expanded])
+        for _key, item in self._items.items():
+            item.show_text(expanded)
+        if expanded:
+            self.brand_label.configure(text="v1.2.0 · Trading Desk")
+            self.logo_label.configure(text="XAU AI PRO")
+        else:
+            self.brand_label.configure(text="v1.2.0")
+            self.logo_label.configure(text="XAU")
+
+    # ------------------------------------------------------------------
     def set_active(self, key: str) -> None:
-        for k, btn in self._buttons.items():
-            btn.set_active(k == key)
-
-
-class Sidebar(tk.Frame):
-    """Menu lateral com logo, grupos de navegacao e rodape."""
-
-    def __init__(self, parent, on_navigate: Callable[[str], None], **kwargs):
-        super().__init__(parent, bg=Theme.PANEL, width=240, **kwargs)
-        self.pack_propagate(False)
-        self.on_navigate = on_navigate
-        self._groups: dict[str, SidebarGroup] = {}
-
-        # Logo
-        logo_frame = tk.Frame(self, bg=Theme.PANEL, height=96, cursor="hand2")
-        logo_frame.pack(fill="x", pady=(20, 12))
-        logo_frame.bind("<Button-1>", lambda e: self._show_about())
-        tk.Frame(logo_frame, bg=Theme.PRIMARY, height=3).pack(fill="x", padx=20, pady=(0, 14))
-        self.logo_title = tk.Label(
-            logo_frame, text="XAU AI PRO", bg=Theme.PANEL, fg=Theme.TEXT,
-            font=(Theme.FONT_FAMILY, 18, "bold"), cursor="hand2"
-        )
-        self.logo_title.pack(anchor="w", padx=20)
-        self.logo_title.bind("<Button-1>", lambda e: self._show_about())
-        self.logo_sub = tk.Label(
-            logo_frame, text="Trading Desk v1.2.0", bg=Theme.PANEL, fg=Theme.PRIMARY,
-            font=(Theme.FONT_FAMILY, 9), cursor="hand2"
-        )
-        self.logo_sub.pack(anchor="w", padx=20)
-        self.logo_sub.bind("<Button-1>", lambda e: self._show_about())
-        self.logo_meta = tk.Label(
-            logo_frame, text="MT5 sync  |  audit trail  |  professional mode",
-            bg=Theme.PANEL, fg=Theme.TEXT_MUTED, font=(Theme.FONT_FAMILY, 8)
-        )
-        self.logo_meta.pack(anchor="w", padx=20, pady=(6, 0))
-
-        # Separador
-        tk.Frame(self, bg=Theme.BORDER, height=1).pack(fill="x", padx=16, pady=10)
-
-        # Grupos de navegação em área rolável; logo e rodapé permanecem fixos.
-        nav = tk.Frame(self, bg=Theme.PANEL)
-        nav.pack(fill="both", expand=True)
-        nav_canvas = tk.Canvas(nav, bg=Theme.PANEL, highlightthickness=0, bd=0)
-        nav_scroll = tk.Scrollbar(nav, orient="vertical", command=nav_canvas.yview)
-        nav_body = tk.Frame(nav_canvas, bg=Theme.PANEL)
-        nav_window = nav_canvas.create_window((0, 0), window=nav_body, anchor="nw")
-        nav_canvas.configure(yscrollcommand=nav_scroll.set)
-        nav_canvas.pack(side="left", fill="both", expand=True)
-        nav_scroll.pack(side="right", fill="y")
-        nav_body.bind("<Configure>", lambda e: nav_canvas.configure(scrollregion=nav_canvas.bbox("all")))
-        nav_canvas.bind("<Configure>", lambda e: nav_canvas.itemconfigure(nav_window, width=e.width))
-        nav_canvas.bind("<Enter>", lambda e: nav_canvas.bind_all("<MouseWheel>", lambda ev: nav_canvas.yview_scroll(-1 if ev.delta > 0 else 1, "units"), add="+"))
-        nav_canvas.bind("<Leave>", lambda e: nav_canvas.unbind_all("<MouseWheel>"))
-
-        self._sections = [
-            ("principal", "Principal", "TR", [
-                ("dashboard", "Dashboard", "DB"),
-                ("market", "Mercado e Graficos", "MK"),
-                ("robot", "Robo MT5", "EA"),
-            ], True),
-            ("ia", "IA Lab", "AI", [
-                ("assistant", "Chat, Treino e Busca", "IA"),
-            ], False),
-            ("analise", "Analise", "AN", [
-                ("audit", "Auditoria", "AU"),
-            ], False),
-            ("sistema", "Sistema", "SY", [
-                ("integrations", "Integracoes", "IN"),
-                ("system", "Monitor e Configuracoes", "MS"),
-            ], False),
-        ]
-
-        for gid, title, icon, items, default_open in self._sections:
-            grp = SidebarGroup(nav_body, title, icon, items, on_navigate,
-                               default_open=default_open)
-            grp.pack(fill="x", pady=2)
-            self._groups[gid] = grp
-
-        # Rodape
-        tk.Frame(self, bg=Theme.BORDER, height=1).pack(fill="x", padx=16, pady=10)
-        self.footer_status = tk.Label(
-            self, text="Status: offline", bg=Theme.PANEL, fg=Theme.TEXT_MUTED,
-            font=(Theme.FONT_FAMILY, 9), anchor="w", padx=20
-        )
-        self.footer_status.pack(fill="x", side="bottom", pady=10)
-
-        # Rodape institucional
-        self.dev_frame = tk.Frame(self, bg=Theme.PANEL)
-        self.dev_frame.pack(fill="x", side="bottom", pady=(0, 10))
-        tk.Label(self.dev_frame, text="Workspace sincronizado com MT5 e MCP",
-                 bg=Theme.PANEL, fg=Theme.TEXT_MUTED,
-                 font=(Theme.FONT_FAMILY, 8)).pack(anchor="w", padx=20)
-        self.dev_contact = tk.Label(
-            text="Figma, GitLab, Slack e auditoria operacional",
-            bg=Theme.PANEL, fg=Theme.PRIMARY, font=(Theme.FONT_FAMILY, 8)
-        )
-        self.dev_contact.pack(anchor="w", padx=20)
-
-    def _show_about(self) -> None:
-        top = tk.Toplevel(self, bg=Theme.BG)
-        top.title("Sobre - XAU AI PRO")
-        top.geometry("420x260")
-        top.transient(self)
-        top.grab_set()
-
-        frame = tk.Frame(top, bg=Theme.BG, padx=24, pady=24)
-        frame.pack(fill="both", expand=True)
-
-        tk.Label(frame, text="XAU AI PRO", bg=Theme.BG, fg=Theme.TEXT,
-                 font=(Theme.FONT_FAMILY, 20, "bold")).pack(anchor="w")
-        tk.Label(frame, text="Trading Desk v1.2.0", bg=Theme.BG, fg=Theme.PRIMARY,
-                 font=(Theme.FONT_FAMILY, 11)).pack(anchor="w", pady=(0, 12))
-
-        lines = [
-            "Plataforma desktop para acompanhamento do MetaTrader 5,",
-            "analise de mercado, treinamento local de modelos de IA",
-            "e execucao de estrategias de trading com governanca.",
-            "",
-            "Desenvolvido por: Henrique Carvalho",
-            "Contato: rickjax123@gmail.com | 55 (21983158911)",
-            "",
-            "Trading envolve risco. Valide estrategias em backtest",
-            "e conta demo antes de operar com capital real.",
-        ]
-        for line in lines:
-            tk.Label(frame, text=line, bg=Theme.BG, fg=Theme.TEXT_SECONDARY,
-                     font=(Theme.FONT_FAMILY, 9), justify="left").pack(anchor="w")
-
-        btn = tk.Button(frame, text="Fechar", bg=Theme.PRIMARY, fg=Theme.TEXT,
-                        font=(Theme.FONT_FAMILY, 10, "bold"), relief="flat",
-                        cursor="hand2", command=top.destroy)
-        btn.pack(anchor="e", pady=(16, 0))
-
-
-    def set_active(self, key: str) -> None:
-        for grp in self._groups.values():
-            grp.set_active(key)
+        for k, item in self._items.items():
+            item.set_active(k == key)
+        try:
+            self._selected_idx = self._index.get(key, 0)
+        except Exception:
+            pass
 
     def set_status(self, text: str, color: str = Theme.TEXT_MUTED) -> None:
-        self.footer_status.configure(text=text, fg=color)
+        status = str(text or "")
+        prefix = "" if status.startswith(("●", "○")) else "● "
+        self.footer_status.configure(text=f"{prefix}{status}", fg=color)
+
+    # ------------------------------------------------------------------
+    # Navegação por teclado
+    # ------------------------------------------------------------------
+    def _key_up(self, _event=None) -> None:
+        self._selected_idx = (self._selected_idx - 1) % len(self._order)
+        self._highlight_sel()
+
+    def _key_down(self, _event=None) -> None:
+        self._selected_idx = (self._selected_idx + 1) % len(self._order)
+        self._highlight_sel()
+
+    def _key_enter(self, _event=None) -> None:
+        self._navigate(self._order[self._selected_idx])
+
+    def _highlight_sel(self) -> None:
+        target = self._order[self._selected_idx]
+        for key, item in self._items.items():
+            item.configure(bg=Theme.CARD_HOVER if key == target else Theme.PANEL)
+
+    # ------------------------------------------------------------------
+    # Exibir/esconder a lateral (botao hamburger) e redimensionar (grip)
+    # ------------------------------------------------------------------
+    def toggle(self) -> bool:
+        """Esconde ou mostra a lateral. Retorna True se ficou VISÍVEL."""
+        if self._hidden:
+            self.pack(side="left", fill="y")
+            self._hidden = False
+        else:
+            self.pack_forget()
+            self._hidden = True
+        return not self._hidden
+
+    @property
+    def is_hidden(self) -> bool:
+        return self._hidden
+
+    MIN_WIDTH = 56
+    MAX_WIDTH = 420
+
+    def _on_grip_drag(self, event) -> None:
+        """Arraste da alça: define a largura do estado atual (com limites)."""
+        try:
+            new_w = int(event.x_root - self.winfo_rootx())
+        except Exception:
+            return
+        new_w = max(self.MIN_WIDTH, min(self.MAX_WIDTH, new_w))
+        # Evita reconfigurar a cada pixel sem mudança real.
+        if new_w != self._widths[self._expanded]:
+            self._widths[self._expanded] = new_w
+            self.configure(width=new_w)
+
+    def _on_grip_reset(self, _event=None) -> None:
+        """Duplo clique na alça: volta à largura padrão do estado atual."""
+        default = COLLAPSED_WIDTH if not self._expanded else EXPANDED_WIDTH
+        self._widths[self._expanded] = default
+        self.configure(width=default)

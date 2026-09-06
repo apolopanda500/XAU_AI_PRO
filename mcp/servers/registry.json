@@ -1,17 +1,6 @@
 {
   "servers": [
-    "alpha_vantage.json",
-    "alpaca.json",
-    "quantconnect.json",
-    "cline.json",
     "mt5_gateway.json",
-    "sequential_thinking.json",
-    "postgres_sqlite.json",
-    "tradingview.json",
-    "github_mcp.json",
-    "brave.json",
-    "filesystem.json",
-    "memory.json",
-    "playwright.json"
+    "tradingview.json"
   ]
 }

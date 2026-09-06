@@ -48,6 +48,35 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+app.post('/api/chat', async (req, res) => {
+  const message = String(req.body?.message || '').trim();
+  const model = String(req.body?.model || 'openai/gpt-5.6-sol').trim();
+  const apiKey = process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN;
+  if (!message || message.length > 8000) {
+    return res.status(400).json({ error: 'message obrigatoria e limitada a 8000 caracteres' });
+  }
+  if (!apiKey) {
+    return res.status(503).json({ error: 'AI Gateway nao configurado' });
+  }
+  try {
+    const response = await fetch('https://ai-gateway.vercel.sh/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, stream: false, messages: [
+        { role: 'system', content: 'Voce e o assistente XAU AI PRO. Nao execute ordens; responda com analise e riscos.' },
+        { role: 'user', content: message },
+      ] }),
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      return res.status(response.status).json({ error: payload?.error?.message || 'Falha no AI Gateway' });
+    }
+    return res.json({ model, reply: payload?.choices?.[0]?.message?.content || '', usage: payload?.usage || null });
+  } catch (error) {
+    return res.status(502).json({ error: `AI Gateway indisponivel: ${error.message}` });
+  }
+});
+
 // ---------- Rotas de saÃºde ----------
 app.get('/', async (req, res) => {
   // Track homepage visits with Vercel Analytics (server-side)

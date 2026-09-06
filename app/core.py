@@ -10,27 +10,21 @@ import tkinter as tk
 from tkinter import messagebox
 from typing import Any
 
-from app.components.animated_bg import AnimatedBackground
 from app.components.sidebar import Sidebar
 from app.components.scrollable import ScrollableFrame
 from app.config_manager import get_config
 from app.learning_engine import get_learning_engine
 from app.market_data import MarketData
 from app.mt5_robot import MT5Robot
-from app.tabs.assistant import AssistantTab
 from app.tabs.dashboard import DashboardTab
 from app.tabs.integrations import IntegrationsTab
-from app.tabs.market import MarketTab
+from app.tabs.market import TradingViewMarket
 from app.tabs.positions import PositionsTab
 from app.tabs.robot import RobotTab
 from app.tabs.settings import SettingsTab
-from app.tabs.search import SearchTab
-from app.tabs.community import CommunityTab
 from app.tabs.subgraph import SubgraphTab
-from app.tabs.system import SystemTab
 from app.tabs.charts import ChartsTab
 from app.tabs.tools import ToolsTab
-from app.tabs.training import TrainingTab
 from app.tabs.combined import CombinedTab
 from app.theme.mexc import Theme
 from app.utils.paths import ensure_paths
@@ -58,6 +52,7 @@ class XAUAProApp:
         y = max(0, y)
 
         self.root.geometry(f"{width}x{height}+{x}+{y}")
+        self.root.minsize(1120, 720)
 
         if self.cfg.get("window", "maximized", default=False):
             self.root.state("zoomed")
@@ -75,6 +70,7 @@ class XAUAProApp:
         self._xau_gui_fps = 0.0
         self._realtime_due: dict[str, float] = {}
         self._current_tab = ""
+        self._scroll_positions: dict[str, float] = {}
         self._navigation_pending: str | None = None
 
         # Login removido: o app abre direto na interface principal.
@@ -87,73 +83,115 @@ class XAUAProApp:
         self.content = tk.Frame(self.root, bg=Theme.BG)
         self.content.pack(side="right", fill="both", expand=True)
 
-        # Plano de fundo animado (camada inferior)
-        self.animated_bg = AnimatedBackground(self.content)
-        self.animated_bg.place(x=0, y=0, relwidth=1, relheight=1)
-        self.animated_bg.start()
-
-        self.header = tk.Frame(self.content, bg=Theme.BG, height=56)
-        self.header.pack(fill="x", padx=24, pady=(12, 0))
+        self.header = tk.Frame(
+            self.content,
+            bg=Theme.BG_SECONDARY,
+            height=Theme.HEADER_HEIGHT,
+            highlightbackground=Theme.BORDER,
+            highlightthickness=1,
+        )
+        self.header.pack(fill="x", padx=24, pady=(16, 0))
         self.header.pack_propagate(False)
-        self.header_title = tk.Label(self.header, text="Dashboard", bg=Theme.BG, fg=Theme.TEXT,
-                                     font=(Theme.FONT_FAMILY, 16, "bold"))
-        self.header_title.pack(side="left")
+
+        # Clock widget (digital) no canto direito do header
+        self.clock_frame = tk.Frame(self.header, bg=Theme.BG_SECONDARY)
+        self.clock_frame.pack(side="right", padx=16, pady=4)
+        self.clock_label = tk.Label(
+            self.clock_frame,
+            text="--:--  --/--",
+            bg=Theme.BG_SECONDARY,
+            fg=Theme.PRIMARY,
+            font=(Theme.FONT_MONO, 13, "bold"),
+        )
+        self.clock_label.pack(side="right")
+        # Botao hamburger: puxa/esconde a barra lateral de abas.
+        self.btn_sidebar = tk.Button(
+            self.header, text="☰", width=3,
+            bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY,
+            activebackground=Theme.CARD_HOVER, activeforeground=Theme.TEXT,
+            relief="flat", borderwidth=0, cursor="hand2",
+            font=(Theme.FONT_FAMILY, 12, "bold"),
+            command=self._toggle_sidebar,
+        )
+        self.btn_sidebar.pack(side="left", padx=(12, 8), pady=12)
+        self.header_context = tk.Frame(self.header, bg=Theme.BG_SECONDARY)
+        self.header_context.pack(side="left", padx=18, pady=10)
+        tk.Label(
+            self.header_context,
+            text="DESK OPERACIONAL",
+            bg=Theme.BG_SECONDARY,
+            fg=Theme.TEXT_MUTED,
+            font=(Theme.FONT_FAMILY, 8, "bold"),
+        ).pack(anchor="w")
+        self.header_title = tk.Label(
+            self.header_context,
+            text="Dashboard",
+            bg=Theme.BG_SECONDARY,
+            fg=Theme.TEXT,
+            font=(Theme.FONT_FAMILY, 16, "bold"),
+        )
+        self.header_title.pack(anchor="w")
 
         # Status indicators (right side)
-        self.status_frame = tk.Frame(self.header, bg=Theme.BG)
-        self.status_frame.pack(side="right")
+        self.status_frame = tk.Frame(self.header, bg=Theme.BG_SECONDARY)
+        self.status_frame.pack(side="right", padx=18, pady=12)
 
         # MT5 connection status
-        self.mt5_status = tk.Label(self.status_frame, text="● MT5", bg=Theme.BG, fg=Theme.TEXT_MUTED,
-                                   font=(Theme.FONT_FAMILY, 9))
+        self.mt5_status = tk.Label(self.status_frame, text="● MT5", bg=Theme.CARD_ALT, fg=Theme.TEXT_MUTED,
+                                   font=(Theme.FONT_FAMILY, 9, "bold"), padx=9, pady=4)
         self.mt5_status.pack(side="left", padx=(0, 12))
 
         # Market status
-        self.market_status = tk.Label(self.status_frame, text="● Market", bg=Theme.BG, fg=Theme.TEXT_MUTED,
-                                      font=(Theme.FONT_FAMILY, 9))
+        self.market_status = tk.Label(self.status_frame, text="● Mercado", bg=Theme.CARD_ALT, fg=Theme.TEXT_MUTED,
+                                      font=(Theme.FONT_FAMILY, 9, "bold"), padx=9, pady=4)
         self.market_status.pack(side="left", padx=(0, 12))
 
-        # Clock
-        self.clock_label = tk.Label(self.status_frame, text="", bg=Theme.BG, fg=Theme.TEXT_SECONDARY,
-                                    font=(Theme.FONT_MONO, 10))
-        self.clock_label.pack(side="left", padx=(0, 12))
+        # Clock digital em tempo real: chip com borda, HH:MM grande,
+        # segundos em destaque (accent), data compacta e ":" piscando.
+        clock_chip = tk.Frame(self.status_frame, bg=Theme.BG_SECONDARY,
+                              highlightbackground=Theme.BORDER, highlightthickness=1)
+        clock_chip.pack(side="left", padx=(0, 12))
+        self.clock_time = tk.Label(clock_chip, text="--:--", bg=Theme.BG_SECONDARY,
+                                   fg=Theme.TEXT, font=(Theme.FONT_MONO, 15, "bold"))
+        self.clock_time.pack(side="left", padx=(10, 2), pady=4)
+        self.clock_secs = tk.Label(clock_chip, text="--", bg=Theme.BG_SECONDARY,
+                                   fg=Theme.ACCENT, font=(Theme.FONT_MONO, 11, "bold"))
+        self.clock_secs.pack(side="left", padx=(0, 8), pady=4)
+        self.clock_date = tk.Label(clock_chip, text="", bg=Theme.BG_SECONDARY,
+                                   fg=Theme.TEXT_MUTED, font=(Theme.FONT_FAMILY, 8))
+        self.clock_date.pack(side="left", padx=(0, 10))
         self._update_clock()
 
         # Status label (existing)
-        self.status_label = tk.Label(self.status_frame, text="Pronto", bg=Theme.BG, fg=Theme.TEXT_SECONDARY,
+        self.status_label = tk.Label(self.status_frame, text="Pronto", bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY,
                                      font=(Theme.FONT_FAMILY, 9))
         self.status_label.pack(side="left")
 
         self.scroll = ScrollableFrame(self.content, bg=Theme.BG)
         self.scroll.pack(fill="both", expand=True)
         self.tab_container = self.scroll.inner
+        self.tab_container._scroll_host = self.scroll
 
         # Todas as abas são lazy-loaded. Construtores podem criar widgets,
         # imagens e controles; fazê-los no boot bloqueava a thread Tk e fazia
         # os botões parecerem travados.
         self._tab_factories = {
             "dashboard": lambda: CombinedTab(self.tab_container, [
-                ("Visao geral", lambda parent: DashboardTab(parent, self.robot, self.market, self._set_status)),
+                ("Painel", lambda parent: DashboardTab(parent, self.robot, self.market, self._set_status)),
                 ("Carteira", lambda parent: PositionsTab(parent, self.robot, self.market, self._set_status)),
             ]),
             "market": lambda: CombinedTab(self.tab_container, [
-                ("Mercado", lambda parent: MarketTab(parent, self.robot, self.market, self._set_status)),
+                ("Mercado", lambda parent: TradingViewMarket(parent, self.robot, self.market, self._set_status)),
                 ("Graficos", lambda parent: ChartsTab(parent, self.robot, self.market, self._set_status)),
-                ("Subgraph", lambda parent: SubgraphTab(parent, self.robot, self.market, self._set_status)),
+                ("Análise", lambda parent: SubgraphTab(parent, self.robot, self.market, self._set_status)),
             ]),
-            "robot": lambda: RobotTab(self.tab_container, self.robot, self.market, self._set_status),
-            "assistant": lambda: CombinedTab(self.tab_container, [
-                ("Chat IA", lambda parent: AssistantTab(parent, self.robot, self.market, self._set_status)),
-                ("Treinamento", lambda parent: TrainingTab(parent, self.robot, self.market, self._set_status)),
-                ("Pesquisa", lambda parent: SearchTab(parent, self.robot, self.market, self._set_status)),
-                ("Comunidade", lambda parent: CommunityTab(parent, self.robot, self.market, self._set_status)),
+            "robot": lambda: CombinedTab(self.tab_container, [
+                ("Controle", lambda parent: RobotTab(parent, self.robot, self.market, self._set_status)),
+                ("Auditoria", lambda parent: ToolsTab(parent, self.robot, self.market, self._set_status)),
             ]),
-            "tools": lambda: ToolsTab(self.tab_container, self.robot, self.market, self._set_status),
-            "audit": lambda: ToolsTab(self.tab_container, self.robot, self.market, self._set_status),
-            "integrations": lambda: IntegrationsTab(self.tab_container, self.robot, self.market, self._set_status),
             "system": lambda: CombinedTab(self.tab_container, [
-                ("Monitor", lambda parent: SystemTab(parent, self.robot, self.market, self._set_status)),
                 ("Configuracoes", lambda parent: SettingsTab(parent, self.robot, self.market, self._set_status)),
+                ("Conexões", lambda parent: IntegrationsTab(parent, self.robot, self.market, self._set_status)),
             ]),
         }
         self._navigate("dashboard")
@@ -188,41 +226,48 @@ class XAUAProApp:
         self._show_tab(key)
 
     def _show_tab(self, key: str) -> None:
+        if key == self._current_tab:
+            return
         if self._current_tab and self._current_tab in self.tabs:
+            self._scroll_positions[self._current_tab] = self.scroll.canvas.yview()[0]
             self.tabs[self._current_tab].frame.pack_forget()
         self._current_tab = key
         self.tabs[key].frame.pack(fill="both", expand=True)
         self.root.update_idletasks()
-        self.scroll.canvas.yview_moveto(0)
+        self.scroll.canvas.yview_moveto(self._scroll_positions.get(key, 0.0))
         self.sidebar.set_active(key)
         titles = {
-            "dashboard": "Dashboard",
+            "dashboard": "Painel",
             "market": "Mercado",
             "positions": "Carteira",
-            "robot": "Controle do Robo",
-            "training": "Treinamento IA",
-            "assistant": "Assistente",
-            "tools": "Ferramentas",
-            "audit": "Auditoria",
-            "integrations": "Integracoes",
+            "robot": "Robô",
             "subgraph": "Subgraph",
-            "settings": "Configuracoes",
+            "settings": "Configuração",
             "system": "Sistema",
             "charts": "Graficos",
-            "search": "Pesquisa",
-            "community": "Comunidade",
         }
         self.header_title.configure(text=titles.get(key, key))
+
+    def _toggle_sidebar(self) -> None:
+        """Mostra/esconde a barra lateral (botao hamburger do header)."""
+        visible = self.sidebar.toggle()
+        self.btn_sidebar.configure(text="❮" if visible else "☰")
 
     def _set_status(self, text: str) -> None:
         self.status_label.configure(text=text)
         self.sidebar.set_status(text, Theme.TEXT_SECONDARY)
 
     def _update_clock(self) -> None:
-        """Atualiza o relogio a cada segundo."""
+        """Atualiza o relogio digital a cada segundo (dois pontos piscando)."""
         from datetime import datetime
-        now = datetime.now().strftime("%H:%M:%S")
-        self.clock_label.configure(text=now)
+        now = datetime.now()
+        sep = ":" if now.second % 2 == 0 else " "
+        try:
+            self.clock_time.configure(text=f"{now:%H}{sep}{now:%M}")
+            self.clock_secs.configure(text=f"{now:%S}")
+            self.clock_date.configure(text=f"{now:%d/%m}")
+        except Exception:
+            return  # janela encerrada
         self.root.after(1000, self._update_clock)
 
     def _frame_tick(self) -> None:
@@ -240,7 +285,12 @@ class XAUAProApp:
         self.root.after(33, self._frame_tick)
 
     def _realtime_tick(self) -> None:
-        """Atualiza somente a tela visivel, sem empilhar consultas em background."""
+        """Atualiza somente a tela visivel, sem empilhar consultas em background.
+
+        Preserva a posição de leitura: tiramos um snapshot da rolagem antes do
+        refresh e o ScrollableFrame restaura a fração de yview após o recálculo
+        final do layout (a menos que o usuário tenha rolado durante a coleta).
+        """
         if not self._running:
             return
         intervals = {
@@ -255,6 +305,7 @@ class XAUAProApp:
         if key in intervals and now >= self._realtime_due.get(key, 0.0):
             tab = self.tabs.get(key)
             if tab is not None:
+                snapshot = self.scroll.capture_view()
                 try:
                     if key == "robot":
                         tab.check_ea()
@@ -264,21 +315,20 @@ class XAUAProApp:
                         tab.refresh()
                 except Exception as error:
                     self._set_status(f"Atualizacao em tempo real: {error}")
+                # Restaura a leitura após o conteúdo ser recalculado, saltando
+                # apenas se o usuário rolou enquanto a coleta rodava.
+                self.scroll.restore_view(snapshot)
             self._realtime_due[key] = now + intervals[key]
         self.root.after(250, self._realtime_tick)
 
     def _start_threads(self) -> None:
         # v1.2.0 - Auto-refresh removido: o loop de 10s acumulava chamadas em
         # background e travava a GUI (freeze). Atualizacao agora e MANUAL.
-        # Opcoes de CPU (prioridade/afinidade) definidas na aba Configuracoes.
+                # Opcoes de CPU (prioridade/afinidade) definidas na aba Configuracoes.
         try:
             from app.cpu import apply_cpu_options, apply_model_limits
-            ok_p, ok_a = apply_cpu_options(self.cfg)
-            n_jobs, max_ram = apply_model_limits(self.cfg)
-            self._set_status(
-                f"CPU: prioridade {'ok' if ok_p else 'falhou'}, afinidade {'ok' if ok_a else 'falhou'}"
-                f", modelos: {n_jobs} nucleo(s), RAM {max_ram} MB"
-            )
+            apply_cpu_options(self.cfg)
+            apply_model_limits(self.cfg)
         except Exception:
             pass
         if self.cfg.get("learning", "enabled", default=True):

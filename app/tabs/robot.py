@@ -93,6 +93,65 @@ class RobotTab:
         AccentButton(form, text="Comprar", command=self.buy, width=10).grid(row=0, column=8, padx=4)
         DangerButton(form, text="Vender", command=self.sell, width=10).grid(row=0, column=9, padx=4)
 
+        # ------------------------------------------------------------------
+        # Painel de Risco e Execução PRO (estilo Trade Control MTS / EXP FOREX)
+        # ------------------------------------------------------------------
+        risk_card = Card(self.frame, title="Risco e Execucao PRO")
+        risk_card.pack(fill="x", padx=24, pady=10)
+
+        # Campos numéricos estilo terminal (Lot, SL/TP em pips, Risk%)
+        rform = tk.Frame(risk_card.body, bg=Theme.CARD)
+        rform.pack(fill="x", padx=8, pady=(8, 4))
+        self.r_fields: dict[str, tuple[tk.Entry, tk.Label]] = {}
+        r_specs = [
+            ("Lote", "lot", "0.01"), ("Risk %", "risk", "4.0"),
+            ("R/TP", "rtp", "2.0"), ("R/SL", "rsl", "1.0"),
+            ("SL (p)", "slp", "50"), ("TP (p)", "tpp", "0"),
+        ]
+        for col, (label, key, default_value) in enumerate(r_specs):
+            box = tk.Frame(rform, bg=Theme.CARD)
+            box.pack(side="left", expand=True, fill="both", padx=3)
+            tk.Label(box, text=label, bg=Theme.CARD, fg=Theme.TEXT_SECONDARY,
+                     font=(Theme.FONT_FAMILY, 9)).pack(anchor="w")
+            entry = tk.Entry(box, width=8, bg=Theme.PANEL, fg=Theme.TEXT,
+                             insertbackground=Theme.TEXT, relief="flat",
+                             highlightbackground=Theme.BORDER, highlightthickness=1,
+                             font=(Theme.FONT_MONO, 10))
+            entry.insert(0, default_value)
+            entry.pack(anchor="w", pady=(2, 0))
+            self.r_fields[key] = (entry, box)
+
+        # Métricas calculáveis (estáticas para visual INSTITUTIONAL)
+        self.risk_metric = tk.Frame(risk_card.body, bg=Theme.CARD)
+        self.risk_metric.pack(fill="x", padx=8, pady=(4, 8))
+        self.risk_labels: dict[str, tk.Label] = {}
+        for c, (key, label_text) in enumerate([
+            ("drawdown", "Drawdown lim."), ("slv", "Risco/Stop"),
+            ("tam", "Tamanho pos"), ("modo", "Modo")
+        ]):
+            box = tk.Frame(self.risk_metric, bg=Theme.CARD)
+            box.pack(side="left", expand=True, fill="both", padx=3)
+            tk.Label(box, text=label_text, bg=Theme.CARD, fg=Theme.TEXT_SECONDARY,
+                     font=(Theme.FONT_FAMILY, 9)).pack(anchor="w")
+            lbl = tk.Label(box, text="--", bg=Theme.CARD, fg=Theme.PRIMARY,
+                           font=(Theme.FONT_FAMILY, 13, "bold"))
+            lbl.pack(anchor="w", pady=(2, 0))
+            self.risk_labels[key] = lbl
+
+        # Botões rápidos estilo terminal (STOP / MODIFY / Buy / Sell)
+        ractions = tk.Frame(risk_card.body, bg=Theme.CARD)
+        ractions.pack(fill="x", padx=8, pady=(0, 10))
+        DangerButton(ractions, text="PARAR (STOP)", command=self.stop_trading, width=16).pack(side="left", padx=4)
+        SecondaryButton(ractions, text="MODIFY only", command=self.modify_only, width=14).pack(side="left", padx=4)
+        AccentButton(ractions, text="Comprar", command=self.buy, width=10).pack(side="left", padx=4)
+        DangerButton(ractions, text="Vender", command=self.sell, width=10).pack(side="left", padx=4)
+        SecondaryButton(ractions, text="Fechar ultima", command=self.close_last, width=14).pack(side="left", padx=4)
+        self.risk_status = tk.Label(ractions, text="", bg=Theme.CARD, fg=Theme.TEXT_SECONDARY,
+                                    font=(Theme.FONT_FAMILY, 9))
+        self.risk_status.pack(side="left", padx=10)
+
+        self._apply_risk_defaults()
+
         ai_card = Card(self.frame, title="Aprendizado Continuo")
         ai_card.pack(fill="x", padx=24, pady=10)
         ai_row = tk.Frame(ai_card.body, bg=Theme.CARD)
@@ -153,6 +212,109 @@ class RobotTab:
         )
         self.status_text.configure(text="\n".join(lines),
                                    fg=Theme.SUCCESS if active else Theme.WARNING)
+
+    # ------------------------------------------------------------------
+    # Painel de Risco e Execucao PRO (métodos)
+    # ------------------------------------------------------------------
+    def _apply_risk_defaults(self) -> None:
+        """Carrega defaults de risco da config e preenche campos/métricas."""
+        cfg = get_config()
+        risk_pct = cfg.get("risk", "RiskPercent", default=4.0) or 4.0
+        try:
+            if "lot" in self.r_fields:
+                self.r_fields["lot"][0].delete(0, "end")
+                self.r_fields["lot"][0].insert(0, str(cfg.get("trading", "default_volume", default=0.01)))
+            if "risk" in self.r_fields:
+                self.r_fields["risk"][0].delete(0, "end")
+                self.r_fields["risk"][0].insert(0, str(risk_pct))
+        except Exception:
+            pass
+        try:
+            self.risk_labels["drawdown"].configure(text="--")
+            self.risk_labels["slv"].configure(text="1 : 1")
+            self.risk_labels["tam"].configure(text="--")
+            self.risk_labels["modo"].configure(text="AUTO", fg=Theme.ACCENT)
+        except Exception:
+            pass
+
+    def _recalc_risk(self) -> None:
+        """Recalcula métricas visuais a partir dos campos (sem tocar risco real)."""
+        try:
+            lot = float(self._risk_field("lot") or 0)
+            risk = float(self._risk_field("risk") or 0)
+        except ValueError:
+            return
+        self.risk_labels["tam"].configure(text=f"{lot:.2f} @ {risk:.1f}%")
+        self.risk_labels["modo"].configure(text="MANUAL" if lot else "AUTO", fg=Theme.PRIMARY)
+
+    def _risk_field(self, key: str) -> str:
+        try:
+            return self.r_fields[key][0].get().strip()
+        except Exception:
+            return ""
+
+    def stop_trading(self) -> None:
+        """Registra o comando STOP (emergência). Exige confirmação para aplicar."""
+        if not self.robot.connected:
+            self.risk_status.configure(text="MT5 desconectado", fg=Theme.WARNING)
+            self.on_status("STOP: MT5 desconectado")
+            return
+        confirm = messagebox.askyesno(
+            "Parar trading (STOP)",
+            "Registrar o comando STOP e fechar todas as posições abertas?",
+        )
+        if not confirm:
+            self.risk_status.configure(text="Cancelado", fg=Theme.TEXT_MUTED)
+            return
+        try:
+            res = self.robot.close_all_positions()
+            if res.get("ok"):
+                self.risk_status.configure(text="STOP aplicado", fg=Theme.DANGER)
+                self.on_status("STOP: todas as posicoes fechadas")
+                self._recalc_risk()
+            else:
+                self.risk_status.configure(text=f"Falha: {res.get('error')}", fg=Theme.DANGER)
+        except Exception as e:
+            self.risk_status.configure(text="Erro ao aplicar STOP", fg=Theme.DANGER)
+            self.on_status(f"Erro STOP: {e}")
+
+    def modify_only(self) -> None:
+        """Ativa o modo 'MODIFY only' (sem novas entradas) no painel."""
+        self.risk_labels["modo"].configure(text="MODIFY ONLY", fg=Theme.ACCENT)
+        self.risk_status.configure(text="Modo modify-only ativo", fg=Theme.ACCENT)
+        self.on_status("Modo MODIFY only ativado")
+
+    def close_last(self) -> None:
+        """Fecha a última posição aberta (após confirmação explícita)."""
+        if not self.robot.connected:
+            self.risk_status.configure(text="MT5 desconectado", fg=Theme.WARNING)
+            self.on_status("Close last: MT5 desconectado")
+            return
+        positions = self.robot.get_positions()
+        if not positions:
+            self.risk_status.configure(text="Sem posicoes abertas", fg=Theme.TEXT_MUTED)
+            return
+        last = positions[-1]
+        ticket = getattr(last, "ticket", None)
+        if ticket is None and isinstance(last, dict):
+            ticket = last.get("ticket")
+        confirm = messagebox.askyesno(
+            "Fechar ultima posicao", f"Deseja fechar a posicao ticket={ticket}?"
+        )
+        if not confirm:
+            self.risk_status.configure(text="Cancelado", fg=Theme.TEXT_MUTED)
+            return
+        try:
+            res = self.robot.close_position(ticket)
+            if res.get("ok"):
+                self.risk_status.configure(text="Ultima posicao fechada", fg=Theme.SUCCESS)
+                self.on_status(f"Posicao {ticket} fechada")
+                self._recalc_risk()
+            else:
+                self.risk_status.configure(text=f"Falha: {res.get('error')}", fg=Theme.DANGER)
+        except Exception as e:
+            self.risk_status.configure(text="Erro ao fechar", fg=Theme.DANGER)
+            self.on_status(f"Erro close: {e}")
 
     def buy(self) -> None:
         self._send("BUY")

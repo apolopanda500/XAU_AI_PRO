@@ -25,7 +25,8 @@ from app.cpu import (affinity_mask, apply_cpu_options, apply_model_limits,
                      model_max_ram_mb, model_n_jobs, parse_affinity,
                      set_affinity, set_priority, temperature_c, cpu_usage,
                      system_specs, model_presets, MODEL_PRESET_ORDER,
-                     current_model_preset, preset_ram_mb, set_model_preset)
+                     current_model_preset, preset_ram_mb, set_model_preset,
+                     core_frequencies_mhz, battery_status)
 from app.market_data import MarketData
 from app.mt5_robot import MT5Robot
 from app.theme.mexc import Theme
@@ -100,46 +101,11 @@ class SystemTab:
                        font=(Theme.FONT_FAMILY, 9)).pack(side="left", padx=10)
         PrimaryButton(ops, text="Atualizar agora", command=self.refresh_now, width=14).pack(side="left", padx=6)
 
-        # ---- Configuracao de desempenho ----
-        cfg_card = Card(self.frame, title="Configuracao de desempenho (CPU / RAM)")
-        cfg_card.pack(fill="x", padx=24, pady=10)
-        cf = tk.Frame(cfg_card.body, bg=Theme.CARD)
-        cf.pack(fill="x", padx=8, pady=8)
-        c = get_config()
-        self.prio_var = tk.StringVar(value=str(c.get("cpu", "priority", default="normal")))
-        self.aff_var = tk.StringVar(value=str(c.get("cpu", "affinity", default="todos")))
-        self.cores_var = tk.StringVar(value=str(c.get("cpu", "model_cores", default="auto")))
-        self.ram_pct_var = tk.StringVar(value=str(c.get("cpu", "max_ram_pct", default=80)))
-        self.temp_warn_var = tk.StringVar(value=str(c.get("cpu", "temp_warn_c", default=85)))
-
-        tk.Label(cf, text="Prioridade", bg=Theme.CARD, fg=Theme.TEXT_SECONDARY).grid(row=0, column=0, sticky="w", padx=4, pady=3)
-        tk.OptionMenu(cf, self.prio_var, "baixa", "normal", "alta").grid(row=0, column=1, sticky="w", padx=4)
-        tk.Label(cf, text="Nucleos", bg=Theme.CARD, fg=Theme.TEXT_SECONDARY).grid(row=0, column=2, sticky="w", padx=4)
-        tk.OptionMenu(cf, self.aff_var, "todos", "metade", "quarto", "um", "personalizado").grid(row=0, column=3, sticky="w", padx=4)
-        tk.Label(cf, text="Cores (ex.: 0,2-3)", bg=Theme.CARD, fg=Theme.TEXT_SECONDARY).grid(row=1, column=0, sticky="w", padx=4)
-        self.aff_entry = tk.Entry(cf, width=14, bg=Theme.PANEL, fg=Theme.TEXT, relief="flat",
-                                  highlightbackground=Theme.BORDER, highlightthickness=1)
-        self.aff_entry.grid(row=1, column=1, sticky="w", padx=4)
-        tk.Label(cf, text="Nucleos p/ modelo", bg=Theme.CARD, fg=Theme.TEXT_SECONDARY).grid(row=1, column=2, sticky="w", padx=4)
-        self.cores_entry = tk.Entry(cf, width=8, bg=Theme.PANEL, fg=Theme.TEXT, relief="flat",
-                                    highlightbackground=Theme.BORDER, highlightthickness=1)
-        self.cores_entry.insert(0, self.cores_var.get())
-        self.cores_entry.grid(row=1, column=3, sticky="w", padx=4)
-        tk.Label(cf, text="RAM max %", bg=Theme.CARD, fg=Theme.TEXT_SECONDARY).grid(row=2, column=0, sticky="w", padx=4)
-        self.ram_entry = tk.Entry(cf, width=8, bg=Theme.PANEL, fg=Theme.TEXT, relief="flat",
-                                  highlightbackground=Theme.BORDER, highlightthickness=1)
-        self.ram_entry.insert(0, self.ram_pct_var.get())
-        self.ram_entry.grid(row=2, column=1, sticky="w", padx=4)
-        tk.Label(cf, text="Temp alerta C", bg=Theme.CARD, fg=Theme.TEXT_SECONDARY).grid(row=2, column=2, sticky="w", padx=4)
-        self.temp_entry = tk.Entry(cf, width=8, bg=Theme.PANEL, fg=Theme.TEXT, relief="flat",
-                                   highlightbackground=Theme.BORDER, highlightthickness=1)
-        self.temp_entry.insert(0, self.temp_warn_var.get())
-        self.temp_entry.grid(row=2, column=3, sticky="w", padx=4)
-        self.cfg_status = tk.Label(cf, text="", bg=Theme.CARD, fg=Theme.SUCCESS, font=(Theme.FONT_FAMILY, 9))
-        self.cfg_status.grid(row=3, column=0, columnspan=4, sticky="w", padx=4, pady=(6, 0))
-
-        bts = tk.Frame(cfg_card.body, bg=Theme.CARD)
-        bts.pack(fill="x", padx=8, pady=(0, 8))
+        # ---- Mini informacao de CPU (linha compacta de diagnostico) ------
+        self.cpu_mini = tk.Label(mon.body, text="CPU: aguardando leitura...",
+                                 bg=Theme.CARD, fg=Theme.TEXT_SECONDARY,
+                                 font=(Theme.FONT_FAMILY, 8), anchor="w")
+        self.cpu_mini.pack(fill="x", padx=8, pady=(2, 6))
 
         # ---- Specs da maquina ----
         spec_card = Card(self.frame, title="Specs da Maquina (hardware detectado)")
@@ -150,6 +116,7 @@ class SystemTab:
         spec_keys = [
             ("cpu_name", "CPU"), ("cpu_cores", "Nucleos (fisicos/logicos)"),
             ("ram_total", "RAM total"), ("gpu", "GPU"),
+            ("freq", "Frequencia CPU"), ("battery", "Bateria / AC"),
             ("disco", "Disco (total/livre)"), ("os", "Sistema Operacional"),
             ("arq", "Arquitetura"), ("host", "Hostname"),
         ]
@@ -164,32 +131,6 @@ class SystemTab:
         SecondaryButton(spec_card.body, text="Reler hardware",
                         command=self.load_specs, width=16).pack(anchor="e", padx=8, pady=(0, 8))
 
-        # ---- Presets de modelo (RAM por modelo) ----
-        pre_card = Card(self.frame, title="Presets de Modelo (requisitos de RAM)")
-        pre_card.pack(fill="x", padx=24, pady=6)
-        pf = tk.Frame(pre_card.body, bg=Theme.CARD)
-        pf.pack(fill="x", padx=8, pady=8)
-        self.preset_var = tk.StringVar(value=current_model_preset(get_config()))
-        tk.Label(pf, text="Modelo ativo", bg=Theme.CARD, fg=Theme.TEXT_SECONDARY).grid(row=0, column=0, sticky="w", padx=4)
-        tk.OptionMenu(pf, self.preset_var, *MODEL_PRESET_ORDER).grid(row=0, column=1, sticky="w", padx=4)
-        AccentButton(pf, text="Aplicar preset", command=self.apply_preset, width=16).grid(row=0, column=3, padx=8)
-        self.preset_info = tk.Label(pf, text="", bg=Theme.CARD, fg=Theme.PRIMARY,
-                                    font=(Theme.FONT_FAMILY, 9, "bold"), anchor="w")
-        self.preset_info.grid(row=1, column=0, columnspan=4, sticky="w", padx=4, pady=(6, 0))
-        # lista de presets
-        pre_list = tk.Frame(pre_card.body, bg=Theme.CARD)
-        pre_list.pack(fill="x", padx=8, pady=(0, 8))
-        self.preset_list_lbl = tk.Label(pre_list, text="", bg=Theme.CARD, fg=Theme.TEXT,
-                                        font=(Theme.FONT_MONO if hasattr(Theme, 'FONT_MONO') else Theme.FONT_FAMILY, 8),
-                                        anchor="w", justify="left")
-        self.preset_list_lbl.pack(fill="x")
-        # Botao para editar presets (abre diag simples)
-        SecondaryButton(pre_card.body, text="Editar presets (MB)", command=self.edit_presets, width=20).pack(anchor="e", padx=8, pady=(0, 8))
-        self._render_preset_list()
-
-        AccentButton(bts, text="Aplicar agora", command=self.apply_now, width=16).pack(side="left", padx=4)
-        SecondaryButton(bts, text="Salvar config", command=self.save_config, width=16).pack(side="left", padx=4)
-        SecondaryButton(bts, text="Usar todos nucleos", command=self.use_all_cores, width=18).pack(side="left", padx=4)
         self.load_specs()
 
     # ------------------------------------------------------------------
@@ -216,6 +157,17 @@ class SystemTab:
         ram = s.get("ram_total_mb", 0)
         st("ram_total", f"{ram:,} MB ({ram / 1024:.1f} GB)".replace(",", "."))
         st("gpu", str(s.get("gpu_name", "--")))
+        freq = s.get("freq_mhz", 0)
+        st("freq", f"{freq / 1000:.2f} GHz" if freq else "N/A")
+        try:
+            batt = battery_status()
+        except Exception:
+            batt = {}
+        if batt.get("ac") is not None and batt.get("pct", -1) >= 0:
+            label = "AC" if batt.get("ac") == 1 else f"Bateria {batt.get('pct')}%"
+            st("battery", label)
+        else:
+            st("battery", "N/A")
         if s.get("disco_total_gb", -1) >= 0:
             st("disco", f"{s.get('disco_total_gb')} GB / {s.get('disco_livre_gb')} GB livre")
         else:
@@ -356,8 +308,15 @@ class SystemTab:
         except Exception:
             procs = -1
         # FPS real medido pelo relógio da GUI, sem acessar Tk nesta thread.
+        # FPS real medido pelo relogio da GUI, sem acessar Tk nesta thread.
         from app.runtime_metrics import get_gui_fps
         self._fps_value = get_gui_fps()
+        # Flags OK/FALHOU da aplicacao de prioridade/afinidade (idempotente).
+        try:
+            ok_p, ok_a = apply_cpu_options(get_config())
+        except Exception:
+            ok_p = ok_a = False
+        self._cpu_ok = (bool(ok_p), bool(ok_a))
         return {
             "cpu_uso": usage, "cpu_nucleos": cores,
             "cpu_prioridade": current_priority(),
@@ -371,6 +330,7 @@ class SystemTab:
             "uptime": up_h, "proc": procs,
             "model_njobs": model_n_jobs(get_config()),
             "model_ram": model_max_ram_mb(get_config()),
+            "cpu_ok": getattr(self, "_cpu_ok", (False, False)),
         }
 
     def _apply(self, d: dict) -> None:
@@ -404,5 +364,18 @@ class SystemTab:
         st("model_ram", f"{d['model_ram']:,} MB".replace(",", "."))
         try:
             self.mode_lbl.configure(text=f"Atualizando: {self.interval_entry.get()}s")
+        except Exception:
+            pass
+        # Mini informacao compacta de CPU na pagina de configuracao.
+        try:
+            ok_p, ok_a = d.get("cpu_ok", (False, False))
+            ram_mb = int(d.get("model_ram", 0) or 0)
+            self.cpu_mini.configure(
+                text=(f"CPU: prioridade {'ok' if ok_p else 'falhou'} · "
+                      f"afinidade {'ok' if ok_a else 'falhou'} · "
+                      f"modelos {d.get('model_njobs', '--')} nucleo(s) · "
+                      f"RAM {ram_mb:,} MB").replace(",", "."),
+                fg=Theme.SUCCESS if (ok_p and ok_a) else Theme.WARNING,
+            )
         except Exception:
             pass

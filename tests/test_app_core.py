@@ -28,12 +28,12 @@ def test_import_core_app() -> None:
 
 
 def test_all_tabs_importable() -> None:
-    from app.tabs import dashboard, market, positions, robot, assistant
-    from app.tabs import tools, training, search, charts, subgraph, system, settings
+    from app.tabs import dashboard, market, positions, robot
+    from app.tabs import tools, search, charts, subgraph, system, settings
     from app.tabs import integrations
-    for mod in (dashboard, market, positions, robot, assistant, tools, training,
+    for mod in (dashboard, market, positions, robot, tools,
                 search, charts, subgraph, system, settings, integrations):
-        assert hasattr(mod, "DashboardTab") or hasattr(mod, "MarketTab") or hasattr(mod, "AssistantTab") or mod.__name__
+            assert hasattr(mod, "DashboardTab") or hasattr(mod, "MarketTab") or hasattr(mod, "TradingViewMarket") or mod.__name__
 
 
 # ---------------------------------------------------------------------------
@@ -54,28 +54,13 @@ def test_config_manager_defaults() -> None:
 def test_mcp_servers_registry() -> None:
     import json
     registry = json.loads((ROOT / "mcp" / "servers" / "registry.json").read_text())
-    assert "cline.json" in registry["servers"]
-    assert "quantconnect.json" in registry["servers"]
+    assert registry["servers"] == ["mt5_gateway.json", "tradingview.json"]
 
 
-def test_quantconnect_config() -> None:
-    import json
-    qc = json.loads((ROOT / "mcp" / "servers" / "quantconnect.json").read_text())
-    assert qc["id"] == "quantconnect"
-    assert qc["user_id"] == "536051"
-
-
-def test_cline_config() -> None:
-    import json
-    cl = json.loads((ROOT / "mcp" / "servers" / "cline.json").read_text())
-    assert cl["id"] == "cline"
-    assert cl["api_key_env"] == "CLINE_API_KEY"
-
-
-def test_mcp_tools_dispatcher_has_cline_and_quantconnect() -> None:
+def test_mcp_tools_dispatcher_has_operational_connectors() -> None:
     from app import mcp_tools
-    assert "cline" in mcp_tools._ACTIONS_SPECIFIC
-    assert "quantconnect" in mcp_tools._ACTIONS_SPECIFIC
+    assert "mt5_gateway" in mcp_tools._ACTIONS_SPECIFIC
+    assert "tradingview" in mcp_tools._ACTIONS_SPECIFIC
 
 
 # ---------------------------------------------------------------------------

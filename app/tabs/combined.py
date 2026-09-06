@@ -30,8 +30,10 @@ class CombinedTab:
                 activeforeground=Theme.TEXT,
                 relief="flat",
                 borderwidth=0,
+                highlightthickness=1,
+                highlightbackground=Theme.BORDER,
                 padx=14,
-                pady=7,
+                pady=8,
                 cursor="hand2",
             )
             button.pack(side="left", padx=(0, 6))
@@ -54,6 +56,8 @@ class CombinedTab:
             button.configure(
                 bg=Theme.CARD if name == label else Theme.PANEL,
                 fg=Theme.PRIMARY if name == label else Theme.TEXT_SECONDARY,
+                font=(Theme.FONT_FAMILY, 9, "bold") if name == label else (Theme.FONT_FAMILY, 9),
+                highlightbackground=Theme.PRIMARY if name == label else Theme.BORDER,
             )
         instance = self._instances[label]
         if hasattr(instance, "refresh"):

@@ -62,6 +62,11 @@ CATEGORY_MAP: dict[str, str] = {
     'BTC=F': 'futures', 'ES=F': 'futures', 'NQ=F': 'futures', 'YM=F': 'futures', 'GC=F': 'futures',
 }
 
+CRYPTO_EXCHANGE_MAP: dict[str, str] = {
+    'BTCUSD': 'BTCUSDT', 'BTCUSDc': 'BTCUSDT',
+    'ETHUSD': 'ETHUSDT', 'ETHUSDc': 'ETHUSDT',
+}
+
 
 class MarketData:
     def __init__(self, provider: str = 'auto') -> None:
@@ -141,11 +146,52 @@ class MarketData:
         except Exception:
             return None
 
+    def _quote_exchange(self, symbol: str, exchange: str) -> Quote | None:
+        pair = CRYPTO_EXCHANGE_MAP.get(symbol.upper())
+        if not pair:
+            return None
+        try:
+            import urllib.request
+            if exchange == 'binance':
+                url = f'https://api.binance.com/api/v3/ticker/24hr?symbol={pair}'
+                source = 'Binance'
+            elif exchange == 'mexc':
+                url = f'https://api.mexc.com/api/v3/ticker/24hr?symbol={pair}'
+                source = 'MEXC'
+            else:
+                return None
+            req = urllib.request.Request(url, headers={'User-Agent': 'XAU-AI-PRO/1.2'})
+            with urllib.request.urlopen(req, timeout=3) as response:
+                data = json.loads(response.read().decode('utf-8'))
+            price = float(data['lastPrice'])
+            bid = float(data.get('bidPrice') or data.get('bid1Price') or price)
+            ask = float(data.get('askPrice') or data.get('ask1Price') or price)
+            change = float(data.get('priceChange') or 0.0)
+            change_pct = float(data.get('priceChangePercent') or 0.0)
+            return Quote(
+                symbol=symbol, price=round(price, 2), bid=round(bid, 2), ask=round(ask, 2),
+                change=round(change, 2), change_pct=round(change_pct, 3),
+                spread=round(ask - bid, 2), digits=2, point=0.01,
+                volume=float(data.get('volume') or 0.0),
+                high=round(float(data.get('highPrice') or 0.0), 2),
+                low=round(float(data.get('lowPrice') or 0.0), 2),
+                source=source, time=datetime.now().strftime('%H:%M:%S'), category='crypto',
+            )
+        except Exception:
+            return None
+
     def get_quote(self, symbol: str, provider: str | None = None) -> Quote | None:
         prov = provider or self.provider
         candidates: list[Quote | None] = []
         if prov in ('auto', 'mt5'):
             candidates.append(self._quote_mt5(symbol))
+        if prov == 'auto' and symbol.upper() in CRYPTO_EXCHANGE_MAP:
+            exchange = str(get_config().get('market', 'crypto_provider', default='binance')).lower()
+            candidates.append(self._quote_exchange(symbol, exchange))
+            if exchange != 'mexc':
+                candidates.append(self._quote_exchange(symbol, 'mexc'))
+        elif prov in ('binance', 'mexc'):
+            candidates.append(self._quote_exchange(symbol, prov))
         if prov in ('auto', 'http'):
             candidates.append(self._quote_http(symbol))
         for q in candidates:
