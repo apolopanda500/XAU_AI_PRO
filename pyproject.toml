@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "xau-ai-pro"
+version = "1.2.0"
+description = "XAU AI PRO — trading assistant for MetaTrader 5 with AI integration and management dashboard."
+authors = ["apolopanda500"]
+readme = "README.md"
+packages = [{ include = "src" }]
+
+[tool.poetry.dependencies]
+python = ">=3.11,<3.13"
+crewai = ">=0.80"
+python-dotenv = ">=1.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = ">=8.0"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
