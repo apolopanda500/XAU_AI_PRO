@@ -1,0 +1,9 @@
+# Minimal dependencies required by the automated test suite.
+pytest>=8.0,<9.0
+numpy
+pandas
+requests
+Pillow
+python-dotenv
+pydantic
+sentry-sdk>=2.44.0
