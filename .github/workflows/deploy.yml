@@ -47,7 +47,7 @@ jobs:
       - name: Validar sintaxe Python
         run: python -m compileall -q Python app
       - name: Executar testes Python
-        run: python -m pytest -q tests
+        run: xvfb-run -a python -m pytest -q tests
       - name: Empacotar bundle
         id: package
         env:

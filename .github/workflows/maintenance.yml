@@ -36,7 +36,7 @@ jobs:
       - name: Validar Python
         run: |
           python -m compileall -q Python app
-          python -m pytest -q tests
+          xvfb-run -a python -m pytest -q tests
       - name: Validar backend
         working-directory: backend
         run: |
