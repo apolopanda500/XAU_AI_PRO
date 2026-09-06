@@ -1,0 +1,13 @@
+[tool.poetry]
+name = "xau_ai_pro"
+version = "0.1.0"
+description = "XAU AI PRO — projeto de exemplo"
+authors = ["apolopanda500 <you@example.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
