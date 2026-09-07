@@ -1,7 +1,0 @@
-market_brief:
-  description: >
-    Elabora un resumen breve del contexto actual del mercado XAU/USD
-    (tendencia, soportes/resistencias relevantes y riesgo de noticias).
-  expected_output: >
-    Informe de 5 a 10 líneas, en español, con el contexto de mercado.
-  agent: analyst

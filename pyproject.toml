@@ -4,7 +4,7 @@ version = "1.2.0"
 description = "XAU AI PRO — trading assistant for MetaTrader 5 with AI integration and management dashboard."
 authors = ["apolopanda500"]
 readme = "README.md"
-packages = [{ include = "src" }]
+packages = [{ include = "xau_ai_pro", from = "src" }]
 
 [tool.poetry.dependencies]
 python = ">=3.11,<3.13"
