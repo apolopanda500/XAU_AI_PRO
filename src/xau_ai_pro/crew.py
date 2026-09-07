@@ -46,7 +46,7 @@ class XauAiProCrew:
         return Task(config=self.tasks_config["market_brief"])
 
     @crew
-    def crew_exec(self):
+    def crew(self):
         """Devuelve el Crew listo para kickoff (requiere crewai instalado)."""
         if not CREWAI_AVAILABLE:
             raise RuntimeError(
@@ -69,7 +69,7 @@ def run() -> None:
             "Instala dependencias con 'pip install -e .' para ejecutar el crew."
         )
         return
-    XauAiProCrew().crew_exec().kickoff()
+    XauAiProCrew().crew().kickoff()
 
 
 if __name__ == "__main__":
