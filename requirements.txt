@@ -2,6 +2,9 @@
 # Gold (XAU) AI Trading System
 # Install with: pip install -r requirements.txt
 
+# Crew runtime
+crewai>=1.0,<2.0
+
 # Data Processing
 pandas
 numpy
