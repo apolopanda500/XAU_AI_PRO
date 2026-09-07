@@ -3,7 +3,7 @@
 # Install with: pip install -r requirements.txt
 
 # Crew runtime
-crewai>=1.0,<2.0
+crewai==1.15.20
 
 # Data Processing
 pandas

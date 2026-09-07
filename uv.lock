@@ -2551,7 +2551,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "crewai", specifier = ">=1.0,<2.0" },
+    { name = "crewai", specifier = "==1.15.20" },
     { name = "python-dotenv", specifier = ">=1.0" },
 ]
 
