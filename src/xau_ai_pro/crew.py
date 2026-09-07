@@ -27,6 +27,13 @@ except ImportError:  # pragma: no cover
     task = lambda method: method
     crew = lambda method: method
 
+try:  # pragma: no cover
+    from crewai.a2a import A2AServerConfig
+    from crewai.a2a.auth import EnterpriseTokenAuth
+except ImportError:  # pragma: no cover
+    A2AServerConfig = None
+    EnterpriseTokenAuth = None
+
 
 @CrewBase
 class XauAiProCrew:
@@ -38,7 +45,10 @@ class XauAiProCrew:
     @agent
     def analyst(self):
         """Define al agente 'analyst' (config en src/xau_ai_pro/config/agents.yaml)."""
-        return Agent(config=self.agents_config["analyst"], verbose=True)
+        options = {}
+        if A2AServerConfig is not None and EnterpriseTokenAuth is not None:
+            options["a2a"] = A2AServerConfig(auth=EnterpriseTokenAuth())
+        return Agent(config=self.agents_config["analyst"], verbose=True, **options)
 
     @task
     def market_brief(self):

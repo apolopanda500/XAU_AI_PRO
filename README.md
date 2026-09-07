@@ -28,6 +28,18 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pytest -q tests
 ```
 
+## CrewAI AMP / A2A
+
+The CrewAI deployment exposes the analyst as an A2A server agent. After
+redeploying, use the following URLs in AMP or another A2A client:
+
+- Agent Card: `https://<deployment-host>/.well-known/agent-card.json`
+- JSON-RPC endpoint: `https://<deployment-host>/a2a`
+
+The A2A extra is locked in `uv.lock` and `poetry.lock`. Redeploy from the
+repository (for example, `crewai deploy push`) and configure the deployment
+environment variables in AMP; do not commit provider keys or tokens.
+
 ## Instalador
 
 O arquivo `installer\installer.iss` detecta a pasta de dados do MT5 e instala em `MQL5\Files\XAU_AI_PRO`, sem privilégios de administrador.
