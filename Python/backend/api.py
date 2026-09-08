@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 import subprocess
 import sys
@@ -93,7 +94,17 @@ def health():
 
 @app.get("/prediction/{symbol}")
 def get_prediction(symbol: str):
-    path = PREDICTIONS_DIR / f"prediction_{symbol.upper()}.json"
+    normalized_symbol = symbol.upper()
+    if not re.fullmatch(r"[A-Z0-9_]+", normalized_symbol):
+        raise HTTPException(status_code=400, detail="Invalid symbol")
+
+    base_dir = PREDICTIONS_DIR.resolve()
+    path = (base_dir / f"prediction_{normalized_symbol}.json").resolve()
+    try:
+        path.relative_to(base_dir)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid symbol")
+
     if not path.exists():
         raise HTTPException(status_code=404, detail="Prediction not found")
     with open(path, "r", encoding="utf-8") as f:
