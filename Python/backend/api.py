@@ -116,10 +116,13 @@ def get_prediction(symbol: str):
         path = _prediction_file(symbol)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid symbol")
-    if not path.exists():
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Prediction not found")
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
+    except (OSError, json.JSONDecodeError):
+        raise HTTPException(status_code=500, detail="Error reading prediction")
 
 
 @app.get("/predictions")
@@ -145,8 +148,8 @@ def get_account():
             return {"login": row[0], "balance": row[1], "equity": row[2],
                     "margin": row[3]}
         return {"error": "Account not found"}
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        return {"error": "Database error"}
 
 
 @app.get("/market/live")
