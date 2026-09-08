@@ -1,4 +1,5 @@
-﻿const express = require('express');
+const express = require('express');
+const rateLimit = require('express-rate-limit');
 const cors = require('cors');
 const http = require('http');
 const socketIo = require('socket.io');
@@ -134,6 +135,10 @@ function buildDomains(events) {
 
 app.use(cors(corsOptions));
 app.use(express.json());
+
+// Rate limiting anti-DoS (CodeQL js/missing-rate-limiting): 100 req / 15 min por IP
+const apiLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 100 });
+app.use('/api', apiLimiter);
 
 app.get('/', (req, res) => res.json({ app: 'XAU_AI_PRO Backend', status: 'online', version: '1.2.0-RC1', etapa: '17.3' }));
 

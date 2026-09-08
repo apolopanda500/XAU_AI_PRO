@@ -3,7 +3,7 @@
 # Install with: pip install -r requirements.txt
 
 # Crew runtime
-crewai==1.15.20
+# crewai==1.15.20  # REMOVIDO: vulnerabilidade crítica ChromaDB (CVSS 10/10)
 
 # Data Processing
 pandas

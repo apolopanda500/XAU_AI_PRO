@@ -85,7 +85,15 @@ def read_root():
 
 @app.get("/prediction/{symbol}")
 def get_prediction(symbol: str):
-    path = PREDICTIONS_DIR / f"prediction_{symbol.upper()}.json"
+    try:
+        normalized = symbol.strip().upper()
+        if not normalized or len(normalized) > 64 or ".." in normalized or any(ch in normalized for ch in '/\\:*?"<>|') or any(ord(c) < 32 for c in normalized):
+            raise ValueError("Invalid symbol")
+        base = PREDICTIONS_DIR.resolve()
+        path = (base / f"prediction_{normalized}.json").resolve()
+        path.relative_to(base)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid symbol")
     if not path.exists():
         raise HTTPException(status_code=404, detail="Prediction not found")
     with open(path, "r", encoding="utf-8") as f:

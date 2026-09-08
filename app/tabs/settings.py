@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import tkinter as tk
 import shutil
+import threading
+
 from typing import Callable
 
 from app.components.cards import Card, PrimaryButton, SecondaryButton, AccentButton

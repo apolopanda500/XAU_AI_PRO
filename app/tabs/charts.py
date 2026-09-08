@@ -335,14 +335,22 @@ class ChartsTab:
         limit = max(60, min(500, 240 // max(1, minutes // 5)))
         candles = []; source = "mt5"
         try:
+            from app.mt5_lock import mt5_lock
             import MetaTrader5 as mt5
-            if mt5.initialize():
-                tfmap = {1: mt5.TIMEFRAME_M1, 5: mt5.TIMEFRAME_M5, 15: mt5.TIMEFRAME_M15, 30: mt5.TIMEFRAME_M30, 60: mt5.TIMEFRAME_H1, 240: mt5.TIMEFRAME_H4, 1440: mt5.TIMEFRAME_D1, 10080: mt5.TIMEFRAME_W1}
+            tfmap = {1: mt5.TIMEFRAME_M1, 5: mt5.TIMEFRAME_M5, 15: mt5.TIMEFRAME_M15, 30: mt5.TIMEFRAME_M30, 60: mt5.TIMEFRAME_H1, 240: mt5.TIMEFRAME_H4, 1440: mt5.TIMEFRAME_D1, 10080: mt5.TIMEFRAME_W1}
+            with mt5_lock:
+                # A conexao IPC ja existe (MarketData inicializa no boot):
+                # copy direto; initialize() so se falhar (chamar de novo
+                # quebra a sessao e zera as velas).
+                mt5.symbol_select(symbol, True)
                 rates = mt5.copy_rates_from_pos(symbol, tfmap.get(minutes, mt5.TIMEFRAME_M5), 0, limit)
+                if rates is None and mt5.initialize():
+                    rates = mt5.copy_rates_from_pos(symbol, tfmap.get(minutes, mt5.TIMEFRAME_M5), 0, limit)
                 if rates is not None and len(rates):
                     for r in rates[-limit:]:
-                        candles.append({"symbol": symbol, "time": datetime.fromtimestamp(int(r["time"])).strftime("%d/%m %H:%M"), "open": float(r["open"]), "high": float(r["high"]), "low": float(r["low"]), "close": float(r["close"]), "volume": float(r.get("tick_volume", 0))})
-                mt5.shutdown()
+                        # r e numpy.void: nao tem .get(); acesso por campo
+                        candles.append({"symbol": symbol, "time": datetime.fromtimestamp(int(r["time"])).strftime("%d/%m %H:%M"), "open": float(r["open"]), "high": float(r["high"]), "low": float(r["low"]), "close": float(r["close"]), "volume": float(r["tick_volume"])})
+                # Sem mt5.shutdown(): conexao IPC compartilhada pelo processo.
         except Exception: pass
         if not candles:
             candles = self._from_csv(symbol, limit); source = "csv" if candles else "sem dados"

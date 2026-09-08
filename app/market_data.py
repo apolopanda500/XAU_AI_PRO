@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import Any
 
 from app.config_manager import get_config
+from app.mt5_lock import mt5_lock
 
 
 @dataclass
@@ -80,11 +81,12 @@ class MarketData:
     def _load_mt5(self) -> None:
         try:
             import MetaTrader5 as mt5
-            cfg_path = get_config().get("mt5", "terminal_path", default="")
-            if cfg_path and os.path.exists(cfg_path):
-                ok = mt5.initialize(path=cfg_path)
-            else:
-                ok = mt5.initialize()
+            with mt5_lock:
+                cfg_path = get_config().get("mt5", "terminal_path", default="")
+                if cfg_path and os.path.exists(cfg_path):
+                    ok = mt5.initialize(path=cfg_path)
+                else:
+                    ok = mt5.initialize()
             if ok:
                 self._mt5 = mt5
                 self._mt5_available = True
@@ -95,8 +97,9 @@ class MarketData:
         if not self._mt5_available or self._mt5 is None:
             return None
         try:
-            info = self._mt5.symbol_info(symbol)
-            tick = self._mt5.symbol_info_tick(symbol)
+            with mt5_lock:
+                info = self._mt5.symbol_info(symbol)
+                tick = self._mt5.symbol_info_tick(symbol)
             if info is None or tick is None:
                 return None
             price = (tick.bid + tick.ask) / 2 if tick.bid and tick.ask else tick.last
@@ -123,7 +126,7 @@ class MarketData:
             ticker = YF_MAP.get(symbol.upper(), symbol)
             url = f'https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?interval=1d&range=5d'
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=8) as resp:
+            with urllib.request.urlopen(req, timeout=1) as resp:
                 data = json.loads(resp.read().decode('utf-8'))
             result = data['chart']['result'][0]
             meta = result.get('meta', {})
@@ -161,7 +164,7 @@ class MarketData:
             else:
                 return None
             req = urllib.request.Request(url, headers={'User-Agent': 'XAU-AI-PRO/1.2'})
-            with urllib.request.urlopen(req, timeout=3) as response:
+            with urllib.request.urlopen(req, timeout=2) as response:
                 data = json.loads(response.read().decode('utf-8'))
             price = float(data['lastPrice'])
             bid = float(data.get('bidPrice') or data.get('bid1Price') or price)
@@ -214,9 +217,6 @@ class MarketData:
             return self._cache.get(symbol)
 
     def disconnect(self) -> None:
-        if self._mt5_available and self._mt5:
-            try:
-                self._mt5.shutdown()
-            except Exception:
-                pass
-            self._mt5_available = False
+        # Nao chamamos mt5.shutdown(): a conexao IPC e compartilhada por todo
+        # o processo (robot, graficos, busca) e o shutdown a derrubaria para todos.
+        self._mt5_available = False

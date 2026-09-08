@@ -5,6 +5,7 @@
  * Obs: Em desenvolvimento local, use `npm run dev` (server.js).
  */
 import express from 'express';
+import rateLimit from 'express-rate-limit';
 import cors from 'cors';
 import { start } from 'workflow/api';
 import { marketDataWorkflow, reconcileWorkflow } from '../workflows/index.mjs';
@@ -47,6 +48,10 @@ const htmlStatusPage = `<!DOCTYPE html>
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Rate limiting anti-DoS (CodeQL js/missing-rate-limiting): 100 req / 15 min por IP
+const apiLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 100 });
+app.use('/api', apiLimiter);
 
 app.post('/api/chat', async (req, res) => {
   const message = String(req.body?.message || '').trim();

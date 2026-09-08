@@ -23,6 +23,9 @@ concurrency:
   # runs travados bloqueando a fila de deploys).
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   validate-and-package:
     name: Validar e Empacotar

@@ -12,13 +12,11 @@ version = "1.2.0"
 description = "XAU AI PRO - trading assistant for MetaTrader 5 with AI integration and management dashboard."
 requires-python = ">=3.11,<3.13"
 dependencies = [
-    "crewai[a2a]==1.15.20",
     "python-dotenv>=1.0",
 ]
 
 [tool.poetry.dependencies]
 python = ">=3.11,<3.13"
-crewai = { version = "1.15.20", extras = ["a2a"] }
 python-dotenv = ">=1.0"
 
 [tool.poetry.group.dev.dependencies]

@@ -95,16 +95,18 @@ def search_symbols(query: str) -> list[dict[str, Any]]:
                         "origem": "default"})
     try:
         import MetaTrader5 as mt5  # noqa: PLC0415
+        from app.mt5_lock import mt5_lock
         from app.mt5_robot import get_robot
         robot = get_robot()
         if robot and robot.account_info():
-            syms = mt5.symbols_get()
+            with mt5_lock:
+                syms = mt5.symbols_get()
             for sym in (syms or [])[:500]:
                 name = sym.name
                 if not query or query in name.upper():
                     out.append({"tipo": "ativo", "nome": name,
                                 "descricao": "do terminal MT5", "origem": "mt5"})
-        mt5.shutdown()
+        # Sem mt5.shutdown(): a conexao IPC e compartilhada pelo processo todo.
     except Exception:
         pass
     return out[:60]
@@ -153,7 +155,7 @@ def quick_summary() -> dict[str, Any]:
         from app.mt5_robot import get_robot
         robot = get_robot()
         summary["conectado_mt5"] = bool(robot and robot.account_info())
-        mt5.shutdown()
+        # Sem mt5.shutdown(): a conexao IPC e compartilhada pelo processo todo.
     except Exception:
         summary["conectado_mt5"] = False
     return summary

@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from app.config_manager import get_config
+from app.mt5_lock import mt5_lock
 from app.utils.paths import get_mql_data_path, get_python_dir
 
 
@@ -83,7 +84,7 @@ class MT5Robot:
         return None
 
     def connect(self, path: str | None = None) -> bool:
-        with self._lock:
+        with self._lock, mt5_lock:
             try:
                 import MetaTrader5 as mt5
                 self.mt5 = mt5
@@ -107,21 +108,20 @@ class MT5Robot:
                 return False
 
     def disconnect(self) -> None:
+        # Nao chamamos mt5.shutdown(): a conexao IPC e compartilhada por todo
+        # o processo (MarketData, graficos, busca) e o shutdown a derrubaria.
         with self._lock:
-            if self.mt5 and self.connected:
-                try:
-                    self.mt5.shutdown()
-                except Exception:
-                    pass
+            self.connected = False
 
     def account_info(self) -> dict[str, Any] | None:
         if not self.connected or not self.mt5:
             return None
         try:
-            info = self.mt5.account_info()
-            if info is None:
-                return None
-            terminal = self.mt5.terminal_info()
+            with mt5_lock:
+                info = self.mt5.account_info()
+                if info is None:
+                    return None
+                terminal = self.mt5.terminal_info()
             trade_allowed = bool(terminal.trade_allowed) if terminal else False
             terminal_connected = bool(terminal.connected) if terminal else False
             return {
@@ -147,7 +147,8 @@ class MT5Robot:
         if not self.connected or not self.mt5:
             return []
         try:
-            positions = self.mt5.positions_get()
+            with mt5_lock:
+                positions = self.mt5.positions_get()
             if positions is None:
                 return []
             result = []
@@ -180,7 +181,8 @@ class MT5Robot:
         try:
             from_date = datetime.now() - timedelta(days=days)
             to_date = datetime.now()
-            deals = self.mt5.history_deals_get(from_date, to_date)
+            with mt5_lock:
+                deals = self.mt5.history_deals_get(from_date, to_date)
             if deals is None:
                 return []
             result = []
@@ -219,8 +221,9 @@ class MT5Robot:
             return {"ok": False, "error": "MT5 nao conectado"}
         try:
             magic = get_config().get("mt5", "magic_number", default=2026001)
-            tick = self.mt5.symbol_info_tick(symbol)
-            info = self.mt5.symbol_info(symbol)
+            with mt5_lock:
+                tick = self.mt5.symbol_info_tick(symbol)
+                info = self.mt5.symbol_info(symbol)
             if tick is None or info is None:
                 return {"ok": False, "error": f"Simbolo {symbol} nao encontrado"}
             is_buy = side.upper() == "BUY"
@@ -242,12 +245,13 @@ class MT5Robot:
                 request["sl"] = sl
             if tp > 0:
                 request["tp"] = tp
-            result = self.mt5.order_send(request)
-            if result is None:
-                return {"ok": False, "error": str(self.mt5.last_error())}
-            if result.retcode == self.mt5.TRADE_RETCODE_DONE:
-                return {"ok": True, "ticket": result.order, "price": result.price, "volume": volume}
-            return {"ok": False, "error": f"Retcode {result.retcode}"}
+            with mt5_lock:
+                result = self.mt5.order_send(request)
+                if result is None:
+                    return {"ok": False, "error": str(self.mt5.last_error())}
+                if result.retcode == self.mt5.TRADE_RETCODE_DONE:
+                    return {"ok": True, "ticket": result.order, "price": result.price, "volume": volume}
+                return {"ok": False, "error": f"Retcode {result.retcode}"}
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
@@ -255,12 +259,14 @@ class MT5Robot:
         if not self.connected or not self.mt5:
             return {"ok": False, "error": "MT5 nao conectado"}
         try:
-            position = self.mt5.positions_get(ticket=ticket)
+            with mt5_lock:
+                position = self.mt5.positions_get(ticket=ticket)
             if not position:
                 return {"ok": False, "error": "Posicao nao encontrada"}
             pos = position[0]
             symbol = pos.symbol
-            tick = self.mt5.symbol_info_tick(symbol)
+            with mt5_lock:
+                tick = self.mt5.symbol_info_tick(symbol)
             if tick is None:
                 return {"ok": False, "error": "Tick nao disponivel"}
             price = tick.bid if pos.type == 0 else tick.ask
@@ -278,12 +284,13 @@ class MT5Robot:
                 "type_time": self.mt5.ORDER_TIME_GTC,
                 "type_filling": self._filling_mode(),
             }
-            result = self.mt5.order_send(request)
-            if result is None:
-                return {"ok": False, "error": str(self.mt5.last_error())}
-            if result.retcode == self.mt5.TRADE_RETCODE_DONE:
-                return {"ok": True, "ticket": result.order, "price": result.price}
-            return {"ok": False, "error": f"Retcode {result.retcode}"}
+            with mt5_lock:
+                result = self.mt5.order_send(request)
+                if result is None:
+                    return {"ok": False, "error": str(self.mt5.last_error())}
+                if result.retcode == self.mt5.TRADE_RETCODE_DONE:
+                    return {"ok": True, "ticket": result.order, "price": result.price}
+                return {"ok": False, "error": f"Retcode {result.retcode}"}
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
@@ -306,12 +313,14 @@ class MT5Robot:
         if not self.connected or not self.mt5:
             return {"active": False, "reason": "MT5 nao conectado"}
         try:
-            terminal = self.mt5.terminal_info()
+            with mt5_lock:
+                terminal = self.mt5.terminal_info()
             connected = terminal.connected if terminal else False
             if not connected:
                 return {"active": False, "reason": "Terminal MT5 desconectado"}
             magic = magic or get_config().get("mt5", "magic_number", default=2026001)
-            positions = self.mt5.positions_get(magic=magic)
+            with mt5_lock:
+                positions = self.mt5.positions_get(magic=magic)
             positions_count = len(positions) if positions else 0
             predictions_active = self._check_recent_predictions()
             active = positions_count > 0 or predictions_active

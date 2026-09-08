@@ -88,13 +88,15 @@ class SubgraphTab:
     def _read_candles(self, symbol: str, timeframe: str, bars: int) -> pd.DataFrame:
         if not self.robot.connected and not self.robot.connect():
             raise RuntimeError(f"MT5 não conectado: {self.robot.last_error or 'indisponível'}")
+        from app.mt5_lock import mt5_lock
         mt5 = self.robot.mt5
         mt5_timeframe = getattr(mt5, f"TIMEFRAME_{timeframe}", None)
         if mt5_timeframe is None:
             raise ValueError(f"Timeframe não suportado: {timeframe}")
-        if not mt5.symbol_select(symbol, True):
-            raise RuntimeError(f"Símbolo indisponível no MT5: {symbol}")
-        rates = mt5.copy_rates_from_pos(symbol, mt5_timeframe, 0, bars)
+        with mt5_lock:
+            if not mt5.symbol_select(symbol, True):
+                raise RuntimeError(f"Símbolo indisponível no MT5: {symbol}")
+            rates = mt5.copy_rates_from_pos(symbol, mt5_timeframe, 0, bars)
         if rates is None or len(rates) < 30:
             raise RuntimeError(f"Poucos candles disponíveis para {symbol}")
         data = pd.DataFrame(rates)
