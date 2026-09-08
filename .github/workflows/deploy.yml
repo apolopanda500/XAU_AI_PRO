@@ -272,6 +272,38 @@ jobs:
         working-directory: backend
         run: npx vercel@59.9.1 --yes --token "$VERCEL_TOKEN"
 
+  notify-slack-failure:
+    name: Notificar Slack (falha no deploy Vercel)
+    # Executa mesmo se o deploy falhar: usa always() + failure() dos needs.
+    # jobs deploy-vercel/healthcheck tem `if: success()`, então seriam pulados
+    # na falha e a notificação nunca chegaria — por isso o job dedicado.
+    needs: [build-frontend, deploy-vercel]
+    runs-on: ubuntu-latest
+    if: always() && (needs.build-frontend.result == 'failure' || needs.deploy-vercel.result == 'failure')
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK || secrets.SLACK_WEBHOOK_URL }}
+    steps:
+      - name: Enviar alerta de falha ao Slack
+        if: env.SLACK_WEBHOOK_URL != ''
+        uses: slackapi/slack-github-action@v4.0.0
+        with:
+          payload: |
+            {
+              "text": ":x: Falha no deploy XAU AI PRO",
+              "blocks": [
+                {"type":"section","text":{"type":"mrkdwn","text":":x: *Falha no deploy XAU AI PRO*"}},
+                {"type":"section","text":{"type":"mrkdwn","text":"*Branch:* `${{ github.ref_name }}` | *Run:* #${{ github.run_number }}\n*Build Frontend:* ${{ needs.build-frontend.result }}\n*Deploy Vercel:* ${{ needs.deploy-vercel.result }}\n*Logs:* https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"}}
+              ]
+            }
+          webhook-type: incoming-webhook
+      - name: Avisar ausência do webhook
+        if: env.SLACK_WEBHOOK_URL == ''
+        run: |
+          echo "::warning::SLACK_WEBHOOK_URL não configurado - notificação de falha não enviada"
+          echo "Build Frontend: ${{ needs.build-frontend.result }}"
+          echo "Deploy Vercel: ${{ needs.deploy-vercel.result }}"
+          echo "Logs: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
   healthcheck:
     name: Health Check Final
     needs: deploy-vercel
