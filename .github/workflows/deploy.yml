@@ -93,19 +93,23 @@ jobs:
             echo 'Sem frontend/package.json - skip'
           fi
       - name: Enviar source maps ao Sentry (sentry-cli)
-        if: env.SENTRY_AUTH_TOKEN != '' && hashFiles('frontend/build/**') != ''
+        if: env.SENTRY_AUTH_TOKEN != ''
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ env.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ env.SENTRY_PROJECT }}
         run: |
           npm install -g @sentry/cli
-          if [ -d frontend/build ]; then
-            sentry-cli releases new "${{ github.sha }}-$GITHUB_RUN_NUMBER" || true
-            sentry-cli releases set-commits "${{ github.sha }}-$GITHUB_RUN_NUMBER" --auto || true
-            sentry-cli releases files "${{ github.sha }}-$GITHUB_RUN_NUMBER" upload-sourcemaps ./frontend/build --url-prefix '~/build'
-            sentry-cli releases finalize "${{ github.sha }}-$GITHUB_RUN_NUMBER"
+          sentry-cli releases new "${{ github.sha }}-$GITHUB_RUN_NUMBER" || true
+          sentry-cli releases set-commits "${{ github.sha }}-$GITHUB_RUN_NUMBER" --auto || true
+          if [ -d frontend/dist ]; then
+            sentry-cli releases files "${{ github.sha }}-$GITHUB_RUN_NUMBER" upload-sourcemaps ./frontend/dist/ --url-prefix '~/dist' || true
+          elif [ -d frontend/build ]; then
+            sentry-cli releases files "${{ github.sha }}-$GITHUB_RUN_NUMBER" upload-sourcemaps ./frontend/build/ --url-prefix '~/build' || true
           else
-            echo 'Sem pasta frontend/build - skip Sentry source maps'
+            echo 'Sem frontend/dist ou frontend/build - skip source maps'
           fi
+          sentry-cli releases finalize "${{ github.sha }}-$GITHUB_RUN_NUMBER" || true
 
   deploy-vercel:
     name: Deploy Vercel
