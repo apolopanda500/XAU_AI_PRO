@@ -23,19 +23,36 @@ name: Deploy Node.js project to Azure Function App
 on:
   push:
     branches: ["main"]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/azure-functions-app-nodejs.yml'
+  pull_request:
+    branches: ["main"]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/azure-functions-app-nodejs.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 env:
+  # Enquanto não houver um Azure Function App real configurado, este
+  # workflow fica desativado por padrão mas continua válido/sintaticamente ok.
+  # Para ativar: crie o Function App no Azure, configure o secret
+  # AZURE_FUNCTIONAPP_PUBLISH_PROFILE e defina AZURE_FUNCTIONS_ENABLED=true
+  # nos secrets/variables do repositório.
+  AZURE_FUNCTIONS_ENABLED: 'false'
   AZURE_FUNCTIONAPP_NAME: 'your-app-name'   # set this to your function app name on Azure
-  AZURE_FUNCTIONAPP_PACKAGE_PATH: 'backend'       # set this to the path to your function app project, defaults to the repository root
+  AZURE_FUNCTIONAPP_PACKAGE_PATH: 'backend' # set this to the path to your function app project
   NODE_VERSION: '20.x'                      # set this to the node version to use (e.g. '8.x', '10.x', '12.x')
 
 jobs:
   build-and-deploy:
     runs-on: windows-latest # For Linux, use ubuntu-latest
     environment: dev
+    # Pula de forma limpa quando o Azure ainda não foi configurado.
+    if: vars.AZURE_FUNCTIONS_ENABLED == 'true' || secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE != ''
     steps:
     - name: 'Checkout GitHub Action'
       uses: actions/checkout@v4
@@ -59,6 +76,18 @@ jobs:
         npm run build --if-present
         npm run test --if-present
         popd
+
+    - name: 'Validate Azure configuration'
+      shell: pwsh
+      run: |
+        if ("${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}" -eq "") {
+          Write-Error "AZURE_FUNCTIONAPP_PUBLISH_PROFILE não configurado. Configure o secret ou mantenha AZURE_FUNCTIONS_ENABLED=false."
+          exit 1
+        }
+        if ("${{ env.AZURE_FUNCTIONAPP_NAME }}" -eq "your-app-name") {
+          Write-Error "AZURE_FUNCTIONAPP_NAME ainda está como 'your-app-name'. Configure o nome real do Function App."
+          exit 1
+        }
 
     - name: 'Run Azure Functions Action'
       uses: Azure/functions-action@v1
