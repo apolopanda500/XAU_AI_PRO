@@ -1,0 +1,86 @@
+version: 2
+updates:
+  # ============================================================
+  # Python: requirements files
+  # ============================================================
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "America/Sao_Paulo"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "apolopanda500"
+    labels:
+      - "dependencies"
+      - "security"
+    groups:
+      python-major:
+        dependency-type: "direct"
+        update-types:
+          - "major"
+      python-minor:
+        dependency-type: "direct"
+        update-types:
+          - "minor"
+      python-all:
+        dependency-type: "all"
+    allow:
+      - dependency-type: "direct"
+      - dependency-type: "transitive"
+    ignore:
+      # crewai travado a versao 1.15.20 por compatibilidade com o layout CrewAI
+      - dependency-name: "crewai"
+        versions: ["1.x"]
+
+  # ============================================================
+  # Node.js / npm: backend/package.json
+  # ============================================================
+  - package-ecosystem: "npm"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "America/Sao_Paulo"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "apolopanda500"
+    labels:
+      - "dependencies"
+      - "security"
+    groups:
+      npm-major:
+        dependency-type: "direct"
+        update-types:
+          - "major"
+      npm-minor:
+        dependency-type: "direct"
+        update-types:
+          - "minor"
+      npm-all:
+        dependency-type: "all"
+    allow:
+      - dependency-type: "direct"
+      - dependency-type: "transitive"
+
+  # ============================================================
+  # GitHub Actions: workflow dependencies
+  # ============================================================
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "America/Sao_Paulo"
+    open-pull-requests-limit: 3
+    reviewers:
+      - "apolopanda500"
+    labels:
+      - "dependencies"
+      - "security"
+    allow:
+      - dependency-type: "direct"
