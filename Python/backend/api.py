@@ -80,21 +80,30 @@ def _py() -> str:
 
 
 def _prediction_file(symbol: str) -> Path:
-    """Retorna o path seguro de predição para um símbolo (evita path traversal)."""
+    """Retorna o path seguro de predição para um símbolo (evita path traversal).
+    
+    Validação:
+    1. Normaliza para uppercase e strip
+    2. Verifica tamanho (1-64 chars)
+    3. Whitelist: apenas A-Z, 0-9 e underscore
+    4. Resolve o path e verifica contenção no diretório base
+    """
     normalized = symbol.strip().upper()
     if not normalized or len(normalized) > 64:
         raise ValueError("Invalid symbol")
-    if ".." in normalized or any(ch in normalized for ch in '/\\:*?"<>|'):
-        raise ValueError("Invalid symbol")
-    if any(ord(c) < 32 for c in normalized):
+    # Whitelist estrita: apenas caracteres seguros para filenames
+    if not normalized.replace("_", "").isalnum():
         raise ValueError("Invalid symbol")
     base = PREDICTIONS_DIR.resolve()
-    path = (base / f"prediction_{normalized}.json").resolve()
-    try:
-        path.relative_to(base)
-    except (ValueError, OSError):
+    # Constrói path sem f-string com input do usuário
+    filename = "prediction_" + normalized + ".json"
+    path = base / filename
+    # Verifica contenção (path traversal protection)
+    real_base = str(base.resolve())
+    real_path = str(Path(path).resolve())
+    if not real_path.startswith(real_base + os.sep) and real_path != real_base:
         raise ValueError("Invalid symbol")
-    return path
+    return Path(real_path)
 
 
 # ============================================================

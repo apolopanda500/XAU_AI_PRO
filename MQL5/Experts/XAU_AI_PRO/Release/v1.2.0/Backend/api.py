@@ -87,15 +87,24 @@ def read_root():
 def get_prediction(symbol: str):
     try:
         normalized = symbol.strip().upper()
-        if not normalized or len(normalized) > 64 or ".." in normalized or any(ch in normalized for ch in '/\\:*?"<>|') or any(ord(c) < 32 for c in normalized):
+        if not normalized or len(normalized) > 64:
+            raise ValueError("Invalid symbol")
+        # Whitelist estrita: apenas A-Z, 0-9 e underscore
+        if not normalized.replace("_", "").isalnum():
             raise ValueError("Invalid symbol")
         base = PREDICTIONS_DIR.resolve()
-        path = (base / f"prediction_{normalized}.json").resolve()
-        path.relative_to(base)
+        # Constrói path sem f-string com input do usuário
+        filename = "prediction_" + normalized + ".json"
+        path = base / filename
+        # Verifica contenção (path traversal protection)
+        real_base = str(base.resolve())
+        real_path = str(Path(path).resolve())
+        if not real_path.startswith(real_base + os.sep) and real_path != real_base:
+            raise ValueError("Invalid symbol")
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid symbol")
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(real_path, "r", encoding="utf-8") as f:
             return json.load(f)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Prediction not found")
