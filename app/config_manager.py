@@ -211,7 +211,7 @@ class ConfigManager:
         if not rec:
             return False
         digest, _ = self._hash_password(password, rec["salt"])
-                return secrets.compare_digest(digest, rec["hash"])
+        return secrets.compare_digest(digest, rec["hash"])
 
     def ensure_default_user(self) -> None:
         """Cria usuario admin apenas se nao existir nenhum usuario.
