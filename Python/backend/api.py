@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 import subprocess
 import sys
@@ -78,32 +79,41 @@ def _py() -> str:
     return sys.executable or "python"
 
 
-
-def _prediction_file(symbol: str) -> Path:
-    """Retorna o path seguro de predição para um símbolo (evita path traversal).
+def _safe_prediction_path(symbol: str) -> str:
+    """Constrói um path seguro para o arquivo de predição.
     
-    Validação:
-    1. Normaliza para uppercase e strip
-    2. Verifica tamanho (1-64 chars)
-    3. Whitelist: apenas A-Z, 0-9 e underscore
-    4. Resolve o path e verifica contenção no diretório base
+    Usa whitelist estrita e verificação de contenção para prevenir path traversal.
+    Retorna o path absoluto como string.
     """
+    # Normaliza o símbolo
     normalized = symbol.strip().upper()
+    
+    # Validação de tamanho
     if not normalized or len(normalized) > 64:
         raise ValueError("Invalid symbol")
-    # Whitelist estrita: apenas caracteres seguros para filenames
-    if not normalized.replace("_", "").isalnum():
+    
+    # Whitelist estrita: apenas A-Z, 0-9 e underscore
+    if not re.fullmatch(r"[A-Z0-9_]+", normalized):
         raise ValueError("Invalid symbol")
-    base = PREDICTIONS_DIR.resolve()
-    # Constrói path sem f-string com input do usuário
+    
+    # Diretório base confiável (resolvido uma vez)
+    base_dir = os.path.realpath(str(PREDICTIONS_DIR.resolve()))
+    
+    # Constrói o filename de forma segura
     filename = "prediction_" + normalized + ".json"
-    path = base / filename
-    # Verifica contenção (path traversal protection)
-    real_base = str(base.resolve())
-    real_path = str(Path(path).resolve())
-    if not real_path.startswith(real_base + os.sep) and real_path != real_base:
+    
+    # Usa os.path.join para construir o path (mais seguro que /)
+    full_path = os.path.join(base_dir, filename)
+    
+    # Resolve o path final
+    real_path = os.path.realpath(full_path)
+    
+    # Verificação de contenção: o path deve estar dentro do diretório base
+    # Usa os.path.commonpath para comparação segura
+    if os.path.commonpath([real_path, base_dir]) != base_dir:
         raise ValueError("Invalid symbol")
-    return Path(real_path)
+    
+    return real_path
 
 
 # ============================================================
@@ -122,11 +132,12 @@ def health():
 @app.get("/prediction/{symbol}")
 def get_prediction(symbol: str):
     try:
-        path = _prediction_file(symbol)
+        file_path = _safe_prediction_path(symbol)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid symbol")
+    
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(file_path, "r", encoding="utf-8") as f:
             return json.load(f)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Prediction not found")
