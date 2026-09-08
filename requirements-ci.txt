@@ -1,5 +1,5 @@
 # Minimal dependencies required by the automated test suite.
-pytest>=8.0,<9.0
+pytest>=8.3.0,<9.0
 numpy
 pandas
 joblib
