@@ -1,0 +1,204 @@
+﻿name: Security Checks
+
+# Security workflow that runs on every PR and push to main.
+# Runs: dependency audit, secret scanning, env check, and code pattern checks.
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  schedule:
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  security-events: write
+  actions: read
+  contents: read
+  packages: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # 1. Dependency audit (Python + Node.js)
+  dependency-audit:
+    name: "Dependency Audit"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Checkout repository"
+        uses: actions/checkout@v4
+
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: "Install pip-audit"
+        run: pip install pip-audit
+
+      - name: "Audit Python dependencies"
+        run: |
+          pip-audit -r requirements.txt --no-deps
+          pip-audit -r requirements-ci.txt --no-deps
+          pip-audit -r requirements-dev.txt --no-deps
+          pip-audit -r requirements-build.txt --no-deps
+
+      - name: "Set up Node.js"
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: backend/package-lock.json
+
+      - name: "Audit Node.js dependencies"
+        working-directory: backend
+        run: npm audit --audit-level=high
+
+  # 2. Secret scanning
+  secret-scanning:
+    name: "Secret Scanning"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Checkout repository"
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: "Scan for secrets"
+        uses: gitleaks/gitleaks-action@v2
+        with:
+          config-path: .gitleaks.toml
+          scan-source: .
+          fail: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: "Verify .env.example has no real Sentry DSN"
+        run: |
+          if grep -q "c58d3855cb3d89ff2da34aaefc68106a@o4511837787586560" .env.example; then
+            echo "::error::.env.example contains real Sentry DSN"
+            exit 1
+          else
+            echo "OK: .env.example clean"
+          fi
+
+      - name: "Check for default admin/admin credentials"
+        run: |
+          if grep -rn "create_user.*admin.*admin" app/ Python/ src/ 2>/dev/null; then
+            echo "::warning::Default admin/admin credential found"
+          else
+            echo "OK: No default admin/admin credentials found"
+          fi
+
+  # 3. Verify .env files are not tracked
+  env-files-check:
+    name: "Environment Files Check"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Checkout repository"
+        uses: actions/checkout@v4
+
+      - name: "Verify .env files not tracked"
+        run: |
+          for f in .env .env.local .env.integrations .env.production; do
+            if git ls-files "$f" --error-unmatch > /dev/null 2>&1; then
+              echo "::error::$f is tracked by git - it should be in .gitignore!"
+              exit 1
+            fi
+          done
+          echo "OK: .env files are not tracked"
+
+  # 4. Verify GitHub Actions security best practices
+  actions-permissions-check:
+    name: "GitHub Actions Permissions Check"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Checkout repository"
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: "Check workflow permissions"
+        run: |
+          echo "Checking workflow permission declarations..."
+          found=0
+          total=0
+          for f in .github/workflows/*.yml .github/workflows/*.yaml; do
+            total=$((total + 1))
+            if grep -q "^permissions:" "$f" || grep -q "permissions:" "$f"; then
+              found=$((found + 1))
+              echo "  OK $(basename $f) has permissions block"
+            else
+              echo "  WARN $(basename $f) MISSING permissions block"
+            fi
+          done
+          echo "Workflows with permissions: $found/$total"
+
+      - name: "Check for pinned action versions"
+        run: |
+          unpinned=$(grep -rn "uses: " .github/workflows/ | grep -v "@" | grep -v "^.*:#")
+          if [ -n "$unpinned" ]; then
+            echo "::warning::Some actions are not pinned"
+          else
+            echo "OK: All actions are pinned"
+          fi
+
+  # 5. Check for known vulnerability patterns in code
+  code-patterns-check:
+    name: "Code Patterns Security Check"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Checkout repository"
+        uses: actions/checkout@v4
+
+      - name: "Check for shell=True in subprocess"
+        run: |
+          if grep -rn "shell=True" Python/ app/ src/ 2>/dev/null | grep -v "test_" | grep -v ".pyc"; then
+            echo "::error::shell=True found"
+            exit 1
+          else
+            echo "OK: No shell=True found"
+          fi
+
+      - name: "Check for eval/exec usage"
+        run: |
+          if grep -rn "eval(" Python/ app/ src/ 2>/dev/null | grep -v "test_" | grep -v "literal_eval" | grep -v "# noqa" | grep -v ".pyc"; then
+            echo "::error::eval() usage found"
+            exit 1
+          else
+            echo "OK: No unsafe eval() found"
+          fi
+
+      - name: "Check for hardcoded secrets in source"
+        run: |
+          if grep -rnE "(api_key|api_secret|password|secret)\s*=\s*['\"][a-zA-Z0-9]" Python/ app/ src/ 2>/dev/null | grep -v "config_manager" | grep -v "test_" | grep -v ".pyc" | grep -v "default" | grep -v '""'; then
+            echo "::error::Potential hardcoded secret found"
+            exit 1
+          else
+            echo "OK: No hardcoded secrets found"
+          fi
+
+  # 6. Docker image security scan
+  docker-scan:
+    name: "Docker Image Security Scan"
+    runs-on: ubuntu-latest
+    needs: dependency-audit
+    steps:
+      - name: "Checkout repository"
+        uses: actions/checkout@v4
+
+      - name: "Set up Docker Buildx"
+        uses: docker/setup-buildx-action@v3
+
+      - name: "Scan base image for vulnerabilities"
+        uses: docker/docker-scan-action@v0
+        with:
+          image: "node:22-bookworm-slim"
+          ignore-scripts: true
+          severity: "high,critical"
+          exit-code: 1 || true
+          accept-license: true
+

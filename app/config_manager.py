@@ -211,11 +211,22 @@ class ConfigManager:
         if not rec:
             return False
         digest, _ = self._hash_password(password, rec["salt"])
-        return secrets.compare_digest(digest, rec["hash"])
+                return secrets.compare_digest(digest, rec["hash"])
 
     def ensure_default_user(self) -> None:
+        """Cria usuario admin apenas se nao existir nenhum usuario.
+
+        NOTA: Em producao, o usuario admin deve ser criado manualmente
+        com senha forte. Este metodo evita o primeiro uso sem usuario,
+        mas usa senha gerada aleatoriamente (nunca 'admin').
+        """
         if not self._cfg.get("users"):
-            self.create_user("admin", "admin")
+            import secrets as _secrets
+            _pw = _secrets.token_urlsafe(16)
+            self.create_user("admin", _pw)
+            # Loga a senha gerada apenas no primeiro uso (nao persiste)
+            print(f"[CONFIG] Usuario 'admin' criado. Senha temporaria: {_pw}")
+            print("[CONFIG] Altere a senha imediatamente em Settings > Accounts")
 
     def set_session(self, username: str | None) -> None:
         self.set("session", value=username)

@@ -94,3 +94,8 @@ dash_run.err
 dash_fix_run.*
 exe_test*.log
 exe_test*.err
+
+# Gitleaks report (nao versionar)
+.gitleaks-report.json
+
+# Gitleaks config pode ser versionado (documentacao)

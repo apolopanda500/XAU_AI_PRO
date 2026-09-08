@@ -1,0 +1,85 @@
+# Gitleaks configuration for XAU_AI_PRO
+# https://github.com/gitleaks/gitleaks
+#
+# Detecta segredos expostos no codigo fonte do projeto XAU_AI_PRO.
+
+title: "XAU_AI_PRO Gitleaks Configuration"
+
+# Configuracao global
+# https://github.com/gitleaks/gitleaks-docs/blob/master/docs/configuration/repodigest.md
+report-format: "json"
+report-path: ".gitleaks-report.json"
+check-updates: true
+check-git-history: true
+
+# Arquivos a serem ignorados
+ignore-files:
+  - ".env"
+  - ".env.local"
+  - ".env.integrations"
+  - ".env.production"
+  - "*.pyc"
+  - "*.log"
+  - "*.lock"
+  - "*.pkl"
+  - "*.pkg"
+  - "*.pyz"
+  - "*.db"
+  - "node_modules/**"
+  - ".venv/**"
+  - "venv/**"
+  - ".output/**"
+  - "dist/**"
+  - "build/**"
+
+# Registros de denylist (padroes a serem detectados)
+denylist:
+  # Sentry DSN real
+  - description: "Sentry DSN real exposta"
+    regex: "https://[a-f0-9]+@[0-9]+\\.ingest\\.de\\.sentry\\.io/[0-9]+"
+    severity: "CRITICAL"
+    file: .env.example
+    path: .env.example
+  # GitHub PAT
+  - description: "GitHub Personal Access Token"
+    regex: "gh[pousr]_[A-Za-z0-9]{36,}"
+    severity: "CRITICAL"
+  # Slack webhook URL (real, not placeholder)
+  - description: "Slack webhook URL real"
+    regex: "https://hooks.slack.com/services/[A-Z0-9]+/[A-Z0-9]+/[A-Za-z0-9]+"
+    severity: "CRITICAL"
+  # Default admin/admin
+  - description: "Credencial default admin/admin"
+    regex: "create_user\\([\"']admin[\"']\\s*,\\s*[\"']admin[\"']\\)"
+    severity: "HIGH"
+  # OpenAPI key hardcoded
+  - description: "API key hardcoded em codigo fonte"
+    regex: "(api_key|api_secret|secret_key)\\s*[:=]\\s*['\"]([a-zA-Z0-9._-]{16,})"
+    severity: "HIGH"
+  # Docker credentials
+  - description: "Docker Hub PAT"
+    regex: "(DOCKER_USER|DOCKER_PAT)\\s*[:=]\\s*['\"][^\"']{6,}"
+    severity: "CRITICAL"
+  # Vercel token
+  - description: "Vercel token exposta"
+    regex: "vercel_token\\s*[:=]\\s*['\"][A-Za-z0-9._-]{20,}"
+    severity: "CRITICAL"
+
+# Registros de allowlist (padroes a serem ignorados)
+allowlist:
+  # Placeholders conhecidos
+  - "your_broker_api_key_here"
+  - "your_broker_api_secret_here"
+  - "https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXX"
+  - "sk-test-"
+  - "sk-xau-ai-pro-local"
+  - "anything"
+  # Configs legítimas
+  - "SENTRY_DSN="
+  - "SLACK_WEBHOOK_URL="
+  - "OPENAI_API_KEY="
+  - "CLINE_API_KEY="
+  - "BROKER_API_KEY="
+  - "BROKER_API_SECRET="
+  - "GITHUB_TOKEN="
+  - "VERCEL_TOKEN="
