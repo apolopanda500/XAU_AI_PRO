@@ -31,8 +31,13 @@ def _github_slug(repo_url: str) -> str:
     value = repo_url.strip().rstrip("/")
     if value.endswith(".git"):
         value = value[:-4]
-    if "github.com/" in value:
-        return value.split("github.com/", 1)[1]
+
+    parsed = urllib.parse.urlparse(value)
+    host = (parsed.hostname or "").lower()
+
+    if host == "github.com":
+        return parsed.path.lstrip("/").rstrip("/")
+
     return value
 
 
