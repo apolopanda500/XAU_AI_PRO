@@ -79,11 +79,11 @@ def _py() -> str:
     return sys.executable or "python"
 
 
-def _safe_prediction_path(symbol: str) -> str:
-    """Constrói um path seguro para o arquivo de predição.
+def _read_prediction_file(symbol: str) -> dict:
+    """Lê e retorna o conteúdo do arquivo de predição de forma segura.
     
     Usa whitelist estrita e verificação de contenção para prevenir path traversal.
-    Retorna o path absoluto como string.
+    Retorna o conteúdo do arquivo como dict.
     """
     # Normaliza o símbolo
     normalized = symbol.strip().upper()
@@ -113,7 +113,14 @@ def _safe_prediction_path(symbol: str) -> str:
     if os.path.commonpath([real_path, base_dir]) != base_dir:
         raise ValueError("Invalid symbol")
     
-    return real_path
+    # Lê o arquivo
+    try:
+        with open(real_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        raise
+    except (OSError, json.JSONDecodeError) as e:
+        raise ValueError(f"Error reading file: {e}")
 
 
 # ============================================================
@@ -132,17 +139,11 @@ def health():
 @app.get("/prediction/{symbol}")
 def get_prediction(symbol: str):
     try:
-        file_path = _safe_prediction_path(symbol)
+        return _read_prediction_file(symbol)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid symbol")
-    
-    try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            return json.load(f)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Prediction not found")
-    except (OSError, json.JSONDecodeError):
-        raise HTTPException(status_code=500, detail="Error reading prediction")
 
 
 @app.get("/predictions")
