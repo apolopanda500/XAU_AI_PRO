@@ -1,0 +1,31 @@
+# Configuração do actions/labeler — aplica labels automaticamente em PRs
+# por caminhos alterados e áreas do projeto.
+
+ci:
+- changed-files:
+  - any-glob-to-any-file:
+    - '.github/workflows/**'
+    - '.github/labeler.yml'
+
+docker:
+- changed-files:
+  - any-glob-to-any-file:
+    - 'backend/Dockerfile'
+    - '.github/workflows/build.yml'
+
+mql5:
+- changed-files:
+  - any-glob-to-any-file:
+    - 'MQL5/**'
+
+documentation:
+- changed-files:
+  - any-glob-to-any-file:
+    - '**/*.md'
+
+dependencies:
+- changed-files:
+  - any-glob-to-any-file:
+    - 'backend/package*.json'
+    - 'frontend/package*.json'
+    - '**/requirements*.txt'
