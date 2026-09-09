@@ -84,14 +84,6 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - name: Instalar dependências frontend
-        run: |
-          if [ -f frontend/package.json ]; then
-            cd frontend
-            npm install
-          else
-            echo 'Sem frontend/package.json - skip'
-          fi
       - name: Enviar source maps ao Sentry (sentry-cli)
         if: env.SENTRY_AUTH_TOKEN != ''
         env:
