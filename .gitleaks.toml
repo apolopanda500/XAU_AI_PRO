@@ -2,7 +2,7 @@
 # https://github.com/gitleaks/gitleaks
 #
 # Detecta segredos expostos no codigo fonte do projeto XAU_AI_PRO.
-# gitleaks v8.24+ TOML format.
+# gitleaks v8.24+ TOML format (formato TOML estandar).
 
 title = "XAU_AI_PRO Gitleaks Configuration"
 
@@ -10,7 +10,6 @@ title = "XAU_AI_PRO Gitleaks Configuration"
 useDefault = true
 
 allowlist = [
-  # Placeholders conhecidos
   "your_broker_api_key_here",
   "your_broker_api_secret_here",
   "https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXX",
@@ -30,42 +29,42 @@ allowlist = [
 [[rules]]
 id = "custom-sentry-dsn"
 description = "Sentry DSN real exposta"
-regex = 'https://[a-f0-9]+@[0-9]+\.ingest\.de\.sentry\.io/[0-9]+'
+regex = "https://[a-f0-9]+@[0-9]+[.]ingest[.]de[.]sentry[.]io/[0-9]+"
 severity = "CRITICAL"
-paths = [".env.example"]
+path = ".env.example"
 
 [[rules]]
 id = "custom-github-pat"
 description = "GitHub Personal Access Token"
-regex = 'gh[pousr]_[A-Za-z0-9]{36,}'
+regex = "gh[pousr]_[A-Za-z0-9]{36,}"
 severity = "CRITICAL"
 
 [[rules]]
 id = "custom-slack-webhook"
 description = "Slack webhook URL real"
-regex = 'https://hooks\.slack\.com/services/[A-Z0-9]+/[A-Z0-9]+/[A-Za-z0-9]+'
+regex = "https://hooks[.]slack[.]com/services/[A-Z0-9]+/[A-Z0-9]+/[A-Za-z0-9]+"
 severity = "CRITICAL"
 
 [[rules]]
 id = "custom-admin-creds"
 description = "Credencial default admin/admin"
-regex = 'create_user\(["'']admin["'']\s*,\s*["'']admin["'']\)'
+regex = "create_user[[:punct:]]*(admin|password)[[:punct:]]*[,][[:space:]]*[[:punct:]]*(admin|password)"
 severity = "HIGH"
 
 [[rules]]
-id = "custom-harcoded-key"
+id = "custom-hardcoded-key"
 description = "API key hardcoded em codigo fonte"
-regex = '''(api_key|api_secret|secret_key)\s*[:=]\s*["']([a-zA-Z0-9._-]{16,})'''
+regex = "(api_key|api_secret|secret_key)[[:space:]]*[:=][[:space:]]*[[:punct:]][a-zA-Z0-9._-]{16,}"
 severity = "HIGH"
 
 [[rules]]
 id = "custom-docker-pat"
 description = "Docker Hub PAT"
-regex = '''(DOCKER_USER|DOCKER_PAT)\s*[:=]\s*["'][^"']{6,}'''
+regex = "(DOCKER_USER|DOCKER_PAT)[[:space:]]*[:=][[:space:]]*[[:punct:]][^[:space:]]{6,}"
 severity = "CRITICAL"
 
 [[rules]]
 id = "custom-vercel-token"
 description = "Vercel token exposta"
-regex = '''vercel_token\s*[:=]\s*["'][A-Za-z0-9._-]{20,}'''
+regex = "vercel_token[[:space:]]*[:=][[:space:]]*[[:punct:]][A-Za-z0-9._-]{20,}"
 severity = "CRITICAL"

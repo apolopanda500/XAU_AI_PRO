@@ -1,2 +1,2 @@
 # Dependências exclusivas de qualidade e testes.
-pytest>=8.3.0,<9.0
+pytest>=9.0.3
