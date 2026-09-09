@@ -237,10 +237,13 @@ jobs:
           webhook-type: incoming-webhook
 
   preview-deploy:
-    name: Preview Deploy (PR)
+    name: Preview Deploy (PR / develop)
     needs: validate-and-package
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    # Roda em PRs para main E em pushes para develop (preview/staging do backend).
+    # Em pushes a develop o Vercel CLI gera um deployment de preview com URL
+    # unica (--yes aceita os prompts padrao), sem tocar em producao.
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/develop'
     env:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID || 'team_m6XXhz0AuVtzK0zxtv96h03a' }}
