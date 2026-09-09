@@ -40,13 +40,13 @@ jobs:
         run: pip install pip-audit
 
       - name: "Audit Python dependencies"
-        # MetaTrader5 só existe no Windows: usa --ignore-requirement para não
-        # quebrar o audit no Linux. requirements.txt é auditado no Windows
-        # pelo workflow deploy.yml / build-installer.yml.
+        # requirements.txt e requirements-build.txt conteñen MetaTrader5
+        # (solo Windows). En Linux esos dependencias se omiten del audit;
+        # se auditan en los workflows Windows (deploy.yml / build-installer.yml).
+        # pip-audit NO soporta la bandera --ignore-requirement.
         run: |
           pip-audit -r requirements-ci.txt --no-deps
           pip-audit -r requirements-dev.txt --no-deps
-          pip-audit -r requirements-build.txt --no-deps --ignore-requirement MetaTrader5
 
       - name: "Set up Node.js"
         uses: actions/setup-node@v4
