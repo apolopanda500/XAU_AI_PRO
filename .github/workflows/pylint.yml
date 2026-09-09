@@ -1,23 +1,43 @@
 name: Pylint
 
-on: [push]
+# Análise estática do código Python (app desktop + pipeline + testes).
+# Configuração em .pylintrc. Job único no Python 3.11 (versão exigida pelo
+# projeto, conforme pyproject.toml). --exit-zero: relatório de qualidade
+# não bloqueia o deploy (gates de segurança ficam no security.yml).
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pylint-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build:
+  pylint:
+    name: Análise estática (Python 3.11)
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.8", "3.9", "3.10"]
+    timeout-minutes: 10
     steps:
-    - uses: actions/checkout@v4
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v3
-      with:
-        python-version: ${{ matrix.python-version }}
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install pylint
-    - name: Analysing the code with pylint
-      run: |
-        pylint $(git ls-files '*.py')
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar pylint
+        run: |
+          python -m pip install --upgrade pip
+          pip install pylint
+
+      - name: Análise com pylint (score no log)
+        run: |
+          pylint --rcfile=.pylintrc $(git ls-files '*.py') --exit-zero
