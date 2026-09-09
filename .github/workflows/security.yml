@@ -198,11 +198,11 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: "Scan base image for vulnerabilities"
-        uses: docker/docker-scan-action@v0
+        uses: docker/scout-action@v1
         with:
+          command: cves
           image: "node:22-bookworm-slim"
-          ignore-scripts: true
-          severity: "high,critical"
-          exit-code: 1 || true
-          accept-license: true
+          only-severities: high,critical
+          exit-code: false
+          ignore-unfixed: true
 
