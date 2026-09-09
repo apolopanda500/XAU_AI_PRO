@@ -59,4 +59,7 @@ jobs:
     - name: Test with pytest
       shell: bash -el {0}
       run: |
-        python -m pytest -q tests
+        # Los tests usan tkinter (GUI), que requiere un display X.
+        # En CI headless se usa xvfb (X Virtual Framebuffer).
+        command -v xvfb-run >/dev/null 2>&1 || sudo apt-get update && sudo apt-get install -y xvfb
+        xvfb-run -a python -m pytest -q tests
