@@ -58,13 +58,17 @@ jobs:
 
   # ────────────────────────────────────────────────────────────────────────
   # Build/push de imagen en Vercel Container Registry (VCR).
-  # Desativado hasta que se configure `secrets.VERCEL_TOKEN`.
-  # Se corrigió el uso de `--yes` (opción no soportada por `vercel vcr`).
-  # El guard del job no puede usar `secrets`, por eso se valida en un step.
+  # Requiere: vars.VCR_ENABLED='true' + secret VERCEL_TOKEN.
+  # Cada comando `vercel vcr` opera sobre um projeto Vercel: no CI não há
+  # `vercel link`, por isso é obrigatório passar --scope (team) e --project.
+  # Usa os mesmos secrets/fallbacks do deploy.yml.
   # ────────────────────────────────────────────────────────────────────────
   vercel-vcr:
     runs-on: ubuntu-latest
     if: vars.VCR_ENABLED == 'true'
+    env:
+      VERCEL_SCOPE: ${{ secrets.VERCEL_ORG_ID || 'team_m6XXhz0AuVtzK0zxtv96h03a' }}
+      VERCEL_PROJECT: ${{ secrets.VERCEL_PROJECT_ID || 'prj_RApeFNVlnOGYxtYcRDqaSUTIJD1G' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -91,11 +95,11 @@ jobs:
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
-          vercel vcr login docker --token "$VERCEL_TOKEN"
+          vercel vcr login docker --scope "$VERCEL_SCOPE" --project "$VERCEL_PROJECT" --token "$VERCEL_TOKEN"
 
       - name: Build e push imagem no VCR
         if: env.SKIP_VCR != 'true'
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
-          vercel vcr build docker ./backend --push --token "$VERCEL_TOKEN"
+          vercel vcr build docker ./backend --push --scope "$VERCEL_SCOPE" --project "$VERCEL_PROJECT" --token "$VERCEL_TOKEN"
