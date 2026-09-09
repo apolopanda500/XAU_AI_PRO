@@ -40,12 +40,9 @@ jobs:
           username: ${{ vars.DOCKER_USER }}
           password: ${{ secrets.DOCKER_PAT }}
 
-      - name: Configurar Docker Buildx Cloud
+      - name: Configurar Docker Buildx
         if: env.SKIP_DOCKER != 'true'
         uses: docker/setup-buildx-action@v3
-        with:
-          driver: cloud
-          endpoint: "rickjax123/apolopanda500"
 
       - name: Build e push (Docker Hub)
         if: env.SKIP_DOCKER != 'true'
