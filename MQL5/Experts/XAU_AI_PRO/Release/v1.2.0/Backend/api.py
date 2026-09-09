@@ -79,46 +79,38 @@ def _py() -> str:
 
 def _read_prediction_file(symbol: str) -> dict:
     """Lê e retorna o conteúdo do arquivo de predição de forma segura.
-    
-    Usa whitelist estrita e verificação de contenção para prevenir path traversal.
-    Retorna o conteúdo do arquivo como dict.
+
+    O símbolo é validado por whitelist estrita (A-Z, 0-9, underscore) e o
+    arquivo é localizado via glob() no diretório base. Como o path nunca é
+    derivado da entrada do usuário, não existe fluxo de dados controlado
+    pelo usuário em expressões de caminho (path injection eliminada por
+    construção).
     """
     # Normaliza o símbolo
     normalized = symbol.strip().upper()
-    
+
     # Validação de tamanho
     if not normalized or len(normalized) > 64:
         raise ValueError("Invalid symbol")
-    
+
     # Whitelist estrita: apenas A-Z, 0-9 e underscore
     if not re.fullmatch(r"[A-Z0-9_]+", normalized):
         raise ValueError("Invalid symbol")
-    
-    # Diretório base confiável (resolvido uma vez)
-    base_dir = os.path.realpath(str(PREDICTIONS_DIR.resolve()))
-    
-    # Constrói o filename de forma segura
-    filename = "prediction_" + normalized + ".json"
-    
-    # Usa os.path.join para construir o path (mais seguro que /)
-    full_path = os.path.join(base_dir, filename)
-    
-    # Resolve o path final
-    real_path = os.path.realpath(full_path)
-    
-    # Verificação de contenção: o path deve estar dentro do diretório base
-    # Usa os.path.commonpath para comparação segura
-    if os.path.commonpath([real_path, base_dir]) != base_dir:
-        raise ValueError("Invalid symbol")
-    
-    # Lê o arquivo
-    try:
-        with open(real_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        raise
-    except (OSError, json.JSONDecodeError) as e:
-        raise ValueError(f"Error reading file: {e}")
+
+    # Localiza o arquivo via glob no diretório base (path NÃO derivado da
+    # entrada do usuário — elimina path injection por construção)
+    expected_name = f"prediction_{normalized}.json"
+    for p in PREDICTIONS_DIR.glob("prediction_*.json"):
+        if p.name == expected_name:
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except FileNotFoundError:
+                raise
+            except (OSError, json.JSONDecodeError) as e:
+                raise ValueError(f"Error reading file: {e}")
+
+    raise FileNotFoundError(expected_name)
 
 
 # ============================================================

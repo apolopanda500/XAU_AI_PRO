@@ -18,12 +18,19 @@ on:
         # The data type of the input
         type: string
 
+# Permissoes minimas: o workflow apenas imprime uma saudacao (nenhum acesso
+# a API precisa de token). Resolve alerta CodeQL actions/missing-workflow-permissions.
+permissions:
+  contents: read
+
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
   # This workflow contains a single job called "greet"
   greet:
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
