@@ -52,10 +52,22 @@ jobs:
     runs-on: windows-latest # For Linux, use ubuntu-latest
     environment: dev
     # Pula de forma limpa quando o Azure ainda não foi configurado.
-    if: vars.AZURE_FUNCTIONS_ENABLED == 'true' || secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE != ''
+    # Observação: contexto `secrets` não é permitido em `if` de job,
+    # por isso a checagem do publish profile acontece no primeiro step.
+    if: vars.AZURE_FUNCTIONS_ENABLED == 'true'
     steps:
     - name: 'Checkout GitHub Action'
       uses: actions/checkout@v4
+
+    - name: 'Check Azure Functions enabled'
+      shell: pwsh
+      env:
+        AZURE_FUNCTIONAPP_PUBLISH_PROFILE: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
+      run: |
+        if ([string]::IsNullOrWhiteSpace($env:AZURE_FUNCTIONAPP_PUBLISH_PROFILE)) {
+          echo "Azure Functions desativado: AZURE_FUNCTIONAPP_PUBLISH_PROFILE ausente. Pulando deploy."
+          "SKIP_AZURE=true" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+        }
 
     # If you want to use Azure RBAC instead of Publish Profile, then uncomment the task below
     # - name: 'Login via Azure CLI'
@@ -64,11 +76,13 @@ jobs:
     #     creds: ${{ secrets.AZURE_RBAC_CREDENTIALS }} # set up AZURE_RBAC_CREDENTIALS secrets in your repository
 
     - name: Setup Node ${{ env.NODE_VERSION }} Environment
+      if: env.SKIP_AZURE != 'true'
       uses: actions/setup-node@v4
       with:
         node-version: ${{ env.NODE_VERSION }}
 
     - name: 'Resolve Project Dependencies Using Npm'
+      if: env.SKIP_AZURE != 'true'
       shell: pwsh # For Linux, use bash
       run: |
         pushd './${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}'
@@ -78,6 +92,7 @@ jobs:
         popd
 
     - name: 'Validate Azure configuration'
+      if: env.SKIP_AZURE != 'true'
       shell: pwsh
       run: |
         if ("${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}" -eq "") {
@@ -90,6 +105,7 @@ jobs:
         }
 
     - name: 'Run Azure Functions Action'
+      if: env.SKIP_AZURE != 'true'
       uses: Azure/functions-action@v1
       id: fa
       with:

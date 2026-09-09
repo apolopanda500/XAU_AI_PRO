@@ -15,7 +15,9 @@ log = get_logger(__name__) if get_logger else None
 
 # Configuração do cliente para usar o LiteLLM Proxy local
 # O LiteLLM Proxy deve estar rodando na porta 4000
-client = OpenAI(api_key="anything", base_url="http://localhost:4000")
+# A chave "anything" é apenas um placeholder exigido pelo SDK local;
+# nenhuma credencial real é enviada para localhost.
+client = OpenAI(api_key="anything", base_url="http://localhost:4000")  # noqa: S106 - placeholder local
 
 
 def validate_signal(symbol: str, signal: str, confidence: float, price: float) -> dict:
