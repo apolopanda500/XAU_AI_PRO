@@ -223,10 +223,24 @@ class TradingViewMarket(tk.Frame):
             provider = getattr(self.market, "provider", "auto") or "auto"
             if provider == "mt5" and not getattr(self.market, "_mt5_available", False):
                 provider = "auto"
-            all_q = self.market.get_many(self._symbols, provider)
-            for sym, q in all_q.items():
+            # Símbolos terminados em 'c' (ex.: XAUUSDc) são aliases: tenta o
+            # símbolo sem o sufixo final 'c', evitando linhas vazias quando o
+            # MT5 não resolve a variante 'c' explicitamente. O resultado volta
+            # rotulado com o símbolo original da watchlist (fallback no base).
+            resolved_symbols = []
+            for sym in self._symbols:
+                suf = sym[-1].upper() if sym else ""
+                base = sym[:-1] if (suf == "C" and len(sym) > 4) else sym
+                resolved_symbols.append((sym, base))
+            all_q = self.market.get_many([base for _, base in resolved_symbols], provider)
+            for sym, base in resolved_symbols:
+                q = all_q.get(sym)
+                if q is None:
+                    q = all_q.get(base)
                 if q is not None:
-                    quotes[sym] = q.to_dict()
+                    qd = q.to_dict()
+                    qd["symbol"] = sym
+                    quotes[sym] = qd
             payload = (cached.to_dict() if cached is not None else None)
         except Exception as error:
             def _err(err=error):
