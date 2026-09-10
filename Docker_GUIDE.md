@@ -120,12 +120,27 @@ O workflow `.github/workflows/build.yml` usa o builder Docker Build Cloud:
 
 ### 3.2 Builds multi-plataforma (GitLab CI)
 
-Se usar GitLab CI, o `.gitlab-ci.yml` usa o mesmo builder:
+O `.gitlab-ci.yml` espelha o comportamento do `build.yml` do GitHub:
 
 ```yaml
-- docker buildx create --use --driver cloud rickjax123/apolopanda500
-- docker buildx build --platform linux/amd64,linux/arm64 --push .
+- docker buildx build --platform linux/amd64,linux/arm64 \
+    --file backend/Dockerfile --push backend
 ```
+
+Comportamento:
+
+| Situação | Resultado |
+|----------|-----------|
+| `DOCKER_ENABLED=true` + `DOCKER_USER`/`DOCKER_PAT` configurados | `build_push` roda e publica `${DOCKER_USER}/xau-ai-pro-backend` (tags `latest` + short SHA) |
+| Credenciais ausentes (padrão) | `build_push` é **pulada**; apenas `build_cache` valida o build multi-plataforma (sem login) |
+
+Para ativar o push no GitLab, configure em **Settings > CI/CD > Variables**:
+
+| Tipo | Chave | Valor |
+|------|-------|-------|
+| Variable | `DOCKER_ENABLED` | `true` |
+| Variable | `DOCKER_USER` | `rickjax123` |
+| Variable (masked) | `DOCKER_PAT` | Personal Access Token do Docker Hub |
 
 ### 3.3 Rodar build manualmente
 

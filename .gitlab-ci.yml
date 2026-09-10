@@ -1,39 +1,66 @@
+# ============================================================
+# CI GitLab - Build e push da imagem Docker do backend
+# ------------------------------------------------------------
+# Espelha o .github/workflows/build.yml:
+#   - Contexto: ./backend (unico Dockerfile do repositorio)
+#   - Login no Docker Hub SOMENTE se DOCKER_USER/DOCKER_PAT
+#     estiverem configurados; caso contrario, pula com warning
+#     e roda apenas o build_cache (sem push).
+# Variables GitLab esperadas (Settings > CI/CD > Variables):
+#   DOCKER_USER (variavel)     ex.: rickjax123
+#   DOCKER_PAT   (variavel masked) Personal Access Token do Docker Hub
+# ============================================================
 default:
-  image: docker:24-dind
+  image: docker:24
   services:
     - docker:24-dind
   before_script:
     - docker info
-    - echo "$DOCKER_PAT" | docker login --username "$DOCKER_USER" --password-stdin
     - |
-      apk add curl jq
+      apk add --no-cache curl jq
       ARCH=${CI_RUNNER_EXECUTABLE_ARCH#*/}
       BUILDX_URL=$(curl -s https://raw.githubusercontent.com/docker/actions-toolkit/main/.github/buildx-lab-releases.json | jq -r ".latest.assets[] | select(endswith(\"linux-$ARCH\"))")
       mkdir -vp ~/.docker/cli-plugins/
-      curl --silent -L --output ~/.docker/cli-plugins/docker-buildx $BUILDX_URL
+      curl --silent -L --output ~/.docker/cli-plugins/docker-buildx "$BUILDX_URL"
       chmod a+x ~/.docker/cli-plugins/docker-buildx
-    - docker buildx create --use --driver cloud rickjax123/apolopanda500
+    # Login tolerante: nao quebra o pipeline quando as credenciais
+    # nao estao configuradas no GitLab (equal ao build.yml do GitHub).
+    - |
+      if [ -n "$DOCKER_USER" ] && [ -n "$DOCKER_PAT" ]; then
+        echo "$DOCKER_PAT" | docker login --username "$DOCKER_USER" --password-stdin
+      else
+        echo "AVISO: DOCKER_USER/DOCKER_PAT nao configurados no GitLab. Push para Docker Hub sera pulado."
+      fi
+    # QEMU permite build linux/arm64 com o builder embarcado (docker driver)
+    - docker run --privileged --rm tonistiigi/binfmt --install arm64
 
 variables:
-  IMAGE_NAME: rickjax123/docker-build-cloud-demo
+  DOCKER_ENABLED: "false"   # sobrescreva em Settings > CI/CD > Variables
 
-# Build multi-platform image and push to a registry
+# Build multi-plataforma e push para o Docker Hub
 build_push:
   stage: build
+  rules:
+    # Executa somente quando credenciais estao configuradas
+    - if: '$CI_COMMIT_BRANCH == "main" && $DOCKER_ENABLED == "true" && $DOCKER_USER != null && $DOCKER_PAT != null'
   script:
     - |
       docker buildx build \
         --platform linux/amd64,linux/arm64 \
-        --tag "${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}" \
-        --push .
+        --file backend/Dockerfile \
+        --tag "${DOCKER_USER}/xau-ai-pro-backend:${CI_COMMIT_SHORT_SHA}" \
+        --tag "${DOCKER_USER}/xau-ai-pro-backend:latest" \
+        --push \
+        backend
 
-# Build an image and discard the result
+# Build multi-plataforma e descarta o resultado (valida cache)
 build_cache:
   stage: build
   script:
     - |
       docker buildx build \
         --platform linux/amd64,linux/arm64 \
-        --tag "${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}" \
+        --file backend/Dockerfile \
+        --tag "xau-ai-pro-backend:${CI_COMMIT_SHORT_SHA}" \
         --output type=cacheonly \
-        .
+        backend
