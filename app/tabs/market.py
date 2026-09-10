@@ -172,7 +172,12 @@ class TradingViewMarket(tk.Frame):
     # ----------------------------------------------------------------- dados
     def _load_symbols(self):
         try:
-            syms = get_config().get("market", "watchlist", default=None) or DEFAULT_SYMBOLS
+            cfg = get_config()
+            # Aceita 'symbols' (padrao do config_manager) e 'watchlist' (legado).
+            syms = cfg.get("market", "symbols", default=None)
+            if syms is None:
+                syms = cfg.get("market", "watchlist", default=None)
+            syms = syms or DEFAULT_SYMBOLS
             if isinstance(syms, str):
                 syms = [s.strip().upper() for s in syms.split(",") if s.strip()]
             self._symbols = [str(s).upper() for s in syms] or list(DEFAULT_SYMBOLS)
@@ -211,11 +216,14 @@ class TradingViewMarket(tk.Frame):
     def _collect_quotes(self):
         quotes = {}
         try:
+            # Coleta o destaque primeiro (MT5 -> exchange -> HTTP) e depois
+            # a lista completa. O modo 'mt5' puro quebrava tudo quando o
+            # MT5 estava fora: usa 'auto' como fallback para HTTP/exchange.
             cached = self.market.get_quote(self._selected)
-            if getattr(self.market, "_mt5_available", False):
-                all_q = self.market.get_many(self._symbols, "mt5")
-            else:
-                all_q = self.market.get_many(self._symbols)
+            provider = getattr(self.market, "provider", "auto") or "auto"
+            if provider == "mt5" and not getattr(self.market, "_mt5_available", False):
+                provider = "auto"
+            all_q = self.market.get_many(self._symbols, provider)
             for sym, q in all_q.items():
                 if q is not None:
                     quotes[sym] = q.to_dict()
@@ -259,7 +267,11 @@ class TradingViewMarket(tk.Frame):
         self.count_label.configure(text="%d/%d com preço" % (filled, len(self._symbols)))
         if cached:
             self._apply_detail(cached)
-        self.status_label.configure(text="Mercado actualizado " + time.strftime("%H:%M:%S"))
+        if filled:
+            self.status_label.configure(text="Mercado actualizado " + time.strftime("%H:%M:%S"))
+        else:
+            self.status_label.configure(
+                text="Sem cotações: verifique internet/MT5 (símbolo %s)" % self._selected)
         try:
             store_quotes(list(quotes.values()))
         except Exception:

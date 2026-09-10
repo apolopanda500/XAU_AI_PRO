@@ -48,8 +48,9 @@ YF_MAP: dict[str, str] = {
     'BTCUSD': 'BTC-USD', 'BTCUSDc': 'BTC-USD',
     'ETHUSD': 'ETH-USD', 'ETHUSDc': 'ETH-USD',
     'EURUSD': 'EURUSD=X', 'GBPUSD': 'GBPUSD=X',
-    'USDJPY': 'USDJPY=X', 'AUDUSD': 'AUDUSD=X',
-    'US30': '^DJI', 'SPX500': '^GSPC',
+    'USDJPY': 'JPY=X', 'AUDUSD': 'AUDUSD=X',
+    'USDCAD': 'CAD=X', 'NZDUSD': 'NZDUSD=X', 'USDCHF': 'CHF=X',
+    'US30': '^DJI', 'SPX500': '^GSPC', 'NAS100': '^NDX',
     'BTC=F': 'BTC=F', 'ES=F': 'ES=F', 'NQ=F': 'NQ=F', 'YM=F': 'YM=F', 'GC=F': 'GC=F',
 }
 
@@ -59,7 +60,8 @@ CATEGORY_MAP: dict[str, str] = {
     'ETHUSD': 'crypto', 'ETHUSDc': 'crypto',
     'EURUSD': 'forex', 'GBPUSD': 'forex',
     'USDJPY': 'forex', 'AUDUSD': 'forex',
-    'US30': 'index', 'SPX500': 'index',
+    'USDCAD': 'forex', 'NZDUSD': 'forex', 'USDCHF': 'forex',
+    'US30': 'index', 'SPX500': 'index', 'NAS100': 'index',
     'BTC=F': 'futures', 'ES=F': 'futures', 'NQ=F': 'futures', 'YM=F': 'futures', 'GC=F': 'futures',
 }
 
@@ -121,12 +123,14 @@ class MarketData:
             return None
 
     def _quote_http(self, symbol: str) -> Quote | None:
+        # Timeout generoso: Yahoo costuma responder em 1-3s; com 1s quase
+        # tudo falhava e a aba Mercado ficava zerada sem MT5.
         try:
             import urllib.request
             ticker = YF_MAP.get(symbol.upper(), symbol)
             url = f'https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?interval=1d&range=5d'
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=1) as resp:
+            with urllib.request.urlopen(req, timeout=8) as resp:
                 data = json.loads(resp.read().decode('utf-8'))
             result = data['chart']['result'][0]
             meta = result.get('meta', {})
@@ -164,7 +168,7 @@ class MarketData:
             else:
                 return None
             req = urllib.request.Request(url, headers={'User-Agent': 'XAU-AI-PRO/1.2'})
-            with urllib.request.urlopen(req, timeout=2) as response:
+            with urllib.request.urlopen(req, timeout=8) as response:
                 data = json.loads(response.read().decode('utf-8'))
             price = float(data['lastPrice'])
             bid = float(data.get('bidPrice') or data.get('bid1Price') or price)
