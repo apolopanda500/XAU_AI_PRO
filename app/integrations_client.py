@@ -337,6 +337,49 @@ def mcp_ping(endpoint: str) -> dict[str, Any]:
 # MCP Servers (catalogo configurado em mcp/servers/*.json)
 # ============================================================
 
+def instalados() -> list[str]:
+    """Lista os IDs dos MCP servers configurados (mcp/servers/*.json).
+
+    Usado pelo marketplace da aba Integracoes para marcar o que já existe.
+    """
+    try:
+        return list(load_mcp_servers().keys())
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def catalogo() -> list[dict[str, Any]]:
+    """Catálogo de MCP servers disponíveis (formato do marketplace)."""
+    try:
+        servers = load_mcp_servers()
+    except Exception:  # noqa: BLE001
+        return []
+    return [
+        {
+            "id": sid,
+            "name": rec.get("name", sid),
+            "desc": rec.get("description", ""),
+            "type": rec.get("type", "http"),
+        }
+        for sid, rec in servers.items()
+    ]
+
+
+def mcp_pesquisar(termo: str) -> list[dict[str, Any]]:
+    """Pesquisa no catálogo de MCP servers por id/nome/descrição/tipo."""
+    t = (termo or "").strip().lower()
+    if not t:
+        return catalogo()
+    resultados = [
+        it for it in catalogo()
+        if t in it.get("id", "").lower()
+        or t in it.get("name", "").lower()
+        or t in it.get("desc", "").lower()
+        or t in it.get("type", "").lower()
+    ]
+    return resultados
+
+
 def load_mcp_servers() -> dict[str, dict[str, Any]]:
     """Carrega o catalogo de MCP servers de mcp/servers/*.json.
 

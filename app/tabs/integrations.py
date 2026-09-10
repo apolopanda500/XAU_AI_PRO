@@ -26,6 +26,9 @@ from app.integrations_client import (
     models_url_test,
     sentry_test,
     slack_test,
+    instalados,
+    catalogo,
+    mcp_pesquisar,
 )
 from app import updater
 from app.deploy_vercel import get_deploy_hook, trigger_deploy

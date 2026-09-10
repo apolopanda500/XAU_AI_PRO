@@ -63,7 +63,7 @@ def run_bg(
         except Exception as exc:  # noqa: BLE001
             if on_error is not None:
                 try:
-                    root.after(0, lambda: on_error(exc))
+                    root.after(0, lambda e=exc: on_error(e))
                 except Exception:
                     pass
             else:

@@ -221,9 +221,9 @@ class TradingViewMarket(tk.Frame):
                     quotes[sym] = q.to_dict()
             payload = (cached.to_dict() if cached is not None else None)
         except Exception as error:
-            def _err():
+            def _err(err=error):
                 self.status_label.configure(
-                    text="Mercado: " + type(error).__name__ + ": " + str(error))
+                    text="Mercado: " + type(err).__name__ + ": " + str(err))
             try:
                 self.after(0, _err)
             except Exception:

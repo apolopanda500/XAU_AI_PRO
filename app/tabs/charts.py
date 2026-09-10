@@ -320,8 +320,11 @@ class ChartsTab:
 
     def _collect_thread(self):
         try:
-            data = self._collect(); self.frame.after(0, lambda: self._finish_refresh(data))
-        except Exception as e: self.frame.after(0, lambda: self._finish_refresh_error(e))
+            data = self._collect()
+        except Exception as e:
+            self.frame.after(0, lambda exc=e: self._finish_refresh_error(exc))
+        else:
+            self.frame.after(0, lambda d=data: self._finish_refresh(d))
 
     def _finish_refresh(self, data):
         self._refresh_busy = False; self._last_data = data; self._apply(data)

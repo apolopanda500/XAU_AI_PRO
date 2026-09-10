@@ -1,39 +1,55 @@
-# This workflow will install Python dependencies, run tests and lint with a single version of Python
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
+# Testes e lint do aplicativo Python (desktop tk + pipeline de ML).
+# Reutiliza a receita comprovada do maintenance.yml:
+#   - Python 3.11 (versão exigida pelo projeto, ver pyproject.toml)
+#   - requirements-ci.txt (deps mínimas dos testes — o requirements.txt
+#     completo inclui MetaTrader5, que só existe para Windows)
+#   - xvfb-run para os testes que criam widgets tkinter
+# O flake8 roda em modo estrito apenas para erros reais (E9, F63, F7, F82):
+# estilo fica a cargo do pylint.yml.
 
 name: Python application
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: python-app-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
-
+    name: Testes + flake8 (Python 3.11)
     runs-on: ubuntu-latest
-
+    timeout-minutes: 15
     steps:
-    - uses: actions/checkout@v4
-    - name: Set up Python 3.10
-      uses: actions/setup-python@v3
-      with:
-        python-version: "3.10"
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install flake8 pytest
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-    - name: Lint with flake8
-      run: |
-        # stop the build if there are Python syntax errors or undefined names
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-        # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-    - name: Test with pytest
-      run: |
-        pytest
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Instalar dependências
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 pytest -r requirements-ci.txt
+
+      - name: Lint com flake8 (erros críticos)
+        run: |
+          # Falha o build apenas com erros de sintaxe/nomes indefinidos
+          flake8 app Python tests --count --select=E9,F63,F7,F82 --show-source --statistics
+          # Avisos de estilo: apenas relatório, não bloqueia
+          flake8 app Python tests --count --exit-zero --max-complexity=15 --max-line-length=127 --statistics
+
+      - name: Testes com pytest
+        run: |
+          xvfb-run -a python -m pytest -q tests
