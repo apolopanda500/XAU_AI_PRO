@@ -31,19 +31,21 @@ default:
       else
         echo "AVISO: DOCKER_USER/DOCKER_PAT nao configurados no GitLab. Push para Docker Hub sera pulado."
       fi
-    # QEMU permite build linux/arm64 com o builder embarcado (docker driver)
-    - docker run --privileged --rm tonistiigi/binfmt --install arm64
 
 variables:
   DOCKER_ENABLED: "false"   # sobrescreva em Settings > CI/CD > Variables
 
 # Build multi-plataforma e push para o Docker Hub
+# Requer builder docker-container (o driver docker padrao nao suporta
+# multi-platform). Registrado QEMU arm64 para emular linux/arm64.
 build_push:
   stage: build
   rules:
     # Executa somente quando credenciais estao configuradas
     - if: '$CI_COMMIT_BRANCH == "main" && $DOCKER_ENABLED == "true" && $DOCKER_USER != null && $DOCKER_PAT != null'
   script:
+    - docker run --privileged --rm tonistiigi/binfmt --install arm64
+    - docker buildx create --use --name ci-builder --driver docker-container
     - |
       docker buildx build \
         --platform linux/amd64,linux/arm64 \
@@ -52,14 +54,18 @@ build_push:
         --tag "${DOCKER_USER}/xau-ai-pro-backend:latest" \
         --push \
         backend
+  after_script:
+    - docker buildx rm ci-builder || true
 
-# Build multi-plataforma e descarta o resultado (valida cache)
+# Build de validacao (descarta o resultado): amd64 nativo do runner,
+# rapido, valida o Dockerfile em todo push. Multi-plataforma (arm64)
+# e validado pelo build_push quando habilitado.
 build_cache:
   stage: build
   script:
     - |
       docker buildx build \
-        --platform linux/amd64,linux/arm64 \
+        --platform linux/amd64 \
         --file backend/Dockerfile \
         --tag "xau-ai-pro-backend:${CI_COMMIT_SHORT_SHA}" \
         --output type=cacheonly \
