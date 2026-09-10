@@ -1,4 +1,4 @@
-name: ci
+﻿name: ci
 
 on:
   push:
@@ -11,12 +11,12 @@ permissions:
   packages: write
 
 jobs:
-  # ────────────────────────────────────────────────────────────────────────
+  # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   # Docker push a Docker Hub.
-  # Desativado até que se configuren:
+  # Desativado atÃ© que se configuren:
   #   - variables: DOCKER_ENABLED='true', DOCKER_USER
   #   - secret:    DOCKER_PAT
-  # ────────────────────────────────────────────────────────────────────────
+  # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   docker:
     runs-on: ubuntu-latest
     if: vars.DOCKER_ENABLED == 'true' && vars.DOCKER_USER != ''
@@ -29,7 +29,7 @@ jobs:
           DOCKER_PAT: ${{ secrets.DOCKER_PAT }}
         run: |
           if [ -z "$DOCKER_PAT" ]; then
-            echo "::warning::DOCKER_PAT não configurado. Pule o push a Docker Hub."
+            echo "::warning::DOCKER_PAT nÃ£o configurado. Pule o push a Docker Hub."
             echo "SKIP_DOCKER=true" >> "$GITHUB_ENV"
           fi
 
@@ -53,13 +53,13 @@ jobs:
           push: true
           tags: "${{ vars.DOCKER_USER }}/xau-ai-pro-backend:latest"
 
-  # ────────────────────────────────────────────────────────────────────────
+  # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   # Build/push de imagen en Vercel Container Registry (VCR).
   # Requiere: vars.VCR_ENABLED='true' + secret VERCEL_TOKEN.
-  # Cada comando `vercel vcr` opera sobre um projeto Vercel: no CI não há
-  # `vercel link`, por isso é obrigatório passar --scope (team) e --project.
+  # Cada comando `vercel vcr` opera sobre um projeto Vercel: no CI nÃ£o hÃ¡
+  # `vercel link`, por isso Ã© obrigatÃ³rio passar --scope (team) e --project.
   # Usa os mesmos secrets/fallbacks do deploy.yml.
-  # ────────────────────────────────────────────────────────────────────────
+  # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   vercel-vcr:
     runs-on: ubuntu-latest
     if: vars.VCR_ENABLED == 'true'
@@ -83,7 +83,7 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
           if [ -z "$VERCEL_TOKEN" ]; then
-            echo "::warning::VERCEL_TOKEN não configurado. Pule el flujo VCR."
+            echo "::warning::VERCEL_TOKEN nÃ£o configurado. Pule el flujo VCR."
             echo "SKIP_VCR=true" >> "$GITHUB_ENV"
           fi
 
