@@ -12,26 +12,29 @@ repositorio GitHub apolopanda500/XAU_AI_PRO.
 
 | Controle | Arquivo | Ativo |
 |---|---|---|
-| CodeQL | .github/workflows/codeql.yml + .github/codeql.yml | Sim |
 | Dependabot | .github/dependabot.yml | Sim |
-| Secret Scanning | .github/secret-scanning.yml | Sim |
-| Gitleaks | .gitleaks.toml + security.yml | Sim |
+| Gitleaks (v3) | .gitleaks.toml + security.yml | Sim |
 | pip-audit | .github/workflows/security.yml | Sim |
 | npm audit | .github/workflows/maintenance.yml | Sim |
 | SECURITY.md | .github/SECURITY.md | Sim |
 | Env files check | .github/workflows/security.yml | Sim |
 | Docker scan | .github/workflows/security.yml | Sim |
 | Code patterns | .github/workflows/security.yml | Sim |
+| CodeQL | Sem workflow no repo (ver secao 2) | Nao |
 
 ---
 
-## 2. CodeQL
+## 2. CodeQL (nao configurado)
 
-Workflow: .github/workflows/codeql.yml
-Configuracao: .github/codeql.yml
-Agendamento: quarta-feira 15:00 UTC
-Linguagens: actions, javascript-typescript, python
-Queries: security-extended, security-and-quality
+Nao existe workflow CodeQL neste repositorio (o config .github/codeql.yml
+foi removido por estar orfao, sem workflow que o consuma).
+
+Para ativar, escolha uma opcao:
+- Default Setup do GitHub: Settings -> Code security -> Code scanning -> Default
+  (gratuito em repositorios publicos).
+- Workflow dedicado: criar .github/workflows/codeql.yml com a action
+  github/codeql-action e restaurar o .github/codeql.yml
+  (security-extended + security-and-quality).
 
 ---
 
@@ -45,9 +48,10 @@ Ecosystems: pip, npm, github-actions
 
 ## 4. Secret Scanning
 
-GitHub native + padroes personalizados (.github/secret-scanning.yml)
-Configuracao: .gitleaks.toml
-Detecta: Sentry DSN, GitHub PAT, Slack webhook, API keys, Vercel tokens
+- GitHub Secret Scanning nativo: habilitar em Settings -> Code security
+  (padroes customizados sao criados via UI/API, nao via arquivo no repo).
+- CI: gitleaks-action v3 (security.yml) lendo .gitleaks.toml.
+- Detecta: Sentry DSN, GitHub PAT, Slack webhook, API keys, Vercel tokens.
 
 ---
 

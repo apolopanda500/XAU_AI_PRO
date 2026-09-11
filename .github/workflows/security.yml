@@ -74,7 +74,9 @@ jobs:
           fetch-depth: 0
 
       - name: "Scan for secrets"
-        uses: gitleaks/gitleaks-action@v2.3.9
+        # v3: runtime Node 24. A v2 deixa de funcionar em 16/09/2026
+        # (remocao do Node 20 dos runners GitHub).
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
