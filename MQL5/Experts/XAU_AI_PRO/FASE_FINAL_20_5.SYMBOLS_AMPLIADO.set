@@ -1,0 +1,111 @@
+; XAU_AI_PRO — FASE FINAL 20.5 — PRESET VALIDACAO COM SIMBOLOS AMPLIADOS
+; Data: 2026-08-28 | Baseline v1.2.0 (nao altera codigo nem release)
+; Base: XAU_AI_PRO.AUTOTRADE_ON.set + lista Symbols ampliada para FX majors
+;
+; IMPORTANTE (decisao de governanca):
+;  - Metais (XAGUSD) e Indices (US30/US500/USTEC) ficam FORA da lista ativa:
+;    SL 300 pontos fixo NAO e normalizado por simbolo (XAG 0.01 lote = -15.00/trade,
+;    causou 79% do gross loss no forward contaminado). Reativar so apos
+;    normalizacao de risco por simbolo (RiskEngine) validada.
+;  - EnableMultiSymbol=true faz o EA operar em TODOS os simbolos da lista.
+;    Se a intencao for apenas observar, manter EnableMultiSymbol=false nos charts.
+;  - Confirmar inputs antes de carregar: Magic 2026001, EMA 50/200, RSI 14/45/55,
+;    SL 300/TP 600, EnableNewsFilter=0, EnableAIFilter=0.
+
+AutoTrade=true
+MagicNumber=2026001
+TradeComment=XAU_AI_PRO
+
+UseRiskManagement=true
+LotSize=0.01
+RiskPercent=1.0
+MaxDailyLossPercent=5.0
+MaxDrawdownPercent=15.0
+MinEquityPercent=10.0
+MinFreeMargin=20.0
+MaxTradesPerDay=20
+MaxOpenPositions=5
+AllowMinLotOverride=true
+
+MaxSpread=50
+MaxSpreadBySymbol=GOLD#:350,BTCUSD#:600,ETHUSD#:600
+Slippage=5
+RetryMaxAttempts=5
+RetryBaseDelayMs=100
+RetryDelayMultiplier=2.0
+RetryMaxDelayMs=2000
+RetryMaxSlippage=50
+RetrySlippageIncrement=2
+
+StopLossPoints=300
+TakeProfitPoints=600
+
+EnableBreakEven=true
+BreakEvenTrigger=80
+BreakEvenOffset=10
+EnableTrailingATR=true
+ATRMultiplier=1.2
+EnablePartialClose=true
+PartialTrigger=150
+PartialPercent=30.0
+
+EnableSpreadFilter=true
+EnableSessionFilter=false
+EnableTrendFilter=true
+EnableVolatilityFilter=false
+EnableADXFilter=true
+EnableMTFConfirmation=false
+EnableNewsFilter=false
+EnableAIFilter=true
+NewsCurrencies=
+NewsImpactThreshold=2
+NewsMinutesBefore=30
+NewsMinutesAfter=30
+
+MinAIConfidence=50.0
+RequireAIJSON=false
+KCI_VD_Period=14
+KCI_DX_BasePeriod=9
+KCI_DX_ZScorePeriod=30
+KCI_DX_Sensitivity=1.5
+KCI_DX_MainThreshold=30.0
+
+TradeStartHour=0
+TradeEndHour=24
+
+FastEMA=50
+SlowEMA=200
+RSIPeriod=14
+RSIPullbackBuy=45.0
+RSIPullbackSell=55.0
+ATRPeriod=14
+ADXPeriod=14
+MinimumADX=18.0
+
+EnableScheduler=true
+SchedulerIntervalSec=60
+EnableWeekendShutdown=true
+EnableDatabase=false
+DatabasePath=XAU_AI_PRO.db
+EnableTelemetry=true
+EnableDataset=true
+SaveDatasetCSV=true
+EnableBacktestLog=true
+EnableDashboard=true
+EnableLogs=true
+DebugTradeDecision=true
+
+EnableHealthMonitor=true
+HealthCheckInterval=60
+HealthWatchdogInterval=120
+EnableAuditLog=true
+EnableDiagnostics=true
+
+; === SYMBOLS AMPLIADO (FX apenas) ===
+EnableMultiSymbol=true
+Symbols=XAUUSD,EURUSD,GBPUSD,USDJPY,AUDUSD,USDCAD,NZDUSD,USDCHF,USDBRL,USDCNH,USDSEK
+
+; === FORA DA LISTA ATIVA (ate normalizacao de risco) ===
+; XAGUSD,US30,US500,USTEC,USDCLP,USDCOP,USDCZK
+
+EnableVerboseDebug=true

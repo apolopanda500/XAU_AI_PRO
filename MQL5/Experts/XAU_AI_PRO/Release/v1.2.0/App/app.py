@@ -3,19 +3,11 @@
 from __future__ import annotations
 
 import sqlite3
-import uuid
 from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 from openai import OpenAI
-
-# Sentry: ID de conversa por chat (agrupa spans em Conversas).
-try:
-    from sentry_config import set_ai_conversation_id, set_current_user
-except Exception:
-    def set_ai_conversation_id(_conv_id):  # noqa: E305
-        pass
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATASET_PATH = PROJECT_ROOT / "MQL5" / "Files" / "Data" / "dataset.csv"
@@ -24,16 +16,6 @@ DB_PATH = PROJECT_ROOT / "database" / "trading.db"
 
 # Cliente IA (LiteLLM)
 client = OpenAI(api_key="anything", base_url="http://localhost:4000")
-
-# Sentry (v1.2.2-integration): monitoramento tolerante - nao quebra se nao configurado
-try:
-    import sys as _sys
-    _py_dir = Path(__file__).resolve().parent.parent / "Python"
-    _sys.path.insert(0, str(_py_dir))
-    from sentry_config import init_sentry
-    init_sentry()
-except Exception:
-    pass
 
 
 @st.cache_data
@@ -140,13 +122,6 @@ def main() -> None:
     with tab2:
         st.subheader("Converse com o XAU AI PRO")
         
-        # Sentry: identifica o usuario (coluna User em Conversas) e cria ID de conversa.
-        if "sentry_user_id" not in st.session_state:
-            st.session_state.sentry_user_id = "chat:" + uuid.uuid4().hex[:12]
-            set_current_user(st.session_state.sentry_user_id, username="dashboard")
-        if "sentry_conv_id" not in st.session_state:
-            st.session_state.sentry_conv_id = uuid.uuid4().hex[:12]
-
         if "messages" not in st.session_state:
             st.session_state.messages = []
 
@@ -161,10 +136,6 @@ def main() -> None:
 
             with st.chat_message("assistant"):
                 try:
-                    # Sentry: agrupa spans desta conversa (gen_ai.conversation.id).
-                    set_ai_conversation_id(
-                        f"chat:{st.session_state.get('sentry_conv_id', 'default')}"
-                    )
                     response = client.chat.completions.create(
                         model="ollama/deepseek-v4-flash:cloud",
                         messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages]

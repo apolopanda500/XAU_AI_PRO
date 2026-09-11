@@ -15,8 +15,6 @@ Endpoints:
 from __future__ import annotations
 
 import json
-import os
-import re
 import sqlite3
 import subprocess
 import sys
@@ -40,15 +38,6 @@ try:
     import config_store as cs
 except Exception:
     cs = None
-
-# Sentry (v1.2.2-integration): monitoramento tolerante - nao quebra se nao configurado
-try:
-    _py_dir = Path(__file__).resolve().parent.parent / "Python"
-    sys.path.insert(0, str(_py_dir))
-    from sentry_config import init_sentry
-    init_sentry()
-except Exception:
-    pass
 
 
 # ============================================================
@@ -77,42 +66,6 @@ def _py() -> str:
     return sys.executable or "python"
 
 
-def _read_prediction_file(symbol: str) -> dict:
-    """Lê e retorna o conteúdo do arquivo de predição de forma segura.
-
-    O símbolo é validado por whitelist estrita (A-Z, 0-9, underscore) e o
-    arquivo é localizado via glob() no diretório base. Como o path nunca é
-    derivado da entrada do usuário, não existe fluxo de dados controlado
-    pelo usuário em expressões de caminho (path injection eliminada por
-    construção).
-    """
-    # Normaliza o símbolo
-    normalized = symbol.strip().upper()
-
-    # Validação de tamanho
-    if not normalized or len(normalized) > 64:
-        raise ValueError("Invalid symbol")
-
-    # Whitelist estrita: apenas A-Z, 0-9 e underscore
-    if not re.fullmatch(r"[A-Z0-9_]+", normalized):
-        raise ValueError("Invalid symbol")
-
-    # Localiza o arquivo via glob no diretório base (path NÃO derivado da
-    # entrada do usuário — elimina path injection por construção)
-    expected_name = f"prediction_{normalized}.json"
-    for p in PREDICTIONS_DIR.glob("prediction_*.json"):
-        if p.name == expected_name:
-            try:
-                with open(p, "r", encoding="utf-8") as f:
-                    return json.load(f)
-            except FileNotFoundError:
-                raise
-            except (OSError, json.JSONDecodeError) as e:
-                raise ValueError(f"Error reading file: {e}")
-
-    raise FileNotFoundError(expected_name)
-
-
 # ============================================================
 # ROTAS
 # ============================================================
@@ -124,11 +77,18 @@ def read_root():
 @app.get("/prediction/{symbol}")
 def get_prediction(symbol: str):
     try:
-        return _read_prediction_file(symbol)
+        normalized = symbol.strip().upper()
+        if not normalized or len(normalized) > 64 or ".." in normalized or any(ch in normalized for ch in '/\\:*?"<>|') or any(ord(c) < 32 for c in normalized):
+            raise ValueError("Invalid symbol")
+        base = PREDICTIONS_DIR.resolve()
+        path = (base / f"prediction_{normalized}.json").resolve()
+        path.relative_to(base)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid symbol")
-    except FileNotFoundError:
+    if not path.exists():
         raise HTTPException(status_code=404, detail="Prediction not found")
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 
 @app.get("/predictions")
@@ -154,8 +114,8 @@ def get_account():
             return {"login": row[0], "balance": row[1], "equity": row[2],
                     "margin": row[3]}
         return {"error": "Account not found"}
-    except Exception:
-        return {"error": "Database error"}
+    except Exception as e:
+        return {"error": str(e)}
 
 
 @app.get("/market/live")

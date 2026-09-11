@@ -1,0 +1,12 @@
+{
+  "timestamp": "2026-07-21T21:55:00",
+  "symbol": "BTCUSDC",
+  "signal": "BUY",
+  "price": 66310.86,
+  "buy": 58.879,
+  "sell": 41.121,
+  "score": 58.879,
+  "confidence": 58.879,
+  "model_version": "1.1.0",
+  "feature_engineering_version": "1.1.0"
+}
