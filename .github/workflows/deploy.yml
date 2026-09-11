@@ -11,8 +11,6 @@ on:
 env:
   NODE_VERSION: "22"
   PYTHON_VERSION: "3.11"
-  SENTRY_ORG: henrique-7n
-  SENTRY_PROJECT: default
   # ⚠️ Domínio real do projeto Vercel (com sufixo da team). O domínio
   # "xau-ai-pro-api.vercel.app" NÃO existe (sem o sufixo da team).
   API_URL: https://xau-ai-pro-api-apolopanda500.vercel.app
@@ -69,39 +67,6 @@ jobs:
           name: pkg-${{ steps.package.outputs.name }}
           path: dist/*.zip
           retention-days: 30
-
-  build-frontend:
-    name: Build Frontend + Sentry
-    needs: validate-and-package
-    runs-on: ubuntu-latest
-    if: always()
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-      - name: Setup Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-      - name: Enviar source maps ao Sentry (sentry-cli)
-        if: env.SENTRY_AUTH_TOKEN != ''
-        env:
-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-          SENTRY_ORG: ${{ env.SENTRY_ORG }}
-          SENTRY_PROJECT: ${{ env.SENTRY_PROJECT }}
-        run: |
-          npm install -g @sentry/cli
-          sentry-cli releases new "${{ github.sha }}-$GITHUB_RUN_NUMBER" || true
-          sentry-cli releases set-commits "${{ github.sha }}-$GITHUB_RUN_NUMBER" --auto || true
-          if [ -d frontend/dist ]; then
-            sentry-cli releases files "${{ github.sha }}-$GITHUB_RUN_NUMBER" upload-sourcemaps ./frontend/dist/ --url-prefix '~/dist' || true
-          elif [ -d frontend/build ]; then
-            sentry-cli releases files "${{ github.sha }}-$GITHUB_RUN_NUMBER" upload-sourcemaps ./frontend/build/ --url-prefix '~/build' || true
-          else
-            echo 'Sem frontend/dist ou frontend/build - skip source maps'
-          fi
-          sentry-cli releases finalize "${{ github.sha }}-$GITHUB_RUN_NUMBER" || true
 
   deploy-vercel:
     name: Deploy Vercel
@@ -191,15 +156,19 @@ jobs:
           #    pending no auto-assign de projetos sem microfrontends)
           npx vercel@59.9.1 promote "$URL" --yes --token "$VERCEL_TOKEN" || \
             echo "::warning::Promoção automática falhou - promote manual no dashboard"
-      - name: Smoke test pós-deploy
+      - name: Smoke test pós-deploy (gate)
+        # Gate duro: se a API não ficar saudável após o promote, o job falha
+        # (a notificação de falha do Slack no passo seguinte cobre o alerta —
+        # substitui o antigo job healthcheck, que duplicava a verificação).
         run: |
-          for i in 1 2 3 4 5; do
+          for i in $(seq 1 12); do
             if curl -fsSL "$API_URL/api/health" | grep -q '"ok":true'; then
-              echo "Healthcheck OK"; exit 0
+              echo "Healthcheck OK (tentativa $i)"; exit 0
             fi
             sleep 10
           done
-          echo "::warning::Healthcheck ainda não refletiu o novo deploy"
+          echo "::error::API não ficou saudável após o deploy ($API_URL/api/health)"
+          exit 1
       - name: Coletar URL do deploy p/ notificação
         id: notify
         run: |
@@ -266,66 +235,3 @@ jobs:
         # do deploy de produção acima)
         working-directory: backend
         run: npx vercel@59.9.1 --yes --token "$VERCEL_TOKEN"
-
-  notify-slack-failure:
-    name: Notificar Slack (falha no deploy Vercel)
-    # Executa mesmo se o deploy falhar: usa always() + failure() dos needs.
-    # jobs deploy-vercel/healthcheck tem `if: success()`, então seriam pulados
-    # na falha e a notificação nunca chegaria — por isso o job dedicado.
-    needs: [build-frontend, deploy-vercel]
-    runs-on: ubuntu-latest
-    if: always() && (needs.build-frontend.result == 'failure' || needs.deploy-vercel.result == 'failure')
-    env:
-      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK || secrets.SLACK_WEBHOOK_URL }}
-    steps:
-      - name: Enviar alerta de falha ao Slack
-        if: env.SLACK_WEBHOOK_URL != ''
-        uses: slackapi/slack-github-action@v4.0.0
-        with:
-          payload: |
-            {
-              "text": ":x: Falha no deploy XAU AI PRO",
-              "blocks": [
-                {"type":"section","text":{"type":"mrkdwn","text":":x: *Falha no deploy XAU AI PRO*"}},
-                {"type":"section","text":{"type":"mrkdwn","text":"*Branch:* `${{ github.ref_name }}` | *Run:* #${{ github.run_number }}\n*Build Frontend:* ${{ needs.build-frontend.result }}\n*Deploy Vercel:* ${{ needs.deploy-vercel.result }}\n*Logs:* https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"}}
-              ]
-            }
-          webhook-type: incoming-webhook
-      - name: Avisar ausência do webhook
-        if: env.SLACK_WEBHOOK_URL == ''
-        run: |
-          echo "::warning::SLACK_WEBHOOK_URL não configurado - notificação de falha não enviada"
-          echo "Build Frontend: ${{ needs.build-frontend.result }}"
-          echo "Deploy Vercel: ${{ needs.deploy-vercel.result }}"
-          echo "Logs: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-
-  healthcheck:
-    name: Health Check Final
-    needs: deploy-vercel
-    runs-on: ubuntu-latest
-    if: success()
-    env:
-      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK || secrets.SLACK_WEBHOOK_URL }}
-    steps:
-      - name: Aguardar propagação do alias
-        run: sleep 15
-      - name: Verificar saúde da API
-        run: |
-          curl -fsSL "$API_URL/api/health" | head -c 500
-          echo ""
-          curl -fsSL "$API_URL/" | head -c 300
-      - name: Notificar Slack (conclusão)
-        if: success() && env.SLACK_WEBHOOK_URL != ''
-        env:
-          DEPLOY_API_URL: ${{ env.API_URL }}
-        uses: slackapi/slack-github-action@v4.0.0
-        with:
-          payload: |
-            {
-              "text": ":tada: Pipeline XAU AI PRO concluido com sucesso",
-              "blocks": [
-                {"type":"section","text":{"type":"mrkdwn","text":":tada: *Pipeline XAU AI PRO concluído com sucesso*"}},
-                {"type":"section","text":{"type":"mrkdwn","text":"*Branch:* `${{ github.ref_name }}` | *Run:* #${{ github.run_number }}\n*Health:* ${{ env.DEPLOY_API_URL }}/api/health\n*Workflows:* marketDataWorkflow, reconcileWorkflow"}}
-              ]
-            }
-          webhook-type: incoming-webhook

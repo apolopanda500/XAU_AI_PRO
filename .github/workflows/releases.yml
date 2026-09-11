@@ -1,78 +1,28 @@
-# Releases & manutenção automática — XAU AI PRO
+# Releases — XAU AI PRO
 #
-#  * Diário (09:00 UTC): health check da API em produção (Vercel). Se falhar,
-#    abre uma issue automática no repositório para correção ao vivo.
 #  * Mensal (1º dia, 08:00 UTC): cria um RELEASE DRAFT com o CHANGELOG.md como
 #    notas — pronto para revisão/publicação manual.
+#  * O health check diário da API vive no maintenance.yml (10:17 UTC), que
+#    também roda testes/lint/audit — centralizado para não duplicar jobs.
 #
 # Secrets/variaveis:
 #   vars.API_URL        -> URL da API em produção (ex.: https://xau-ai-pro-api-apolopanda500.vercel.app)
 #   GITHUB_TOKEN        -> disponibilizado automaticamente pelo GitHub Actions
-name: Releases & Manutenção (diário + mensal)
+name: Releases (draft mensal)
 
 "on":
   schedule:
-    # Diário 09:00 UTC / 06:00 BRT
-    - cron: "0 9 * * *"
-    # Mensal: 1º dia do mês 08:00 UTC / 05:00 BRT (separa do job diário)
+    # Mensal: 1º dia do mês 08:00 UTC / 05:00 BRT
     - cron: "0 8 1 * *"
   workflow_dispatch:
 
 permissions:
   contents: write   # criar releases (mensal)
-  issues: write     # abrir issue de health (diário)
-
-env:
-  API_URL: ${{ vars.API_URL || 'https://xau-ai-pro-api-apolopanda500.vercel.app' }}
 
 jobs:
-  daily-healthcheck:
-    name: Health check diário da API
-    runs-on: ubuntu-latest
-    steps:
-      - name: Verificar saúde da API
-        id: health
-        run: |
-          CODE=$(curl -sS -o /tmp/health.json -w "%{http_code}" "$API_URL/api/health" || true)
-          echo "HTTP $CODE"
-          cat /tmp/health.json 2>/dev/null | head -c 300 || true
-          echo ""
-          if [ "$CODE" = "200" ] && grep -q '"ok":true' /tmp/health.json; then
-            echo "status=ok" >> "$GITHUB_OUTPUT"
-          else
-            echo "status=fail" >> "$GITHUB_OUTPUT"
-          fi
-      - name: Abrir issue quando a API estiver fora do ar
-        if: steps.health.outputs.status == 'fail'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          BODY_TITLE="Health check automático falhou ($(date -u +'%Y-%m-%d'))"
-          cat <<'EOF' > /tmp/issue_body.md
-          ## ⚠️ Health check automático falhou
-
-          O endpoint de saúde da API não respondeu com `200 {"ok":true}`.
-          Verificar o deploy na Vercel e os logs do backend.
-          EOF
-          echo "- Endpoint: $API_URL/api/health" >> /tmp/issue_body.md
-          echo "- Data: $(date -u +'%Y-%m-%d %H:%M UTC')" >> /tmp/issue_body.md
-          echo "- Workflow: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> /tmp/issue_body.md
-          # Evita abrir issues duplicadas (reutiliza issue aberta existente)
-          EXISTING=$(gh issue list --state open --search "Health check automático falhou" --json number -q '.[0].number' 2>/dev/null || true)
-          if [ -n "$EXISTING" ]; then
-            echo "Issue #$EXISTING já aberta — atualizando comentário"
-            gh issue comment "$EXISTING" --body-file /tmp/issue_body.md
-          else
-            gh issue create --title "$BODY_TITLE" --body-file /tmp/issue_body.md
-          fi
-      - name: Tudo saudável
-        if: steps.health.outputs.status == 'ok'
-        run: echo "API saudável ✓"
-
   monthly-release-draft:
     name: Draft de release mensal
     runs-on: ubuntu-latest
-    if: github.event_name == 'schedule' && github.event.schedule == '0 8 1 * *'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
