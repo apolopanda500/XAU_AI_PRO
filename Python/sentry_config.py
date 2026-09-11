@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Configuracao do Sentry para XAU AI Pro
 Monitoramento de erros e performance para sistema de trading de XAUUSD

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Persistencia local e leve de cotações recebidas pelo desk."""
 from __future__ import annotations
 

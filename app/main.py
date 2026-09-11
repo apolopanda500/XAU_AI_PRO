@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Ponto de entrada do app XAU_AI_PRO v1.2.0.
 """

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Nucleo do app XAU_AI_PRO v1.2.0 com design PRO estilo TradingView/Binance.
 """
@@ -26,7 +27,10 @@ from app.tabs.subgraph import SubgraphTab
 from app.tabs.charts import ChartsTab
 from app.tabs.tools import ToolsTab
 from app.tabs.combined import CombinedTab
+from app.tabs.strategy_tester import StrategyTester
+from app.tabs.robot_vision import RobotVision
 from app.theme.mexc import Theme
+from app.components.button import ProButton
 from app.utils.paths import ensure_paths
 from app.runtime_metrics import set_gui_fps
 
@@ -105,13 +109,10 @@ class XAUAProApp:
         )
         self.clock_label.pack(side="right")
         # Botao hamburger: puxa/esconde a barra lateral de abas.
-        self.btn_sidebar = tk.Button(
-            self.header, text="☰", width=3,
-            bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY,
-            activebackground=Theme.CARD_HOVER, activeforeground=Theme.TEXT,
-            relief="flat", borderwidth=0, cursor="hand2",
-            font=(Theme.FONT_FAMILY, 12, "bold"),
-            command=self._toggle_sidebar,
+        self.btn_sidebar = ProButton(
+            self.header, "☰", self._toggle_sidebar,
+            variant="GHOST", font_size=12, bold=True,
+            padx=12, pady=8, width=44,
         )
         self.btn_sidebar.pack(side="left", padx=(12, 8), pady=12)
         self.header_context = tk.Frame(self.header, bg=Theme.BG_SECONDARY)
@@ -172,9 +173,9 @@ class XAUAProApp:
         self.tab_container = self.scroll.inner
         self.tab_container._scroll_host = self.scroll
 
-        # Todas as abas são lazy-loaded. Construtores podem criar widgets,
-        # imagens e controles; fazê-los no boot bloqueava a thread Tk e fazia
-        # os botões parecerem travados.
+        # Todas as abas sÃ£o lazy-loaded. Construtores podem criar widgets,
+        # imagens e controles; fazÃª-los no boot bloqueava a thread Tk e fazia
+        # os botÃµes parecerem travados.
         self._tab_factories = {
             "dashboard": lambda: CombinedTab(self.tab_container, [
                 ("Painel", lambda parent: DashboardTab(parent, self.robot, self.market, self._set_status)),
@@ -183,15 +184,25 @@ class XAUAProApp:
             "market": lambda: CombinedTab(self.tab_container, [
                 ("Mercado", lambda parent: TradingViewMarket(parent, self.robot, self.market, self._set_status)),
                 ("Graficos", lambda parent: ChartsTab(parent, self.robot, self.market, self._set_status)),
-                ("Análise", lambda parent: SubgraphTab(parent, self.robot, self.market, self._set_status)),
+                ("AnÃ¡lise", lambda parent: SubgraphTab(parent, self.robot, self.market, self._set_status)),
             ]),
             "robot": lambda: CombinedTab(self.tab_container, [
                 ("Controle", lambda parent: RobotTab(parent, self.robot, self.market, self._set_status)),
                 ("Auditoria", lambda parent: ToolsTab(parent, self.robot, self.market, self._set_status)),
             ]),
+                        "charts": lambda: CombinedTab(self.tab_container, [
+                ("Grafico Avancado", lambda parent: ChartsTab(parent, self.robot, self.market, self._set_status)),
+                ("Mercado", lambda parent: TradingViewMarket(parent, self.robot, self.market, self._set_status)),
+            ]),
+            "tester": lambda: CombinedTab(self.tab_container, [
+                ("Strategy Tester", lambda parent: StrategyTester(parent, self._set_status)),
+            ]),
+            "vision": lambda: CombinedTab(self.tab_container, [
+                ("Visao do Robo", lambda parent: RobotVision(parent, self.robot, self.market, self._set_status)),
+            ]),
             "system": lambda: CombinedTab(self.tab_container, [
                 ("Configuracoes", lambda parent: SettingsTab(parent, self.robot, self.market, self._set_status)),
-                ("Conexões", lambda parent: IntegrationsTab(parent, self.robot, self.market, self._set_status)),
+                ("ConexÃµes", lambda parent: IntegrationsTab(parent, self.robot, self.market, self._set_status)),
             ]),
         }
         self._navigate("dashboard")
@@ -205,7 +216,7 @@ class XAUAProApp:
             return
         if key not in self.tabs:
             # Mostra feedback imediato e deixa o Tk processar o clique antes
-            # de construir a aba. Isso evita a sensação de botão congelado.
+            # de construir a aba. Isso evita a sensaÃ§Ã£o de botÃ£o congelado.
             self._navigation_pending = key
             self._set_status("Carregando aba...")
             self.root.after_idle(lambda: self._load_and_navigate(key))
@@ -240,9 +251,9 @@ class XAUAProApp:
             "dashboard": "Painel",
             "market": "Mercado",
             "positions": "Carteira",
-            "robot": "Robô",
+            "robot": "RobÃ´",
             "subgraph": "Subgraph",
-            "settings": "Configuração",
+            "settings": "ConfiguraÃ§Ã£o",
             "system": "Sistema",
             "charts": "Graficos",
         }
@@ -251,7 +262,7 @@ class XAUAProApp:
     def _toggle_sidebar(self) -> None:
         """Mostra/esconde a barra lateral (botao hamburger do header)."""
         visible = self.sidebar.toggle()
-        self.btn_sidebar.configure(text="❮" if visible else "☰")
+        self.btn_sidebar.set_text("⟮" if visible else "☰")
 
     def _set_status(self, text: str) -> None:
         self.status_label.configure(text=text)
@@ -287,9 +298,9 @@ class XAUAProApp:
     def _realtime_tick(self) -> None:
         """Atualiza somente a tela visivel, sem empilhar consultas em background.
 
-        Preserva a posição de leitura: tiramos um snapshot da rolagem antes do
-        refresh e o ScrollableFrame restaura a fração de yview após o recálculo
-        final do layout (a menos que o usuário tenha rolado durante a coleta).
+        Preserva a posiÃ§Ã£o de leitura: tiramos um snapshot da rolagem antes do
+        refresh e o ScrollableFrame restaura a fraÃ§Ã£o de yview apÃ³s o recÃ¡lculo
+        final do layout (a menos que o usuÃ¡rio tenha rolado durante a coleta).
         """
         if not self._running:
             return
@@ -315,8 +326,8 @@ class XAUAProApp:
                         tab.refresh()
                 except Exception as error:
                     self._set_status(f"Atualizacao em tempo real: {error}")
-                # Restaura a leitura após o conteúdo ser recalculado, saltando
-                # apenas se o usuário rolou enquanto a coleta rodava.
+                # Restaura a leitura apÃ³s o conteÃºdo ser recalculado, saltando
+                # apenas se o usuÃ¡rio rolou enquanto a coleta rodava.
                 self.scroll.restore_view(snapshot)
             self._realtime_due[key] = now + intervals[key]
         self.root.after(250, self._realtime_tick)

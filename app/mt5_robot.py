@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Integracao real entre o app Python e o Robo MQL5 no MetaTrader 5.
 A API do MT5 nao permite ligar/desligar um EA; o controle e feito via conexao,
@@ -310,6 +311,29 @@ class MT5Robot:
         return {"ok": closed > 0, "closed": closed, "errors": errors}
 
     def is_ea_active(self, magic: int | None = None) -> dict[str, Any]:
+        """Detecta se o EA está ativo usando heartbeat como critério primário.
+
+        Estratégia:
+        1. Heartbeat (system_status.json) - critério primário (detecta EA ligado sem operar)
+        2. Posições com magic + predições recentes - fallback/reduncia
+        """
+        # 1. Validação primária: heartbeat do system_status.json
+        try:
+            from app.system_status_reader import read_system_status
+            status = read_system_status()
+            if status and status.get("ea_online"):
+                return {
+                    "active": True,
+                    "connected": True,
+                    "heartbeat_age_sec": status.get("heartbeat_age_sec", -1),
+                    "positions_with_magic": 0,
+                    "predictions_recent": False,
+                    "reason": f"EA online (heartbeat {status.get('heartbeat_age_sec', '?')}s)",
+                }
+        except Exception:
+            pass  # Fallback para verificação heurística
+
+        # 2. Fallback: MT5 direto (posições + predições)
         if not self.connected or not self.mt5:
             return {"active": False, "reason": "MT5 nao conectado"}
         try:

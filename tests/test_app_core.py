@@ -1,4 +1,4 @@
-﻿"""Testes de core, integracao, MCPs e UI do XAU_AI_PRO."""
+"""Testes de core, integracao, MCPs e UI do XAU_AI_PRO."""
 from __future__ import annotations
 
 import os

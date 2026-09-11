@@ -1,4 +1,5 @@
-﻿"""
+# -*- coding: utf-8 -*-
+"""
 Plano de fundo animado sutil estilo dark/IA para o XAU_AI_PRO.
 Usa um canvas com particulas e linhas de conexao leves.
     Atualizacao a 30 FPS, baixo consumo de CPU (max 25 particulas).

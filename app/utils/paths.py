@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Utilitários de caminho para o app XAU_AI_PRO.
 """

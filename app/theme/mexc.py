@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Design System PRO inspirado em TradingView + Binance + MetaTrader 5.
 Cores escuras profissionais, glassmorphism, sombras e animações suaves.

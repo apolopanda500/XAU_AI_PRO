@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 XAU_AI_PRO - Multi-Asset Pipeline
 v1.2.0 Multi-Asset Engine

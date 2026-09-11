@@ -15,6 +15,11 @@
 
 #include "../AI/AIEngine.mqh"
 
+// F4/20.15: contador de bloqueos por ADX inválido (valor válido < MinimumADX).
+// Complementa a los contadores de ADX.mqh (unavailable/valid). Si block_count
+// crece mucho, el filtro ADX está siendo el cuello de botella de validación.
+int g_adxBlockCount = 0;
+
 
 //==================================================
 // VALIDATION ENGINE
@@ -198,9 +203,24 @@ bool ValidateTrade(
 
       if(
          adx<
+         0.0
+      )
+      {
+         // F4/20.15 §3: ADX indisponivel (warm-up/erro) -> neutro, nao bloqueia
+         Print(
+            "[VALIDATION] SKIP | ADX | ",
+            symbol,
+            " | nao disponivel"
+         );
+      }
+      else
+      if(
+         adx<
          MinimumADX
       )
       {
+         g_adxBlockCount++;
+
          Print(
             "[VALIDATION] BLOCK | ADX | ",
             symbol

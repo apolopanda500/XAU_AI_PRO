@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Ponte Event Stream -> Sentry (ETAPA Plataforma/Sentry).
 
 Le o forward_test_events.csv gerado pelo EventEmitter MQL5 e encaminha

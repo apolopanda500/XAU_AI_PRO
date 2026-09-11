@@ -1,4 +1,4 @@
-﻿//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
 //|                                         PositionSynchronizer.mqh |
 //|                                  Smart Execution Engine - Sync   |
 //|                                            XAU_AI_PRO v1.2.0       |
@@ -33,13 +33,14 @@ private:
    static bool         m_initialized;
    
    static bool IsEAPosition(ulong ticket);
-   
+
 public:
    static void Init();
    static void Synchronize();
-   static int GetTotalPositions();
-   static int GetEAPositions();
-   static int GetManualPositions();
+   static int  GetTotalPositions();
+   static int  GetTerminalPositions();   // F4: total EA (magic) no terminal inteiro
+   static int  GetEAPositions();
+   static int  GetManualPositions();
    static PositionInfo GetPosition(ulong ticket);
    static bool HasConflicts();
    static void LogPositions();
@@ -108,6 +109,25 @@ void CPositionSynchronizer::Synchronize()
    
    ArrayResize(m_positions, m_position_count);
    m_last_sync_time = now;
+}
+
+int CPositionSynchronizer::GetTerminalPositions()
+{
+   // F4: conta posicoes EA (magic) do terminal INTEIRO, ao vivo.
+   // Nao depende do cache por-simbolo do grafico nem do throttle de
+   // 5s -> elimina o "Positions: 0 total" enganoso quando ha posicao
+   // em outro simbolo ou quando o cache esta desatualizado.
+   if(!m_initialized) Synchronize();
+
+   int count = 0;
+   int total = PositionsTotal();
+   for(int i = 0; i < total; i++)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket <= 0) continue;
+      if(IsEAPosition(ticket)) count++;
+   }
+   return count;
 }
 
 int CPositionSynchronizer::GetTotalPositions()

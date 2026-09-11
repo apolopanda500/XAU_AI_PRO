@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Gerenciador de configuracao persistente do app XAU_AI_PRO.
 Salva em JSON com merge de defaults para nunca quebrar em atualizacoes.

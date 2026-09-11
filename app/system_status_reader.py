@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Leitor do snapshot system_status.json gerado pelo EA (ETAPA 15.6).
 
 Contrato: Docs/contracts/ea_python_app_contract.md (schema v1.0).

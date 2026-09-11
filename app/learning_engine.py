@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Motor de aprendizado continuo diario do XAU_AI_PRO.
 Responsavel por agendar treinamento, rotear modelos e sincronizar predicoes.

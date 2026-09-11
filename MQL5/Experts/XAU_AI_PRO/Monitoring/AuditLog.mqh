@@ -1,9 +1,10 @@
-// XAU_AI_PRO v1.2.0
+// XAU_AI_PRO v1.2.2
 #ifndef AUDITLOG_MQH
 #define AUDITLOG_MQH
 
 #include "../Core/Config.mqh"
 #include "Logger.mqh"
+#include "EventLock.mqh"      // F4: serializa escrita dos arquivos de auditoria
 
 //==================================================
 // XAU_AI_PRO — SISTEMA DE AUDITORIA (ETAPA 6)
@@ -11,13 +12,26 @@
 // Unifica o AuditLog (decisões em CSV) com o antigo
 // FullAudit (registros estruturados de entrada/saída
 // por ticket, salvos em Data\full_audit.csv).
+//
+// F4 v1.2.2 - SERIALIZACAO: os arquivos compartilhados
+// (audit_log.csv FILE_COMMON e full_audit.csv) sao escritos
+// sob o mesmo lock global do EventEmitter (EventLock.mqh),
+// evitando entrelacamento/race entre as 11 instancias.
+//
+// PADRAO DE ESCRITA (F4): ABRIR -> SEEK(END) -> WRITE -> FLUSH -> FECHAR
+// sob o lock. NAO manter handle persistente aberto entre gravacoes:
+// com 11 instancias abrindo o mesmo arquivo, o FileSeek(SEEK_END) de
+// um handle antigo nao enxerga o tamanho atualizado pelos outros
+// handles -> overlay/interleave. Handle novo a cada escrita resolve.
 //==================================================
 
 #define AUDIT_MAX_RECORDS 1000
 #define AUDIT_FULL_FILE   "Data\\full_audit.csv"
 
-int  auditHandle        = INVALID_HANDLE;
 bool g_auditInitialized = false;
+
+// F4: total de gravacoes perdidas por lock/timeout (auditoria)
+int  g_audit_dropped    = 0;
 
 //==================================================
 // FULL AUDIT — REGISTRO ESTRUTURADO (antigo FullAudit)
@@ -47,12 +61,72 @@ AuditRecord g_auditRecords[];
 int         g_auditRecordCount = 0;
 
 //==================================================
+// HELPERS F4 — escrita atomica por gravacao
+//==================================================
+
+// Abre audit_log.csv (FILE_COMMON) com handle novo. Retorna handle ou INVALID_HANDLE.
+int AuditOpenDecisionLog()
+{
+   ResetLastError();
+
+   int h = FileOpen(
+      "audit_log.csv",
+      FILE_COMMON |
+      FILE_READ |
+      FILE_WRITE |
+      FILE_CSV |
+      FILE_ANSI |
+      FILE_SHARE_READ |
+      FILE_SHARE_WRITE,
+      ','
+   );
+
+   return h;
+}
+
+// Grava header do decision log se arquivo vazio (chamado sob lock).
+void AuditEnsureDecisionHeader(int handle)
+{
+   if(handle == INVALID_HANDLE)
+      return;
+
+   FileSeek(handle, 0, SEEK_END);
+
+   if(FileSize(handle) == 0)
+   {
+      FileWrite(
+         handle,
+         "Time",
+         "Symbol",
+         "Timeframe",
+         "Direction",
+         "RSI",
+         "ADX",
+         "ATR",
+         "EMA_Fast",
+         "EMA_Slow",
+         "AI_Score",
+         "AI_Confidence",
+         "Technical_Score",
+         "Combined_Score",
+         "Spread",
+         "Session",
+         "Result",
+         "Ticket",
+         "Profit"
+      );
+
+      FileFlush(handle);
+   }
+}
+
+//==================================================
 // INICIALIZA
 //==================================================
 
 bool AuditLogInit()
 {
-   if(g_auditInitialized && auditHandle != INVALID_HANDLE)
+   if(g_auditInitialized)
       return true;
 
    //----------------------------------------------
@@ -66,26 +140,23 @@ bool AuditLogInit()
    }
 
    //----------------------------------------------
-   // Decision log CSV
+   // Decision log CSV — header serializado (F4)
    //----------------------------------------------
 
-   if(auditHandle == INVALID_HANDLE)
+   if(EventLockAcquire())
    {
-      ResetLastError();
+      int h = AuditOpenDecisionLog();
 
-      auditHandle = FileOpen(
-         "audit_log.csv",
-         FILE_COMMON |
-         FILE_READ |
-         FILE_WRITE |
-         FILE_CSV |
-         FILE_ANSI |
-         FILE_SHARE_READ |
-         FILE_SHARE_WRITE
-      );
-
-      if(auditHandle == INVALID_HANDLE)
+      if(h != INVALID_HANDLE)
       {
+         AuditEnsureDecisionHeader(h);
+         FileClose(h);
+         EventLockRelease();
+      }
+      else
+      {
+         EventLockRelease();
+
          LogError(
             "AuditLog: falha ao abrir arquivo. Erro: ",
             IntegerToString(GetLastError())
@@ -93,36 +164,10 @@ bool AuditLogInit()
 
          return false;
       }
-
-      FileSeek(auditHandle, 0, SEEK_END);
-
-      if(FileSize(auditHandle) == 0)
-      {
-         FileWrite(
-            auditHandle,
-            "Time",
-            "Symbol",
-            "Timeframe",
-            "Direction",
-            "RSI",
-            "ADX",
-            "ATR",
-            "EMA_Fast",
-            "EMA_Slow",
-            "AI_Score",
-            "AI_Confidence",
-            "Technical_Score",
-            "Combined_Score",
-            "Spread",
-            "Session",
-            "Result",
-            "Ticket",
-            "Profit"
-         );
-
-         FileFlush(auditHandle);
-      }
    }
+   else
+      LogError("AuditLog: header sem lock (concorrencia)",
+               "Code=EV_LOCK_TIMEOUT");
 
    g_auditInitialized = true;
 
@@ -163,16 +208,39 @@ void AuditLogDecision(
    double profit = 0.0
 )
 {
-   if(auditHandle == INVALID_HANDLE)
-      return;
+   if(!g_auditInitialized)
+      AuditLogInit();
 
    if(symbol == "")
       symbol = _Symbol;
 
-   FileSeek(auditHandle, 0, SEEK_END);
+   // F4: serializa seek->write->flush->close (1 escritor por vez)
+   if(!EventLockAcquire())
+   {
+      g_audit_dropped++;
+      Print("[AUDIT] DROP | decision | ", symbol,
+            " | dropped=", g_audit_dropped);
+      return;
+   }
+
+   int h = AuditOpenDecisionLog();
+
+   if(h == INVALID_HANDLE)
+   {
+      EventLockRelease();
+
+      LogError(
+         "AuditLog: falha ao abrir audit_log.csv",
+         "Code=" + IntegerToString(GetLastError())
+      );
+
+      return;
+   }
+
+   AuditEnsureDecisionHeader(h);
 
    FileWrite(
-      auditHandle,
+      h,
 
       TimeToString(TimeCurrent(), TIME_DATE | TIME_SECONDS),
 
@@ -206,7 +274,10 @@ void AuditLogDecision(
       DoubleToString(profit, 2)
    );
 
-   FileFlush(auditHandle);
+   FileFlush(h);
+   FileClose(h);
+
+   EventLockRelease();
 }
 
 //==================================================
@@ -220,16 +291,38 @@ void AuditLogSimple(
    double score
 )
 {
-   if(auditHandle == INVALID_HANDLE)
-      return;
+   if(!g_auditInitialized)
+      AuditLogInit();
 
    if(symbol == "")
       symbol = _Symbol;
 
-   FileSeek(auditHandle, 0, SEEK_END);
+   if(!EventLockAcquire())
+   {
+      g_audit_dropped++;
+      Print("[AUDIT] DROP | simple | ", symbol,
+            " | dropped=", g_audit_dropped);
+      return;
+   }
+
+   int h = AuditOpenDecisionLog();
+
+   if(h == INVALID_HANDLE)
+   {
+      EventLockRelease();
+
+      LogError(
+         "AuditLog: falha ao abrir audit_log.csv",
+         "Code=" + IntegerToString(GetLastError())
+      );
+
+      return;
+   }
+
+   AuditEnsureDecisionHeader(h);
 
    FileWrite(
-      auditHandle,
+      h,
 
       TimeToString(TimeCurrent(), TIME_DATE | TIME_SECONDS),
 
@@ -264,7 +357,10 @@ void AuditLogSimple(
       "0.00"
    );
 
-   FileFlush(auditHandle);
+   FileFlush(h);
+   FileClose(h);
+
+   EventLockRelease();
 }
 
 //==================================================
@@ -278,16 +374,38 @@ void AuditLogTradeResult(
    string result
 )
 {
-   if(auditHandle == INVALID_HANDLE)
-      return;
+   if(!g_auditInitialized)
+      AuditLogInit();
 
    if(symbol == "")
       symbol = _Symbol;
 
-   FileSeek(auditHandle, 0, SEEK_END);
+   if(!EventLockAcquire())
+   {
+      g_audit_dropped++;
+      Print("[AUDIT] DROP | trade_result | ", symbol,
+            " | dropped=", g_audit_dropped);
+      return;
+   }
+
+   int h = AuditOpenDecisionLog();
+
+   if(h == INVALID_HANDLE)
+   {
+      EventLockRelease();
+
+      LogError(
+         "AuditLog: falha ao abrir audit_log.csv",
+         "Code=" + IntegerToString(GetLastError())
+      );
+
+      return;
+   }
+
+   AuditEnsureDecisionHeader(h);
 
    FileWrite(
-      auditHandle,
+      h,
 
       TimeToString(TimeCurrent(), TIME_DATE | TIME_SECONDS),
 
@@ -321,7 +439,10 @@ void AuditLogTradeResult(
       DoubleToString(profit, 2)
    );
 
-   FileFlush(auditHandle);
+   FileFlush(h);
+   FileClose(h);
+
+   EventLockRelease();
 }
 
 //==================================================
@@ -353,8 +474,11 @@ void AuditLogTrackEntry(
 
    if(g_auditRecordCount >= AUDIT_MAX_RECORDS)
    {
-      AuditLogSaveRecords();
-      g_auditRecordCount = 0;
+      if(!AuditLogSaveRecords())
+      {
+         Print("[AUDIT] BUFFER FULL | flush pendente | entrada preservada em memoria");
+         return;
+      }
    }
 
    int index = g_auditRecordCount;
@@ -419,13 +543,23 @@ void AuditLogTrackExit(
 // FULL AUDIT — SALVA REGISTROS (antigo CFullAudit::SaveToFile)
 //==================================================
 
-void AuditLogSaveRecords()
+bool AuditLogSaveRecords()
 {
    if(!g_auditInitialized)
-      return;
+      return false;
 
    if(g_auditRecordCount <= 0)
-      return;
+      return true;
+
+   // F4: serializa a escrita do full_audit.csv (compartilhado entre
+   // instancias). O lock cobre open->(header)write->flush->close.
+   if(!EventLockAcquire())
+   {
+      g_audit_dropped++;
+      Print("[AUDIT] DROP | SaveRecords | records=", g_auditRecordCount,
+            " | dropped=", g_audit_dropped);
+      return false;
+   }
 
    ResetLastError();
 
@@ -442,12 +576,14 @@ void AuditLogSaveRecords()
 
    if(handle == INVALID_HANDLE)
    {
+      EventLockRelease();
+
       LogError(
          "AuditLog: erro ao abrir full_audit.csv",
          "Code=" + IntegerToString(GetLastError())
       );
 
-      return;
+      return false;
    }
 
    //================================================
@@ -525,8 +661,11 @@ void AuditLogSaveRecords()
    FileFlush(handle);
    FileClose(handle);
 
+   EventLockRelease();
+
    // Registros persistidos - libera o buffer (ETAPA 6)
    g_auditRecordCount = 0;
+   return true;
 }
 
 //==================================================
@@ -535,24 +674,22 @@ void AuditLogSaveRecords()
 
 void AuditLogFlush()
 {
-   if(auditHandle != INVALID_HANDLE)
-      FileFlush(auditHandle);
-
    AuditLogSaveRecords();
 }
 
 //==================================================
-// SUMMARY (ETAPA 6)
+// SUMMARY (ETAPA 6 / F4)
 //==================================================
 
 string AuditLogSummary()
 {
    return StringFormat(
-      "AuditLog | DecisionLog=%s | Records=%d | File=%s | Status=%s",
-      (auditHandle != INVALID_HANDLE ? "ON" : "OFF"),
+      "AuditLog | DecisionLog=%s | Records=%d | File=%s | Status=%s | Dropped=%d",
+      (g_auditInitialized ? "ON" : "OFF"),
       g_auditRecordCount,
       AUDIT_FULL_FILE,
-      g_auditInitialized ? "READY" : "OFF"
+      g_auditInitialized ? "READY" : "OFF",
+      g_audit_dropped
    );
 }
 
@@ -563,13 +700,6 @@ string AuditLogSummary()
 void AuditLogClose()
 {
    AuditLogSaveRecords();
-
-   if(auditHandle != INVALID_HANDLE)
-   {
-      FileFlush(auditHandle);
-      FileClose(auditHandle);
-      auditHandle = INVALID_HANDLE;
-   }
 
    g_auditInitialized = false;
 
@@ -582,7 +712,7 @@ void AuditLogClose()
 
 bool AuditLogIsReady()
 {
-   return g_auditInitialized && auditHandle != INVALID_HANDLE;
+   return g_auditInitialized;
 }
 
 //==================================================

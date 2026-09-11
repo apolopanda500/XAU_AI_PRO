@@ -119,7 +119,6 @@ CTrade trade;
 
 // ETAPA 6: Monitoring & Auditoria
 #include "Monitoring/HealthMonitor.mqh"   // HealthMonitor + WatchDog integrado
-#include "Monitoring/EventEmitter.mqh"    // ETAPA 15.6.1/15.6.2: event stream (canonico)
 // Auditoria (AuditLog + FullAudit fundidos) - incluÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­do no top (ETAPA 11)
 #include "Monitoring/Diagnostics.mqh"     // Diagnostico completo
 
@@ -389,48 +388,45 @@ bool InitializeModules()
       CTelemetry::Init();
       CTelemetry::RecordBrokerLatency(0);
       CTelemetry::RecordExecutionStart();  // ETAPA 15.6.3: uptime real
+     }
 
-      //------------------------------------------------
-      // ETAPA 7 - REPLAY & BACKUP
-      //------------------------------------------------
+   //------------------------------------------------
+   // ETAPA 8 - BACKTEST ANALYZER & BENCHMARK
+   //------------------------------------------------
 
-      //------------------------------------------------
-      // ETAPA 8 - BACKTEST ANALYZER & BENCHMARK
-      //------------------------------------------------
+   if(EnableBacktestAnalyzer)
+     {
+      if(!BacktestInit())
+         Print("[BACKTEST] BacktestAnalyzer OFF");
+     }
 
-      if(EnableBacktestAnalyzer)
-        {
-         if(!BacktestInit())
-            Print("[BACKTEST] BacktestAnalyzer OFF");
-        }
+   if(EnableBenchmark)
+     {
+      CBenchmarkEngine::Init();
+     }
 
-      if(EnableBenchmark)
-        {
-         CBenchmarkEngine::Init();
-        }
+   //------------------------------------------------
+   // ETAPA 9 - NOTIFICATION CENTER
+   //------------------------------------------------
 
-      //------------------------------------------------
-      // ETAPA 9 - NOTIFICATION CENTER
-      //------------------------------------------------
+   if(EnableNotifications)
+     {
+      CNotificationCenter::Init();
+      CNotificationCenter::SetPushEnabled(NotifyPushEnabled);
 
-      if(EnableNotifications)
-        {
-         CNotificationCenter::Init();
-         CNotificationCenter::SetPushEnabled(NotifyPushEnabled);
+      if(NotifyTelegramToken != "" && NotifyTelegramChatID != "")
+         CNotificationCenter::SetTelegram(NotifyTelegramToken, NotifyTelegramChatID);
 
-         if(NotifyTelegramToken != "" && NotifyTelegramChatID != "")
-            CNotificationCenter::SetTelegram(NotifyTelegramToken, NotifyTelegramChatID);
+      CNotificationCenter::SetCooldown(NCAT_TRADE_OPEN, NotifyCooldownSec);
+      CNotificationCenter::SetCooldown(NCAT_TRADE_CLOSE, NotifyCooldownSec);
+      CNotificationCenter::SetCooldown(NCAT_HEALTH, 600);
+      CNotificationCenter::SetCooldown(NCAT_CIRCUIT, 300);
+      CNotificationCenter::SetCooldown(NCAT_EXECUTION, 300);
+      CNotificationCenter::SetCooldown(NCAT_DRAWDOWN, 600);
+      CNotificationCenter::SetMaxPerMinute(NotifyMaxPerMinute);
 
-         CNotificationCenter::SetCooldown(NCAT_TRADE_OPEN, NotifyCooldownSec);
-         CNotificationCenter::SetCooldown(NCAT_TRADE_CLOSE, NotifyCooldownSec);
-         CNotificationCenter::SetCooldown(NCAT_HEALTH, 600);
-         CNotificationCenter::SetCooldown(NCAT_CIRCUIT, 300);
-         CNotificationCenter::SetCooldown(NCAT_EXECUTION, 300);
-         CNotificationCenter::SetCooldown(NCAT_DRAWDOWN, 600);
-         CNotificationCenter::SetMaxPerMinute(NotifyMaxPerMinute);
-
-         Print("[NOTIFY] " + CNotificationCenter::GetStatus());
-   }
+      Print("[NOTIFY] " + CNotificationCenter::GetStatus());
+     }
 
    //------------------------------------------------
    // ETAPA 10 - CONFIG MANAGER + VERSION MANAGER
@@ -452,24 +448,23 @@ bool InitializeModules()
    CProductionChecklist::Run();
    ValidationChecklistRun();
 
-      if(EnableBackupManager)
+   if(EnableBackupManager)
+     {
+      CBackupManager::Init();
+     }
+
+   if(EnableReplay)
+     {
+      if(ReplayEngineInit())
         {
-         CBackupManager::Init();
+         if(ReplaySymbolFilter != "")
+            ReplayEngineSetSymbolFilter(ReplaySymbolFilter);
+
+         Print("[REPLAY] MODO REPLAY ATIVO | trades reais BLOQUEADOS | origem=", ReplayEngineSource());
         }
-
-      if(EnableReplay)
+      else
         {
-         if(ReplayEngineInit())
-           {
-            if(ReplaySymbolFilter != "")
-               ReplayEngineSetSymbolFilter(ReplaySymbolFilter);
-
-            Print("[REPLAY] MODO REPLAY ATIVO | trades reais BLOQUEADOS | origem=", ReplayEngineSource());
-           }
-         else
-           {
-            Print("[REPLAY] Falha ao inicializar replay (operacao normal)");
-           }
+         Print("[REPLAY] Falha ao inicializar replay (operacao normal)");
         }
      }
    return true;
@@ -568,10 +563,12 @@ void UpdateSafety()
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+
-void UpdateDataset()
+// F4/1.2: retorna TRUE apenas com progresso REAL (nova vela detectada),
+// para que HealthMonitorProgress seja chamado somente com avance verificado.
+bool UpdateDataset()
   {
    if(!EnableDataset)
-      return;
+      return false;
 
    datetime candle =
       iTime(
@@ -581,7 +578,7 @@ void UpdateDataset()
       );
 
    if(candle==LastDatasetBar)
-      return;
+      return false;   // sem nova vela => sem progresso
 
    LastDatasetBar=candle;
 
@@ -595,6 +592,8 @@ void UpdateDataset()
       if(symbol!="")
          SaveMarketData(symbol);
      }
+
+   return true;   // nova vela processada => progresso real do pipeline
   }
 
 //+------------------------------------------------------------------+
@@ -924,17 +923,19 @@ void OnTick()
 // Atualiza Dataset
 //------------------------------------------------
 
-   UpdateDataset();
+   bool datasetProgressed = UpdateDataset();
 
 //------------------------------------------------
 // Health Monitor - heartbeat dataset/python (ETAPA 6)
 //------------------------------------------------
+// Progresso REAL (F4/1.2): HealthMonitorProgress avanza SOLO quando
+// UpdateDataset reporta nova vela (datasetProgressed==true). Nunca por tick.
 
-   if(EnableHealthMonitor && EnableDataset)
+   if(EnableHealthMonitor && EnableDataset && datasetProgressed)
      {
-      HealthMonitorHeartbeat("CSV");
-      HealthMonitorHeartbeat("JSON");
-      HealthMonitorHeartbeat("PYTHON");
+      HealthMonitorProgress("CSV");
+      HealthMonitorProgress("JSON");
+      HealthMonitorProgress("PYTHON");
      }
 
 //------------------------------------------------
@@ -1538,6 +1539,7 @@ void OnTimer()
          Print("========== HEALTH MONITOR ==========");
          Print(HealthMonitorSummary());
          Print(EnableAuditLog ? AuditLogSummary() : "AuditLog OFF");
+         Print(ADXMetricsSummary() + " | block=" + IntegerToString(g_adxBlockCount));
          Print("====================================");
         }
      }
@@ -1637,14 +1639,24 @@ void OnTimer()
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+
+double OnTester()
+{
+   const double profit       = TesterStatistics(STAT_PROFIT);
+   const double profitFactor = TesterStatistics(STAT_PROFIT_FACTOR);
+   const double drawdownPct  = TesterStatistics(STAT_EQUITY_DDREL_PERCENT);
+   const double trades       = TesterStatistics(STAT_TRADES);
+
+   // O criterio so ordena os passes do Strategy Tester; nunca altera ordens.
+   if(trades <= 0.0 || profit <= 0.0 || profitFactor <= 1.0)
+      return 0.0;
+
+   return (profit * profitFactor) / (1.0 + MathMax(0.0, drawdownPct));
+}
+
 void OnDeinit(
    const int reason
 )
   {
-   // ETAPA 15.6.1: ultimo evento do event stream (API canonica)
-   EventSystemStop("deinit_reason=" + IntegerToString(reason));
-   EventShutdown();
-
    Print(
       "========================================"
    );
@@ -1694,10 +1706,14 @@ void OnDeinit(
 //================================================
 
    if(EnableHealthMonitor)
+     {
       HealthMonitorShutdown();
+     }
 
-      if(EnableAuditLog)
+   if(EnableAuditLog)
+     {
       AuditLogClose();
+     }
 
    ForwardLogClose(); // ETAPA 13: pecha CSV de sesion de forward test (flush+close)
 

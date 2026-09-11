@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Aba Carteira: saldos, posicoes abertas e historico de trades.
 """

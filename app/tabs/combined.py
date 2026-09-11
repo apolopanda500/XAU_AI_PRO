@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 import tkinter as tk
@@ -5,6 +6,7 @@ from collections.abc import Callable
 from typing import Any
 
 from app.theme.mexc import Theme
+from app.components.button import ProButton
 
 
 class CombinedTab:
@@ -15,26 +17,19 @@ class CombinedTab:
         self._sections = dict(sections)
         self._instances: dict[str, Any] = {}
         self._active = ""
-        self._buttons: dict[str, tk.Button] = {}
+        self._buttons: dict[str, ProButton] = {}
 
         navigation = tk.Frame(self.frame, bg=Theme.BG)
         navigation.pack(fill="x", padx=24, pady=(8, 4))
         for label, _factory in sections:
-            button = tk.Button(
+            button = ProButton(
                 navigation,
-                text=label,
-                command=lambda name=label: self.show(name),
-                bg=Theme.PANEL,
-                fg=Theme.TEXT_SECONDARY,
-                activebackground=Theme.CARD_HOVER,
-                activeforeground=Theme.TEXT,
-                relief="flat",
-                borderwidth=0,
-                highlightthickness=1,
-                highlightbackground=Theme.BORDER,
-                padx=14,
-                pady=8,
-                cursor="hand2",
+                label,
+                lambda name=label: self.show(name),
+                variant="GHOST",
+                font_size=9,
+                padx=16,
+                pady=9,
             )
             button.pack(side="left", padx=(0, 6))
             self._buttons[label] = button
@@ -53,12 +48,8 @@ class CombinedTab:
         self._active = label
         self._instances[label].frame.pack(fill="both", expand=True)
         for name, button in self._buttons.items():
-            button.configure(
-                bg=Theme.CARD if name == label else Theme.PANEL,
-                fg=Theme.PRIMARY if name == label else Theme.TEXT_SECONDARY,
-                font=(Theme.FONT_FAMILY, 9, "bold") if name == label else (Theme.FONT_FAMILY, 9),
-                highlightbackground=Theme.PRIMARY if name == label else Theme.BORDER,
-            )
+            button.set_active(name == label)
+            button.set_text(name)
         instance = self._instances[label]
         if hasattr(instance, "refresh"):
             instance.refresh()
@@ -88,3 +79,5 @@ class CombinedTab:
                         method(*args, **kwargs)
             return relay
         raise AttributeError(name)
+
+

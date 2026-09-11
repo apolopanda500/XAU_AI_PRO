@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Main entry point for XAU_AI_PRO."""
 
 from __future__ import annotations

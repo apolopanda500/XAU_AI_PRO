@@ -35,7 +35,7 @@ try:
 except Exception:
     pass
 
-VERSION = "1.2.0"
+VERSION = "1.2.0"  # se sobreescribe desde el archivo VERSION de la raiz al arrancar (ver main)
 APP_NAME = "XAU_AI_PRO"
 
 # Portas padrao do dashboard web (Streamlit)
@@ -294,8 +294,18 @@ def _default_action(root: Path) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    global VERSION
     argv = list(sys.argv[1:] if argv is None else argv)
     root = _resolve_project_root()
+    # Version unica: sobrescribir desde el archivo VERSION de la raiz.
+    try:
+        version_file = root / "VERSION"
+        if version_file.exists():
+            value = version_file.read_text(encoding="utf-8").strip()
+            if value:
+                VERSION = value
+    except Exception:
+        pass  # fallback: VERSION declarada no modulo
     if str(root) not in sys.path:
         sys.path.insert(0, str(root))
 

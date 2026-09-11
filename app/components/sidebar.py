@@ -22,7 +22,10 @@ from app.theme.mexc import Theme
 NAV_ITEMS: list[tuple[str, str, str]] = [
     ("dashboard", "Painel", "📊"),
     ("market", "Mercado", "📈"),
+    ("charts", "Gráficos", "📉"),
     ("robot", "Robô", "🤖"),
+    ("tester", "Strategy Tester", "🧪"),
+    ("vision", "Visão do Robô", "👁️"),
     ("system", "Configuração", "⚙️"),
 ]
 
@@ -144,12 +147,15 @@ class Sidebar(tk.Frame):
         )
         self.footer_status.pack(fill="x", side="bottom", pady=(0, 14))
 
-        # ---- Expansão por hover -----------------------------------------
-        self.bind("<Enter>", self._on_enter_self)
-        self.bind("<Leave>", self._on_leave_self)
-        for w in (logo, nav, self.brand_label, self.logo_label, self.footer_status):
-            w.bind("<Enter>", self._on_enter_self)
-            w.bind("<Leave>", self._on_leave_self)
+        # ---- Expansão por hover (MANUTIDA SEM ESCONDER AO SAIR DO MOUSE) ----
+        #self.bind("<Enter>", self._on_enter_self)
+        #self.bind("<Leave>", self._on_leave_self)
+        #for w in (logo, nav, self.brand_label, self.logo_label, self.footer_status):
+        #    w.bind("<Enter>", self._on_enter_self)
+        #    w.bind("<Leave>", self._on_leave_self)
+
+        # ---- Lado aberto/fechado por botao ☰ (so pode diminuir ou aumentar)
+        self.bind("<Button-1>", self._on_toggle_click)
 
         # ---- Navegação por teclado (quando a lateral tem foco) ----------
         self._selected_idx = 0
@@ -168,6 +174,17 @@ class Sidebar(tk.Frame):
     # ------------------------------------------------------------------
     def _navigate(self, key: str) -> None:
         self.on_navigate(key)
+
+    # ------------------------------------------------------------------
+    # Botão ☰: alterna entre expansão (completo) e mini (ícones compactos)
+    # (so pode diminuir ou aumentar, sem hover collapse)
+    # ------------------------------------------------------------------
+    def _on_toggle_click(self, _event=None) -> None:
+        """Alterna aba aberta/fechada por clique no botao (hover sem efeito)."""
+        if self._expanded:
+            self.set_expanded(False)
+        else:
+            self.set_expanded(True)
 
     def _on_enter_self(self, _event=None) -> None:
         self.set_expanded(True)

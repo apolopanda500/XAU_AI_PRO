@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Graficos PRO estilo TradingView usando Canvas do Tkinter.
 Linha de equity com área preenchida, grid e crosshair.

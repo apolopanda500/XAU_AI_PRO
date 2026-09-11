@@ -1,7 +1,7 @@
 //+------------------------------------------------------------------+
 //|                                              EventEmitter.mqh    |
 //|                                  Event Stream - ETAPA 15.6       |
-//|                                            XAU_AI_PRO v1.2.0     |
+//|                                            XAU_AI_PRO v1.2.2     |
 //+------------------------------------------------------------------+
 // ETAPA 15.6.1 / 15.6.2 - EVENT EMITTER (canal oficial de eventos)
 //
@@ -16,10 +16,24 @@
 // Arquivo: Data\forward_test_events.csv (UTF-16 LE, append-only, 1 linha,
 // com FILE_SHARE para leitura simultanea pelo App/Python).
 //
+// F4 v1.2.2 - SERIALIZACAO DE ESCRITA:
+//   * Lock global via EventLock.mqh (CAS atomico + TTL), compartilhado
+//     com o AuditLog: 1 produtor ativo por vez no arquivo.
+//   * Criacao de header sob lock (arranque concorrente das 11 instancias
+//     NAO gera header duplicado).
+//   * Escrita com ABRIR->SEEK(END)->WRITE->FLUSH->FECHAR dentro do lock.
+//     (NAO manter handle persistente aberto entre eventos: com 11
+//     instancias abrindo o mesmo arquivo, o FileSeek(SEEK_END) de um
+//     handle antigo nao enxerga o tamanho atualizado pelos outros
+//     handles -> overlay/interleave. Handle novo a cada escrita resolve.)
+//   * Custodia de drops/timeouts com contadores observaveis (summary).
+//
 // PRINCIPIO: nunca bloqueia/interrompe a execucao; apenas registra.
 
 #ifndef EVENT_EMITTER_MQH
 #define EVENT_EMITTER_MQH
+
+#include "EventLock.mqh"
 
 //==================================================
 // NOMES PADRAO DE EVENTOS (15.6.1)
@@ -57,96 +71,118 @@
 #define EV_SEV_CRIT    "CRITICAL"
 
 static string EV_FILE = "Data\\forward_test_events.csv";
-static string EV_LOCK_FILE = "Data\\forward_test_events.lock";
-static int    evHandle = INVALID_HANDLE;
 static bool   evInitialized = false;
 
 // Versao local (nao depende de VersionManager)
 #define EV_VERSION_STRING "1.2.0"
 
-//==================================================
-// LOCK ENTRE INSTANCIAS (correcao 17.5)
-// Multiplos EAs no mesmo terminal escrevem no mesmo CSV;
-// sem lock, FileWrite concorrentes corrompem o arquivo.
-// Usa um arquivo .lock aberto em modo exclusivo (sem FILE_SHARE_*)
-// como mutex entre instancias/processos.
-//==================================================
-static int  evLockHandle = INVALID_HANDLE;
-static bool evLockHeld   = false;
+// F4: estatisticas locais de escrita desta instancia
+int g_ev_written = 0;      // total de eventos gravados (esta instancia)
+int g_ev_dropped = 0;      // total de eventos nao gravados (lock/timeout)
 
-bool EventLock()
+//==================================================
+// ABRE O CSV (handle novo a cada chamada)
+//==================================================
+int EventOpenWrite()
 {
-   if(evLockHeld)
-      return true;
-
-   for(int i = 0; i < 50; i++)
-   {
-      ResetLastError();
-      int h = FileOpen(EV_LOCK_FILE, FILE_READ | FILE_WRITE, ',');
-      if(h != INVALID_HANDLE)
-      {
-         evLockHandle = h;
-         evLockHeld   = true;
-         return true;
-      }
-      Sleep(10);
-   }
-   return false;
-}
-
-void EventUnlock()
-{
-   if(evLockHeld && evLockHandle != INVALID_HANDLE)
-   {
-      FileClose(evLockHandle);
-      evLockHandle = INVALID_HANDLE;
-      evLockHeld   = false;
-   }
-}
-
-//==================================================
-// INIT - abre/garante header (append-only UTF-16)
-//==================================================
-bool EventInit()
-{
-   if(evInitialized && evHandle != INVALID_HANDLE)
-      return true;
-
    ResetLastError();
-   evHandle = FileOpen(
+   int h = FileOpen(
       EV_FILE,
       FILE_WRITE | FILE_READ | FILE_CSV | FILE_UNICODE |
       FILE_SHARE_READ | FILE_SHARE_WRITE,
       ','
    );
+   return h;
+}
 
-   if(evHandle == INVALID_HANDLE)
-   {
+//==================================================
+// INIT - garante header (ABRIR->LOCK->HEADER->FECHAR)
+//==================================================
+bool EventInit()
+{
+   if(evInitialized)
+      return true;
+
+   int h = EventOpenWrite();
+   if(h == INVALID_HANDLE)
+     {
       Print("[EVENT] falha ao abrir: ", EV_FILE, " | Err=", GetLastError());
       return false;
-   }
+     }
 
-   FileSeek(evHandle, 0, SEEK_END);
+   //--------------------------------------------------
+   // F4: criacao de header SERIALIZADA
+   // (arranque simultaneo das 11 instancias: so 1 grava)
+   //--------------------------------------------------
+   if(FileSize(h) == 0)
+     {
+      bool headerWritten = false;
+      if(EventLockAcquire())
+        {
+         FileSeek(h, 0, SEEK_END);   // reconfirma apos lock
+         if(FileSize(h) == 0)
+           {
+            FileWrite(h,
+               "Time","Event","Symbol","TF","Ticket","Severity",
+               "Module","Message","Value","Status");
+            FileFlush(h);
+            headerWritten = true;
+           }
+         EventLockRelease();
+        }
+      else
+         Print("[EVENT] WARN | header sem lock (concorrencia) | append-only continuara");
+     }
 
-   if(FileSize(evHandle) == 0 && EventLock())
-   {
-      FileSeek(evHandle, 0, SEEK_END);
-      if(FileSize(evHandle) == 0)
-      {
-         FileWrite(evHandle,
-            "Time","Event","Symbol","TF","Ticket","Severity",
-            "Module","Message","Value","Status");
-         FileFlush(evHandle);
-      }
-      EventUnlock();
-   }
+   FileClose(h);
 
    evInitialized = true;
    return true;
 }
 
 //==================================================
-// EMIT - funcao central
+// WRITE - nucleo de escrita (chamado APOS o lock)
+// Abre handle novo -> seek END -> write -> flush -> fecha.
+//==================================================
+bool EventWriteLine(const string event,
+                    const string severity,
+                    const string sym,
+                    const string tf,
+                    const long   ticket,
+                    const string module,
+                    const string message,
+                    const string value,
+                    const string status)
+{
+   int h = EventOpenWrite();
+   if(h == INVALID_HANDLE)
+     {
+      Print("[EVENT] falha ao abrir (write): ", EV_FILE, " | Err=", GetLastError());
+      return false;
+     }
+
+   FileSeek(h, 0, SEEK_END);
+
+   FileWrite(h,
+      TimeToString(TimeCurrent(), TIME_DATE | TIME_SECONDS),
+      event,
+      sym,
+      tf,
+      (ticket > 0 ? IntegerToString((long)ticket) : "0"),
+      severity,
+      module,
+      message,
+      value,
+      status);
+
+   FileFlush(h);
+   FileClose(h);
+
+   return true;
+}
+
+//==================================================
+// EMIT - funcao central (escrita serializada)
 //==================================================
 bool EventEmit(
    const string event,
@@ -162,32 +198,30 @@ bool EventEmit(
    if(!evInitialized)
       EventInit();
 
-   if(evHandle == INVALID_HANDLE)
-      return false;
-
    string sym = (symbol == "" ? _Symbol : symbol);
    string tf  = EnumToString((ENUM_TIMEFRAMES)Period());
 
-   if(!EventLock())
+   //--------------------------------------------------
+   // F4: serializa a escrita (1 produtor por vez no CSV).
+   //--------------------------------------------------
+   if(!EventLockAcquire())
+     {
+      g_ev_dropped++;
+      Print("[EVENT] DROP | ", event, " | ", symbol,
+            " | total_dropped=", g_ev_dropped,
+            " | timeouts=", g_ev_lock_timeouts);
       return false;
+     }
 
-   FileSeek(evHandle, 0, SEEK_END);
+   bool ok = EventWriteLine(event, severity, sym, tf, ticket,
+                            module, message, value, status);
 
-   FileWrite(evHandle,
-      TimeToString(TimeCurrent(), TIME_DATE | TIME_SECONDS),
-      event,
-      sym,
-      tf,
-      (ticket > 0 ? IntegerToString((long)ticket) : "0"),
-      severity,
-      module,
-      message,
-      value,
-      status);
+   EventLockRelease();
 
-   FileFlush(evHandle);
-   EventUnlock();
-   return true;
+   if(ok)
+      g_ev_written++;
+
+   return ok;
 }
 
 //==================================================
@@ -336,30 +370,29 @@ bool EventSystemError(string reason)
 //==================================================
 void EventFlush()
 {
-   if(evHandle != INVALID_HANDLE)
-      FileFlush(evHandle);
+   // Sem handle persistente (F4): cada escrita ja faz flush+close.
+   EventLockRelease();   // libera lock se esta instancia o deteve
 }
 
 void EventShutdown()
 {
-   EventUnlock();
-   if(evHandle != INVALID_HANDLE)
-   {
-      FileFlush(evHandle);
-      FileClose(evHandle);
-      evHandle = INVALID_HANDLE;
-   }
+   // F4: nao mantemos handle aberto; apenas libera lock e reinicia flag.
+   EventLockRelease();
    evInitialized = false;
 }
 
 //==================================================
-// SUMMARY
+// SUMMARY (F4: inclui estatisticas de serializacao)
 //==================================================
 string EventSummary()
 {
-   return StringFormat("EventEmitter | File=%s | State=%s",
+   return StringFormat(
+      "EventEmitter | File=%s | State=%s | Written=%d | Dropped=%d | %s",
       EV_FILE,
-      (evHandle != INVALID_HANDLE ? "ON" : "OFF"));
+      (evInitialized ? "ON" : "OFF"),
+      g_ev_written,
+      g_ev_dropped,
+      EventLockStats());
 }
 
 #endif // EVENT_EMITTER_MQH

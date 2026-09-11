@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Tabelas PRO estilo terminal de trading (MetaTrader 5 / TradingView).
 Cores de bid/ask, formatação condicional e cabeçalho estilizado.
@@ -111,6 +112,17 @@ class ScrollableTable(tk.Frame):
         vs = ttk.Scrollbar(self, orient="vertical", command=self.tree.yview)
         vs.pack(side="right", fill="y")
         self.tree.configure(yscrollcommand=vs.set)
+
+    # ------------------------------------------------------------------
+    # Delegação da API de dados para o Treeview interno: permite chamar
+    # set_rows/clear direto no wrapper (usado por market.py e testes).
+    # ------------------------------------------------------------------
+    def set_rows(self, rows: list[list[Any]], tags: list[str] | None = None) -> None:
+        self.tree.set_rows(rows, tags)
+
+    def clear(self) -> None:
+        self.tree.clear()
+
 
 
 class MarketTable(ScrollableTable):

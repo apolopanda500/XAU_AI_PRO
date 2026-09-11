@@ -92,6 +92,13 @@ double GetATR(string symbol)
    if(symbol=="")
       return GetATR();
 
+   // Normaliza com os digitos do proprio simbolo (nao do chart),
+   // senao ATR de pares com mais casas (ex: EURUSD, 5 digitos)
+   // e arredondado a zero (NormalizeDouble(x,_Digits) com _Digits=2).
+   int symbolDigits=(int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+   if(symbolDigits<=0)
+      symbolDigits=_Digits;
+
    int handle=iATR(symbol, PERIOD_CURRENT, VOLATILITY_ATR_PERIOD);
    if(handle==INVALID_HANDLE)
       return 0.0;
@@ -101,7 +108,7 @@ double GetATR(string symbol)
 
    double result=0.0;
    if(CopyBuffer(handle, 0, 0, 1, buf) > 0)
-      result=NormalizeDouble(buf[0], _Digits);
+      result=NormalizeDouble(buf[0], symbolDigits);
 
    IndicatorRelease(handle);
    return result;

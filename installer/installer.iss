@@ -14,7 +14,9 @@
 ; Compilacao: "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
 ; ============================================================
 #define MyAppName "XAU AI PRO"
+#ifndef MyAppVersion
 #define MyAppVersion "1.2.0"
+#endif
 #define MyAppPublisher "XAU AI PRO"
 #define MyAppExeName "XAU_AI_PRO.exe"
 ; MyRoot pode ser sobrescrito na linha de comando do ISCC (CI):
@@ -35,8 +37,9 @@ AppPublisher={#MyAppPublisher}
 DefaultDirName={userappdata}\XAU_AI_PRO
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
-OutputDir=.
-OutputBaseFilename=XAU_AI_PRO_Setup
+
+OutputDir={#MyRoot}\dist
+OutputBaseFilename=XAU_AI_PRO_Setup_{#MyAppVersion}
 ; Compressao normal: lzma2/ultra64 no EXE de ~175MB levaria ~7h de build.
 ; lzma2/normal leva poucos minutos (o EXE ja vem compactado pelo PyInstaller/UPX).
 Compression=lzma2/normal
@@ -103,7 +106,6 @@ Source: "{#MyRoot}\app\components\*.py"; DestDir: "{app}\app\components"; Flags:
 Source: "{#MyRoot}\app\tabs\*.py"; DestDir: "{app}\app\tabs"; Flags: ignoreversion; Excludes: "*__pycache__*,*.pyc"
 Source: "{#MyRoot}\app\theme\*.py"; DestDir: "{app}\app\theme"; Flags: ignoreversion; Excludes: "*__pycache__*,*.pyc"
 Source: "{#MyRoot}\app\utils\*.py"; DestDir: "{app}\app\utils"; Flags: ignoreversion; Excludes: "*__pycache__*,*.pyc"
-Source: "{#MyRoot}\app\data\config.json"; DestDir: "{app}\app\data"; Flags: ignoreversion
 
 ; ============================================================
 ; 4) EA MQL5 + includes + presets (estrutura COMPLETA do EA)
@@ -124,7 +126,6 @@ Source: "{#MyRoot}\MQL5\Experts\XAU_AI_PRO\Monitoring\*.mqh"; DestDir: "{app}\MQ
 ; 5) Include compartilhado (KCI) e Scripts de integracao
 ; ============================================================
 Source: "{#MyRoot}\MQL5\Include\KCI\*.mqh"; DestDir: "{app}\MQL5\Include\KCI"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "{#MyRoot}\MQL5\Scripts\*.ex5"; DestDir: "{app}\MQL5\Scripts"; Flags: ignoreversion
 Source: "{#MyRoot}\MQL5\Scripts\*.mq5"; DestDir: "{app}\MQL5\Scripts"; Flags: ignoreversion
 
 ; ============================================================
@@ -214,9 +215,14 @@ begin
   if CurStep = ssPostInstall then
   begin
     if DetectedMT5 = '' then
+      DetectedMT5 := FindTerminalDataPath();
+    if DetectedMT5 = '' then
+    begin
+      if (Pos('/SILENT', UpperCase(GetCmdTail())) = 0) and (Pos('/VERYSILENT', UpperCase(GetCmdTail())) = 0) then
       MsgBox('Nao foi possivel localizar uma instalacao do MetaTrader 5.' + #13#10 +
              'O XAU AI PRO foi instalado em {app}.' + #13#10 +
              'Abra o MetaTrader 5 e carregue o EA manualmente, se aplicavel.',
              mbInformation, MB_OK);
+    end;
   end;
 end;

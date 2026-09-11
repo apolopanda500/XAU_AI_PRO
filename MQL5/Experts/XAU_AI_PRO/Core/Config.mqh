@@ -177,17 +177,6 @@ input bool   RequireAIJSON      = false;
 // Padrao 900s = 15 min (~3 candles M5).
 //==================================================
 input int    MaxPredictionAgeSec = 900;
-//==================================================
-// IA - GATE DIRECIONAL (ETAPA 20.x)
-// Exige que a predicao do modelo concorde com a
-// direcao do sinal tecnico (BUY/SELL) acima de um
-// limiar de probabilidade. Desligado por padrao
-// para preservar o baseline; ative nos testes que
-// medem o impacto da IA na win-rate.
-//==================================================
-input bool   AIRequireDirection  = false;
-input double AIMinDirectionProb  = 60.0;   // prob minima (0-100) da direcao para liberar
-
 
 //==================================================
 // KCI v1.2.0
@@ -272,7 +261,8 @@ input bool DebugTradeDecision   = true;
 //==================================================
 input bool EnableHealthMonitor   = true;   // HealthMonitor + WatchDog integrado
 input int  HealthCheckInterval   = 60;     // segundos entre health checks completos
-input int  HealthWatchdogInterval= 120;    // segundos sem heartbeat para contar falha
+input int  HealthWatchdogInterval= 120;    // segundos sem heartbeat para contar falha (liveness)
+input int  HealthPipelineProgressTimeout= 0;  // 0 = auto (2x cadencia da vela, min WatchdogInterval)
 input bool EnableAuditLog        = true;   // Auditoria (decisoes + full audit)
 input bool EnableDiagnostics     = true;   // Diagnostico completo no OnInit
 
@@ -337,10 +327,10 @@ input string Symbols=
 "USDCAD,"
 "NZDUSD,"
 "USDCHF,"
-"XAGUSD,"
-"US30,"
-"US500,"
-"USTEC";
+"USDBRL,"
+"USDSEK,"
+
+"USDCNH";
 
 //==================================================
 // DEBUG - NAO ALTERE

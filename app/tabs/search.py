@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Aba Pesquisa: busca global no XAU_AI_PRO (MCP, agentes, chats, ativos, calendario).
 """

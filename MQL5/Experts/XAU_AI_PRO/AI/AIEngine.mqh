@@ -316,6 +316,9 @@ double AdvancedAIScore(int signal, string symbol="")
    double trend = GetADX(symbol);
    if(trend > 100.0)
       trend = 100.0;
+   // F4/20.15 §3: ADX indisponivel (negativo) -> neutro, sem penalizar
+   if(trend < 0.0)
+      trend = 0.0;
    score += trend * GetStrengthWeight();
 
    //------------------------------------------
@@ -358,42 +361,6 @@ bool FinalAIAllow(int signal, string symbol="")
 
    if(symbol == "")
       symbol = _Symbol;
-
-   //------------------------------------------------
-   // ETAPA 20.x: GATE DIRECIONAL DA IA
-   // Quando AIRequireDirection=true, exige que a
-   // predicao (prediction_<SYMBOL>.json) concorde com
-   // a direcao do sinal tecnico com probabilidade
-   // >= AIMinDirectionProb. SELL vs BUY = veto.
-   // UNAVAILABLE/ausencia de JSON = fail-safe (nao
-   // bloqueia; o score base prevalece).
-   //------------------------------------------------
-   if(AIRequireDirection)
-   {
-      if(LoadAIPrediction(symbol) && AI_Signal != "UNAVAILABLE")
-      {
-         double dirProb =
-            (signal > 0) ? AI_BuyProbability : AI_SellProbability;
-
-         bool aiAgrees =
-            (signal > 0 && (AI_Signal == "BUY" || AI_Signal == "STRONG_BUY")) ||
-            (signal < 0 && (AI_Signal == "SELL" || AI_Signal == "STRONG_SELL"));
-
-         if(!aiAgrees || dirProb < AIMinDirectionProb)
-         {
-            PrintFormat(
-               "[ADV AI] DIRECTION VETO | Signal=%d | AI=%s | DirProb=%.2f | Min=%.2f | %s",
-               signal,
-               AI_Signal,
-               dirProb,
-               AIMinDirectionProb,
-               symbol
-            );
-            EventAIBlock(symbol, "AI_direction_veto");
-            return false;
-         }
-      }
-   }
 
    double score = AdvancedAIScore(signal, symbol);
 

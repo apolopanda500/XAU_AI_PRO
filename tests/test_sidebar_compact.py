@@ -37,8 +37,11 @@ def test_sidebar_expande_no_hover(root_tk):
 
 def test_sidebar_itens_esperados(root_tk):
     sb = Sidebar(root_tk, lambda k: None)
-    assert set(sb._items.keys()) == {"dashboard", "market", "robot", "system"}
+    assert set(sb._items.keys()) == {"dashboard", "market", "charts", "robot", "tester", "vision", "system"}
     assert sb._items["dashboard"].label == "Painel"
+    assert sb._items["charts"].label == "Gráficos"
+    assert sb._items["tester"].label == "Strategy Tester"
+    assert sb._items["vision"].label == "Visão do Robô"
     assert sb._items["system"].label == "Configuração"
 
 

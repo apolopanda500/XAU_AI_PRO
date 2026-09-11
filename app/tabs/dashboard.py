@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Aba Dashboard PRO do app XAU_AI_PRO.
 Layout profissional com KPIs, gráfico de equity e status de operações.

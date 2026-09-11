@@ -13,6 +13,20 @@ int adxHandle = INVALID_HANDLE;
 double adxBuffer[];
 
 //==================================================
+// MÉTRICAS ADX (F4/20.15)
+// adx_unavailable_count: nº de lecturas en las que el
+//   ADX no estaba disponible (warm-up/INVALID_HANDLE/err 4807-4073)
+//   -> el consumidor hace SKIP (fail-open).
+// adx_valid_count: nº de lecturas con valor ADX válido y > 0.
+// Si unavailable_count se mantiene ALTO en operación normal,
+// indica un problema persistente del indicador (y el fail-open
+// lo estaría enmascarando). Reset en InitADX.
+//==================================================
+
+int g_adxUnavailable = 0;
+int g_adxValid       = 0;
+
+//==================================================
 // INIT
 //==================================================
 
@@ -42,6 +56,9 @@ bool InitADX()
    ArrayResize(adxBuffer, 3);
    ArraySetAsSeries(adxBuffer, true);
 
+   g_adxUnavailable = 0;
+   g_adxValid       = 0;
+
    Print(
       "[ADX] INIT OK | Symbol=",
       _Symbol,
@@ -54,12 +71,26 @@ bool InitADX()
 
 //==================================================
 // GET CURRENT ADX
+// F4/20.15 §3: retorna -1.0 (sentinel "indisponivel")
+// quando o indicador nao esta pronto (INVALID_HANDLE,
+// warm-up com poucos dados, CopyBuffer err 4807/4073).
+// Consumidores tratam valor negativo como neutro/skip.
 //==================================================
 
 double GetADX()
 {
    if(adxHandle == INVALID_HANDLE)
-      return 0.0;
+   {
+      g_adxUnavailable++;
+      return -1.0;
+   }
+
+   // Warm-up: dados insuficientes para o ADX ficar estable
+   if(Bars(_Symbol, PERIOD_CURRENT) < ADXPeriod * 3)
+   {
+      g_adxUnavailable++;
+      return -1.0;
+   }
 
    ResetLastError();
 
@@ -73,9 +104,18 @@ double GetADX()
 
    if(copied != 1)
    {
+      int err = GetLastError();
+
+      // 4807 = indicador aún no inicializado; 4073 = serie no encontrada
+      if(err == 4807 || err == 4073)
+      {
+         g_adxUnavailable++;
+         return -1.0;
+      }
+
       Print(
          "[ADX] CopyBuffer failed | Error=",
-         GetLastError()
+         err
       );
 
       return 0.0;
@@ -85,6 +125,8 @@ double GetADX()
 
    if(value <= 0.0)
       return 0.0;
+
+   g_adxValid++;
 
    return value;
 }
@@ -101,7 +143,15 @@ double GetADX(string symbol)
    if(!SymbolSelect(symbol, true))
    {
       Print("[ADX] SymbolSelect failed: ", symbol);
-      return 0.0;
+      g_adxUnavailable++;
+      return -1.0;
+   }
+
+   // Warm-up: datos insuficientes para el ADX quede estable
+   if(Bars(symbol, PERIOD_CURRENT) < ADXPeriod * 3)
+   {
+      g_adxUnavailable++;
+      return -1.0;
    }
 
    int handle = iADX(
@@ -119,12 +169,15 @@ double GetADX(string symbol)
          GetLastError()
       );
 
-      return 0.0;
+      g_adxUnavailable++;
+      return -1.0;
    }
 
    double buffer[];
 
    ArraySetAsSeries(buffer, true);
+
+   ResetLastError();
 
    int copied = CopyBuffer(
       handle,
@@ -137,7 +190,24 @@ double GetADX(string symbol)
    double result = 0.0;
 
    if(copied == 1)
+   {
       result = buffer[0];
+
+      if(result > 0.0)
+         g_adxValid++;
+      else
+         g_adxUnavailable++;
+   }
+   else
+   {
+      int err = GetLastError();
+
+      if(err == 4807 || err == 4073)
+      {
+         result = -1.0;
+         g_adxUnavailable++;
+      }
+   }
 
    IndicatorRelease(handle);
 
@@ -146,14 +216,17 @@ double GetADX(string symbol)
 
 //==================================================
 // FILTER
+// F4/20.15 §3: ADX indisponible (negativo) -> fail-open
+// (retorna true = neutro, no bloquea). Solo bloquea
+// cuando hay un valor valido por debajo del minimo.
 //==================================================
 
 bool ADX_OK()
 {
    double adx = GetADX();
 
-   if(adx <= 0.0)
-      return false;
+   if(adx < 0.0)
+      return true;
 
    return (adx >= MinimumADX);
 }
@@ -169,8 +242,8 @@ bool ADX_OK(string symbol)
 
    double adx = GetADX(symbol);
 
-   if(adx <= 0.0)
-      return false;
+   if(adx < 0.0)
+      return true;
 
    return (adx >= MinimumADX);
 }
@@ -202,6 +275,29 @@ double GetADXStrength(string symbol = "")
       return 30.0;
 
    return 0.0;
+}
+
+//==================================================
+// GETTERS ADX (F4/20.15)
+//==================================================
+
+int ADXGetUnavailableCount()
+{
+   return g_adxUnavailable;
+}
+
+int ADXGetValidCount()
+{
+   return g_adxValid;
+}
+
+string ADXMetricsSummary()
+{
+   return StringFormat(
+      "ADX | unavailable=%d | valid=%d",
+      g_adxUnavailable,
+      g_adxValid
+   );
 }
 
 //==================================================

@@ -1,4 +1,5 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """Deploy automatico do backend XAU_AI_PRO via Vercel Deploy Hook.
 
 O Deploy Hook permite disparar um novo deploy sem autenticacao adicional,

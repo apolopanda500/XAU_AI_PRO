@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Aba de controle do Robo MT5.
 """

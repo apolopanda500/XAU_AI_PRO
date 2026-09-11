@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """MT5 terminal path resolver and symbol mapping for XAU_AI_PRO.
 
 Resolve dinamicamente o caminho do terminal MetaTrader 5,

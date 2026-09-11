@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Aba Configuracoes do app XAU_AI_PRO.
 """

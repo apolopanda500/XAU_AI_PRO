@@ -1,4 +1,5 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """ETAPA 18.12 - Testes obrigatorios da IA (fail-safe determinístico).
 
 Executa os 9 casos usando prediction_gateway + confidence (sem I/O real

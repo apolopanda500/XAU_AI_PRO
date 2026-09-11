@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from PIL import Image, ImageDraw
 
 img = Image.new('RGBA', (256, 256), (10, 11, 14, 255))

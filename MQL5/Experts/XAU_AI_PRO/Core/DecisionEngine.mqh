@@ -177,6 +177,7 @@ double CalculateMarketScore(
    }
 
 
+       emaFastHandle=INVALID_HANDLE;  // v1.2.1-crashfix: invalidate after release
    if(
       emaSlowHandle!=INVALID_HANDLE
    )
@@ -187,6 +188,7 @@ double CalculateMarketScore(
    }
 
 
+       emaSlowHandle=INVALID_HANDLE;  // v1.2.1-crashfix: invalidate after release
    //================================================
    // RSI QUALITY
    //================================================

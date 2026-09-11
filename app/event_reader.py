@@ -1,4 +1,5 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """Leitor do Event Stream (ETAPA 15.6.2/15.6.4).
 
 Contrato: Docs/contracts/ea_python_app_contract.md (Contrato C - Eventos).

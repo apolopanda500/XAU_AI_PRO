@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Componentes visuais PRO estilo TradingView/Binance para o app XAU_AI_PRO.
 Cards com glassmorphism, KPIs com indicadores visuais, badges e botões modernos.

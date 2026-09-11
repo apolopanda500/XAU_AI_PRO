@@ -1,4 +1,4 @@
-﻿//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
 //|                                              SmartExecution.mqh |
 //|                                  Smart Execution Engine - Core   |
 //|                                            XAU_AI_PRO v1.2.0      |
@@ -975,12 +975,12 @@ string CSmartExecution::GetExecutionSummary()
 
    summary+=
       IntegerToString(
-         CPositionSynchronizer::GetTotalPositions()
+         CPositionSynchronizer::GetTerminalPositions()
       );
 
 
    summary+=
-      " total\n";
+      " total EA (terminal)\n";
 
 
    QualityScore lastScore=

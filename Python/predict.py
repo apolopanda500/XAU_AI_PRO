@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Módulo de predição multi-ativo do XAU_AI_PRO."""
 
 from __future__ import annotations

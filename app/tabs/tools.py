@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Aba Ferramentas do app XAU_AI_PRO.
 
@@ -12,6 +13,7 @@ from __future__ import annotations
 
 import csv
 import os
+import json
 import threading
 import time
 import tkinter as tk
@@ -26,6 +28,7 @@ from app.market_data import MarketData
 from app.mt5_robot import MT5Robot
 from app.theme.mexc import Theme
 from app.utils.async_ui import run_bg
+from app.utils.paths import get_data_dir
 
 # Caminho do audit do EA (gerado pelo MQL5) - busca em varias localizacoes
 _RES = Path(__file__).resolve()
@@ -70,6 +73,40 @@ def _current_log_path() -> Path | None:
         return None
 
 
+def _should_fire(price: float, target: float, cond: str) -> bool:
+    """Regra de disparo de alerta: 'acima' cruza para cima, 'abaixo' para baixo."""
+    if cond == "acima":
+        return price >= target
+    if cond == "abaixo":
+        return price <= target
+    return False
+
+
+def _alerts_path() -> Path:
+    p = get_data_dir() / "alerts.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def _load_alerts_disk() -> list[dict]:
+    try:
+        p = _alerts_path()
+        if p.exists():
+            data = json.loads(p.read_text(encoding="utf-8"))
+            if isinstance(data, list):
+                return [d for d in data if isinstance(d, dict)]
+    except Exception:
+        pass
+    return []
+
+
+def _save_alerts_disk(alerts: list[dict]) -> None:
+    try:
+        _alerts_path().write_text(json.dumps(alerts, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+
 class ToolsTab:
     def __init__(self, parent: tk.Widget, robot: MT5Robot, market: MarketData,
                  on_status: Callable[[str], None]) -> None:
@@ -80,7 +117,12 @@ class ToolsTab:
         self.frame = tk.Frame(parent, bg=Theme.BG)
         self.frame.pack(fill="both", expand=True)
         self._auto_running = False
+        self._last_rows: list[list[str]] = []
+        self._alerts: list[dict] = _load_alerts_disk()
+        self._alerts_monitor = True
         self._build()
+        self._refresh_alerts_list()
+        threading.Thread(target=self._alert_monitor_loop, daemon=True).start()
 
     def _build(self) -> None:
         from app.components.banner import TabBanner
@@ -96,6 +138,7 @@ class ToolsTab:
                                  fg=Theme.TEXT_SECONDARY, font=(Theme.FONT_FAMILY, 9))
         self.last_lbl.pack(side="right")
         PrimaryButton(header, text="Atualizar", command=self.refresh, width=12).pack(side="right", padx=8)
+        SecondaryButton(header, text="Exportar CSV", command=self.export_history_csv, width=13).pack(side="right", padx=4)
 
         # ---------------- Historico de Operacoes ----------------
         hist_card = Card(self.frame, title="Historico de Operacoes (EA + MT5)")
@@ -138,6 +181,37 @@ class ToolsTab:
         self.mov_filter.insert(0, "Trades")
         self.mov_filter.pack(side="left", padx=4)
         SecondaryButton(mov_row, text="Aplicar", command=self.refresh_movimentos, width=10).pack(side="left", padx=6)
+
+        # ---------------- Alertas de Preco ---------------- 
+        alerts_card = Card(self.frame, title="Alertas de Preco (monitora em tempo real)")
+        alerts_card.pack(fill="x", padx=24, pady=10)
+        alerts_form = tk.Frame(alerts_card.body, bg=Theme.CARD)
+        alerts_form.pack(fill="x", padx=8, pady=(8, 4))
+        tk.Label(alerts_form, text="Ativo", bg=Theme.CARD, fg=Theme.TEXT_SECONDARY).pack(side="left", padx=4)
+        self.alert_sym = tk.Entry(alerts_form, width=9, bg=Theme.PANEL, fg=Theme.TEXT,
+                                  insertbackground=Theme.TEXT, relief="flat",
+                                  highlightbackground=Theme.BORDER, highlightthickness=1)
+        self.alert_sym.insert(0, "XAUUSD")
+        self.alert_sym.pack(side="left", padx=4)
+        tk.Label(alerts_form, text="Preco", bg=Theme.CARD, fg=Theme.TEXT_SECONDARY).pack(side="left", padx=4)
+        self.alert_price = tk.Entry(alerts_form, width=10, bg=Theme.PANEL, fg=Theme.TEXT,
+                                    insertbackground=Theme.TEXT, relief="flat",
+                                    highlightbackground=Theme.BORDER, highlightthickness=1)
+        self.alert_price.pack(side="left", padx=4)
+        tk.Label(alerts_form, text="Condicao", bg=Theme.CARD, fg=Theme.TEXT_SECONDARY).pack(side="left", padx=4)
+        self.alert_cond = tk.StringVar(value="acima")
+        tk.OptionMenu(alerts_form, self.alert_cond, "acima", "abaixo").pack(side="left", padx=4)
+        AccentButton(alerts_form, text="Adicionar", command=self._add_alert, width=10).pack(side="left", padx=6)
+        SecondaryButton(alerts_form, text="Remover sel.", command=self._remove_alert, width=11).pack(side="left", padx=4)
+        SecondaryButton(alerts_form, text="Ativar/Desativar", command=self._toggle_alert, width=15).pack(side="left", padx=4)
+        SecondaryButton(alerts_form, text="Limpar", command=self._clear_alerts, width=9).pack(side="left", padx=4)
+        self.alerts_list = tk.Listbox(alerts_card.body, bg=Theme.PANEL, fg=Theme.TEXT, height=4,
+                                      relief="flat", highlightbackground=Theme.BORDER,
+                                      highlightthickness=1, selectbackground=Theme.ACCENT,
+                                      selectforeground=Theme.TEXT_DARK if hasattr(Theme, "TEXT_DARK") else "white",
+                                      font=(Theme.FONT_MONO, 9))
+        self.alerts_list.pack(fill="x", padx=8, pady=(4, 8))
+        self.alerts_list.bind("<Double-Button-1>", lambda e: self._toggle_alert())
 
         # ---------------- Calculadora de Lote + Notas ----------------
         bottom = tk.Frame(self.frame, bg=Theme.BG)
@@ -322,6 +396,7 @@ class ToolsTab:
         if not rows:
             rows = [["--"] * 9]
             tags = ["flat"]
+        self._last_rows = rows
         self.hist_table.tree.set_rows(rows, tags)
 
     # ------------------------------------------------------------------
@@ -375,6 +450,109 @@ class ToolsTab:
     # ------------------------------------------------------------------
     # Utilidades
     # ------------------------------------------------------------------
+    def export_history_csv(self) -> None:
+        rows = [r for r in self._last_rows if r != ["--"] * 9]
+        path = Path.home() / "Desktop" / f"historico_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        try:
+            with open(path, "w", newline="", encoding="utf-8") as fh:
+                w = csv.writer(fh)
+                w.writerow(["Time", "Ticket", "Symbol", "Price", "Side", "Confidence",
+                            "Entry Reason", "Exit Reason", "Result"])
+                w.writerows(rows)
+            self.on_status(f"Historico exportado: {len(rows)} registro(s) -> {path.name}")
+        except Exception as e:
+            self.on_status(f"Erro ao exportar: {e}")
+
+    # ------------------------------------------------------------------
+    # Alertas de preco
+    # ------------------------------------------------------------------
+    def _add_alert(self) -> None:
+        symbol = (self.alert_sym.get().strip() or "XAUUSD").upper()
+        try:
+            price = float(self.alert_price.get().strip())
+            if price <= 0:
+                raise ValueError
+        except ValueError:
+            self.on_status("Preco do alerta invalido")
+            return
+        cond = self.alert_cond.get()
+        for a in self._alerts:
+            if a.get("symbol") == symbol and a.get("cond") == cond and a.get("active", True):
+                a["price"] = price
+                break
+        else:
+            self._alerts.append({"symbol": symbol, "price": price, "cond": cond,
+                                 "active": True, "fired": False})
+        _save_alerts_disk(self._alerts)
+        self._refresh_alerts_list()
+        self.on_status(f"Alerta: {symbol} {cond} {price:,.2f}")
+
+    def _remove_alert(self) -> None:
+        idx = self.alerts_list.curselection()
+        if idx and 0 <= idx[0] < len(self._alerts):
+            self._alerts.pop(idx[0])
+            _save_alerts_disk(self._alerts)
+            self._refresh_alerts_list()
+            self.on_status("Alerta removido")
+
+    def _toggle_alert(self) -> None:
+        idx = self.alerts_list.curselection()
+        if idx and 0 <= idx[0] < len(self._alerts):
+            a = self._alerts[idx[0]]
+            a["active"] = not a.get("active", True)
+            a["fired"] = False
+            _save_alerts_disk(self._alerts)
+            self._refresh_alerts_list()
+
+    def _clear_alerts(self) -> None:
+        self._alerts = []
+        _save_alerts_disk(self._alerts)
+        self._refresh_alerts_list()
+        self.on_status("Alertas limpos")
+
+    def _refresh_alerts_list(self) -> None:
+        self.alerts_list.delete(0, "end")
+        if not self._alerts:
+            self.alerts_list.insert("end", "(nenhum alerta - adicione acima)")
+            return
+        for a in self._alerts:
+            state = "ATIVO" if a.get("active", True) else "off"
+            icon = "!" if a.get("fired") else " "
+            self.alerts_list.insert("end",
+                                    f"[{state}] {icon} {a['symbol']} {a.get('cond', '')} {a.get('price', 0):,.2f}")
+
+    def _alert_monitor_loop(self) -> None:
+        while self._alerts_monitor:
+            try:
+                self._check_alerts_once()
+            except Exception:
+                pass
+            time.sleep(10)
+
+    def _check_alerts_once(self) -> None:
+        active = [a for a in self._alerts if a.get("active", True) and not a.get("fired")]
+        if not active:
+            return
+        symbols = sorted({a["symbol"] for a in active})
+        quotes = {}
+        try:
+            quotes = self.market.get_many(symbols) or {}
+        except Exception:
+            quotes = {}
+        changed = False
+        for a in active:
+            q = quotes.get(a["symbol"])
+            if q is None or q.price is None:
+                continue
+            if _should_fire(float(q.price), float(a["price"]), a.get("cond", "acima")):
+                a["fired"] = True
+                changed = True
+                self.frame.after(0, lambda s=a["symbol"], p=q.price: self.on_status(
+                    f"ALERTA: {s} em {p:,.2f}"))
+        if changed:
+            _save_alerts_disk(self._alerts)
+            self.frame.after(0, self._refresh_alerts_list)
+
     def calc_lot(self) -> None:
         try:
             balance = float(self.entry_balance.get())

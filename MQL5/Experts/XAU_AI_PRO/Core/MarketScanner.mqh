@@ -11,44 +11,43 @@
 #include "../AI/AIEngine.mqh"
 
 //==================================================
-// LATCH DE SINAL v1.2.0
-// Evita re-entrada na MESMA vela fechada [1].
-// 1 operacao por vela fechada por simbolo.
+// F3 v1.2.2 - LATCH GLOBAL POR VELA
+// 1 decisao por vela fechada por simbolo, independente
+// do processo/instancia. Chave GlobalVariable:
+// XAI_PRO_LATCH_<symbol>_<bar_time>
+// (substitui o array em memoria g_tradedSignals[],
+//  que era local a cada instancia do EA)
 //==================================================
 
-struct TradedSignal
-{
-   string   symbol;
-   datetime barTime;
-};
+#define LATCH_PREFIX "XAI_PRO_LATCH_"
 
-TradedSignal g_tradedSignals[];
+string LatchKey(string symbol, datetime barTime)
+{
+   return LATCH_PREFIX + symbol + "_" + IntegerToString((long)barTime);
+}
 
 bool AlreadyTradedThisBar(string symbol, datetime barTime)
 {
-   for(int i = 0; i < ArraySize(g_tradedSignals); i++)
-   {
-      if(g_tradedSignals[i].symbol == symbol &&
-         g_tradedSignals[i].barTime == barTime)
-         return true;
-   }
-   return false;
+   if(barTime <= 0)
+      return false;
+   return GlobalVariableCheck(LatchKey(symbol, barTime));
 }
 
 void MarkTradedBar(string symbol, datetime barTime)
 {
-   for(int i = 0; i < ArraySize(g_tradedSignals); i++)
+   if(barTime <= 0)
+      return;
+   GlobalVariableSet(LatchKey(symbol, barTime), (double)barTime);
+
+   // Cleanup: remove chaves antigas do MESMO simbolo (evita acumulo)
+   string prefix = LATCH_PREFIX + symbol + "_";
+   string current = LatchKey(symbol, barTime);
+   for(int i = GlobalVariablesTotal() - 1; i >= 0; i--)
    {
-      if(g_tradedSignals[i].symbol == symbol)
-      {
-         g_tradedSignals[i].barTime = barTime;
-         return;
-      }
+      string name = GlobalVariableName(i);
+      if(StringFind(name, prefix, 0) == 0 && name != current)
+         GlobalVariableDel(name);
    }
-   int size = ArraySize(g_tradedSignals);
-   ArrayResize(g_tradedSignals, size + 1);
-   g_tradedSignals[size].symbol = symbol;
-   g_tradedSignals[size].barTime = barTime;
 }
 
 //==================================================
@@ -99,7 +98,7 @@ void ProcessSymbol(string symbol)
 
 
    //================================================
-   // LATCH v1.2.0 - 1 operacao por vela fechada
+   // LATCH v1.2.0/F3 - 1 operacao por vela fechada
    //================================================
 
    datetime signalBar = iTime(symbol, PERIOD_CURRENT, 1);
@@ -217,7 +216,7 @@ void ProcessSymbol(string symbol)
    }
 
 
-   // v1.2.0 - marca a vela como negociada (evita reentrada)
+   // v1.2.0/F3 - marca a vela como negociada (evita reentrada)
    if(signalBar > 0)
       MarkTradedBar(symbol, signalBar);
 
