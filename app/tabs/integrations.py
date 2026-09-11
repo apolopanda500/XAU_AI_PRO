@@ -24,6 +24,7 @@ from app.integrations_client import (
     mcp_ping,
     load_mcp_servers, mcp_server_ping,
     models_url_test,
+    kilo_test,
     sentry_test,
     slack_test,
     instalados,
@@ -106,6 +107,7 @@ class IntegrationsTab:
         )
         self.sentry_dsn = self._card_sentry(body, c.get("integrations", "sentry", "dsn", default=""))
         self.slack_hook = self._card_slack(body, c.get("integrations", "slack", "webhook", default=""))
+        self.kilo_hook = self._card_kilo(body, c.get("integrations", "kilo", "webhook", default=""))
         self.models_url = self._card_models(body, c.get("integrations", "models", "base_url", default=""))
 
         self._widgets = {
@@ -114,6 +116,7 @@ class IntegrationsTab:
             "figma": self.figma_cfg["result"],
             "sentry": self.sentry_dsn["result"],
             "slack": self.slack_hook["result"],
+            "kilo": self.kilo_hook["result"],
             "models": self.models_url["result"],
         }
 
@@ -477,6 +480,22 @@ class IntegrationsTab:
         SecondaryButton(row, text="Enviar mensagem teste", command=self.test_slack, width=20).pack(side="left", padx=4)
         return {"webhook": e_hook, "result": res}
 
+    def _card_kilo(self, body, webhook: str) -> dict[str, tk.Entry]:
+        card = Card(body, title="Kilo - Sessoes (inbound webhook)")
+        card.pack(fill="x", padx=24, pady=10)
+        form = tk.Frame(card.body, bg=Theme.CARD)
+        form.pack(fill="x", padx=8, pady=8)
+        tk.Label(form, text="Webhook URL", bg=Theme.CARD, fg=Theme.TEXT_SECONDARY).grid(row=0, column=0, sticky="w", padx=4)
+        e_hook = _entry(form, width=62)
+        e_hook.insert(0, webhook)
+        e_hook.grid(row=0, column=1, padx=4, pady=3)
+        res = _result_label(form)
+        res.grid(row=1, column=0, columnspan=2, sticky="w", padx=4, pady=(4, 0))
+        row = tk.Frame(card.body, bg=Theme.CARD)
+        row.pack(fill="x", padx=8, pady=(0, 8))
+        SecondaryButton(row, text="Enviar ping teste", command=self.test_kilo, width=20).pack(side="left", padx=4)
+        return {"webhook": e_hook, "result": res}
+
     def _card_models(self, body, base_url: str) -> dict[str, tk.Entry]:
         card = Card(body, title="Modelos IA - CDN (Vercel) / download sob demanda")
         card.pack(fill="x", padx=24, pady=10)
@@ -583,6 +602,11 @@ class IntegrationsTab:
         hook = self._get(self.slack_hook, "webhook")
         self.on_status("Enviando mensagem de teste ao Slack...")
         self._run_async(lambda: slack_test(hook), "slack")
+
+    def test_kilo(self) -> None:
+        hook = self._get(self.kilo_hook, "webhook")
+        self.on_status("Enviando ping de teste ao Kilo...")
+        self._run_async(lambda: kilo_test(hook), "kilo")
 
     def test_models(self) -> None:
         url = self._get(self.models_url, "base_url")
@@ -708,6 +732,7 @@ class IntegrationsTab:
         c.set("integrations", "figma", "file_key", value=self._get(self.figma_cfg, "file_key"))
         c.set("integrations", "sentry", "dsn", value=self._get(self.sentry_dsn, "dsn"))
         c.set("integrations", "slack", "webhook", value=self._get(self.slack_hook, "webhook"))
+        c.set("integrations", "kilo", "webhook", value=self._get(self.kilo_hook, "webhook"))
         c.set("integrations", "models", "base_url", value=self._get(self.models_url, "base_url"))
         servers = {}
         for sid, widgets in self.mcp_server_entries.items():

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Clientes de integracao do XAU_AI_PRO (GitHub, GitLab, Figma, Sentry, Slack, Vercel/Modelos, MCP/Plugins).
+"""Clientes de integracao do XAU_AI_PRO (GitHub, GitLab, Figma, Sentry, Slack, Kilo, Vercel/Modelos, MCP/Plugins).
 
 Funcoes de teste de conexao usadas pela aba de Integracoes.
 Todas retornam dict {ok, message} e NUNCA levantam excecao.
@@ -200,6 +200,46 @@ def figma_test(token: str = "", file_key: str = "") -> dict[str, Any]:
         return _res(False, f"HTTP {e.code} ao validar arquivo Figma")
     except Exception as e:  # noqa: BLE001
         return _res(False, f"Erro de rede: {e}")
+
+
+# ============================================================
+# Kilo (inbound webhook de sessoes)
+# ============================================================
+
+def kilo_test(webhook_url: str) -> dict[str, Any]:
+    """Envia um ping de teste ao inbound webhook do Kilo.
+
+    O endpoint captura JSON arbitrario e responde 200 com requestId.
+    """
+    url = (webhook_url or "").strip()
+    if not url:
+        return _res(False, "Webhook URL vazia")
+    if not url.startswith("https://hooks.kilosessions.ai/"):
+        return _res(False, "URL nao parece ser um inbound webhook do Kilo (hooks.kilosessions.ai)")
+    payload = json.dumps({
+        "source": "xau_ai_pro",
+        "type": "connection_test",
+    }).encode("utf-8")
+    req = urllib.request.Request(url, data=payload, headers={**_UA, "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            body = resp.read().decode("utf-8", "replace")
+            if resp.status == 200:
+                rid = ""
+                try:
+                    rid = str(json.loads(body).get("data", {}).get("requestId", ""))[:8]
+                except Exception:  # noqa: BLE001
+                    pass
+                msg = "Ping capturado pelo Kilo"
+                if rid:
+                    msg += f" (requestId {rid})"
+                return _res(True, msg)
+            return _res(False, "HTTP %d" % resp.status)
+    except urllib.error.HTTPError as e:
+        return _res(False, "HTTP %d: webhook invalido ou revogado" % e.code)
+    except Exception as e:  # noqa: BLE001
+        return _res(False, "Erro de rede: %s" % e)
+
 
 
 # ============================================================

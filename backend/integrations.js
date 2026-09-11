@@ -71,6 +71,29 @@ async function sendSlackTest() {
   }
 }
 
+// ---------- Kilo (inbound webhook de sessoes) ----------
+function kiloWebhook() {
+  return env('KILO_WEBHOOK_URL');
+}
+
+function kiloConfigured() {
+  return !!kiloWebhook();
+}
+
+// Envia ping de teste ao inbound webhook do Kilo (usado pelo POST /api/integrations/kilo/test).
+// O endpoint captura JSON arbitrario e responde 200 com requestId.
+async function sendKiloTest() {
+  const url = kiloWebhook();
+  if (!url) return { ok: false, error: 'KILO_WEBHOOK_URL nao configurado' };
+  const payload = JSON.stringify({ source: 'xau_ai_pro', type: 'connection_test', ts: new Date().toISOString() });
+  try {
+    const res = await requestJson(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, timeout: 8000 }, payload);
+    return { ok: res.status >= 200 && res.status < 300, status: res.status, detail: res.raw.slice(0, 200) };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
 // ---------- GitHub ----------
 function githubToken() {
   return env('GITHUB_TOKEN');
@@ -163,6 +186,8 @@ module.exports = {
   slackConfigured,
   sendSlack,
   sendSlackTest,
+  kiloConfigured,
+  sendKiloTest,
   githubToken,
   checkGithub,
   sentryDsn,

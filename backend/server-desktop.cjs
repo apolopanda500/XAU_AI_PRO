@@ -162,6 +162,11 @@ app.post('/api/integrations/slack/test', async (req, res) => {
   const result = await integrations.sendSlackTest();
   res.json(result);
 });
+// 17.6: teste do inbound webhook do Kilo (retorna ok/status do servico de captura)
+app.post('/api/integrations/kilo/test', async (req, res) => {
+  const result = await integrations.sendKiloTest();
+  res.json(result);
+});
 app.get('/api/events', (req, res) => res.json(readEvents(parseInt(req.query.limit) || 100)));
 app.get('/api/events/latest', (req, res) => { const { source, events } = readEvents(1); res.json({ source, evento: events[events.length-1] || null, ts: new Date().toISOString() }); });
 

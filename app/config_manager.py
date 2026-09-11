@@ -106,6 +106,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "figma": {"token": "", "file_key": "DCWY2p6frSZwjAcwZYYDKj", "team_id": ""},
         "sentry": {"dsn": ""},
         "slack": {"webhook": ""},
+        "kilo": {"webhook": ""},
         "models": {"base_url": "", "api_key": ""},
         "mcp": {
             "endpoint": "",
