@@ -15,6 +15,7 @@ Endpoints:
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import subprocess
 import sys
@@ -78,17 +79,25 @@ def read_root():
 def get_prediction(symbol: str):
     try:
         normalized = symbol.strip().upper()
-        if not normalized or len(normalized) > 64 or ".." in normalized or any(ch in normalized for ch in '/\\:*?"<>|') or any(ord(c) < 32 for c in normalized):
+        if not normalized or len(normalized) > 64:
             raise ValueError("Invalid symbol")
-        base = PREDICTIONS_DIR.resolve()
-        path = (base / f"prediction_{normalized}.json").resolve()
-        path.relative_to(base)
+        if not re.fullmatch(r"[A-Z0-9_]+", normalized):
+            raise ValueError("Invalid symbol")
+        expected_name = f"prediction_{normalized}.json"
+        for p in PREDICTIONS_DIR.glob("prediction_*.json"):
+            if p.name == expected_name:
+                try:
+                    with open(p, "r", encoding="utf-8") as f:
+                        return json.load(f)
+                except (OSError, json.JSONDecodeError):
+                    raise ValueError("Error reading file")
+        raise FileNotFoundError(expected_name)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid symbol")
-    if not path.exists():
+    except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Prediction not found")
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
+    except OSError:
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.get("/predictions")
@@ -114,8 +123,8 @@ def get_account():
             return {"login": row[0], "balance": row[1], "equity": row[2],
                     "margin": row[3]}
         return {"error": "Account not found"}
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        return {"error": "Database error"}
 
 
 @app.get("/market/live")
