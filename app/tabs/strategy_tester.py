@@ -165,7 +165,7 @@ class StrategyTester(tk.Frame):
             else:
                 self.frame.after(0, lambda: self._on_data_loaded(False, 0))
         except Exception as e:
-            self.frame.after(0, lambda: self._on_data_loaded(False, 0, str(e)))
+            self.frame.after(0, lambda e=e: self._on_data_loaded(False, 0, str(e)))
 
     def _on_data_loaded(self, ok, n, error=None):
         if ok:
