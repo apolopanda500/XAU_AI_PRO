@@ -75,6 +75,13 @@ Type: filesandordirs; Name: "{app}\Python\__pycache__"
 Type: filesandordirs; Name: "{app}\Python\*\__pycache__"
 Type: filesandordirs; Name: "{app}\app\__pycache__"
 Type: filesandordirs; Name: "{app}\app\*\__pycache__"
+; Remove abas e modulos orfaos eliminados na varredura total (2026-09-11)
+Type: files; Name: "{app}\app\tabs\search.py"
+Type: files; Name: "{app}\app\tabs\system.py"
+Type: files; Name: "{app}\app\tabs\training.py"
+Type: files; Name: "{app}\app\tabs\community.py"
+Type: files; Name: "{app}\app\tabs\subgraph.py"
+Type: files; Name: "{app}\app\components\charts.py"
 
 [Files]
 ; ============================================================

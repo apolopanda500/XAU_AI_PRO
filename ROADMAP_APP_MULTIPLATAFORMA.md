@@ -66,3 +66,36 @@ Nota: Streamlit (App/app.py) fica como painel LOCAL/dev, nao vai para lojas.
 - Conclusao endurance 20.3 (24h->30d)
 - Gate economico: PF > 1 e drawdown aceitavel (CHECKLIST_GATE_2011.md)
 - v1.2.2-opt aplicada apos 24h (f891f71 pronto)
+
+## 9. MOTOR DE RENDERIZACAO (DECISAO — 2026-09-11)
+Pedido: "adicionar motor compativel para renderizacao de todo app e novas
+funcoes". Decisao: **Flutter (Dart)** como motor unico de UI/UX do app
+multiplataforma, com **Rust (via FFI)** para os calculos pesados. Justificativa
+contra as alternativas avaliadas:
+
+| Criterio | Flutter (ESCOLHIDO) | React Native (Hermes) | Kotlin + Swift nativos | Tauri v2 (Rust+Web) |
+|---|---|---|---|---|
+| Renderizacao 60/120 fps | Impeller/Skia (motor proprio, estilo videogame) | Hermes JS (bom, mas ponte nativa) | Motor nativo (otimo) | WebView (limitado) |
+| Um codigo para Android+Windows+iOS | Sim | Sim (Android/iOS; desktop fragil) | NAO (2 codebases) | Sim (mobile iOS/Android ok) |
+| Graficos custom (candles, canvases) | Canvas/Painter excelente | Depende de libs | Manual nativo | HTML canvas |
+| Binario final enxuto (R8/ProGuard p/ Android) | Sim (AOT Dart, tree shaking) | Sim | Sim | Sim (Rust pequeno) |
+| Hot reload no desenvolvimento | Sim | Sim | NAO | Parcial |
+
+Fundamentos de performance incorporados (referencia do pedido):
+1. **Linguagem**: Dart AOT (compilado, sem JIT em producao) — memoria e
+   bateria sob controle; Rust para correlacoes/AI/heavy math (equivalente a
+   usar Rust/C++ nas partes criticas, como fazem Instagram/bancos).
+2. **Multiplataforma**: Flutter desenha a tela sozinho (Skia/Impeller), nao
+   depende dos widgets do SO — mesma fonte de verdade para Android e Windows.
+3. **Dados offline-first**: SQLite (via sqflite/drift) local primeiro, sync em
+   background; **Protobuf/gRPC** (em vez de JSON) na API de ticks/sinais para
+   economizar ate ~80% do plano de dados; REST/JSON mantido para endpoints
+   simples e webhooks.
+4. **Arquitetura**: Clean Architecture + MVVM, injecao de dependencia
+   (get_it + injectable) carregando modulos sob demanda; ProGuard/R8 na
+   release Android.
+5. **Desktop atual**: app Python/Tkinter v1.2.0 permanece como painel local
+   ate o MVP Flutter (F2) ficar pronto — nenhum recurso de v1.2.0 e removido.
+
+Decisao de portabilidade: manter servicos (backend Node/FastAPI, MCP gateway,
+pipeline IA) intactos; o Flutter apenas os consome via API — nao porta o EA.

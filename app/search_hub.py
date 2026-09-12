@@ -52,14 +52,14 @@ def search_agents(query: str) -> list[dict[str, Any]]:
         ("market", "Mercado: cotacoes em tempo real e graficos"),
         ("positions", "Posicoes: carteira aberta e historico"),
         ("robot", "Robo MT5: conexao, status e acoes"),
-        ("training", "IA/Treino: pipeline de modelos e predicoes"),
-        ("assistant", "Assistente IA: chat com memoria e pensamentos"),
+
+
         ("tools", "Ferramentas: utilitarios e operacoes"),
         ("integrations", "Integracoes: MCP, GitHub, Slack, Sentry"),
-        ("subgraph", "Subgraph: analise por correlacoes de ativos"),
+
         ("system", "Sistema: monitoramento, logs e diagnostico"),
         ("charts", "Graficos: analise tecnica visual"),
-        ("search", "Pesquisa global: MCP, agentes, chats, ativos, calendario"),
+
     ]
     out = []
     for name, desc in agents:

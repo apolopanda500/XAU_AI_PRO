@@ -22,7 +22,7 @@ from app.theme.mexc import Theme
 NAV_ITEMS: list[tuple[str, str, str]] = [
     ("dashboard", "Painel", "📊"),
     ("market", "Mercado", "📈"),
-    ("charts", "Gráficos", "📉"),
+    
     ("robot", "Robô", "🤖"),
     ("tester", "Strategy Tester", "🧪"),
     ("vision", "Visão do Robô", "👁️"),
@@ -60,8 +60,8 @@ class SidebarItem(tk.Frame):
 
         for w in (self, self.body, self.icon_lbl, self.text_lbl):
             w.bind("<Button-1>", self._on_click)
-            w.bind("<Enter>", lambda e: self._on_enter())
-            w.bind("<Leave>", lambda e: self._on_leave())
+            # Hover desativado: os itens nao mudam de cor ao passar o mouse.
+            # w.bind("<Leave>", lambda e: self._on_leave())  # removido
 
     def _on_click(self, _event=None) -> None:
         self.command(self.key)
@@ -165,7 +165,7 @@ class Sidebar(tk.Frame):
         self.bind("<space>", self._key_enter)
 
         # ---- Alça de redimensionamento (arraste para diminuir/aumentar) --
-        self.grip = tk.Frame(self, bg=Theme.BORDER, width=4,
+        self.grip = tk.Frame(self, bg=Theme.BORDER, width=6,
                              cursor="sb_h_double_arrow")
         self.grip.pack(side="right", fill="y")
         self.grip.bind("<B1-Motion>", self._on_grip_drag)

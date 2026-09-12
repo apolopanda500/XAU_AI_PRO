@@ -23,7 +23,6 @@ from app.tabs.market import TradingViewMarket
 from app.tabs.positions import PositionsTab
 from app.tabs.robot import RobotTab
 from app.tabs.settings import SettingsTab
-from app.tabs.subgraph import SubgraphTab
 from app.tabs.charts import ChartsTab
 from app.tabs.tools import ToolsTab
 from app.tabs.combined import CombinedTab
@@ -184,15 +183,10 @@ class XAUAProApp:
             "market": lambda: CombinedTab(self.tab_container, [
                 ("Mercado", lambda parent: TradingViewMarket(parent, self.robot, self.market, self._set_status)),
                 ("Graficos", lambda parent: ChartsTab(parent, self.robot, self.market, self._set_status)),
-                ("Análise", lambda parent: SubgraphTab(parent, self.robot, self.market, self._set_status)),
             ]),
             "robot": lambda: CombinedTab(self.tab_container, [
                 ("Controle", lambda parent: RobotTab(parent, self.robot, self.market, self._set_status)),
                 ("Auditoria", lambda parent: ToolsTab(parent, self.robot, self.market, self._set_status)),
-            ]),
-                        "charts": lambda: CombinedTab(self.tab_container, [
-                ("Grafico Avancado", lambda parent: ChartsTab(parent, self.robot, self.market, self._set_status)),
-                ("Mercado", lambda parent: TradingViewMarket(parent, self.robot, self.market, self._set_status)),
             ]),
             "tester": lambda: CombinedTab(self.tab_container, [
                 ("Strategy Tester", lambda parent: StrategyTester(parent, self._set_status)),
@@ -231,8 +225,6 @@ class XAUAProApp:
             self.tabs[key].frame.pack_forget()
             if key == "system":
                 self.tabs[key].start_monitor()
-            elif key == "charts":
-                self.tabs[key].start_auto()
         self._navigation_pending = None
         self._show_tab(key)
 
@@ -252,10 +244,10 @@ class XAUAProApp:
             "market": "Mercado",
             "positions": "Carteira",
             "robot": "Robô",
-            "subgraph": "Subgraph",
+            "tester": "Strategy Tester",
+            "vision": "Visão do Robô",
             "settings": "Configuração",
             "system": "Sistema",
-            "charts": "Graficos",
         }
         self.header_title.configure(text=titles.get(key, key))
 
@@ -383,12 +375,6 @@ class XAUAProApp:
                 system_tab.refresh_now()
         except Exception:
             pass
-        try:
-            charts_tab = self.tabs.get("charts")
-            if charts_tab is not None:
-                charts_tab.refresh_now()
-        except Exception:
-            pass
 
     def _on_close(self) -> None:
         if messagebox.askyesno("Sair", "Deseja realmente fechar o XAU AI PRO?"):
@@ -397,9 +383,6 @@ class XAUAProApp:
             system_tab = self.tabs.get("system")
             if system_tab is not None:
                 system_tab.stop_monitor()
-            charts_tab = self.tabs.get("charts")
-            if charts_tab is not None:
-                charts_tab.stop_auto()
             try:
                 self.tabs["positions"].stop_auto_refresh()
             except Exception:

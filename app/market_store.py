@@ -53,3 +53,35 @@ def store_quotes(quotes: list[dict[str, Any]], db_path: Path | None = None) -> i
         )
         connection.execute("DELETE FROM market_ticks WHERE ts_ms < ?", (timestamp_ms - 7 * 86_400_000,))
     return len(rows)
+
+
+def last_ticks(symbol: str, limit: int = 80, db_path: Path | None = None) -> list[dict[str, Any]]:
+    """Le os ultimos ticks persistidos de um simbolo (mais antigos -> recentes).
+
+    Usado como fallback do grafico quando o MT5 nao fornece candles: cada tick
+    vira um ponto OHLC degenerado (open=high=low=close=price) para renderizar
+    uma linha de preco mesmo sem conectividade com o terminal.
+    """
+    path = db_path or get_market_db_path()
+    if not path.exists():
+        return []
+    try:
+        with sqlite3.connect(path, timeout=2) as connection:
+            connection.row_factory = sqlite3.Row
+            rows = connection.execute(
+                """SELECT ts_ms, price FROM market_ticks
+                   WHERE symbol = ? ORDER BY ts_ms DESC LIMIT ?""",
+                (str(symbol), int(limit)),
+            ).fetchall()
+        out: list[dict[str, Any]] = []
+        for r in reversed(rows):
+            price = float(r["price"])
+            when = time.strftime("%H:%M:%S", time.localtime(int(r["ts_ms"]) / 1000.0))
+            out.append({
+                "symbol": str(symbol), "time": when,
+                "open": price, "high": price, "low": price, "close": price,
+                "volume": 0.0,
+            })
+        return out
+    except Exception:
+        return []

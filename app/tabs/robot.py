@@ -147,9 +147,16 @@ class RobotTab:
         AccentButton(ractions, text="Comprar", command=self.buy, width=10).pack(side="left", padx=4)
         DangerButton(ractions, text="Vender", command=self.sell, width=10).pack(side="left", padx=4)
         SecondaryButton(ractions, text="Fechar ultima", command=self.close_last, width=14).pack(side="left", padx=4)
+        DangerButton(ractions, text="Fechar tudo", command=self.close_all, width=12).pack(side="left", padx=4)
         self.risk_status = tk.Label(ractions, text="", bg=Theme.CARD, fg=Theme.TEXT_SECONDARY,
                                     font=(Theme.FONT_FAMILY, 9))
         self.risk_status.pack(side="left", padx=10)
+
+        ractions2 = tk.Frame(risk_card.body, bg=Theme.CARD)
+        ractions2.pack(fill="x", padx=8, pady=(0, 10))
+        SecondaryButton(ractions2, text="Fechar perdedoras", command=self.close_losers, width=16).pack(side="left", padx=4)
+        SecondaryButton(ractions2, text="Fechar ganhadoras", command=self.close_winners, width=16).pack(side="left", padx=4)
+        SecondaryButton(ractions2, text="Cancelar pendentes", command=self.cancel_pending, width=18).pack(side="left", padx=4)
 
         self._apply_risk_defaults()
 
@@ -316,6 +323,107 @@ class RobotTab:
         except Exception as e:
             self.risk_status.configure(text="Erro ao fechar", fg=Theme.DANGER)
             self.on_status(f"Erro close: {e}")
+
+    def close_all(self) -> None:
+        """Fecha todas as posicoes do EA (apos confirmacao explicita)."""
+        if not self.robot.connected:
+            self.risk_status.configure(text="MT5 desconectado", fg=Theme.WARNING)
+            self.on_status("Close all: MT5 desconectado")
+            return
+        positions = self.robot.get_positions()
+        if not positions:
+            self.risk_status.configure(text="Sem posicoes abertas", fg=Theme.TEXT_MUTED)
+            return
+        confirm = messagebox.askyesno(
+            "Fechar todas as posicoes",
+            f"Deseja fechar TODAS as {len(positions)} posicao(oes) do EA?"
+        )
+        if not confirm:
+            self.risk_status.configure(text="Cancelado", fg=Theme.TEXT_MUTED)
+            return
+        try:
+            res = self.robot.close_all_positions()
+            if res.get("ok"):
+                self.risk_status.configure(text=f"Fechadas: {res.get('closed')}", fg=Theme.SUCCESS)
+                self.on_status(f"Close all: {res.get('closed')} posicao(oes) fechadas")
+                self._recalc_risk()
+            else:
+                errors = res.get("errors") or []
+                self.risk_status.configure(text=f"Falhas: {len(errors)}", fg=Theme.DANGER)
+                self.on_status(f"Close all: {len(errors)} falha(s) - {'; '.join(errors[:2])}")
+        except Exception as e:
+            self.risk_status.configure(text="Erro ao fechar tudo", fg=Theme.DANGER)
+            self.on_status(f"Erro close all: {e}")
+
+    def _close_filtered(self, winning: bool) -> None:
+        """Fecha posicoes lucrativas (winning=True) ou no prejuizo (False)."""
+        label = "ganhadoras" if winning else "perdedoras"
+        if not self.robot.connected:
+            self.risk_status.configure(text="MT5 desconectado", fg=Theme.WARNING)
+            self.on_status(f"Close {label}: MT5 desconectado")
+            return
+        positions = self.robot.get_positions()
+        targets = [p for p in positions
+                   if ((p.profit or 0) > 0) == winning and (p.profit or 0) != 0]
+        if not targets:
+            self.risk_status.configure(text=f"Sem posicoes {label}", fg=Theme.TEXT_MUTED)
+            return
+        confirm = messagebox.askyesno(
+            f"Fechar posicoes {label}",
+            f"Deseja fechar as {len(targets)} posicao(oes) {label} do EA?",
+        )
+        if not confirm:
+            self.risk_status.configure(text="Cancelado", fg=Theme.TEXT_MUTED)
+            return
+        closed, fails = 0, []
+        for pos in targets:
+            res = self.robot.close_position(pos.ticket)
+            if res.get("ok"):
+                closed += 1
+            else:
+                fails.append(str(res.get("error", "erro")))
+        if closed:
+            self.risk_status.configure(text=f"{label.title()}: {closed} fechada(s)", fg=Theme.SUCCESS)
+            self.on_status(f"Close {label}: {closed} posicao(oes) fechadas")
+            self._recalc_risk()
+        else:
+            self.risk_status.configure(text=f"Nenhuma fechada: {len(fails)} falha(s)", fg=Theme.DANGER)
+            self.on_status(f"Close {label}: falhas - {'; '.join(fails[:2])}")
+
+    def close_losers(self) -> None:
+        """Fecha todas as posicoes no prejuizo (apos confirmacao)."""
+        self._close_filtered(winning=False)
+
+    def close_winners(self) -> None:
+        """Fecha todas as posicoes lucrativas (apos confirmacao)."""
+        self._close_filtered(winning=True)
+
+    def cancel_pending(self) -> None:
+        """Cancela todas as ordens pendentes (apos confirmacao explicita)."""
+        if not self.robot.connected:
+            self.risk_status.configure(text="MT5 desconectado", fg=Theme.WARNING)
+            self.on_status("Cancel pendentes: MT5 desconectado")
+            return
+        confirm = messagebox.askyesno(
+            "Cancelar ordens pendentes",
+            "Deseja cancelar TODAS as ordens pendentes?",
+        )
+        if not confirm:
+            self.risk_status.configure(text="Cancelado", fg=Theme.TEXT_MUTED)
+            return
+        try:
+            res = self.robot.cancel_pending_orders()
+            if res.get("ok"):
+                self.risk_status.configure(
+                    text=f"Canceladas: {res.get('canceled')}", fg=Theme.SUCCESS)
+                self.on_status(f"Cancel pendentes: {res.get('canceled')} ordem(ns) canceladas")
+                self._recalc_risk()
+            else:
+                self.risk_status.configure(
+                    text=f"Falha: {res.get('error')}", fg=Theme.DANGER)
+        except Exception as e:
+            self.risk_status.configure(text="Erro ao cancelar pendentes", fg=Theme.DANGER)
+            self.on_status(f"Erro cancel pendentes: {e}")
 
     def buy(self) -> None:
         self._send("BUY")

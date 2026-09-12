@@ -25,10 +25,11 @@ from typing import Callable
 from app.components.tables import MarketTable
 from app.config_manager import get_config
 from app.market_data import MarketData
-from app.market_store import store_quotes
+from app.market_store import store_quotes, last_ticks
 from app.mt5_robot import MT5Robot
 from app.theme.mexc import Theme
 from app.components.button import ProButton
+from app.tabs.charts import ChartCanvas
 from app.data.assets import get_default_symbols, search_assets, get_categories, get_assets_by_category
 
 DEFAULT_SYMBOLS = ["XAUUSD", "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD",
@@ -109,7 +110,7 @@ class TradingViewMarket(tk.Frame):
         self.stat_low = self._stat_box(bar, "24h Baixa", "--")
         self.stat_vol = self._stat_box(bar, "Volume", "--")
         self.stat_time = self._stat_box(bar, "Atualizado", "--")
-        ProButton(bar, "Abrir TradingView", self._open_tradingview, bold=True, pady=5).pack(side="right", padx=12)
+        ProButton(bar, "Abrir TradingView", self._open_tradingview, bold=True, pady=7, padx=14).pack(side="right", padx=12)
 
     def _show_asset_search(self):
         """Search dialog with 212+ assets."""
@@ -224,6 +225,23 @@ class TradingViewMarket(tk.Frame):
                            font=(Theme.FONT_MONO, 10, "bold"))
             lbl.pack(side="right")
             self._detail[key] = lbl
+        # Mini-grafico embutido (motor ChartCanvas) com seletor de timeframe.
+        chart_head = tk.Frame(body, bg=Theme.CARD)
+        chart_head.pack(fill="x", pady=(10, 2))
+        tk.Label(chart_head, text="Grafico", bg=Theme.CARD, fg=Theme.TEXT_SECONDARY,
+                 font=(Theme.FONT_FAMILY, 8)).pack(side="left")
+        self.chart_tf_var = tk.StringVar(value="M5")
+        for _tf in ("M1", "M5", "M15", "H1"):
+            tk.Radiobutton(chart_head, text=_tf, variable=self.chart_tf_var, value=_tf,
+                           bg=Theme.CARD, fg=Theme.TEXT_MUTED, selectcolor=Theme.PANEL,
+                           activebackground=Theme.CARD, activeforeground=Theme.TEXT,
+                           font=(Theme.FONT_FAMILY, 7),
+                           command=self._on_chart_tf).pack(side="left", padx=1)
+        self.chart_info = tk.Label(chart_head, text="", bg=Theme.CARD, fg=Theme.TEXT_MUTED,
+                                   font=(Theme.FONT_FAMILY, 8))
+        self.chart_info.pack(side="right")
+        self.chart = ChartCanvas(body, height=205)
+        self.chart.pack(fill="x", pady=(2, 4))
 
     def _build_movers(self, main, row, col):
         card = tk.Frame(main, bg=Theme.CARD, highlightthickness=1,
@@ -298,6 +316,9 @@ class TradingViewMarket(tk.Frame):
                 kind = item[0]
                 if kind == "quotes":
                     self._apply_quotes(item[1], item[2])
+                elif kind == "chart":
+                    chart_kind = item[3] if len(item) > 3 else "candles"
+                    self._apply_chart(item[1], item[2], chart_kind)
                 elif kind == "error":
                     self._show_fetch_error(item[1])
         except (queue.Empty, RuntimeError):
@@ -364,10 +385,58 @@ class TradingViewMarket(tk.Frame):
                     quotes[sym] = qd
             payload = cached.to_dict() if cached is not None else None
             self._queue.put(("quotes", quotes, payload))
+            try:
+                candles = self._collect_candles(self._selected, self.chart_tf_var.get())
+                if not candles:
+                    candles = last_ticks(self._selected, 80)
+                    chart_kind = "line"
+                else:
+                    chart_kind = "candles"
+                self._queue.put(("chart", self._selected, candles, chart_kind))
+            except Exception:
+                pass
         except Exception as exc:  # noqa: BLE001 - error de red capturado
             self._queue.put(("error", type(exc).__name__ + ": " + str(exc)))
         finally:
             self._busy = False
+
+    def _collect_candles(self, symbol: str, timeframe: str = "M5", limit: int = 80) -> list[dict]:
+        """Candles do simbolo via MT5 local (best-effort, worker thread)."""
+        base = symbol[:-1] if symbol[-1:].upper() == "C" and len(symbol) > 4 else symbol
+        try:
+            from app.mt5_lock import mt5_lock
+            import MetaTrader5 as mt5
+            tfmap = {"M1": mt5.TIMEFRAME_M1, "M5": mt5.TIMEFRAME_M5,
+                     "M15": mt5.TIMEFRAME_M15, "H1": mt5.TIMEFRAME_H1}
+            with mt5_lock:
+                if not mt5.initialize():
+                    return []
+                mt5.symbol_select(base, True)
+                rates = mt5.copy_rates_from_pos(base, tfmap.get(timeframe, mt5.TIMEFRAME_M5), 0, limit)
+            if rates is None or not len(rates):
+                return []
+            from datetime import datetime
+            out = []
+            for r in rates[-limit:]:
+                out.append({"symbol": symbol,
+                            "time": datetime.fromtimestamp(int(r["time"])).strftime("%d/%m %H:%M"),
+                            "open": float(r["open"]), "high": float(r["high"]),
+                            "low": float(r["low"]), "close": float(r["close"]),
+                            "volume": float(r["tick_volume"])})
+            return out
+        except Exception:
+            return []
+
+    def _apply_chart(self, symbol: str, candles: list[dict], chart_kind: str = "candles") -> None:
+        try:
+            if not candles:
+                self.chart_info.configure(text="sem dados")
+                return
+            self.chart.set_data(candles, chart_kind)
+            suffix = "(ticks)" if chart_kind == "line" else ""
+            self.chart_info.configure(text="%d ponto(s) %s" % (len(candles), suffix))
+        except tk.TclError:
+            pass
 
     def _apply_quotes(self, quotes: dict, cached: dict | None) -> None:
         self._quotes = quotes
@@ -491,6 +560,14 @@ class TradingViewMarket(tk.Frame):
             self.on_status("TradingView abierto para " + self._selected)
         except Exception as error:  # noqa: BLE001
             self.on_status("No se pudo abrir el navegador: " + str(error))
+
+    def _on_chart_tf(self):
+        """Troca o timeframe do mini-grafico e recarrega os candles."""
+        try:
+            self.chart_info.configure(text="carregando...")
+        except tk.TclError:
+            pass
+        self.refresh(force=True)
 
     # ------------------------------------------------------------- auto loop
     def _toggle_auto(self):

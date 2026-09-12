@@ -29,10 +29,10 @@ def test_import_core_app() -> None:
 
 def test_all_tabs_importable() -> None:
     from app.tabs import dashboard, market, positions, robot
-    from app.tabs import tools, search, charts, subgraph, system, settings
+    from app.tabs import tools, charts, settings
     from app.tabs import integrations
     for mod in (dashboard, market, positions, robot, tools,
-                search, charts, subgraph, system, settings, integrations):
+                charts, settings, integrations):
             assert hasattr(mod, "DashboardTab") or hasattr(mod, "MarketTab") or hasattr(mod, "TradingViewMarket") or mod.__name__
 
 

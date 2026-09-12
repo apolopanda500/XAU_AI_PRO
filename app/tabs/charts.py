@@ -18,6 +18,8 @@ from app.components.cards import Card, SecondaryButton, AccentButton
 from app.theme.mexc import Theme
 from app.utils.paths import get_data_dir
 
+from app.data.indicators import _sma, _ema, _rsi  # noqa: E402,F401 (deduplicado)
+
 TFMAP = {"M1": 1, "M5": 5, "M15": 15, "M30": 30, "H1": 60, "H4": 240, "D1": 1440, "W1": 10080}
 TFORDER = ["M1", "M5", "M15", "M30", "H1", "H4", "D1", "W1"]
 TOOLS = [
@@ -36,26 +38,6 @@ FIB_LEVELS = [0.0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0]
 # ---------------------------------------------------------------------------
 # Indicadores puros (funcoes top-level testaveis)
 # ---------------------------------------------------------------------------
-def _sma(vals: list[float], n: int) -> list[float]:
-    out, s, q = [], 0.0, []
-    for v in vals:
-        q.append(v)
-        s += v
-        if len(q) > n:
-            s -= q.pop(0)
-        out.append(s / len(q) if len(q) < n else s / n)
-    return out
-
-
-def _ema(vals: list[float], n: int) -> list[float]:
-    out, k = [], 2.0 / (n + 1)
-    e = None
-    for v in vals:
-        e = v if e is None else v * k + e * (1 - k)
-        out.append(e)
-    return out
-
-
 def _bb(vals: list[float], n: int = 20, mult: float = 2.0) -> tuple[list[float], list[float], list[float]]:
     mid = _sma(vals, n)
     up, lo = [], []
@@ -67,26 +49,6 @@ def _bb(vals: list[float], n: int = 20, mult: float = 2.0) -> tuple[list[float],
         up.append(m + mult * sd)
         lo.append(m - mult * sd)
     return mid, up, lo
-
-
-def _rsi(vals: list[float], n: int = 14) -> list[float]:
-    out, gains, losses, prev = [], [], [], None
-    for v in vals:
-        if prev is None:
-            out.append(50.0)
-        else:
-            ch = v - prev
-            gains.append(max(ch, 0.0))
-            losses.append(max(-ch, 0.0))
-            if len(gains) >= n:
-                ag = sum(gains[-n:]) / n
-                al = sum(losses[-n:]) / n
-                rs = ag / al if al > 0 else 100.0
-                out.append(100.0 - 100.0 / (1.0 + rs))
-            else:
-                out.append(50.0)
-        prev = v
-    return out
 
 
 def _atr(candles: list[dict[str, Any]], n: int = 14) -> list[float | None]:

@@ -310,6 +310,31 @@ class MT5Robot:
                 errors.append(f"#{pos.ticket}: {res.get('error')}")
         return {"ok": closed > 0, "closed": closed, "errors": errors}
 
+    def cancel_pending_orders(self, magic: int | None = None) -> dict[str, Any]:
+        """Cancela todas as ordens pendentes (com ou sem filtro de magic)."""
+        if not self.connected or not self.mt5:
+            return {"ok": False, "error": "MT5 nao conectado"}
+        try:
+            with mt5_lock:
+                orders = self.mt5.orders_get()
+            canceled = 0
+            errors = []
+            for order in orders or []:
+                if magic is not None and order.magic != magic:
+                    continue
+                try:
+                    with mt5_lock:
+                        result = self.mt5.order_delete(order.ticket)
+                    if result and result.retcode == self.mt5.TRADE_RETCODE_DONE:
+                        canceled += 1
+                    else:
+                        errors.append(f"#{order.ticket}: {getattr(result, 'comment', 'sem retorno')}")
+                except Exception as exc:  # noqa: BLE001
+                    errors.append(f"#{order.ticket}: {exc}")
+            return {"ok": True, "canceled": canceled, "errors": errors}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
     def is_ea_active(self, magic: int | None = None) -> dict[str, Any]:
         """Detecta se o EA está ativo usando heartbeat como critério primário.
 
