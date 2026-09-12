@@ -30,6 +30,7 @@ from app.cpu import (affinity_mask, apply_cpu_options, apply_model_limits,
 from app.market_data import MarketData
 from app.mt5_robot import MT5Robot
 from app.theme.mexc import Theme
+from app.utils.async_ui import run_bg
 
 
 class SystemTab:
@@ -282,11 +283,7 @@ class SystemTab:
     # ------------------------------------------------------------------
     def refresh_now(self) -> None:
         """Coleta dados em thread e atualiza a GUI com after (nao trava)."""
-        try:
-            data = self._collect()
-            self.frame.after(0, lambda: self._apply(data))
-        except Exception:
-            pass
+        run_bg(self.frame, self._collect, self._apply, on_error=lambda _exc: None)
 
     def _collect(self) -> dict:
         mem = memory_info()

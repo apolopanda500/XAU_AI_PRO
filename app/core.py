@@ -173,9 +173,9 @@ class XAUAProApp:
         self.tab_container = self.scroll.inner
         self.tab_container._scroll_host = self.scroll
 
-        # Todas as abas sÃ£o lazy-loaded. Construtores podem criar widgets,
-        # imagens e controles; fazÃª-los no boot bloqueava a thread Tk e fazia
-        # os botÃµes parecerem travados.
+        # Todas as abas são lazy-loaded. Construtores podem criar widgets,
+        # imagens e controles; fazê-los no boot bloqueava a thread Tk e fazia
+        # os botões parecerem travados.
         self._tab_factories = {
             "dashboard": lambda: CombinedTab(self.tab_container, [
                 ("Painel", lambda parent: DashboardTab(parent, self.robot, self.market, self._set_status)),
@@ -184,7 +184,7 @@ class XAUAProApp:
             "market": lambda: CombinedTab(self.tab_container, [
                 ("Mercado", lambda parent: TradingViewMarket(parent, self.robot, self.market, self._set_status)),
                 ("Graficos", lambda parent: ChartsTab(parent, self.robot, self.market, self._set_status)),
-                ("AnÃ¡lise", lambda parent: SubgraphTab(parent, self.robot, self.market, self._set_status)),
+                ("Análise", lambda parent: SubgraphTab(parent, self.robot, self.market, self._set_status)),
             ]),
             "robot": lambda: CombinedTab(self.tab_container, [
                 ("Controle", lambda parent: RobotTab(parent, self.robot, self.market, self._set_status)),
@@ -202,7 +202,7 @@ class XAUAProApp:
             ]),
             "system": lambda: CombinedTab(self.tab_container, [
                 ("Configuracoes", lambda parent: SettingsTab(parent, self.robot, self.market, self._set_status)),
-                ("ConexÃµes", lambda parent: IntegrationsTab(parent, self.robot, self.market, self._set_status)),
+                ("Conexões", lambda parent: IntegrationsTab(parent, self.robot, self.market, self._set_status)),
             ]),
         }
         self._navigate("dashboard")
@@ -216,7 +216,7 @@ class XAUAProApp:
             return
         if key not in self.tabs:
             # Mostra feedback imediato e deixa o Tk processar o clique antes
-            # de construir a aba. Isso evita a sensaÃ§Ã£o de botÃ£o congelado.
+            # de construir a aba. Isso evita a sensação de botão congelado.
             self._navigation_pending = key
             self._set_status("Carregando aba...")
             self.root.after_idle(lambda: self._load_and_navigate(key))
@@ -251,9 +251,9 @@ class XAUAProApp:
             "dashboard": "Painel",
             "market": "Mercado",
             "positions": "Carteira",
-            "robot": "RobÃ´",
+            "robot": "Robô",
             "subgraph": "Subgraph",
-            "settings": "ConfiguraÃ§Ã£o",
+            "settings": "Configuração",
             "system": "Sistema",
             "charts": "Graficos",
         }
@@ -298,9 +298,9 @@ class XAUAProApp:
     def _realtime_tick(self) -> None:
         """Atualiza somente a tela visivel, sem empilhar consultas em background.
 
-        Preserva a posiÃ§Ã£o de leitura: tiramos um snapshot da rolagem antes do
-        refresh e o ScrollableFrame restaura a fraÃ§Ã£o de yview apÃ³s o recÃ¡lculo
-        final do layout (a menos que o usuÃ¡rio tenha rolado durante a coleta).
+        Preserva a posição de leitura: tiramos um snapshot da rolagem antes do
+        refresh e o ScrollableFrame restaura a fração de yview após o recálculo
+        final do layout (a menos que o usuário tenha rolado durante a coleta).
         """
         if not self._running:
             return
@@ -326,8 +326,8 @@ class XAUAProApp:
                         tab.refresh()
                 except Exception as error:
                     self._set_status(f"Atualizacao em tempo real: {error}")
-                # Restaura a leitura apÃ³s o conteÃºdo ser recalculado, saltando
-                # apenas se o usuÃ¡rio rolou enquanto a coleta rodava.
+                # Restaura a leitura após o conteúdo ser recalculado, saltando
+                # apenas se o usuário rolou enquanto a coleta rodava.
                 self.scroll.restore_view(snapshot)
             self._realtime_due[key] = now + intervals[key]
         self.root.after(250, self._realtime_tick)
