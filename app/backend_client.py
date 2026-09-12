@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import socket
+import threading
 import urllib.request
 from typing import Any
 
@@ -94,10 +95,36 @@ def api_get(endpoint: str, timeout: float = 3.0) -> dict[str, Any] | None:
 
 
 def fetch_all() -> dict[str, Any]:
-    """Busca todos os endpoints; retorna dict endpoint->dados (None se falhou)."""
+    """Busca todos os endpoints em PARALELO (threads) para velocidade.
+
+    Timeout total maximo ~3s (nao mais 20s+ com chamadas sequenciais).
+    Retorna dict endpoint->dados (None se falhou).
+    """
     out: dict[str, Any] = {"online": backend_online()}
-    for name in ENDPOINTS:
-        out[name] = api_get(name) if out["online"] else None
+    if not out["online"]:
+        # Se o backend esta offline, nao gasta tempo fazendo requests
+        for name in ENDPOINTS:
+            out[name] = None
+        return out
+
+    # Coleta PARALELA: cada endpoint em sua propria thread (timeout 3s cada)
+    results: dict[str, Any] = {}
+    lock = threading.Lock()
+
+    def _fetch(name: str) -> None:
+        results[name] = api_get(name, timeout=3.0)
+
+    threads = [
+        threading.Thread(target=_fetch, args=(name,), daemon=True)
+        for name in ENDPOINTS
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=3.5)  # garante corte maximo ~3.5s
+
+    with lock:
+        out.update(results)
     return out
 
 

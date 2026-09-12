@@ -154,7 +154,7 @@ class DashboardTab:
     def stop_auto_refresh(self) -> None:
         self._auto_running = False
 
-    # ------------------------- coletores (background) ---------------------
+        # ------------------------- coletores (background) ---------------------
 
     def _collect(self) -> dict[str, Any]:
         """Coleta TUDO em background (sem tocar widgets)."""
@@ -167,6 +167,11 @@ class DashboardTab:
             data["services"] = self._collect_services()
         except Exception:
             data["services"] = {}
+        # Backend API: sempre tenta buscar (refresh rápido, 2s timeout por endpoint)
+        try:
+            data["backend_lines"] = self._collect_backend()
+        except Exception:
+            data["backend_lines"] = [("Backend API", "ERRO", "bad")]
         if time.monotonic() >= self._next_detail_refresh:
             self._next_detail_refresh = time.monotonic() + 15.0
             try:
@@ -258,7 +263,7 @@ class DashboardTab:
         from app.mt5_sync import to_export
         return to_export()
 
-    # ------------------------- aplicadores (GUI thread) -------------------
+        # ------------------------- aplicadores (GUI thread) -------------------
 
     def _apply(self, data: dict[str, Any] | None) -> None:
         if not data:
@@ -267,6 +272,8 @@ class DashboardTab:
             return
         self._apply_account(data.get("account"))
         self._apply_services(data.get("services") or {})
+        if "backend_lines" in data:
+            self._apply_backend(data["backend_lines"])
         if "system" in data:
             self._apply_system(data["system"])
         if "calendar" in data or "sync" in data:
@@ -317,6 +324,34 @@ class DashboardTab:
         for key in ("backend", "dashboard", "litellm"):
             self._set_service(key, bool(svc.get(key, False)))
         self._set_service("robot", bool(svc.get("robot", False)))
+
+    def _apply_backend(self, lines: list[tuple[str, str, str]]) -> None:
+        """Renderiza as linhas do backend na seção de status (refresh leve)."""
+        # Só atualiza a seção se mudou para evitar flicker
+        sig = tuple(lines)
+        if sig == getattr(self, "_backend_signature", None):
+            return
+        self._backend_signature = sig
+        # Limpa apenas as linhas do backend (mantém sistema/calendar/sync)
+        for w in list(self.ea_frame.winfo_children()):
+            if getattr(w, "_is_backend", False):
+                w.destroy()
+        color_map = {
+            "": Theme.TEXT_SOFT,
+            "ok": Theme.SUCCESS,
+            "warn": Theme.WARNING,
+            "bad": Theme.DANGER,
+        }
+        for name, value, color in lines[:8]:
+            row = tk.Frame(self.ea_frame, bg=Theme.CARD)
+            row._is_backend = True
+            row.pack(fill="x", pady=1)
+            tk.Label(row, text=name, bg=Theme.CARD, fg=Theme.TEXT_SECONDARY,
+                     font=(Theme.FONT_FAMILY, 9)).pack(side="left")
+            tk.Label(row, text=value, bg=Theme.CARD,
+                     fg=color_map.get(color, Theme.TEXT),
+                     font=(Theme.FONT_FAMILY, 9, "bold"),
+                     wraplength=340, justify="right").pack(side="right")
 
     def _apply_system(self, lines: list[tuple[str, str, str]]) -> None:
         signature = tuple(lines)
