@@ -1,13 +1,17 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-use std::process::Command;
 use std::path::PathBuf;
+use std::process::Command;
 
 fn log_core(msg: &str) {
     if let Some(base) = std::env::var("LOCALAPPDATA").ok().map(PathBuf::from) {
         let dir = base.join("XAU_AI_PRO").join("logs");
         if std::fs::create_dir_all(&dir).is_ok() {
             use std::io::Write;
-            if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(dir.join("core_bootstrap.log")) {
+            if let Ok(mut f) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(dir.join("core_bootstrap.log"))
+            {
                 let _ = writeln!(f, "{}", msg);
             }
         }
@@ -17,12 +21,16 @@ fn log_core(msg: &str) {
 /// Localiza o executavel do core: primeiro como resource empacotado,
 /// depois como pasta "core" ao lado do executavel principal.
 fn localizar_core(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    if let Some(p) = app.path_resolver().resolve_resource("core/xau-ai-pro-core.exe") {
+    if let Some(p) = app
+        .path_resolver()
+        .resolve_resource("core/xau-ai-pro-core.exe")
+    {
         if p.exists() {
             return Ok(p);
         }
     }
-    let cand = std::env::current_exe().ok()
+    let cand = std::env::current_exe()
+        .ok()
         .and_then(|p| p.parent().map(|d| d.to_path_buf()))
         .map(|d| d.join("core").join("xau-ai-pro-core.exe"))
         .filter(|c| c.exists());

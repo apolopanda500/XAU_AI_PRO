@@ -1,9 +1,9 @@
 // Configuração do XAU AI PRO Core
 // Carregada de arquivo JSON, environment variables, ou defaults.
 
+use anyhow::{Result};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use anyhow::{Result, anyhow};
 use tracing::warn;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -22,7 +22,7 @@ pub struct Config {
 pub struct AppConfig {
     pub name: String,
     pub version: String,
-    pub mode: String,            // "development" | "production"
+    pub mode: String, // "development" | "production"
     pub data_dir: Option<PathBuf>,
 }
 
@@ -43,7 +43,7 @@ pub struct MT5Config {
     pub enabled: bool,
     pub terminal_path: Option<String>,
     pub magic_number: u32,
-    pub local_api_url: Option<String>,  // URL do API local do MT5 se disponível
+    pub local_api_url: Option<String>, // URL do API local do MT5 se disponível
 }
 
 impl Default for MT5Config {
@@ -62,7 +62,7 @@ impl Default for MT5Config {
 pub struct MarketConfig {
     pub symbols: Vec<String>,
     pub refresh_interval_ms: u64,
-    pub providers: Vec<String>,  // "mt5" | "binance" | "mexc" | "yahoo" | "stooq"
+    pub providers: Vec<String>, // "mt5" | "binance" | "mexc" | "yahoo" | "stooq"
 }
 
 impl Default for MarketConfig {
