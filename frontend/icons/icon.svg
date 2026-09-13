@@ -1,0 +1,12 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <rect width="128" height="128" rx="24" fill="#0A0B0E"/>
+  <defs>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFD700"/>
+      <stop offset="50%" stop-color="#FFA500"/>
+      <stop offset="100%" stop-color="#FF6B35"/>
+    </linearGradient>
+  </defs>
+  <text x="64" y="82" font-family="Arial, sans-serif" font-size="56" font-weight="bold" fill="url(#goldGrad)" text-anchor="middle">X</text>
+  <text x="64" y="100" font-family="Arial, sans-serif" font-size="14" fill="#00C6FB" text-anchor="middle">AI PRO</text>
+</svg>
