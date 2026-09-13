@@ -104,6 +104,11 @@ exe_test*.err
 # XAU AI PRO Core Rust
 core/target/
 frontend/src-tauri/target/
+# Core exe embutido no bundle Tauri (gerado a partir de core/ pelo pipeline)
+frontend/src-tauri/core/
+# Artefatos temporarios de build local
+*_done.flag
+bg_build.ps1
 # Frontend
 frontend/dist/
 frontend/node_modules/

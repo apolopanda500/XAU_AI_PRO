@@ -1,0 +1,7 @@
+﻿import React from 'react'; import {useAppStore} from './hooks/useAppStore'; import {useMarketWebSocket} from './hooks/useMarketWebSocket'; import {useCoreBootstrap} from './hooks/useCoreBootstrap'; import Sidebar from './components/Sidebar'; import TopNav from './components/TopNav'; import DashboardTab from './components/tabs/DashboardTab'; import MarketTab from './components/tabs/MarketTab'; import PositionsTab from './components/tabs/PositionsTab'; import RobotTab from './components/tabs/RobotTab'; import ChartsTab from './components/tabs/ChartsTab'; import ToolsTab from './components/tabs/ToolsTab'; import IntegrationsTab from './components/tabs/IntegrationsTab'; import SettingsTab from './components/tabs/SettingsTab'; import StrategyTesterTab from './components/tabs/StrategyTesterTab'; import RobotVisionTab from './components/tabs/RobotVisionTab';
+export default function App(){const {activeTab,wsConnected}=useAppStore(); useCoreBootstrap(); useMarketWebSocket(); const tab=({dashboard:<DashboardTab/>,market:<MarketTab/>,positions:<PositionsTab/>,robot:<RobotTab/>,charts:<ChartsTab/>,tools:<ToolsTab/>,integrations:<IntegrationsTab/>,settings:<SettingsTab/>,['strategy-tester']:<StrategyTesterTab/>,['robot-vision']:<RobotVisionTab/>} as any)[activeTab]||<DashboardTab/>; return <div className="app-shell"><Sidebar/><main className="main"><TopNav activeTab={activeTab} wsConnected={wsConnected} onTabChange={()=>{}}/><section className="content">{tab}</section></main></div>}
+
+
+
+
+
