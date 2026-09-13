@@ -1,162 +1,111 @@
-﻿// @ts-nocheck
-// @ts-nocheck
 import { useAppStore } from '../../hooks/useAppStore';
-import { Theme } from '../../hooks/useTheme';
+import { THEMES } from '../../hooks/useTheme';
+import type { ThemeName } from '../../hooks/useAppStore';
 
 export default function SettingsTab() {
-  const { settings, setSettings } = useAppStore();
-
-  const updateSetting = (key: string, value: any) => {
-    setSettings({ [key]: value });
-  };
+  const settings = useAppStore((s) => s.settings);
+  const setSettings = useAppStore((s) => s.setSettings);
+  const resetSettings = useAppStore((s) => s.resetSettings);
 
   return (
-    <Box>
-      <Typography variant="h4" sx={{ mb: 3, fontWeight: 'bold' }}>
-        ConfiguraÃƒÂ§ÃƒÂµes
-      </Typography>
+    <div>
+      <div className="page-head">
+        <h1>Configurações</h1>
+        <span className="muted">Aparencia, IA e comportamento geral do aplicativo</span>
+      </div>
 
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={6}>
-          <Card sx={{ bgcolor: 'background.paper', mb: 3 }}>
-            <CardHeader title="AparÃƒÂªncia" />
-            <CardContent>
-              <FormControl fullWidth sx={{ mb: 2 }} size="small">
-                <InputLabel>Tema</InputLabel>
-                <Select
-                  value={settings.theme || 'dark'}
-                  label="Tema"
-                  onChange={(e) => updateSetting('theme', e.target.value)}
-                >
-                  <MenuItem value="dark">Dark (PadrÃƒÂ£o)</MenuItem>
-                  <MenuItem value="xau_dark">XAU Dark</MenuItem>
-                  <MenuItem value="btc_dark">BTC Dark</MenuItem>
-                  <MenuItem value="light">Light</MenuItem>
-                </Select>
-              </FormControl>
+      <div className="grid cols-2">
+        <div className="card">
+          <h2>Aparência</h2>
+          <div className="field">
+            <label htmlFor="theme">Tema</label>
+            <select
+              id="theme"
+              value={settings.theme}
+              onChange={(e) => setSettings({ theme: e.target.value as ThemeName })}
+            >
+              {THEMES.map((t) => (
+                <option key={t.id} value={t.id}>{t.label}</option>
+              ))}
+            </select>
+            <span className="hint">Aplicado imediatamente via data-theme no documento.</span>
+          </div>
+          <div className="field">
+            <label htmlFor="precision">Casas decimais</label>
+            <input
+              id="precision"
+              type="number"
+              min={0}
+              max={8}
+              value={settings.precision}
+              onChange={(e) => setSettings({ precision: Number(e.target.value) || 2 })}
+            />
+          </div>
+          <div className="switch-row">
+            <div>
+              <div className="switch-label">Animações</div>
+              <div className="switch-desc">Transicoes suaves na interface</div>
+            </div>
+            <button className={`switch ${settings.animations ? 'on' : ''}`} aria-label="Alternar animacoes" onClick={() => setSettings({ animations: !settings.animations })} />
+          </div>
+          <div className="switch-row">
+            <div>
+              <div className="switch-label">Sons</div>
+              <div className="switch-desc">Alertas sonoros de trade</div>
+            </div>
+            <button className={`switch ${settings.soundEnabled ? 'on' : ''}`} aria-label="Alternar sons" onClick={() => setSettings({ soundEnabled: !settings.soundEnabled })} />
+          </div>
+          <div className="switch-row">
+            <div>
+              <div className="switch-label">Notificações</div>
+              <div className="switch-desc">Notificacoes do sistema operacional</div>
+            </div>
+            <button className={`switch ${settings.notifications ? 'on' : ''}`} aria-label="Alternar notificacoes" onClick={() => setSettings({ notifications: !settings.notifications })} />
+          </div>
+        </div>
 
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={settings.animations}
-                    onChange={(_, checked) => updateSetting('animations', checked)}
-                  />
-                }
-                label="AnimaÃƒÂ§ÃƒÂµes"
-              />
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={settings.soundEnabled}
-                    onChange={(_, checked) => updateSetting('soundEnabled', checked)}
-                  />
-                }
-                label="Efeitos Sonoros"
-              />
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={settings.autoScroll}
-                    onChange={(_, checked) => updateSetting('autoScroll', checked)}
-                  />
-                }
-                label="Auto-scroll"
-              />
-            </CardContent>
-          </Card>
-
-          <Card sx={{ bgcolor: 'background.paper' }}>
-            <CardHeader title="NotificaÃƒÂ§ÃƒÂµes" />
-            <CardContent>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={settings.notifications}
-                    onChange={(_, checked) => updateSetting('notifications', checked)}
-                  />
-                }
-                label="NotificaÃƒÂ§ÃƒÂµes de Alertas"
-              />
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid item xs={12} md={6}>
-          <Card sx={{ bgcolor: 'background.paper', mb: 3 }}>
-            <CardHeader title="MT5" />
-            <CardContent>
-              <TextField
-                label="Terminal Path"
-                value={settings.mt5Path || ''}
-                onChange={(e) => updateSetting('mt5Path', e.target.value)}
-                fullWidth
-                size="small"
-                margin="dense"
-              />
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={settings.mt5AutoConnect}
-                    onChange={(_, checked) => updateSetting('mt5AutoConnect', checked)}
-                  />
-                }
-                label="Auto-conectar MT5"
-              />
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={settings.aiEnabled}
-                    onChange={(_, checked) => updateSetting('aiEnabled', checked)}
-                  />
-                }
-                label="AI Engine Ativado"
-              />
-            </CardContent>
-          </Card>
-
-          <Card sx={{ bgcolor: 'background.paper' }}>
-            <CardHeader title="Performance" />
-            <CardContent>
-              <TextField
-                label="Precision (decimals)"
+        <div>
+          <div className="card" style={{ marginBottom: 14 }}>
+            <h2>IA / Análise</h2>
+            <div className="switch-row">
+              <div>
+                <div className="switch-label">IA ativa</div>
+                <div className="switch-desc">Sinais gerados pelo motor de IA do Core</div>
+              </div>
+              <button className={`switch ${settings.aiEnabled ? 'on' : ''}`} aria-label="Alternar ia" onClick={() => setSettings({ aiEnabled: !settings.aiEnabled })} />
+            </div>
+            <div className="field">
+              <label htmlFor="aimodel">Modelo</label>
+              <select id="aimodel" value={settings.aiModel} onChange={(e) => setSettings({ aiModel: e.target.value })}>
+                <option value="xau-pro-v2">xau-pro-v2</option>
+                <option value="xau-pro-v1">xau-pro-v1</option>
+                <option value="experimental">experimental</option>
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="aiinterval">Intervalo de analise (s)</label>
+              <input
+                id="aiinterval"
                 type="number"
-                value={settings.precision || 2}
-                onChange={(e) => updateSetting('precision', parseInt(e.target.value))}
-                fullWidth
-                size="small"
-                margin="dense"
+                min={10}
+                max={3600}
+                value={settings.aiInterval}
+                onChange={(e) => setSettings({ aiInterval: Number(e.target.value) || 60 })}
               />
-              <TextField
-                label="Refresh Interval (ms)"
-                type="number"
-                value={settings.refreshInterval || 1000}
-                onChange={(e) => updateSetting('refreshInterval', parseInt(e.target.value))}
-                fullWidth
-                size="small"
-                margin="dense"
-              />
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
+            </div>
+          </div>
 
-      <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
-        <Button variant="outlined">Resetar ConfiguraÃƒÂ§ÃƒÂµes</Button>
-        <Button variant="contained" color="primary">
-          Salvar Tudo
-        </Button>
-      </Box>
-    </Box>
+          <div className="card">
+            <h2>Manutenção</h2>
+            <div className="btn-row">
+              <button className="btn danger" onClick={resetSettings}>Restaurar Padrões</button>
+            </div>
+            <span className="hint" style={{ display: 'block', marginTop: 8 }}>
+              As configuracoes ficam persistidas localmente (localStorage, chave xau-ai-pro).
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
-
-
-
-
-
-
-
-
-
-
-

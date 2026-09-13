@@ -1,174 +1,108 @@
-﻿// @ts-nocheck
-// @ts-nocheck
 import { useAppStore } from '../../hooks/useAppStore';
 
 export default function DashboardTab() {
-  const theme = useTheme();
-  const { quotes, account, positions, wsConnected, systemState } = useAppStore();
+  const account = useAppStore((s) => s.account);
+  const systemState = useAppStore((s) => s.systemState);
+  const wsConnected = useAppStore((s) => s.wsConnected);
+  const positions = useAppStore((s) => s.positions);
+  const settings = useAppStore((s) => s.settings);
+
+  const fmt = (v: number | undefined | null, decimals = settings.precision) =>
+    v == null ? '--' : v.toLocaleString('pt-BR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+
+  const equity = account?.equity ?? null;
+  const balance = account?.balance ?? null;
+  const floating = account?.profit ?? null;
 
   return (
-    <Box>
-      <Typography variant="h4" sx={{ mb: 3, fontWeight: 'bold' }}>
-        XAU AI PRO - Trading Dashboard
-      </Typography>
+    <div>
+      <div className="page-head">
+        <h1>Painel</h1>
+        <span className="muted">Visao geral do sistema e da conta MT5</span>
+      </div>
 
-      {/* Cards de status */}
-      <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid item xs={12} sm={3}>
-          <Card sx={{ bgcolor: 'background.paper' }}>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: wsConnected ? 'success.main' : 'error.main' }} />
-                <Typography variant="caption" color={wsConnected ? 'success.main' : 'error.main'} fontWeight="bold">
-                  {wsConnected ? 'WebSocket Online' : 'WebSocket Offline'}
-                </Typography>
-              </Box>
-              <Typography variant="h6" color="text.secondary">ConexÃƒÂ£o</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
+      <div className="grid cols-4">
+        <div className="card">
+          <div className="kpi-label">Saldo</div>
+          <div className="kpi-value">{fmt(balance)}</div>
+          <div className="kpi-sub">{account?.currency ?? 'USD'}</div>
+        </div>
+        <div className="card">
+          <div className="kpi-label">Equidade</div>
+          <div className="kpi-value">{fmt(equity)}</div>
+          <div className="kpi-sub">
+            Flutuante:{' '}
+            {floating != null ? (
+              <span className={floating >= 0 ? 'pos' : 'neg'}>
+                {fmt(floating)}
+              </span>
+            ) : (
+              '--'
+            )}
+          </div>
+        </div>
+        <div className="card">
+          <div className="kpi-label">Posições Abertas</div>
+          <div className="kpi-value">{positions.length}</div>
+          <div className="kpi-sub">Magic #{settings.mt5AutoConnect ? 'auto' : 'manual'}</div>
+        </div>
+        <div className="card">
+          <div className="kpi-label">Conexão WS</div>
+          <div className="kpi-value">
+            <span className={`chip ${wsConnected ? 'ok' : 'danger'}`}>{wsConnected ? 'Online' : 'Offline'}</span>
+          </div>
+          <div className="kpi-sub">Core: {systemState?.status ?? 'aguardando'}</div>
+        </div>
+      </div>
 
-        <Grid item xs={12} sm={3}>
-          <Card sx={{ bgcolor: 'background.paper' }}>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                <AccountBalance sx={{ color: theme.palette.primary.main, fontSize: 20 }} />
-                <Typography variant="h5" fontWeight="bold">
-                  {account ? `$${account.balance.toFixed(2)}` : '---'}
-                </Typography>
-              </Box>
-              <Typography variant="h6" color="text.secondary">Saldo</Typography>
-              {account && (
-                <Typography variant="caption" color="text.secondary">
-                  Equity: ${account.equity.toFixed(2)} | Free: ${account.free_margin.toFixed(2)}
-                </Typography>
-              )}
-            </CardContent>
-          </Card>
-        </Grid>
+      <div className="grid cols-2" style={{ marginTop: 14 }}>
+        <div className="card">
+          <h2>Estado do Sistema</h2>
+          {systemState ? (
+            <div className="tbl-wrap">
+              <table className="tbl">
+                <tbody>
+                  <tr><td>Status</td><td className="mono">{systemState.status}</td></tr>
+                  <tr><td>Uptime</td><td className="mono">{Math.floor(systemState.uptime_sec / 60)}m {systemState.uptime_sec % 60}s</td></tr>
+                  <tr><td>Clientes WS</td><td className="mono">{systemState.ws_clients}</td></tr>
+                  <tr><td>MT5</td><td><span className={`chip ${systemState.mt5_connected ? 'ok' : 'warn'}`}>{systemState.mt5_connected ? 'Conectado' : 'Desconectado'}</span></td></tr>
+                  <tr><td>IA</td><td><span className={`chip ${systemState.ai_enabled ? 'primary' : ''}`}>{systemState.ai_enabled ? 'Ativa' : 'Inativa'}</span></td></tr>
+                  <tr><td>Eventos recentes</td><td className="mono">{systemState.recent_events}</td></tr>
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="placeholder">
+              <div className="ph-icon">⏳</div>
+              <span>Aguardando primeiro SystemState do Core...</span>
+            </div>
+          )}
+        </div>
 
-        <Grid item xs={12} sm={3}>
-          <Card sx={{ bgcolor: 'background.paper' }}>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                <ShowChart sx={{ color: theme.palette.success.main, fontSize: 20 }} />
-                <Typography variant="h5" fontWeight="bold">
-                  {positions.length}
-                </Typography>
-              </Box>
-              <Typography variant="h6" color="text.secondary">PosiÃƒÂ§ÃƒÂµes Abertas</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid item xs={12} sm={3}>
-          <Card sx={{ bgcolor: 'background.paper' }}>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                <TrendingUp sx={{ color: theme.palette.warning.main, fontSize: 20 }} />
-                <Typography variant="h5" fontWeight="bold">
-                  {systemState?.status || '---'}
-                </Typography>
-              </Box>
-              <Typography variant="h6" color="text.secondary">Status do Sistema</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
-
-      {/* Tabela de cotaÃƒÂ§ÃƒÂµes */}
-      <Card sx={{ bgcolor: 'background.paper', mb: 3 }}>
-        <CardHeader title="CotaÃƒÂ§ÃƒÂµes em Tempo Real" />
-        <TableContainer component={Paper} sx={{ bgcolor: 'background.paper' }}>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>SÃƒÂ­mbolo</TableCell>
-                <TableCell align="right">PreÃƒÂ§o</TableCell>
-                <TableCell align="right">Bid</TableCell>
-                <TableCell align="right">Ask</TableCell>
-                <TableCell align="right">Spread</TableCell>
-                <TableCell align="right">VariaÃƒÂ§ÃƒÂ£o</TableCell>
-                <TableCell align="right">Volume</TableCell>
-                <TableCell>Fonte</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {quotes.map((q) => (
-                <TableRow key={q.symbol} hover>
-                  <TableCell>
-                    <Typography variant="body2" fontWeight="bold">{q.symbol}</Typography>
-                  </TableCell>
-                  <TableCell align="right">{q.price?.toFixed(2) || '---'}</TableCell>
-                  <TableCell align="right">{q.bid?.toFixed(2) || '---'}</TableCell>
-                  <TableCell align="right">{q.ask?.toFixed(2) || '---'}</TableCell>
-                  <TableCell align="right">{q.spread?.toFixed(1) || '0'} pips</TableCell>
-                  <TableCell align="right">
-                    <Chip
-                                          label={`${q.change_pct >= 0 ? '+' : ''}${q.change_pct?.toFixed(2) || '0'}%`}
-                      color={q.change_pct >= 0 ? 'success' : 'error'}
-                      size="small"
-                    />
-                  </TableCell>
-                  <TableCell align="right">{q.volume?.toFixed(0) || '0'}</TableCell>
-                  <TableCell>{q.source}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      </Card>
-
-      {/* PosiÃƒÂ§ÃƒÂµes recentes */}
-      {positions.length > 0 && (
-        <Card sx={{ bgcolor: 'background.paper' }}>
-          <CardHeader title="PosiÃƒÂ§ÃƒÂµes Abertas" />
-          <TableContainer>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Ticket</TableCell>
-                  <TableCell>SÃƒÂ­mbolo</TableCell>
-                  <TableCell>Side</TableCell>
-                  <TableCell align="right">Volume</TableCell>
-                  <TableCell align="right">Open Price</TableCell>
-                  <TableCell align="right">Current</TableCell>
-                  <TableCell align="right">Profit</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {positions.map((p) => (
-                  <TableRow key={p.ticket} hover>
-                    <TableCell>{p.ticket}</TableCell>
-                    <TableCell>{p.symbol}</TableCell>
-                    <TableCell>
-                      <Chip label={p.side} color={p.side === 'BUY' ? 'success' : 'error'} size="small" />
-                    </TableCell>
-                    <TableCell align="right">{p.volume}</TableCell>
-                    <TableCell align="right">{p.open_price.toFixed(2)}</TableCell>
-                    <TableCell align="right">{p.current_price.toFixed(2)}</TableCell>
-                    <TableCell align="right" style={{ color: p.profit >= 0 ? '#00c853' : '#ff3d57' }}>
-                      ${p.profit.toFixed(2)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Card>
-      )}
-    </Box>
+        <div className="card">
+          <h2>Conta MT5</h2>
+          {account ? (
+            <div className="tbl-wrap">
+              <table className="tbl">
+                <tbody>
+                  <tr><td>Login</td><td className="mono">{account.login}</td></tr>
+                  <tr><td>Servidor</td><td>{account.server}</td></tr>
+                  <tr><td>Moeda</td><td>{account.currency}</td></tr>
+                  <tr><td>Alavancagem</td><td className="mono">1:{account.leverage}</td></tr>
+                  <tr><td>Margem</td><td className="mono">{fmt(account.margin)}</td></tr>
+                  <tr><td>Margem livre</td><td className="mono">{fmt(account.free_margin)}</td></tr>
+                  <tr><td>Negociação</td><td><span className={`chip ${account.trade_allowed ? 'ok' : 'warn'}`}>{account.trade_allowed ? 'Permitida' : 'Bloqueada'}</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="placeholder">
+              <div className="ph-icon">🔌</div>
+              <span>Sem conta conectada. Configure o MT5 na aba Robô.</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-

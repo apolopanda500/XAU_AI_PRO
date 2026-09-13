@@ -1,4 +1,5 @@
-﻿import { create } from 'zustand';
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 export type TabType =
   | 'dashboard'
@@ -11,6 +12,8 @@ export type TabType =
   | 'settings'
   | 'strategy-tester'
   | 'robot-vision';
+
+export type ThemeName = 'dark' | 'xau_dark' | 'btc_dark' | 'light';
 
 export interface Quote {
   symbol: string;
@@ -84,7 +87,51 @@ export interface SystemState {
   recent_events: number;
 }
 
-export interface AppState {
+export interface Settings {
+  theme: ThemeName;
+  animations: boolean;
+  soundEnabled: boolean;
+  notifications: boolean;
+  autoScroll: boolean;
+  precision: number;
+  refreshInterval: number;
+  mt5Path: string;
+  mt5AutoConnect: boolean;
+  aiEnabled: boolean;
+  aiModel: string;
+  aiInterval: number;
+  slackWebhook: string;
+  slackActive: boolean;
+  telegramToken: string;
+  telegramChatId: string;
+  telegramActive: boolean;
+  discordWebhook: string;
+  discordActive: boolean;
+}
+
+export const DEFAULT_SETTINGS: Settings = {
+  theme: 'xau_dark',
+  animations: true,
+  soundEnabled: true,
+  notifications: true,
+  autoScroll: true,
+  precision: 2,
+  refreshInterval: 1000,
+  mt5Path: '',
+  mt5AutoConnect: true,
+  aiEnabled: true,
+  aiModel: 'xau-pro-v2',
+  aiInterval: 60,
+  slackWebhook: '',
+  slackActive: false,
+  telegramToken: '',
+  telegramChatId: '',
+  telegramActive: false,
+  discordWebhook: '',
+  discordActive: false,
+};
+
+interface AppState {
   activeTab: TabType;
   setActiveTab: (tab: TabType) => void;
   quotes: Quote[];
@@ -92,8 +139,6 @@ export interface AppState {
   addQuote: (quote: Quote) => void;
   selectedSymbol: string;
   setSelectedSymbol: (symbol: string) => void;
-  connected: boolean;
-  setConnected: (connected: boolean) => void;
   wsConnected: boolean;
   setWsConnected: (connected: boolean) => void;
   account: AccountInfo | null;
@@ -112,62 +157,63 @@ export interface AppState {
   setMagicNumber: (magic: number) => void;
   aiStatus: string;
   setAiStatus: (status: string) => void;
-  predictions: Record<string, any>;
-  setPredictions: (predictions: Record<string, any>) => void;
-  settings: Record<string, any>;
-  setSettings: (settings: Record<string, any>) => void;
+  settings: Settings;
+  setSettings: (patch: Partial<Settings>) => void;
+  resetSettings: () => void;
 }
 
-const initialSettings = {
-  theme: 'xau_dark',
-  animations: true,
-  soundEnabled: true,
-  notifications: true,
-  autoScroll: true,
-  precision: 2,
-  refreshInterval: 1000,
-  mt5Path: '',
-  mt5AutoConnect: true,
-  aiEnabled: true,
-  aiModel: 'xau-pro-v2',
-  aiInterval: 60,
-};
-
-export const useAppStore = create<AppState>((set, get) => ({
-  activeTab: 'dashboard',
-  setActiveTab: (tab) => set({ activeTab: tab }),
-  quotes: [],
-  setQuotes: (quotes) => set({ quotes }),
-  addQuote: (quote) =>
-    set((state) => {
-      const filtered = state.quotes.filter((q) => q.symbol !== quote.symbol);
-      return { quotes: [...filtered, quote] };
+export const useAppStore = create<AppState>()(
+  persist(
+    (set) => ({
+      activeTab: 'dashboard',
+      setActiveTab: (tab) => set({ activeTab: tab }),
+      quotes: [],
+      setQuotes: (quotes) => set({ quotes }),
+      addQuote: (quote) =>
+        set((state) => ({
+          quotes: [...state.quotes.filter((q) => q.symbol !== quote.symbol), quote],
+        })),
+      selectedSymbol: 'XAUUSD',
+      setSelectedSymbol: (symbol) => set({ selectedSymbol: symbol }),
+      wsConnected: false,
+      setWsConnected: (connected) => set({ wsConnected: connected }),
+      account: null,
+      setAccount: (account) => set({ account }),
+      positions: [],
+      setPositions: (positions) => set({ positions }),
+      orders: [],
+      setOrders: (orders) => set({ orders }),
+      systemState: null,
+      setSystemState: (state) => set({ systemState: state }),
+      sidebarOpen: true,
+      setSidebarOpen: (open) => set({ sidebarOpen: open }),
+      robotStatus: 'Desconectado',
+      setRobotStatus: (status) => set({ robotStatus: status }),
+      magicNumber: 2026001,
+      setMagicNumber: (magic) => set({ magicNumber: magic }),
+      aiStatus: 'Inativo',
+      setAiStatus: (status) => set({ aiStatus: status }),
+      settings: DEFAULT_SETTINGS,
+      setSettings: (patch) => set((state) => ({ settings: { ...state.settings, ...patch } })),
+      resetSettings: () => set({ settings: DEFAULT_SETTINGS }),
     }),
-  selectedSymbol: 'XAUUSD',
-  setSelectedSymbol: (symbol) => set({ selectedSymbol: symbol }),
-  connected: false,
-  setConnected: (connected) => set({ connected }),
-  wsConnected: false,
-  setWsConnected: (connected) => set({ wsConnected: connected }),
-  account: null,
-  setAccount: (account) => set({ account }),
-  positions: [],
-  setPositions: (positions) => set({ positions }),
-  orders: [],
-  setOrders: (orders) => set({ orders }),
-  systemState: null,
-  setSystemState: (state) => set({ systemState: state }),
-  sidebarOpen: true,
-  setSidebarOpen: (open) => set({ sidebarOpen: open }),
-  robotStatus: 'Desconectado',
-  setRobotStatus: (status) => set({ robotStatus: status }),
-  magicNumber: 2026001,
-  setMagicNumber: (magic) => set({ magicNumber: magic }),
-  aiStatus: 'Inativo',
-  setAiStatus: (status) => set({ aiStatus: status }),
-  predictions: {},
-  setPredictions: (predictions) => set({ predictions }),
-  settings: initialSettings,
-  setSettings: (settings) =>
-    set((state) => ({ settings: { ...state.settings, ...settings } })),
-}));
+    {
+      name: 'xau-ai-pro',
+      partialize: (state) => ({
+        activeTab: state.activeTab,
+        selectedSymbol: state.selectedSymbol,
+        settings: state.settings,
+        sidebarOpen: state.sidebarOpen,
+      }),
+      // Mescla defaults com settings persistidos (garante chaves novas apos atualizacao)
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as Partial<AppState>;
+        return {
+          ...current,
+          ...p,
+          settings: { ...DEFAULT_SETTINGS, ...(p.settings ?? {}) },
+        } as AppState;
+      },
+    },
+  ),
+);
