@@ -1,7 +1,7 @@
 // Configuração do XAU AI PRO Core
 // Carregada de arquivo JSON, environment variables, ou defaults.
 
-use anyhow::{Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tracing::warn;
