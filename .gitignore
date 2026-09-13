@@ -1,4 +1,4 @@
-﻿# Dependencies
+# Dependencies
 node_modules/
 frontend/node_modules/
 backend/node_modules/
@@ -100,4 +100,18 @@ exe_test*.err
 # Gitleaks report (nao versionar)
 .gitleaks-report.json
 
+
+# XAU AI PRO Core Rust
+core/target/
+frontend/src-tauri/target/
+# Frontend
+frontend/dist/
+frontend/node_modules/
+frontend/.vite/
+
+# Database
+*.db
+*.sqlite
+
 # Gitleaks config pode ser versionado (documentacao)
+
