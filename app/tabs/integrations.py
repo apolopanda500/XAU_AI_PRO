@@ -88,6 +88,19 @@ class IntegrationsTab:
         scroll.pack(fill="both", expand=True)
         body = scroll.inner
 
+        # Suporte e contas (informativo, sem rede): onde pedir ajuda e
+        # como gerenciar contas do desk antes de mexer nas integracoes.
+        support_card = Card(body, title="Suporte e Contas")
+        support_card.pack(fill="x", padx=24, pady=10)
+        tk.Label(support_card.body,
+                 text=("Contas do desk: criadas em Configuracoes (SettingsTab cria usuario admin\n"
+                       "na primeira execucao; troque a senha em Settings > Accounts).\n"
+                       "Sessao atual fica salva em config (session/remember_me).\n"
+                       "Suporte: registre o erro via aba Auditoria (ToolsTab) + Logs do EA\n"
+                       "(MQL5/Files/Data) e anexe o system_status.json ao chamado."),
+                 bg=Theme.CARD, fg=Theme.TEXT_SECONDARY, justify="left", anchor="w",
+                 font=(Theme.FONT_FAMILY, 9)).pack(fill="x", padx=12, pady=10)
+
         # Mapeia chave -> label de resultado (usado pelos testes async)
         self._widgets: dict[str, tk.Label] = {}
 

@@ -27,6 +27,7 @@ class RobotTab:
         self.frame = tk.Frame(parent, bg=Theme.BG)
         self.frame.pack(fill="both", expand=True)
         self._build()
+        self.start_refresh_loop()
 
     def _build(self) -> None:
         from app.components.banner import TabBanner

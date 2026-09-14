@@ -106,6 +106,45 @@ services:
     networks:
       - xau_ai_pro_net
 
+  # ----------------------------------------------------------
+  # Core Backend — Rust (WebSocket + HTTP API)
+  # ----------------------------------------------------------
+  core:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: xau_ai_pro_core
+    restart: unless-stopped
+    ports:
+      - "9002:9002"   # WebSocket (market data)
+      - "9003:9003"   # HTTP API
+    volumes:
+      - ./data:/app/data
+      - ./core/config.json:/app/config.json:ro
+    environment:
+      - RUST_LOG=info
+      - MT5_ENABLED=true
+    networks:
+      - xau_ai_pro_net
+
+  # ----------------------------------------------------------
+  # Frontend React + TypeScript (Vite)
+  # ----------------------------------------------------------
+  frontend:
+    image: node:22-alpine
+    container_name: xau_ai_pro_frontend
+    working_dir: /app
+    ports:
+      - "3002:3000"
+    volumes:
+      - ./frontend:/app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    depends_on:
+      - core
+    networks:
+      - xau_ai_pro_net
+
+
 networks:
   xau_ai_pro_net:
     name: xau_ai_pro_net

@@ -54,5 +54,18 @@ O resultado é `installer\XAU_AI_PRO_Setup.exe`.
 ## Segurança operacional
 
 - Não versione tokens, senhas ou DSNs.
+
+---
+
+## Nova Stack 2026 (em migração)
+
+O projeto está sendo modernizado para a stack 2026:
+
+- **Core Backend**: Rust (axum/tokio) — performance extrema
+- **Frontend**: React + TypeScript + Tauri — nativo, leve
+- **Execução**: MQL5 EA (mantido como executor real)
+
+Veja `docs/ARCHITECTURE.md` para detalhes.
+
 - Use conta demo até haver histórico suficiente de backtest e forward test.
 - Revise limites de lote, spread, perda diária e drawdown antes de habilitar o robô.

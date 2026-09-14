@@ -4,30 +4,28 @@ import { useTheme } from './hooks/useTheme';
 import { useCoreBootstrap } from './hooks/useCoreBootstrap';
 import { useMarketWebSocket } from './hooks/useMarketWebSocket';
 import AuthGate from './components/AuthGate';
+import QuantumBackground from './components/QuantumBackground';
 import Sidebar from './components/Sidebar';
 import TopNav from './components/TopNav';
 import DashboardTab from './components/tabs/DashboardTab';
 import MarketTab from './components/tabs/MarketTab';
-import PositionsTab from './components/tabs/PositionsTab';
 import RobotTab from './components/tabs/RobotTab';
-import ChartsTab from './components/tabs/ChartsTab';
-import ToolsTab from './components/tabs/ToolsTab';
-import IntegrationsTab from './components/tabs/IntegrationsTab';
+import HistoryTab from './components/tabs/HistoryTab';
+import EconomicCalendarTab from './components/tabs/EconomicCalendarTab';
+import SystemMonitorTab from './components/tabs/SystemMonitorTab';
 import SettingsTab from './components/tabs/SettingsTab';
 import StrategyTesterTab from './components/tabs/StrategyTesterTab';
-import RobotVisionTab from './components/tabs/RobotVisionTab';
+import MiniInfoWidget from './components/MiniInfoWidget';
 
 const TAB_COMPONENTS: Record<TabType, React.ReactNode> = {
   dashboard: <DashboardTab />,
   market: <MarketTab />,
-  positions: <PositionsTab />,
   robot: <RobotTab />,
-  charts: <ChartsTab />,
-  tools: <ToolsTab />,
-  integrations: <IntegrationsTab />,
+  history: <HistoryTab />,
+  calendar: <EconomicCalendarTab />,
+  system: <SystemMonitorTab />,
   settings: <SettingsTab />,
   'strategy-tester': <StrategyTesterTab />,
-  'robot-vision': <RobotVisionTab />,
 };
 
 export default function App() {
@@ -37,14 +35,20 @@ export default function App() {
   useMarketWebSocket();
 
   return (
-    <AuthGate>
-      <div className="app-shell">
-        <Sidebar />
-        <main className="main">
-          <TopNav />
-          <section className="content">{TAB_COMPONENTS[activeTab] ?? TAB_COMPONENTS.dashboard}</section>
-        </main>
-      </div>
-    </AuthGate>
+    <>
+      {/* Camada de fundo quântico com partículas e linhas de energia */}
+      <QuantumBackground density={60} speed={1} />
+      <AuthGate>
+        <div className="app-shell">
+          <Sidebar />
+          <main className="main">
+            <TopNav />
+            <MiniInfoWidget />
+            <section className="content">{TAB_COMPONENTS[activeTab] ?? TAB_COMPONENTS.dashboard}</section>
+          </main>
+        </div>
+      </AuthGate>
+    </>
   );
 }
+

@@ -1,4 +1,9 @@
-"""Testes da barra lateral compacta/recolhível (Tkinter headless)."""
+"""Testes da barra lateral compacta/recolhível (Tkinter headless).
+
+NOTA: a Sidebar foi desativada visualmente no core (navegacao unica pelo
+TopNav no topo). Estes testes cobrem o componente isolado; o core usa
+TopNav (ver tests/test_topnav.py).
+"""
 from __future__ import annotations
 
 import sys

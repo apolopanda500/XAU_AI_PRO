@@ -1,13 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { useAppStore, TabType } from '../hooks/useAppStore';
+import QuantumClock from './QuantumClock';
+import { QuantumIcon } from './QuantumIcon';
 
-const TABS: [TabType, string][] = [
-  ['dashboard', 'Painel'],
-  ['market', 'Mercado'],
-  ['positions', 'Carteira'],
-  ['charts', 'Gráficos'],
-  ['robot', 'Robô'],
-  ['strategy-tester', 'Estratégias'],
+const TABS: [TabType, string, string][] = [
+  ['dashboard', 'Painel', 'dashboard'],
+  ['market', 'Mercado', 'market'],
+  ['robot', 'Robô', 'robot'],
+  ['history', 'Histórico', 'history'],
+  ['calendar', 'Calendário', 'calendar'],
+  ['strategy-tester', 'Estratégia', 'strategy'],
 ];
 
 export default function TopNav() {
@@ -16,23 +18,19 @@ export default function TopNav() {
   const wsConnected = useAppStore((s) => s.wsConnected);
   const aiStatus = useAppStore((s) => s.aiStatus);
   const robotStatus = useAppStore((s) => s.robotStatus);
-  const [time, setTime] = useState(new Date());
-
-  useEffect(() => {
-    const id = setInterval(() => setTime(new Date()), 1000);
-    return () => clearInterval(id);
-  }, []);
 
   return (
     <header className="topbar">
       <div className="topnav-tabs">
-        {TABS.map(([key, label]) => (
+        {TABS.map(([key, label, icon]) => (
           <button
             key={key}
             className={`btn sm ${activeTab === key ? 'primary' : 'ghost'}`}
             onClick={() => setActiveTab(key)}
+            title={label}
           >
-            {label}
+            <QuantumIcon name={icon as any} size={16} glow={activeTab === key} />
+            <span>{label}</span>
           </button>
         ))}
       </div>
@@ -42,7 +40,7 @@ export default function TopNav() {
         </span>
         <span className="status">🤖 AI: {aiStatus}</span>
         <span className="status">EA: {robotStatus}</span>
-        <span className="muted">{time.toLocaleTimeString('pt-BR')}</span>
+        <QuantumClock compact showSeconds={false} showDate={false} />
       </div>
     </header>
   );

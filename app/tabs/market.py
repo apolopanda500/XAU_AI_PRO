@@ -1,17 +1,17 @@
 # -*- coding: utf-8 -*-
-"""Aba Mercado - pagina dedicada al mercado financiero (sin grafico).
+"""Aba Mercado - pagina dedicada ao mercado financeiro.
 
-El grafico esta EXCLUSIVAMENTE en la aba "Graficos" para mantener esta
-pantalla liviana y rapida (solo cotizaciones: MT5 local + fallback HTTP).
+O grafico principal fica EXCLUSIVAMENTE na aba "Graficos" para manter esta
+tela leve e rapida (apenas cotacoes: MT5 local + fallback HTTP).
 
-Diseno de produccion:
-  - Tkinter NO es thread-safe: los workers de red JAMAS tocan widgets ni
-    llaman after(). Ponen resultados en self._queue y el hilo principal las
-    vacia via _poll_results (after repetitivo iniciado UNA sola vez).
-  - Un solo ciclo activo (guard _busy) y una sola fuente de cadencia
-    (el _realtime_tick del core respeta el checkbox Auto).
-  - Los fallos por simbolo se leen de market.errors() y se muestran
-    concretos en la barra de estado (nada de "except: pass").
+Desenho de producao:
+  - Tkinter NAO e thread-safe: os workers de rede JAMAIS tocam widgets nem
+    chamam after(). Colocam resultados em self._queue e a thread principal
+    esvazia via _poll_results (after repetitivo iniciado UMA unica vez).
+  - Um unico ciclo ativo (guarda _busy) e uma unica fonte de cadencia
+    (o _realtime_tick do core respeita o checkbox Auto).
+  - As falhas por simbolo sao lidas de market.errors() e mostradas de forma
+    concreta na barra de status (nada de "except: pass").
 """
 from __future__ import annotations
 
@@ -30,16 +30,34 @@ from app.mt5_robot import MT5Robot
 from app.theme.mexc import Theme
 from app.components.button import ProButton
 from app.tabs.charts import ChartCanvas
-from app.data.assets import get_default_symbols, search_assets, get_categories, get_assets_by_category
+from app.data.assets import (get_default_symbols, search_assets, get_categories,
+                             get_assets_by_category, get_tv_symbol, get_asset)
 
-DEFAULT_SYMBOLS = ["XAUUSD", "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD",
-                   "NZDUSD", "USDCHF", "BTCUSD", "ETHUSD", "SPX500", "NAS100"]
+DEFAULT_SYMBOLS = [
+    # Foco operacional do robo (F1: instancia unica, 11 simbolos oficiais)
+    "XAUUSD",
+    "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "NZDUSD",
+    "USDCHF", "USDBRL", "USDSEK", "USDCNH",
+    # Metais e energia (cobertura ouro/prata/petroleo)
+    "XAGUSD", "XPTUSD", "XPDUSD", "WTI", "BRENT", "USOIL", "UKOIL", "NG",
+    # Forex majors/crosses liquidos
+    "EURGBP", "EURJPY", "GBPJPY", "AUDJPY", "CADJPY", "AUDNZD", "USDMXN",
+    # Cripto principais (MT5 + fallback exchange)
+    "BTCUSD", "ETHUSD", "BNBUSD", "SOLUSD", "XRPUSD", "DOGEUSD", "ADAUSD",
+    "LTCUSD", "LINKUSD", "DOTUSD",
+    # Indices globais
+    "SPX500", "NAS100", "US30", "DAX40", "FTSE100", "NIKKEI225",
+    "BOVESPA", "US500", "US100",
+    # Acoes EUA + Brasil (day-trade e swing)
+    "AAPL", "MSFT", "NVDA", "TSLA", "GOOGL", "AMZN", "META",
+    "PETR4", "VALE3", "ITUB4", "BBDC4", "WEGE3",
+]
 
-# Mapeo para TradingView (simbolo del app -> feed corredor/exchange).
+# Mapeamento para TradingView (simbolo do app -> feed corretora/exchange).
 TV_SYMBOL_MAP = {
-    "XAUUSD": "OANDA:XAUUSD", "XAUUSDc": "OANDA:XAUUSD", "GOLD": "OANDA:XAUUSD",
-    "BTCUSD": "BINANCE:BTCUSDT", "BTCUSDc": "BINANCE:BTCUSDT",
-    "ETHUSD": "BINANCE:ETHUSDT", "ETHUSDc": "BINANCE:ETHUSDT",
+    "XAUUSD": "OANDA:XAUUSD", "XAUUSDC": "OANDA:XAUUSD", "GOLD": "OANDA:XAUUSD",
+    "BTCUSD": "BINANCE:BTCUSDT", "BTCUSDC": "BINANCE:BTCUSDT",
+    "ETHUSD": "BINANCE:ETHUSDT", "ETHUSDC": "BINANCE:ETHUSDT",
     "EURUSD": "OANDA:EURUSD", "GBPUSD": "OANDA:GBPUSD", "USDJPY": "OANDA:USDJPY",
     "AUDUSD": "OANDA:AUDUSD", "USDCAD": "OANDA:USDCAD", "NZDUSD": "OANDA:NZDUSD",
     "USDCHF": "OANDA:USDCHF", "US30": "TVC:DJI", "SPX500": "TVC:SPX",
@@ -48,11 +66,21 @@ TV_SYMBOL_MAP = {
 
 
 def tv_symbol(sym: str) -> str:
-    return TV_SYMBOL_MAP.get((sym or "").upper(), "OANDA:" + sym.upper())
+    s = (sym or "").upper()
+    if s in TV_SYMBOL_MAP:
+        return TV_SYMBOL_MAP[s]
+    mapped = get_tv_symbol(s)  # mapa canonico do app (inclui aliases de corretoras)
+    if mapped != s:
+        return mapped
+    base = s[:-1] if s[-1:] == "C" and len(s) > 4 else s
+    asset = get_asset(base)
+    if asset is not None and asset.category.lower() == "crypto":
+        return "BINANCE:" + base + "USDT"
+    return "OANDA:" + s
 
 
 class TradingViewMarket(tk.Frame):
-    """Pagina del mercado financiero: watchlist, detalle del activo y movers."""
+    """Pagina do mercado financeiro: watchlist, detalhe do ativo e movers."""
 
     def __init__(self, parent, robot: MT5Robot, market: MarketData, on_status: Callable):
         super().__init__(parent, bg=Theme.BG)
@@ -143,9 +171,10 @@ class TradingViewMarket(tk.Frame):
         assets = []
         for cat in get_categories():
             assets.extend(get_assets_by_category(cat))
+        popup.title("Buscar Ativos - %d ativos" % len(assets))
         def fill(a):
             lb.delete(0, "end")
-            for x in a[:200]:
+            for x in a[:400]:
                 lb.insert("end", f"{x.icon} {x.symbol} - {x.name}")
         fill(assets)
         def on_search(*args):
@@ -185,7 +214,7 @@ class TradingViewMarket(tk.Frame):
         card.grid(row=row, column=col, sticky="nsew", padx=(4, 4), pady=2)
         head = tk.Frame(card, bg=Theme.CARD)
         head.pack(fill="x", padx=10, pady=(8, 2))
-        tk.Label(head, text="Vigilancia de Mercado", bg=Theme.CARD, fg=Theme.TEXT,
+        tk.Label(head, text="Monitor de Mercado", bg=Theme.CARD, fg=Theme.TEXT,
                  font=(Theme.FONT_FAMILY, 11, "bold")).pack(side="left")
         tk.Checkbutton(head, text="Auto", variable=self.auto_var, command=self._toggle_auto,
                        bg=Theme.CARD, fg=Theme.TEXT_MUTED, activebackground=Theme.CARD,
@@ -213,9 +242,9 @@ class TradingViewMarket(tk.Frame):
         body.pack(fill="both", expand=True, padx=12, pady=(0, 10))
         self._detail: dict[str, tk.Label] = {}
         rows = [("Bid", "bid"), ("Ask", "ask"), ("Spread", "spread"),
-                ("Variacion", "change"), ("% 24h", "change_pct"),
-                ("24h High", "high"), ("24h Low", "low"),
-                ("Volumen", "volume"), ("Hora", "time")]
+                ("Variacao", "change"), ("% 24h", "change_pct"),
+                ("24h Maxima", "high"), ("24h Minima", "low"),
+                ("Volume", "volume"), ("Hora", "time")]
         for label, key in rows:
             line = tk.Frame(body, bg=Theme.CARD)
             line.pack(fill="x", pady=2)
@@ -231,7 +260,7 @@ class TradingViewMarket(tk.Frame):
         tk.Label(chart_head, text="Grafico", bg=Theme.CARD, fg=Theme.TEXT_SECONDARY,
                  font=(Theme.FONT_FAMILY, 8)).pack(side="left")
         self.chart_tf_var = tk.StringVar(value="M5")
-        for _tf in ("M1", "M5", "M15", "H1"):
+        for _tf in ("M1", "M5", "M15", "H1", "H4", "D1"):
             tk.Radiobutton(chart_head, text=_tf, variable=self.chart_tf_var, value=_tf,
                            bg=Theme.CARD, fg=Theme.TEXT_MUTED, selectcolor=Theme.PANEL,
                            activebackground=Theme.CARD, activeforeground=Theme.TEXT,
@@ -249,7 +278,7 @@ class TradingViewMarket(tk.Frame):
         card.grid(row=row, column=col, columnspan=2, sticky="nsew", padx=(4, 4), pady=(2, 4))
         card.configure(height=190)
         card.pack_propagate(False)
-        tk.Label(card, text="Top Movimientos (24h)", bg=Theme.CARD, fg=Theme.TEXT,
+        tk.Label(card, text="Top Movimentos (24h)", bg=Theme.CARD, fg=Theme.TEXT,
                  font=(Theme.FONT_FAMILY, 11, "bold")).pack(anchor="w", padx=10, pady=(8, 2))
         self.movers_table = MarketTable(card, height=4)
         self.movers_table.pack(fill="both", expand=True, padx=6, pady=(0, 6))
@@ -257,23 +286,30 @@ class TradingViewMarket(tk.Frame):
     def _build_statusbar(self):
         bar = tk.Frame(self, bg=Theme.BG_SECONDARY, height=26)
         bar.pack(fill="x", side="bottom")
-        self.status_label = tk.Label(bar, text="Listo", bg=Theme.BG_SECONDARY,
+        self.status_label = tk.Label(bar, text="Pronto", bg=Theme.BG_SECONDARY,
                                      fg=Theme.TEXT_MUTED, font=(Theme.FONT_FAMILY, 9))
         self.status_label.pack(side="left", padx=12)
         self.count_label = tk.Label(bar, text="", bg=Theme.BG_SECONDARY,
                                     fg=Theme.TEXT_MUTED, font=(Theme.FONT_FAMILY, 9))
         self.count_label.pack(side="right", padx=12)
 
-    # ----------------------------------------------------------------- datos
+    # ----------------------------------------------------------------- dados
     def _load_symbols(self):
         try:
             cfg = get_config()
-            # Acepta 'symbols' (estandar del config_manager) y 'watchlist' (legacy).
+            # Aceita 'symbols' (padrao do config_manager) e 'watchlist' (legado).
             syms = cfg.get("market", "symbols", default=None)
             if syms is None:
                 syms = cfg.get("market", "watchlist", default=None)
             if isinstance(syms, str):
                 syms = [s.strip().upper() for s in syms.split(",") if s.strip()]
+            # Migra watchlists antigas/curtas para o universo ampliado
+            # (qualquer lista com menos de 20 simbolos e considerada legada).
+            if isinstance(syms, (list, tuple)):
+                up = [str(s).upper() for s in syms if str(s).strip()]
+                if len(up) < 20:
+                    up = list(DEFAULT_SYMBOLS)
+                syms = up
             self._symbols = [str(s).upper() for s in (syms or DEFAULT_SYMBOLS)]
         except Exception as exc:  # noqa: BLE001 - config corrupta: defaults
             self._symbols = list(DEFAULT_SYMBOLS)
@@ -286,7 +322,7 @@ class TradingViewMarket(tk.Frame):
         rows = [[s] + placeholder for s in self._symbols]
         self.watch_table.set_rows(rows)
         self.movers_table.set_rows([["--"] + placeholder] * 3)
-        self.count_label.configure(text="%d activos" % len(self._symbols))
+        self.count_label.configure(text="%d ativos" % len(self._symbols))
         self._select(self._selected)
 
     @staticmethod
@@ -407,7 +443,8 @@ class TradingViewMarket(tk.Frame):
             from app.mt5_lock import mt5_lock
             import MetaTrader5 as mt5
             tfmap = {"M1": mt5.TIMEFRAME_M1, "M5": mt5.TIMEFRAME_M5,
-                     "M15": mt5.TIMEFRAME_M15, "H1": mt5.TIMEFRAME_H1}
+                     "M15": mt5.TIMEFRAME_M15, "H1": mt5.TIMEFRAME_H1,
+                     "H4": mt5.TIMEFRAME_H4, "D1": mt5.TIMEFRAME_D1}
             with mt5_lock:
                 if not mt5.initialize():
                     return []
@@ -459,20 +496,20 @@ class TradingViewMarket(tk.Frame):
         self.watch_table.set_rows(rows, tags)
         self._apply_movers(quotes)
         filled = sum(1 for r in rows if r[1] != "--")
-        self.count_label.configure(text="%d/%d con precio" % (filled, len(self._symbols)))
+        self.count_label.configure(text="%d/%d com preco" % (filled, len(self._symbols)))
         if cached:
             self._apply_detail(cached)
         errors = self.market.errors()
         if filled:
-            self.status_label.configure(text="Mercado actualizado " + time.strftime("%H:%M:%S"))
+            self.status_label.configure(text="Mercado atualizado " + time.strftime("%H:%M:%S"))
         elif errors:
-            # Muestra la causa mas comunes (sin abrir popups).
+            # Mostra as causas mais comuns (sem abrir popups).
             sample = list(dict.fromkeys(errors.values()))[:2]
             self.status_label.configure(
-                text="Sin cotizaciones: " + "; ".join(sample))
+                text="Sem cotacoes: " + "; ".join(sample))
         else:
             self.status_label.configure(
-                text="Sin cotizaciones: verificar internet/MT5 (%s)" % self._selected)
+                text="Sem cotacoes: verifique internet/MT5 (%s)" % self._selected)
         try:
             store_quotes(list(quotes.values()))
         except Exception:  # noqa: BLE001 - persistencia opcional
@@ -516,7 +553,7 @@ class TradingViewMarket(tk.Frame):
                 d = 1 if key == "spread" else digits
                 lbl.configure(text=self._fmt(data.get(key), d))
         self.detail_title.configure(text=data.get("symbol", self._selected))
-        self.detail_source.configure(text="Fuente: " + (data.get("source") or "--"))
+        self.detail_source.configure(text="Fonte: " + (data.get("source") or "--"))
         self.stat_high.configure(text=self._fmt(data.get("high"), digits))
         self.stat_low.configure(text=self._fmt(data.get("low"), digits))
         self.stat_vol.configure(text=self._fmt(data.get("volume"), 0))
@@ -547,7 +584,7 @@ class TradingViewMarket(tk.Frame):
         if sym not in self._symbols:
             self._symbols.insert(0, sym)
             self.watch_table.set_rows(self._symbol_rows())
-            self.count_label.configure(text="%d activos" % len(self._symbols))
+            self.count_label.configure(text="%d ativos" % len(self._symbols))
         self._select(sym)
 
     def _symbol_rows(self) -> list[list[str]]:
@@ -557,9 +594,9 @@ class TradingViewMarket(tk.Frame):
         url = "https://www.tradingview.com/chart/?symbol=" + tv_symbol(self._selected)
         try:
             webbrowser.open(url)
-            self.on_status("TradingView abierto para " + self._selected)
+            self.on_status("TradingView aberto para " + self._selected)
         except Exception as error:  # noqa: BLE001
-            self.on_status("No se pudo abrir el navegador: " + str(error))
+            self.on_status("Nao foi possivel abrir o navegador: " + str(error))
 
     def _on_chart_tf(self):
         """Troca o timeframe do mini-grafico e recarrega os candles."""

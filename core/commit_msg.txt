@@ -1,0 +1,13 @@
+feat: ia assistiva com sinais auditaveis, walk-forward e paper trading
+
+Item 8 do roadmap concluido:
+- modulo strategy: EMA 9/21 com filtro RSI (sinal deterministico e auditavel)
+- candles de 1 minuto persistidos em SQLite (tabela candles, WAL, 3000max)
+- backtest walk-forward sem vazamento de dados futuros (stop conservador)
+- PaperTrader integrado ao RiskEngine: kill switch, spread e lote sugerido
+- autopilot desligado por padrao; paper_only=true por padrao (seguranca)
+- guardrail de seguranca: EaCommandKind restrito a 3 comandos operacionais
+  (PlaceOrder/ClosePosition/CancelOrder) — sem saque/transferencia, teste
+  quebra o CI se a superficie do EA mudar
+- Config ganha secao "strategy" (config.json)
+- 10 testes novos; 19 passed no total; fmt + clippy limpos

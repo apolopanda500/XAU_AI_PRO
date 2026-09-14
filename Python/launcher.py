@@ -163,7 +163,13 @@ def _run_streamlit_cli(root: Path, port: int) -> int:
 
 
 def _run_dashboard(root: Path) -> int:
-    """Single-instance: reutiliza painel saudavel ou sobe em porta livre."""
+    """Dashboard web (Streamlit) - SO NO FUENTE (nao embutido no EXE GUI-only)."""
+    try:
+        import streamlit  # noqa: F401
+    except Exception:
+        _log("[AVISO] Dashboard web (Streamlit) no esta empacado nesta versao GUI-only.")
+        _log("Para o dashboard web executa desde o fonte: python Python/launcher.py dashboard")
+        return 0
     url_8501 = f"http://127.0.0.1:{DEFAULT_PORT}"
     url_8502 = f"http://127.0.0.1:{FALLBACK_PORT}"
 

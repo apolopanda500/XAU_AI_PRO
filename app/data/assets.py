@@ -99,6 +99,22 @@ CRYPTO_ASSETS = [
     AssetInfo("BONKUSD", "Bonk / US Dollar", "Crypto", "Binance", "Meme", "US", "\U0001f415"),
     AssetInfo("BTCETH", "Bitcoin / Ethereum", "Crypto", "Binance", "", "US", "\u20bf"),
     AssetInfo("ETHBTC", "Ethereum / Bitcoin", "Crypto", "Binance", "", "US", "\u039e"),
+    AssetInfo("SUIUSD", "Sui / US Dollar", "Crypto", "Binance", "", "US", "\u2b21"),
+    AssetInfo("TONUSD", "Toncoin / US Dollar", "Crypto", "Binance", "", "US", "\U0001f4a0"),
+    AssetInfo("TRXUSD", "TRON / US Dollar", "Crypto", "Binance", "", "US", "\u27f3"),
+    AssetInfo("HBARUSD", "Hedera / US Dollar", "Crypto", "Binance", "", "US", "\u25c9"),
+    AssetInfo("FETUSD", "Fetch.ai / US Dollar", "Crypto", "Binance", "AI", "US", "\u2b21"),
+    AssetInfo("RNDRUSD", "Render / US Dollar", "Crypto", "Binance", "AI", "US", "\U0001f5a5"),
+    AssetInfo("INJUSD", "Injective / US Dollar", "Crypto", "Binance", "DeFi", "US", "\u2b21"),
+    AssetInfo("TAOUSD", "Bittensor / US Dollar", "Crypto", "Binance", "AI", "US", "\u221e"),
+    AssetInfo("WIFUSD", "dogwifhat / US Dollar", "Crypto", "Binance", "Meme", "US", "\U0001f436"),
+    AssetInfo("ORDIUSD", "Ordinals / US Dollar", "Crypto", "Binance", "", "US", "\u2b21"),
+    AssetInfo("SEIUSD", "Sei / US Dollar", "Crypto", "Binance", "", "US", "\u25c8"),
+    AssetInfo("TIAUSD", "Celestia / US Dollar", "Crypto", "Binance", "", "US", "\u25c8"),
+    AssetInfo("IMXUSD", "Immutable X / US Dollar", "Crypto", "Binance", "Gaming", "US", "\U0001f3ae"),
+    AssetInfo("STXUSD", "Stacks / US Dollar", "Crypto", "Binance", "DeFi", "US", "\u2b21"),
+    AssetInfo("GRTUSD", "The Graph / US Dollar", "Crypto", "Binance", "DeFi", "US", "\U0001f5c4"),
+    AssetInfo("LDOUSD", "Lido DAO / US Dollar", "Crypto", "Binance", "DeFi", "US", "\U0001f3e6"),
     AssetInfo("BTC=F", "Bitcoin Futures", "Crypto", "CME", "", "US", "\u20bf"),
     AssetInfo("ETH=F", "Ethereum Futures", "Crypto", "CME", "", "US", "\u039e"),
 ]
@@ -130,6 +146,15 @@ INDICES_ASSETS = [
     AssetInfo("ES=F", "S&P 500 Futures", "Indices", "CME", "Index", "US", "\U0001f4ca"),
     AssetInfo("NQ=F", "NASDAQ 100 Futures", "Indices", "CME", "Index", "US", "\U0001f4ca"),
     AssetInfo("YM=F", "Dow Jones Futures", "Indices", "CME", "Index", "US", "\U0001f4ca"),
+    AssetInfo("GER40", "DAX 40 (GER40)", "Indices", "DE", "Index", "DE", "\U0001f4ca"),
+    AssetInfo("UK100", "FTSE 100 (UK100)", "Indices", "UK", "Index", "UK", "\U0001f4ca"),
+    AssetInfo("US500", "S&P 500 (US500)", "Indices", "US", "Index", "US", "\U0001f4ca"),
+    AssetInfo("US100", "NASDAQ 100 (US100)", "Indices", "US", "Index", "US", "\U0001f4ca"),
+    AssetInfo("USTEC", "NASDAQ Tech (USTEC)", "Indices", "US", "Index", "US", "\U0001f4ca"),
+    AssetInfo("EU50", "Euro Stoxx 50", "Indices", "EU", "Index", "EU", "\U0001f4ca"),
+    AssetInfo("CHINA50", "FTSE China A50", "Indices", "CN", "Index", "CN", "\U0001f4ca"),
+    AssetInfo("TAIWAN", "Taiwan Weighted", "Indices", "TW", "Index", "TW", "\U0001f4ca"),
+    AssetInfo("MEXICO", "IPC Mexico", "Indices", "MX", "Index", "MX", "\U0001f4ca"),
     AssetInfo("RTY=F", "Russell 2000 Futures", "Indices", "CME", "Index", "US", "\U0001f4ca"),
 ]
 
@@ -165,6 +190,8 @@ COMMODITIES_ASSETS = [
     AssetInfo("CL=F", "Crude Oil WTI Futures", "Commodities", "NYMEX", "Energy", "US", "\U0001f6e2"),
     AssetInfo("BZ=F", "Brent Crude Futures", "Commodities", "ICE", "Energy", "UK", "\U0001f6e2"),
     AssetInfo("NG=F", "Natural Gas Futures", "Commodities", "NYMEX", "Energy", "US", "\U0001f525"),
+    AssetInfo("USOIL", "WTI Crude Oil (USOIL)", "Commodities", "NYMEX", "Energy", "US", "\U0001f6e2"),
+    AssetInfo("UKOIL", "Brent Crude (UKOIL)", "Commodities", "ICE", "Energy", "UK", "\U0001f6e2"),
     AssetInfo("PL=F", "Platinum Futures", "Commodities", "COMEX", "Metals", "US", "\U0001f48e"),
 ]
 
@@ -288,6 +315,24 @@ TV_SYMBOL_MAP = {
     "LIVECOW": "CME:LE1!", "FEEDER": "CME:GF1!", "LEANHOG": "CME:HE1!",
     "GC=F": "COMEX:GC1!", "SI=F": "COMEX:SI1!", "CL=F": "NYMEX:CL1!",
     "BZ=F": "ICE:BZ1!", "NG=F": "NYMEX:NG1!", "PL=F": "NYMEX:PL1!",
+    "SUIUSD": "BINANCE:SUIUSDT", "TONUSD": "BINANCE:TONUSDT", "TRXUSD": "BINANCE:TRXUSDT",
+    "HBARUSD": "BINANCE:HBARUSDT", "FETUSD": "BINANCE:FETUSDT", "RNDRUSD": "BINANCE:RNDRUSDT",
+    "INJUSD": "BINANCE:INJUSDT", "TAOUSD": "BINANCE:TAOUSDT", "WIFUSD": "BINANCE:WIFUSDT",
+    "ORDIUSD": "BINANCE:ORDIUSDT", "SEIUSD": "BINANCE:SEIUSDT", "TIAUSD": "BINANCE:TIAUSDT",
+    "IMXUSD": "BINANCE:IMXUSDT", "STXUSD": "BINANCE:STXUSDT", "GRTUSD": "BINANCE:GRTUSDT",
+    "LDOUSD": "BINANCE:LDOUSDT",
+    "GER40": "XETR:DAX", "UK100": "TVC:UKX", "US500": "TVC:SPX",
+    "US100": "TVC:NDX", "USTEC": "TVC:NDX", "EU50": "TVC:SX5E",
+    "CHINA50": "TVC:CHINA50", "TAIWAN": "TVC:TWSE", "MEXICO": "TVC:IPC",
+    "USOIL": "NYMEX:CL1!", "UKOIL": "ICE:BZ1!",
+    "XAUUSDC": "OANDA:XAUUSD", "XAGUSDC": "OANDA:XAGUSD",
+    "XPTUSDC": "OANDA:XPTUSD", "XPDUSDC": "OANDA:XPDUSD",
+    "BTCUSDC": "BINANCE:BTCUSDT", "ETHUSDC": "BINANCE:ETHUSDT",
+    "SOLUSDC": "BINANCE:SOLUSDT", "BNBUSDC": "BINANCE:BNBUSDT",
+    "XRPUSDC": "BINANCE:XRPUSDT", "DOGEUSDC": "BINANCE:DOGEUSDT",
+    "LTCUSDC": "BINANCE:LTCUSDT", "ADAUSDC": "BINANCE:ADAUSDT",
+    "GOLD": "OANDA:XAUUSD", "SILVER": "OANDA:XAGUSD",
+
     "AAPL": "NASDAQ:AAPL", "MSFT": "NASDAQ:MSFT", "GOOGL": "NASDAQ:GOOGL",
     "AMZN": "NASDAQ:AMZN", "META": "NASDAQ:META", "TSLA": "NASDAQ:TSLA",
     "NVDA": "NASDAQ:NVDA", "NFLX": "NASDAQ:NFLX",
@@ -335,11 +380,23 @@ def get_tv_symbol(symbol):
 
 def get_default_symbols():
     return [
-        "XAUUSD", "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD",
-        "BTCUSD", "ETHUSD", "BNBUSD", "SOLUSD",
-        "SPX500", "NAS100", "US30", "DAX40",
-        "AAPL", "MSFT", "NVDA", "TSLA",
-        "PETR4", "VALE3", "ITUB4",
+        # Foco operacional do robo (F1: instancia unica, 11 simbolos oficiais)
+        "XAUUSD",
+        "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "NZDUSD",
+        "USDCHF", "USDBRL", "USDSEK", "USDCNH",
+        # Metais e energia (cobertura ouro/prata/petroleo)
+        "XAGUSD", "XPTUSD", "XPDUSD", "WTI", "BRENT", "USOIL", "UKOIL", "NG",
+        # Forex majors/crosses liquidos
+        "EURGBP", "EURJPY", "GBPJPY", "AUDJPY", "CADJPY", "AUDNZD", "USDMXN",
+        # Cripto principais (MT5 + fallback exchange)
+        "BTCUSD", "ETHUSD", "BNBUSD", "SOLUSD", "XRPUSD", "DOGEUSD", "ADAUSD",
+        "LTCUSD", "LINKUSD", "DOTUSD",
+        # Indices globais
+        "SPX500", "NAS100", "US30", "DAX40", "FTSE100", "NIKKEI225",
+        "BOVESPA", "US500", "US100",
+        # Acoes EUA + Brasil (day-trade e swing)
+        "AAPL", "MSFT", "NVDA", "TSLA", "GOOGL", "AMZN", "META",
+        "PETR4", "VALE3", "ITUB4", "BBDC4", "WEGE3",
     ]
 
 def get_categories():

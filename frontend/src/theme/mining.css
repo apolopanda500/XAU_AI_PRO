@@ -1,0 +1,319 @@
+/* ============================================================
+   XAU AI PRO — CSS Mining Rig
+   Visual de minerador: LEDs, ventoinhas, hashrate, temperatura
+   ============================================================ */
+
+.mining-rig {
+  background: var(--panel);
+  border: 1px solid var(--quantum-border);
+  border-radius: 12px;
+  padding: 16px;
+  position: relative;
+  overflow: hidden;
+}
+
+.mining-rig::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 20% 30%, rgba(240, 185, 11, 0.05) 0%, transparent 50%),
+    radial-gradient(circle at 80% 70%, rgba(247, 147, 26, 0.05) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+.mining-rig-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--quantum-border);
+}
+
+.mining-rig-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--quantum-primary);
+  text-shadow: 0 0 8px var(--quantum-glow);
+}
+
+.mining-rig-icon {
+  font-size: 18px;
+}
+
+.mining-rig-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.mining-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  animation: mining-pulse 1.5s ease-in-out infinite;
+}
+
+.mining-status-dot.active {
+  background: #22c55e;
+  box-shadow: 0 0 8px #22c55e;
+}
+
+.mining-status-dot.idle {
+  background: #6b7280;
+}
+
+.mining-status-text {
+  color: var(--text);
+}
+
+.mining-gpus {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.mining-gpu {
+  background: var(--panel2);
+  border: 1px solid var(--quantum-border);
+  border-radius: 8px;
+  padding: 8px;
+  text-align: center;
+}
+
+.mining-gpu-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.mining-gpu-fans {
+  display: flex;
+  gap: 4px;
+  font-size: 14px;
+}
+
+.mining-fan {
+  display: inline-block;
+}
+
+.mining-fan.spinning {
+  animation: fan-spin 1s linear infinite;
+}
+
+.mining-fan.spinning-reverse {
+  animation: fan-spin 1.2s linear infinite reverse;
+}
+
+@keyframes fan-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.mining-gpu-leds {
+  display: flex;
+  gap: 3px;
+  margin: 4px 0;
+}
+
+.gpu-led {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  transition: all 0.15s ease;
+}
+
+.gpu-led.led-green {
+  background: #22c55e;
+  box-shadow: 0 0 6px #22c55e;
+}
+
+.gpu-led.led-off {
+  background: #374151;
+}
+
+.mining-gpu-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.mining-gpu-hash {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--quantum-primary);
+  text-shadow: 0 0 4px var(--quantum-glow-soft);
+}
+
+.mining-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.mining-stat {
+  background: var(--panel2);
+  border: 1px solid var(--quantum-border);
+  border-radius: 6px;
+  padding: 8px;
+  text-align: center;
+}
+
+.mining-stat-label {
+  display: block;
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 4px;
+  letter-spacing: 0.5px;
+}
+
+.mining-stat-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.mining-stat-value small {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.mining-stat-value.ok { color: #22c55e; }
+.mining-stat-value.warn { color: #f59e0b; }
+.mining-stat-value.danger { color: #ef4444; }
+
+.hash-value {
+  color: var(--quantum-primary) !important;
+  text-shadow: 0 0 6px var(--quantum-glow);
+}
+
+.mining-shares {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px;
+  background: var(--panel2);
+  border-radius: 6px;
+  margin-bottom: 8px;
+  font-size: 11px;
+}
+
+.mining-share {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.share-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.share-dot.green {
+  background: #22c55e;
+  box-shadow: 0 0 4px #22c55e;
+}
+
+.share-dot.red {
+  background: #ef4444;
+  box-shadow: 0 0 4px #ef4444;
+}
+
+.mining-activity-bar {
+  display: flex;
+  gap: 3px;
+  justify-content: center;
+  padding: 4px;
+}
+
+.activity-led {
+  width: 8px;
+  height: 4px;
+  border-radius: 2px;
+  background: #374151;
+  transition: all 0.15s ease;
+}
+
+.activity-led.active {
+  background: var(--quantum-primary);
+  box-shadow: 0 0 6px var(--quantum-glow);
+}
+
+/* Mining Rig Compacto */
+.mining-rig-compact {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--panel);
+  border: 1px solid var(--quantum-border);
+  border-radius: 8px;
+}
+
+.mining-hashrate {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mining-hash-icon {
+  font-size: 14px;
+}
+
+.mining-hash-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--quantum-primary);
+  text-shadow: 0 0 4px var(--quantum-glow);
+}
+
+.mining-hash-unit {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.mining-temp-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.mining-leds-row {
+  display: flex;
+  gap: 2px;
+}
+
+.mining-led {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  transition: all 0.15s ease;
+}
+
+.mining-led.on {
+  background: #22c55e;
+  box-shadow: 0 0 4px #22c55e;
+}
+
+.mining-led.off {
+  background: #374151;
+}
+
+/* Animação de pulse para status */
+@keyframes mining-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}

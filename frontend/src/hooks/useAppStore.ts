@@ -4,14 +4,12 @@ import { persist } from 'zustand/middleware';
 export type TabType =
   | 'dashboard'
   | 'market'
-  | 'positions'
   | 'robot'
-  | 'charts'
-  | 'tools'
-  | 'integrations'
+  | 'history'
+  | 'calendar'
+  | 'system'
   | 'settings'
-  | 'strategy-tester'
-  | 'robot-vision';
+  | 'strategy-tester';
 
 export type ThemeName = 'dark' | 'xau_dark' | 'btc_dark' | 'light';
 

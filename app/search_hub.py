@@ -85,9 +85,10 @@ def search_chats(query: str) -> list[dict[str, Any]]:
 def search_symbols(query: str) -> list[dict[str, Any]]:
     """Pesquisa ativos: simbolos MT5 (se conectado) + lista padrao."""
     query = (query or "").strip().upper()
-    default = ["XAUUSD", "XAUUSDc", "BTCUSD", "ETHUSD", "EURUSD", "GBPUSD",
-               "USDJPY", "AUDUSD", "NZDUSD", "USDCAD", "USDCHF", "US30",
-               "NAS100", "SPX500", "GER40", "UK100"]
+    default = ["XAUUSD", "XAUUSDc", "XAGUSD", "WTI", "BRENT",
+               "BTCUSD", "ETHUSD", "SOLUSD", "XRPUSD", "DOGEUSD",
+               "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "NZDUSD", "USDCAD", "USDCHF",
+               "US30", "NAS100", "SPX500", "DAX40", "FTSE100", "GER40", "UK100"]
     out = []
     for s in default:
         if not query or query in s:

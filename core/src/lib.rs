@@ -4,6 +4,9 @@
 pub mod account;
 pub mod bridge;
 pub mod config;
+pub mod connectors;
+pub mod connectors_mock;
+pub mod updates;
 pub mod execution;
 pub mod market;
 pub mod mt5session;

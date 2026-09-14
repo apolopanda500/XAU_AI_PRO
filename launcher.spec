@@ -1,34 +1,24 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-Spec ENXUTA do EXE CLI (launcher) do XAU_AI_PRO v1.3.2+.
+Spec ENXUTA GUI-ONLY do EXE do XAU_AI_PRO v1.3.2+ (build 2026).
 
-Entry point: Python/launcher.py (status/notify/release/versao/predict/train/help/dashboard/menu).
+Entry point: Python/launcher.py (GUI nativa Tkinter + comandos CLI simples).
 
-Estrategia de tamanho:
-  1) SEM datas do projeto: o launcher carrega os modulos do projeto do DISCO
-     (XAU_AI_PRO_ROOT), entao NAO embutimos Python/models/ (2,7 GB) nem MQL5/.
-  2) Apenas libs de runtime realmente usadas pelo CLI:
-     numpy, pandas, sklearn, joblib, sentry_sdk (+ certifi/urllib3 via hooks).
-  3) Dashboard web: streamlit/altair/openai (+ uvicorn, exigido pelo streamlit
-     em runtime via find_spec) incluidas com frontend estatico
-     (collect_data_files) e metadata de versao (copy_metadata).
-  4) Excludes defensivos das libs pesadas nao usadas.
+Estrategia GUI-ONLY (objetivo 40-60 MB):
+  1) NO embute Streamlit/Altair/Uvicorn/OpenAI: o dashboard web foi retirado
+     do EXE (o desktop usa so a interface nativa app/core.py). Isso elimina
+     ~120 MB do binario anterior (~185 MB).
+  2) Embute so app/ (Tree) + Tkinter, MetaTrader5, Pillow e numpy/pandas/
+     sklearn/joblib/sentry_sdk (runtime do CLI/IA).
+  3) O comando 'dashboard' detecta a ausencia de Streamlit e mostra un aviso
+     claro en vez de falhar silenciosamente.
 
 console=False evita uma janela de terminal ao abrir a interface nativa.
 """
 from PyInstaller.building.build_main import Analysis, PYZ, EXE
-from PyInstaller.utils.hooks import collect_data_files, copy_metadata, collect_submodules
+from PyInstaller.utils.hooks import collect_submodules
 
 import os
-
-# Frontend estatico do Streamlit (UI web) + metadata de versao dos pacotes
-# Obs: '.agents/**' (diretorio OCULTO com os skills embutidos do streamlit,
-# ex.: 'streamlit skills') precisa ser incluido explicitamente - sem ele o
-# EXE falha com "Bundled skills were not found in your Streamlit installation".
-_STREAMLIT_DATAS = collect_data_files(
-    'streamlit',
-    includes=['static/**', 'web/**', 'components/**', '.agents/**'],)
-_METADATA = copy_metadata('streamlit') + copy_metadata('altair') + copy_metadata('openai')
 
 # Raiz do projeto = pasta onde este .spec esta (portavel: local e CI).
 # SPECPATH e fornecido pelo PyInstaller apontando para o diretorio do spec.
@@ -52,35 +42,28 @@ a = Analysis(
     [os.path.join(_ROOT, 'Python', 'launcher.py')],
     pathex=[_ROOT, os.path.join(_ROOT, 'Python')],
     binaries=[],
-    datas=_STREAMLIT_DATAS + _METADATA + _APP_DATAS,  # streamlit + libs + app/ (GUI)
+    datas=_APP_DATAS,  # app/ (GUI nativa)
     hiddenimports=[
-        # libs de runtime do CLI (numpy/pandas/sklearn/joblib/sentry_sdk)
+        # libs de runtime do CLI/IA (numpy/pandas/sklearn/joblib/sentry_sdk)
         'numpy', 'pandas', 'sklearn', 'joblib', 'sentry_sdk',
-        # dashboard web (streamlit + altair + openai p/ chat)
-        'streamlit', 'altair', 'openai',
-        # uvicorn: o Streamlit faz import lazy via importlib.util.find_spec(),
-        # que a analise estatica do PyInstaller NAO detecta. Sem isso o
-        # comando 'dashboard' falha no EXE com "uvicorn is not installed".
-        'uvicorn',
         # INTERFACE NATIVA (Tkinter): libs usadas pelo app/ desktop
         # (app/core.py, app/mt5_robot.py, app/tabs/*, app/theme/*).
         'tkinter', 'MetaTrader5', 'PIL', 'PIL.Image', 'PIL.ImageDraw',
-    ] + (collect_submodules('tkinter')  # filedialog/ttk/messagebox/etc.
-         + collect_submodules('streamlit') + collect_submodules('altair')
-         + collect_submodules('openai') + collect_submodules('uvicorn')),
+    ] + collect_submodules('tkinter'),  # filedialog/ttk/messagebox/etc.
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
-        # pesadas e NAO usadas pelo caminho CLI/dashboard
-        # (scipy fica de fora: sklearn importa scipy.sparse internamente)
-        'xgboost', 'yfinance',
-        # uvicorn e obrigatorio p/ o Streamlit>=1.40 servir o dashboard
-        'fastapi', 'boto3', 'botocore', 'litellm',
-        'duckdb', 'dask', 'distributed', 'pyarrow',
-        'sqlalchemy', 'tensorflow', 'torch', 'torchvision',
+        # WEB retirada do build GUI-only (dashboard web ja nao se usa)
+        'streamlit', 'altair', 'uvicorn', 'openai', 'litellm', 'fastapi',
+        # ML executa so no pipeline externo (no embutir libs gigantes)
+        'xgboost', 'lightgbm', 'catboost', 'tensorflow', 'torch', 'torchvision',
+        'transformers', 'yfinance',
+        # Web/DB/UI alternativa nao usadas pela GUI nativa
+        'boto3', 'botocore', 'duckdb', 'dask', 'distributed', 'pyarrow',
+        'sqlalchemy', 'polars',
         'PyQt5', 'PySide2', 'PySide6',
-        # matplotlib nao e usado pela GUI nativa (graficos via PIL/canvas)
+        # matplotlib nao se usa na GUI (graficos via Pillow/tk Canvas)
         'matplotlib',
     ],
     noarchive=False,

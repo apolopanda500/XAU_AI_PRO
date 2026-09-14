@@ -33,7 +33,7 @@ def _result(ok: bool, result: Any = None, error: str = "") -> dict[str, Any]:
 def _act_tradingview(action: str, **params: Any) -> dict[str, Any]:
     symbol = str(params.get("symbol") or "XAUUSD").upper().replace("/", "")
     if action in {"symbols", "screener", "assets", "list"}:
-        symbols = params.get("symbols") or ["XAUUSD", "EURUSD", "GBPUSD", "USDJPY", "BTCUSD", "ETHUSD"]
+        symbols = params.get("symbols") or ["XAUUSD", "EURUSD", "GBPUSD", "USDJPY", "BTCUSD", "ETHUSD", "SPX500", "NAS100", "US30"]
         items = []
         for item in symbols:
             quote = _act_tradingview("quote", symbol=str(item))

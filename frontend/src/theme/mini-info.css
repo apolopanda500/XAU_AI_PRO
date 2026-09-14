@@ -1,0 +1,176 @@
+/* ============================================================
+   XAU AI PRO — CSS Mini Info Widget
+   Widget compacto: calendário + notícias + mining
+   ============================================================ */
+
+.mini-info-widget {
+  display: flex;
+  gap: 12px;
+  padding: 8px 14px;
+  background: var(--panel);
+  border: 1px solid var(--quantum-border);
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+}
+
+.mini-info-widget::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, 
+    var(--quantum-glow-soft) 0%, 
+    transparent 30%, 
+    transparent 70%, 
+    var(--quantum-glow-soft) 100%
+  );
+  pointer-events: none;
+}
+
+.mini-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  position: relative;
+  z-index: 1;
+}
+
+.mini-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+/* Evento */
+.mini-evento {
+  min-width: 180px;
+}
+
+.mini-evento-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mini-hora {
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--quantum-primary);
+  text-shadow: 0 0 4px var(--quantum-glow);
+}
+
+.mini-pais {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--panel2);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.mini-impacto {
+  font-size: 8px;
+  font-weight: 700;
+  color: #fff;
+  padding: 1px 4px;
+  border-radius: 3px;
+  text-transform: uppercase;
+}
+
+.mini-titulo {
+  font-size: 11px;
+  color: var(--text);
+}
+
+/* Notícias */
+.mini-noticias {
+  flex: 1;
+  min-width: 200px;
+}
+
+.mini-noticias-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mini-noticia {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.mini-sentimento {
+  font-size: 10px;
+  font-weight: 700;
+  width: 12px;
+  text-align: center;
+}
+
+.mini-noticia-titulo {
+  flex: 1;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mini-tempo {
+  font-size: 9px;
+  color: var(--muted);
+}
+
+/* Mining */
+.mini-mining {
+  min-width: 120px;
+}
+
+.mini-mining-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mini-hash {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--quantum-primary);
+}
+
+.mini-temp {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.mini-temp.ok { color: #22c55e; }
+.mini-temp.warn { color: #f59e0b; }
+.mini-temp.danger { color: #ef4444; }
+
+.mini-leds {
+  display: flex;
+  gap: 2px;
+}
+
+.mini-led {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #374151;
+}
+
+.mini-led.on {
+  background: #22c55e;
+  box-shadow: 0 0 3px #22c55e;
+  animation: mini-led-pulse 1s ease-in-out infinite;
+}
+
+@keyframes mini-led-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}

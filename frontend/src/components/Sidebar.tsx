@@ -1,17 +1,17 @@
 import React from 'react';
 import { useAppStore, TabType } from '../hooks/useAppStore';
+import { QuantumIcon } from './QuantumIcon';
+import type { IconName } from './QuantumIcon';
 
-const ITEMS: [TabType, string, string][] = [
-  ['dashboard', 'Painel', '📊'],
-  ['market', 'Mercado', '📈'],
-  ['positions', 'Carteira', '💼'],
-  ['charts', 'Gráficos', '📉'],
-  ['robot', 'Robô MT5', '🤖'],
-  ['strategy-tester', 'Teste de Estratégia', '🧪'],
-  ['robot-vision', 'Robô Vision', '👁️'],
-  ['tools', 'Ferramentas', '🛠️'],
-  ['integrations', 'Integrações', '🔌'],
-  ['settings', 'Configurações', '⚙️'],
+const ITEMS: [TabType, string, IconName][] = [
+  ['dashboard', 'Painel', 'dashboard'],
+  ['market', 'Mercado', 'market'],
+  ['robot', 'Robô', 'robot'],
+  ['history', 'Histórico', 'history'],
+  ['calendar', 'Calendário', 'calendar'],
+  ['system', 'Sistema', 'system'],
+  ['strategy-tester', 'Estratégia', 'strategy'],
+  ['settings', 'Config', 'settings'],
 ];
 
 export default function Sidebar() {
@@ -30,7 +30,7 @@ export default function Sidebar() {
       <nav className="nav-list">
         {ITEMS.map(([key, label, icon]) => (
           <button key={key} className={`nav-item ${activeTab === key ? 'active' : ''}`} onClick={() => setActiveTab(key)} title={label}>
-            <span className="nav-icon">{icon}</span>
+            <QuantumIcon name={icon} size={24} glow={activeTab === key} />
             {sidebarOpen && <span className="nav-label">{label}</span>}
           </button>
         ))}

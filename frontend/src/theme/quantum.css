@@ -1,0 +1,814 @@
+/* ============================================================
+   XAU AI PRO — Sistema Visual Quântico
+   Efeitos CSS puros: partículas, linhas de energia,
+   gradientes futuristas, bordas holográficas, sombras neon.
+   Sem libs externas — apenas CSS e variáveis de tema.
+   ============================================================ */
+
+/* ============================================================
+   1. VARIÁVEIS QUÂNTICAS POR TEMA
+   Cada tema define seu próprio espectro de cores neon.
+   ============================================================ */
+
+/* Tema Dark (Padrão) — Azul elétrico + Ciano */
+[data-theme='dark'] {
+  --quantum-primary: #4f7cff;
+  --quantum-secondary: #00d4ff;
+  --quantum-accent: #a855f7;
+  --quantum-glow: rgba(79, 124, 255, 0.6);
+  --quantum-glow-soft: rgba(79, 124, 255, 0.25);
+  --quantum-energy: #00d4ff;
+  --quantum-particle: rgba(79, 124, 255, 0.8);
+  --quantum-border: rgba(79, 124, 255, 0.4);
+  --quantum-bg-wave: rgba(79, 124, 255, 0.03);
+}
+
+/* Tema XAU Dark — Dourado + Âmbar */
+[data-theme='xau_dark'] {
+  --quantum-primary: #f0b90b;
+  --quantum-secondary: #fbbf24;
+  --quantum-accent: #d97706;
+  --quantum-glow: rgba(240, 185, 11, 0.6);
+  --quantum-glow-soft: rgba(240, 185, 11, 0.25);
+  --quantum-energy: #fbbf24;
+  --quantum-particle: rgba(240, 185, 11, 0.8);
+  --quantum-border: rgba(240, 185, 11, 0.4);
+  --quantum-bg-wave: rgba(240, 185, 11, 0.03);
+}
+
+/* Tema BTC Dark — Laranja + Vermelho */
+[data-theme='btc_dark'] {
+  --quantum-primary: #f7931a;
+  --quantum-secondary: #fb923c;
+  --quantum-accent: #ef4444;
+  --quantum-glow: rgba(247, 147, 26, 0.6);
+  --quantum-glow-soft: rgba(247, 147, 26, 0.25);
+  --quantum-energy: #fb923c;
+  --quantum-particle: rgba(247, 147, 26, 0.8);
+  --quantum-border: rgba(247, 147, 26, 0.4);
+  --quantum-bg-wave: rgba(247, 147, 26, 0.03);
+}
+
+/* Tema Light — Roxo suave + Azul */
+[data-theme='light'] {
+  --quantum-primary: #6366f1;
+  --quantum-secondary: #8b5cf6;
+  --quantum-accent: #3b82f6;
+  --quantum-glow: rgba(99, 102, 241, 0.4);
+  --quantum-glow-soft: rgba(99, 102, 241, 0.15);
+  --quantum-energy: #8b5cf6;
+  --quantum-particle: rgba(99, 102, 241, 0.6);
+  --quantum-border: rgba(99, 102, 241, 0.3);
+  --quantum-bg-wave: rgba(99, 102, 241, 0.02);
+}
+
+/* Transição suave entre temas (0.5s ease) */
+* {
+  transition: background-color 0.5s ease,
+              border-color 0.5s ease,
+              box-shadow 0.5s ease;
+}
+
+/* ============================================================
+   2. KEYFRAMES QUÂNTICOS
+   Animações para partículas, energia e efeitos de glow.
+   ============================================================ */
+
+/* Partícula flutuando suavemente */
+@keyframes quantum-float {
+  0%, 100% {
+    transform: translateY(0) translateX(0);
+    opacity: 0.4;
+  }
+  25% {
+    transform: translateY(-8px) translateX(4px);
+    opacity: 0.8;
+  }
+  50% {
+    transform: translateY(-4px) translateX(-3px);
+    opacity: 0.6;
+  }
+  75% {
+    transform: translateY(-12px) translateX(2px);
+    opacity: 0.9;
+  }
+}
+
+/* Partícula flutuando inversa */
+@keyframes quantum-float-reverse {
+  0%, 100% {
+    transform: translateY(0) translateX(0);
+    opacity: 0.6;
+  }
+  33% {
+    transform: translateY(6px) translateX(-5px);
+    opacity: 0.9;
+  }
+  66% {
+    transform: translateY(-3px) translateX(4px);
+    opacity: 0.4;
+  }
+}
+
+/* Pulso de energia */
+@keyframes quantum-pulse {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.05);
+  }
+}
+
+/* Glow pulsante */
+@keyframes quantum-glow-pulse {
+  0%, 100% {
+    box-shadow: 0 0 5px var(--quantum-glow),
+                0 0 10px var(--quantum-glow-soft);
+  }
+  50% {
+    box-shadow: 0 0 15px var(--quantum-glow),
+                0 0 30px var(--quantum-glow-soft),
+                0 0 45px var(--quantum-glow-soft);
+  }
+}
+
+/* Rotação de gradiente conico (borda holográfica) */
+@keyframes quantum-hologram {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+/* Animação de ondas de energia no fundo */
+@keyframes quantum-wave {
+  0% {
+    transform: translateX(-100%) scaleY(1);
+    opacity: 0.3;
+  }
+  50% {
+    transform: translateX(0%) scaleY(1.2);
+    opacity: 0.6;
+  }
+  100% {
+    transform: translateX(100%) scaleY(1);
+    opacity: 0.3;
+  }
+}
+
+/* Números quânticos piscando */
+@keyframes quantum-blink {
+  0%, 90%, 100% {
+    opacity: 0.3;
+    text-shadow: 0 0 5px var(--quantum-glow-soft);
+  }
+  95% {
+    opacity: 1;
+    text-shadow: 0 0 15px var(--quantum-glow),
+                 0 0 25px var(--quantum-glow-soft);
+  }
+}
+
+/* Linha de energia fluindo */
+@keyframes quantum-energy-flow {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 200% 50%;
+  }
+}
+
+/* Spin lento para anéis quânticos */
+@keyframes quantum-spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Scale breathe */
+@keyframes quantum-breathe {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 0.9;
+  }
+}
+
+/* ============================================================
+   3. PARTÍCULAS FLUTUANTES (CSS PURO)
+   Elementos decorativos com animação de flutuação.
+   ============================================================ */
+
+.quantum-particle {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--quantum-particle);
+  box-shadow: 0 0 6px var(--quantum-glow),
+              0 0 12px var(--quantum-glow-soft);
+  animation: quantum-float 4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.quantum-particle.reverse {
+  animation-name: quantum-float-reverse;
+  animation-duration: 5s;
+}
+
+.quantum-particle.large {
+  width: 6px;
+  height: 6px;
+  animation-duration: 6s;
+}
+
+.quantum-particle.small {
+  width: 2px;
+  height: 2px;
+  animation-duration: 3s;
+}
+
+/* ============================================================
+   4. LINHAS DE ENERGIA PULSANTES
+   Gradientes lineares animados que simulam fluxo de energia.
+   ============================================================ */
+
+.quantum-energy-line {
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--quantum-energy) 20%,
+    var(--quantum-primary) 50%,
+    var(--quantum-energy) 80%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: quantum-energy-flow 3s linear infinite;
+  border-radius: 1px;
+  box-shadow: 0 0 8px var(--quantum-glow-soft);
+}
+
+.quantum-energy-line.vertical {
+  width: 2px;
+  height: 100%;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    var(--quantum-energy) 20%,
+    var(--quantum-primary) 50%,
+    var(--quantum-energy) 80%,
+    transparent 100%
+  );
+  background-size: 100% 200%;
+}
+
+.quantum-energy-line.thick {
+  height: 3px;
+  box-shadow: 0 0 12px var(--quantum-glow),
+              0 0 20px var(--quantum-glow-soft);
+}
+
+/* ============================================================
+   5. NÚMEROS QUÂNTICOS (GLOW NEON)
+   Efeito de texto com brilho neon sutil.
+   ============================================================ */
+
+.quantum-number {
+  font-family: var(--mono);
+  color: var(--quantum-primary);
+  text-shadow: 0 0 5px var(--quantum-glow-soft);
+  animation: quantum-blink 8s ease-in-out infinite;
+}
+
+.quantum-number.glow-strong {
+  text-shadow: 0 0 10px var(--quantum-glow),
+               0 0 20px var(--quantum-glow-soft),
+               0 0 30px var(--quantum-glow-soft);
+  animation-duration: 4s;
+}
+
+.quantum-number.glow-soft {
+  text-shadow: 0 0 3px var(--quantum-glow-soft);
+  animation-duration: 12s;
+}
+
+/* ============================================================
+   6. BORDAS HOLOGRÁFICAS
+   Conic-gradient animado para efeito de arco-íris metálico.
+   ============================================================ */
+
+.quantum-holographic-border {
+  position: relative;
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.quantum-holographic-border::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  background: conic-gradient(
+    from 0deg,
+    var(--quantum-primary),
+    var(--quantum-secondary),
+    var(--quantum-accent),
+    var(--quantum-primary),
+    var(--quantum-secondary),
+    var(--quantum-primary)
+  );
+  background-size: 300% 300%;
+  animation: quantum-hologram 6s linear infinite;
+  z-index: -1;
+  opacity: 0.6;
+  filter: blur(1px);
+}
+
+.quantum-holographic-border::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--panel);
+  z-index: -1;
+}
+
+/* Variação sutil */
+.quantum-holographic-border.subtle::before {
+  opacity: 0.3;
+  animation-duration: 10s;
+}
+
+
+/* ============================================================
+   7. SOMBRAS QUÂNTICAS
+   Box-shadow com múltiplas camadas de cores neon.
+   ============================================================ */
+
+.quantum-shadow {
+  box-shadow: 0 0 10px var(--quantum-glow-soft),
+              0 0 20px var(--quantum-glow-soft),
+              0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.quantum-shadow.strong {
+  box-shadow: 0 0 15px var(--quantum-glow),
+              0 0 30px var(--quantum-glow-soft),
+              0 0 50px var(--quantum-glow-soft),
+              0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.quantum-shadow.glow {
+  box-shadow: 0 0 8px var(--quantum-glow),
+              0 0 16px var(--quantum-glow-soft);
+}
+
+/* ============================================================
+   8. FUNDO ANIMADO COM ONDAS DE ENERGIA
+   Pseudo-elementos que criam ondas sutis no fundo.
+   ============================================================ */
+
+.quantum-bg-waves {
+  position: relative;
+  overflow: hidden;
+}
+
+.quantum-bg-waves::before,
+.quantum-bg-waves::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.quantum-bg-waves::before {
+  background: radial-gradient(
+    ellipse 80% 50% at 50% 0%,
+    var(--quantum-bg-wave) 0%,
+    transparent 70%
+  );
+  animation: quantum-wave 12s ease-in-out infinite;
+}
+
+.quantum-bg-waves::after {
+  background: radial-gradient(
+    ellipse 60% 40% at 80% 100%,
+    var(--quantum-bg-wave) 0%,
+    transparent 70%
+  );
+  animation: quantum-wave 15s ease-in-out infinite reverse;
+}
+
+/* ============================================================
+   9. GRADIENTES FUTURISTAS
+   Classes utilitárias para gradientes temáticos.
+   ============================================================ */
+
+.quantum-gradient-primary {
+  background: linear-gradient(
+    135deg,
+    var(--quantum-primary) 0%,
+    var(--quantum-secondary) 50%,
+    var(--quantum-accent) 100%
+  );
+}
+
+.quantum-gradient-glow {
+  background: radial-gradient(
+    circle at 50% 50%,
+    var(--quantum-glow) 0%,
+    transparent 70%
+  );
+}
+
+.quantum-gradient-text {
+  background: linear-gradient(
+    90deg,
+    var(--quantum-primary),
+    var(--quantum-secondary),
+    var(--quantum-accent)
+  );
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ============================================================
+   10. ANÉIS QUÂNTICOS
+   Anéis giratórios com gradiente conico.
+   ============================================================ */
+
+.quantum-ring {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    transparent,
+    var(--quantum-primary),
+    var(--quantum-secondary),
+    transparent
+  );
+  animation: quantum-spin-slow 8s linear infinite;
+  position: relative;
+}
+
+.quantum-ring::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  background: var(--bg);
+}
+
+.quantum-ring.small {
+  width: 30px;
+  height: 30px;
+}
+
+.quantum-ring.large {
+  width: 100px;
+  height: 100px;
+  animation-duration: 12s;
+}
+
+
+/* ============================================================
+   11. PAINEL QUÂNTICO
+   Container com todos os efeitos combinados.
+   ============================================================ */
+
+.quantum-panel {
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--quantum-border);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: 0 0 10px var(--quantum-glow-soft),
+              0 4px 12px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+}
+
+.quantum-panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--quantum-primary),
+    transparent
+  );
+  opacity: 0.6;
+}
+
+.quantum-panel:hover {
+  box-shadow: 0 0 15px var(--quantum-glow),
+              0 0 25px var(--quantum-glow-soft),
+              0 4px 16px rgba(0, 0, 0, 0.3);
+  border-color: var(--quantum-primary);
+}
+
+/* ============================================================
+   12. BOTÃO QUÂNTICO
+   Botão com efeitos de energia e glow.
+   ============================================================ */
+
+.quantum-btn {
+  position: relative;
+  padding: 10px 20px;
+  background: var(--panel);
+  border: 1px solid var(--quantum-border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-weight: 600;
+  cursor: pointer;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.quantum-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--quantum-glow-soft),
+    transparent
+  );
+  transform: translateX(-100%);
+  transition: transform 0.5s ease;
+}
+
+.quantum-btn:hover {
+  border-color: var(--quantum-primary);
+  box-shadow: 0 0 12px var(--quantum-glow-soft);
+}
+
+.quantum-btn:hover::before {
+  transform: translateX(100%);
+}
+
+.quantum-btn.primary {
+  background: var(--quantum-primary);
+  color: var(--primary-contrast);
+  border-color: var(--quantum-primary);
+}
+
+.quantum-btn.primary:hover {
+  box-shadow: 0 0 20px var(--quantum-glow);
+}
+
+/* ============================================================
+   13. CAMADA DE FUNDO QUÂNTICO
+   Container fixo para efeitos de fundo global.
+   ============================================================ */
+
+.quantum-bg-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.quantum-bg-layer .wave {
+  position: absolute;
+  width: 200%;
+  height: 200%;
+  top: -50%;
+  left: -50%;
+  background: radial-gradient(
+    ellipse at center,
+    var(--quantum-bg-wave) 0%,
+    transparent 50%
+  );
+  animation: quantum-wave 20s linear infinite;
+}
+
+.quantum-bg-layer .wave:nth-child(2) {
+  animation-duration: 25s;
+  animation-direction: reverse;
+  opacity: 0.5;
+}
+
+.quantum-bg-layer .wave:nth-child(3) {
+  animation-duration: 30s;
+  opacity: 0.3;
+}
+
+/* ============================================================
+   14. INDICADOR QUÂNTICO
+   Ponto de status com pulso de energia.
+   ============================================================ */
+
+.quantum-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--quantum-primary);
+  box-shadow: 0 0 6px var(--quantum-glow);
+  animation: quantum-pulse 2s ease-in-out infinite;
+}
+
+.quantum-dot.active {
+  background: var(--ok);
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
+}
+
+.quantum-dot.warning {
+  background: var(--warn);
+  box-shadow: 0 0 8px rgba(234, 179, 8, 0.6);
+}
+
+.quantum-dot.danger {
+  background: var(--danger);
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+}
+
+
+/* ============================================================
+   15. SCROLLBAR QUÂNTICA
+   Scrollbar com tema neon sutil.
+   ============================================================ */
+
+.quantum-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.quantum-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.quantum-scroll::-webkit-scrollbar-thumb {
+  background: var(--quantum-border);
+  border-radius: 3px;
+}
+
+.quantum-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--quantum-primary);
+  box-shadow: 0 0 6px var(--quantum-glow-soft);
+}
+
+/* ============================================================
+   16. RESPETA prefers-reduced-motion
+   Desativa animações para usuários que preferem movimento reduzido.
+   ============================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .quantum-particle,
+  .quantum-energy-line,
+  .quantum-number,
+  .quantum-ring,
+  .quantum-dot {
+    animation: none !important;
+  }
+
+  .quantum-holographic-border::before {
+    animation: none !important;
+    opacity: 0.3;
+  }
+
+  .quantum-bg-waves::before,
+  .quantum-bg-waves::after,
+  .quantum-bg-layer .wave {
+    animation: none !important;
+  }
+}
+
+/* ============================================================
+   17. UTITILITÁRIOS DE LAYOUT QUÂNTICO
+   ============================================================ */
+
+.quantum-flex {
+  display: flex;
+}
+
+.quantum-flex.center {
+  align-items: center;
+  justify-content: center;
+}
+
+.quantum-flex.between {
+  align-items: center;
+  justify-content: space-between;
+}
+
+.quantum-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.quantum-grid.cols-2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.quantum-grid.cols-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.quantum-grid.cols-4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+/* ============================================================
+   18. TEXTO QUÂNTICO COM EFEITO DE DIGITAÇÃO
+   ============================================================ */
+
+.quantum-typing {
+  font-family: var(--mono);
+  color: var(--quantum-primary);
+  text-shadow: 0 0 8px var(--quantum-glow-soft);
+  overflow: hidden;
+  white-space: nowrap;
+  border-right: 2px solid var(--quantum-primary);
+  animation: quantum-blink 1s step-end infinite;
+}
+
+/* ============================================================
+   19. BADGE QUÂNTICO
+   ============================================================ */
+
+.quantum-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 10px;
+  background: var(--quantum-glow-soft);
+  color: var(--quantum-primary);
+  border: 1px solid var(--quantum-border);
+}
+
+.quantum-badge.solid {
+  background: var(--quantum-primary);
+  color: var(--primary-contrast);
+}
+
+/* ============================================================
+   20. TOOLTIP QUÂNTICO
+   ============================================================ */
+
+.quantum-tooltip {
+  position: relative;
+}
+
+.quantum-tooltip::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-4px);
+  padding: 4px 8px;
+  background: var(--panel2);
+  border: 1px solid var(--quantum-border);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  box-shadow: 0 0 8px var(--quantum-glow-soft);
+  z-index: 100;
+}
+
+.quantum-tooltip:hover::after {
+  opacity: 1;
+}
+
+

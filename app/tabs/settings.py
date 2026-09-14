@@ -149,6 +149,33 @@ class SettingsTab:
         tk.Label(profile_card.body, text="Ajusta somente prioridade, afinidade e limites do XAU AI PRO. Nunca envia ordens nem altera o Windows globalmente.",
                  bg=Theme.CARD, fg=Theme.TEXT_MUTED, font=(Theme.FONT_FAMILY, 8)).pack(anchor="w", padx=12, pady=(0, 10))
 
+        # Requisitos do produto (informativo: minimo x recomendado)
+        req_card = Card(self.frame, title="Sobre o Robo + Requisitos Minimos e Recomendados")
+        req_card.pack(fill="x", padx=24, pady=10)
+        req_text = (
+            "XAU AI PRO v1.2.0 - robo + desk operacional para MetaTrader 5 (Windows 64-bit).\n"
+            "O EA (.ex5) executa a estrategia no MT5; este app monitora, audita e opera manualmente.\n"
+            "----------------------------------------------------------------\n"
+            "MINIMO: Windows 10 64-bit | 4 nucleos CPU | 8 GB RAM | 2 GB disco livre |\n"
+            "internet estavel 10 Mbps | MT5 build recente | conta Hedge ou Netting.\n"
+            "RECOMENDADO: Windows 11 64-bit | 8+ nucleos CPU (3.0 GHz+) | 16 GB RAM |\n"
+            "SSD com 10 GB livres | internet 50 Mbps cabeada | VPS Windows p/ 24h |\n"
+            "GPU dedicada (opcional, acelera treino IA) | monitor 1080p+.\n"
+            "----------------------------------------------------------------\n"
+            "MT5: conta demo antes do real | alavancagem conforme o risco |\n"
+            "AutoTrading liberado no terminal | EA anexado no XAUUSD M5 (F1: instancia unica).\n"
+            "Suporte: aba Conexoes (Integracoes) + Logs/Auditoria + Docs do instalador."
+        )
+        tk.Label(req_card.body, text=req_text, bg=Theme.CARD, fg=Theme.TEXT_SECONDARY,
+                 justify="left", anchor="w", font=(Theme.FONT_FAMILY, 9)).pack(
+                     fill="x", padx=12, pady=(10, 6))
+        SecondaryButton(req_card.body, text="Atualizar diagnostico", command=self.refresh_resources,
+                        width=20).pack(anchor="w", padx=12, pady=(0, 4))
+        self.req_specs_label = tk.Label(req_card.body, text="Diagnostico: use o botao acima.",
+                                        bg=Theme.CARD, fg=Theme.TEXT_MUTED,
+                                        justify="left", anchor="w", font=(Theme.FONT_FAMILY, 9))
+        self.req_specs_label.pack(fill="x", padx=12, pady=(0, 10))
+
         storage_card = Card(self.frame, title="Armazenamento e Auditoria")
         storage_card.pack(fill="x", padx=24, pady=10)
         self.storage_label = tk.Label(storage_card.body, text="Lendo armazenamento local...", bg=Theme.CARD,
@@ -240,7 +267,18 @@ class SettingsTab:
                     f"Disco C: {specs.get('disco_livre_gb', 'N/D')} GB livres\n"
                     f"Limite IA local: {self.cpu_cores_entry.get() or 'auto'} nucleos | "
                     f"RAM maxima: {self.cpu_ram_entry.get() or '80'}%")
-            self.frame.after(0, lambda: self.resources_label.configure(text=text, fg=Theme.TEXT))
+            diag = (f"Sua maquina: {specs.get('cpu_name', 'N/D')} | "
+                    f"{specs.get('cpu_cores_logicos', '?')} nucleos | "
+                    f"{memory.get('total_mb', 0):,} MB RAM | GPU: {specs.get('gpu_name', 'N/D')}")
+            try:
+                self.frame.after(0, lambda: self.resources_label.configure(text=text, fg=Theme.TEXT))
+            except Exception:
+                pass
+            try:
+                self.frame.after(0, lambda: self.req_specs_label.configure(
+                    text="Diagnostico: " + diag, fg=Theme.TEXT))
+            except Exception:
+                pass
 
         import threading
         threading.Thread(target=worker, daemon=True).start()

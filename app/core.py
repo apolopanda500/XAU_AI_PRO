@@ -12,6 +12,7 @@ from tkinter import messagebox
 from typing import Any
 
 from app.components.sidebar import Sidebar
+from app.components.topnav import TopNav
 from app.components.scrollable import ScrollableFrame
 from app.config_manager import get_config
 from app.learning_engine import get_learning_engine
@@ -80,9 +81,11 @@ class XAUAProApp:
         self._build_main()
 
     def _build_main(self) -> None:
+        # Navegacao unica: TopNav no topo (Sidebar lateral removida por
+        # pedido: abas em cima, sincronizadas, sem travas).
         self.sidebar = Sidebar(self.root, on_navigate=self._navigate)
-        self.sidebar.pack(side="left", fill="y")
-
+        # Nao empacota a Sidebar: mantem o objeto para set_status/teclado,
+        # mas a navegacao visivel e 100% pelo TopNav.
         self.content = tk.Frame(self.root, bg=Theme.BG)
         self.content.pack(side="right", fill="both", expand=True)
 
@@ -172,32 +175,37 @@ class XAUAProApp:
         self.tab_container = self.scroll.inner
         self.tab_container._scroll_host = self.scroll
 
-        # Todas as abas são lazy-loaded. Construtores podem criar widgets,
-        # imagens e controles; fazê-los no boot bloqueava a thread Tk e fazia
-        # os botões parecerem travados.
+        # Barra superior de abas (substitui as sub-abas internas da direita):
+        # fica em cima, sincronizada com a Sidebar via _navigate.
+        self.topnav = TopNav(self.content, on_navigate=self._navigate)
+        self.topnav.pack(fill="x")
+        self.topnav.lower(self.scroll)
+
+        # Todas as abas sao lazy-loaded. Construtores podem criar widgets,
+        # imagens e controles; faze-los no boot bloqueava a thread Tk e fazia
+        # os botoes parecerem travados. Cada destino do TopNav tem fabrica
+        # propria (sem CombinedTab aninhado): a troca passa sempre por
+        # _navigate -> after_idle -> _load_and_navigate (uma unica fonte).
         self._tab_factories = {
-            "dashboard": lambda: CombinedTab(self.tab_container, [
-                ("Painel", lambda parent: DashboardTab(parent, self.robot, self.market, self._set_status)),
-                ("Carteira", lambda parent: PositionsTab(parent, self.robot, self.market, self._set_status)),
-            ]),
-            "market": lambda: CombinedTab(self.tab_container, [
-                ("Mercado", lambda parent: TradingViewMarket(parent, self.robot, self.market, self._set_status)),
-                ("Graficos", lambda parent: ChartsTab(parent, self.robot, self.market, self._set_status)),
-            ]),
-            "robot": lambda: CombinedTab(self.tab_container, [
-                ("Controle", lambda parent: RobotTab(parent, self.robot, self.market, self._set_status)),
-                ("Auditoria", lambda parent: ToolsTab(parent, self.robot, self.market, self._set_status)),
-            ]),
-            "tester": lambda: CombinedTab(self.tab_container, [
-                ("Strategy Tester", lambda parent: StrategyTester(parent, self._set_status)),
-            ]),
-            "vision": lambda: CombinedTab(self.tab_container, [
-                ("Visao do Robo", lambda parent: RobotVision(parent, self.robot, self.market, self._set_status)),
-            ]),
-            "system": lambda: CombinedTab(self.tab_container, [
-                ("Configuracoes", lambda parent: SettingsTab(parent, self.robot, self.market, self._set_status)),
-                ("Conexões", lambda parent: IntegrationsTab(parent, self.robot, self.market, self._set_status)),
-            ]),
+            "dashboard": lambda: DashboardTab(self.tab_container, self.robot, self.market, self._set_status),
+            "positions": lambda: PositionsTab(self.tab_container, self.robot, self.market, self._set_status),
+            "market": lambda: TradingViewMarket(self.tab_container, self.robot, self.market, self._set_status),
+            "charts": lambda: ChartsTab(self.tab_container, self.robot, self.market, self._set_status),
+            "robot": lambda: RobotTab(self.tab_container, self.robot, self.market, self._set_status),
+            "audit": lambda: ToolsTab(self.tab_container, self.robot, self.market, self._set_status),
+            "tester": lambda: StrategyTester(self.tab_container, self._set_status),
+            "vision": lambda: RobotVision(self.tab_container, self.robot, self.market, self._set_status),
+            "settings": lambda: SettingsTab(self.tab_container, self.robot, self.market, self._set_status),
+            "connections": lambda: IntegrationsTab(self.tab_container, self.robot, self.market, self._set_status),
+        }
+        # Compatibilidade: chaves antigas da Sidebar mapeiam para os destinos
+        # do TopNav (a Sidebar continua funcionando sem duplicar abas).
+        self._legacy_nav = {
+            "market": "market",
+            "robot": "robot",
+            "tester": "tester",
+            "vision": "vision",
+            "system": "settings",
         }
         self._navigate("dashboard")
         self._start_threads()
@@ -206,6 +214,8 @@ class XAUAProApp:
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
     def _navigate(self, key: str) -> None:
+        # Compat: Sidebar antiga usa "system"; TopNav usa destinos diretos.
+        key = self._legacy_nav.get(key, key)
         if key not in self._tab_factories:
             return
         if key not in self.tabs:
@@ -218,43 +228,87 @@ class XAUAProApp:
         self._show_tab(key)
 
     def _load_and_navigate(self, key: str) -> None:
+        key = self._legacy_nav.get(key, key)
         if key not in self._tab_factories:
             return
         if key not in self.tabs:
-            self.tabs[key] = self._tab_factories[key]()
-            self.tabs[key].frame.pack_forget()
-            if key == "system":
-                self.tabs[key].start_monitor()
+            try:
+                self.tabs[key] = self._tab_factories[key]()
+            except Exception as exc:  # noqa: BLE001 — aba nunca trava a navegação
+                self._navigation_pending = None
+                self._set_status(f"Falha ao abrir aba: {exc}")
+                return
+            try:
+                self.tabs[key].frame.pack_forget()
+            except Exception:
+                pass
+            if key == "settings":
+                try:
+                    self.tabs[key].start_monitor()
+                except Exception:
+                    pass
         self._navigation_pending = None
         self._show_tab(key)
 
     def _show_tab(self, key: str) -> None:
         if key == self._current_tab:
+            try:
+                self.topnav.set_active(key)
+            except Exception:
+                pass
             return
         if self._current_tab and self._current_tab in self.tabs:
-            self._scroll_positions[self._current_tab] = self.scroll.canvas.yview()[0]
-            self.tabs[self._current_tab].frame.pack_forget()
+            try:
+                self._scroll_positions[self._current_tab] = self.scroll.canvas.yview()[0]
+            except Exception:
+                pass
+            try:
+                self.tabs[self._current_tab].frame.pack_forget()
+            except Exception:
+                pass
         self._current_tab = key
-        self.tabs[key].frame.pack(fill="both", expand=True)
-        self.root.update_idletasks()
-        self.scroll.canvas.yview_moveto(self._scroll_positions.get(key, 0.0))
-        self.sidebar.set_active(key)
+        try:
+            self.tabs[key].frame.pack(fill="both", expand=True)
+        except Exception:
+            pass
+        try:
+            self.root.update_idletasks()
+        except Exception:
+            pass
+        try:
+            self.scroll.canvas.yview_moveto(self._scroll_positions.get(key, 0.0))
+        except Exception:
+            pass
+        try:
+            self.sidebar.set_active(key)
+        except Exception:
+            pass
+        try:
+            self.topnav.set_active(key)
+        except Exception:
+            pass
         titles = {
             "dashboard": "Painel",
-            "market": "Mercado",
             "positions": "Carteira",
-            "robot": "Robô",
+            "market": "Mercado",
+            "charts": "Graficos",
+            "robot": "Robo",
+            "audit": "Auditoria",
             "tester": "Strategy Tester",
-            "vision": "Visão do Robô",
-            "settings": "Configuração",
+            "vision": "Visao do Robo",
+            "settings": "Configuracao",
+            "connections": "Conexoes",
             "system": "Sistema",
         }
         self.header_title.configure(text=titles.get(key, key))
 
     def _toggle_sidebar(self) -> None:
-        """Mostra/esconde a barra lateral (botao hamburger do header)."""
-        visible = self.sidebar.toggle()
-        self.btn_sidebar.set_text("⟮" if visible else "☰")
+        """Botao hamburger: sem Sidebar visivel, apenas confirma o TopNav."""
+        try:
+            self.topnav.set_active(self._current_tab)
+        except Exception:
+            pass
+        self.btn_sidebar.set_text("☰")
 
     def _set_status(self, text: str) -> None:
         self.status_label.configure(text=text)
@@ -298,9 +352,16 @@ class XAUAProApp:
             return
         intervals = {
             "dashboard": 2.0,
+            "positions": 3.0,
             "market": max(1.0, float(self.cfg.get("market", "refresh_seconds", default=3))),
+            "charts": 3.0,
             "robot": 2.0,
+            "audit": 5.0,
             "tools": 5.0,
+            "tester": 5.0,
+            "vision": 3.0,
+            "settings": 2.0,
+            "connections": 5.0,
             "system": 2.0,
         }
         key = self._current_tab
@@ -312,8 +373,11 @@ class XAUAProApp:
                 try:
                     if key == "robot":
                         tab.check_ea()
-                    elif key == "system":
-                        tab.refresh_now()
+                    elif key in ("system", "settings"):
+                        try:
+                            tab.refresh_now()
+                        except AttributeError:
+                            tab.refresh()
                     else:
                         tab.refresh()
                 except Exception as error:

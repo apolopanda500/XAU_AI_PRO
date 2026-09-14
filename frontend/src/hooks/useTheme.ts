@@ -16,15 +16,25 @@ export function normalizeTheme(name: string): ThemeName {
   return (VALID.includes(name as ThemeName) ? name : 'dark') as ThemeName;
 }
 
+const WALLPAPER_CLASSES: Record<ThemeName, string> = {
+  dark: 'wallpaper-quantum',
+  xau_dark: 'wallpaper-xau',
+  btc_dark: 'wallpaper-btc',
+  light: 'wallpaper-quantum',
+};
+
 /**
- * Aplica o tema selecionado no elemento raiz via atributo data-theme.
- * As variaveis CSS (--bg, --primary, etc.) sao definidas no global.css.
+ * Aplica o tema no <html> via data-theme e a classe de wallpaper no <body>.
  */
 export function useTheme() {
   const themeName = useAppStore((s) => s.settings.theme) as string;
 
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', normalizeTheme(themeName));
+    const normalized = normalizeTheme(themeName);
+    document.documentElement.setAttribute('data-theme', normalized);
+    const body = document.body;
+    Object.values(WALLPAPER_CLASSES).forEach((cls) => body.classList.remove(cls));
+    body.classList.add(WALLPAPER_CLASSES[normalized]);
   }, [themeName]);
 }
 
