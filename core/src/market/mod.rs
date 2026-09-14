@@ -24,6 +24,7 @@ use futures_util::StreamExt;
 use crate::config::WebSocketConfig;
 use crate::mt5session::Mt5SessionManager;
 use crate::protocol::WsCommand;
+use crate::risk::RiskEngine;
 use dispatch::{dispatch, maybe_push_quote};
 
 pub async fn start_market_ws(
@@ -31,20 +32,22 @@ pub async fn start_market_ws(
     market: Arc<MarketDataService>,
 ) -> anyhow::Result<()> {
     let mt5 = Arc::new(Mt5SessionManager::new());
-    start_market_ws_with_mt5(config, market, mt5).await
+    let risk = Arc::new(RiskEngine::default());
+    start_market_ws_shared(config, market, mt5, risk).await
 }
 
-pub async fn start_market_ws_with_mt5(
+pub async fn start_market_ws_shared(
     config: &WebSocketConfig,
     market: Arc<MarketDataService>,
     mt5: Arc<Mt5SessionManager>,
+    risk: Arc<RiskEngine>,
 ) -> anyhow::Result<()> {
     let addr = format!("{}:{}", config.bind_address, config.port);
     info!("WS v1 em {}", addr);
     let shared = Arc::new(WsSharedState::new(market));
     let app = Router::new()
         .route("/ws/market", get(ws_handler))
-        .with_state((shared, mt5));
+        .with_state((shared, mt5, risk));
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     axum::serve(listener, app).await?;
     Ok(())
@@ -52,12 +55,21 @@ pub async fn start_market_ws_with_mt5(
 
 async fn ws_handler(
     ws: WebSocketUpgrade,
-    State((shared, mt5)): State<(Arc<WsSharedState>, Arc<Mt5SessionManager>)>,
+    State((shared, mt5, risk)): State<(
+        Arc<WsSharedState>,
+        Arc<Mt5SessionManager>,
+        Arc<RiskEngine>,
+    )>,
 ) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| handle_socket(socket, shared, mt5))
+    ws.on_upgrade(move |socket| handle_socket(socket, shared, mt5, risk))
 }
 
-async fn handle_socket(socket: WebSocket, shared: Arc<WsSharedState>, mt5: Arc<Mt5SessionManager>) {
+async fn handle_socket(
+    socket: WebSocket,
+    shared: Arc<WsSharedState>,
+    mt5: Arc<Mt5SessionManager>,
+    risk: Arc<RiskEngine>,
+) {
     let (sender, mut receiver) = socket.split();
     let mut rx = shared.market.subscribe();
     let hello = handler::await_hello(sender, &mut receiver).await;
@@ -73,6 +85,7 @@ async fn handle_socket(socket: WebSocket, shared: Arc<WsSharedState>, mt5: Arc<M
     let refs = types::ServerRefs {
         shared: shared.clone(),
         mt5,
+        risk,
     };
     loop {
         tokio::select! {

@@ -62,7 +62,7 @@ async fn reply_pong(sender: &mut WsSender, request_id: String, ts_ms: i64) {
     push_text(sender, encode_message(&msg)).await;
 }
 
-/// Valida volume e enfileira ordem para o EA (roteamento real item 6).
+/// Valida lote y riesgo, y enfileira ordem para el EA.
 async fn route_place_order(
     sender: &mut WsSender,
     refs: &ServerRefs,
@@ -74,14 +74,33 @@ async fn route_place_order(
             success: false,
             ticket: 0,
             message: format!("Volume invalido: {} (permitido: 0.01-0.50)", volume),
-            request_id: Some(order_cmd.request_id),
+            request_id: Some(order_cmd.request_id.clone()),
         });
         push_text(sender, encode_message(&resp)).await;
         return;
     }
+
+    // Item 7: aplicar Risk Engine antes de operar.
+    let decision = refs.risk.evaluate(&order_cmd.order, None).await;
+    if !decision.approved {
+        let resp = WsMessage::OrderResponse(OrderResponse {
+            success: false,
+            ticket: 0,
+            message: decision.reason.clone(),
+            request_id: Some(order_cmd.request_id.clone()),
+        });
+        push_text(sender, encode_message(&resp)).await;
+        info!(
+            "Orden rechazada por riesgo (code={}, req={})",
+            decision.code.as_deref().unwrap_or("-"),
+            order_cmd.request_id,
+        );
+        return;
+    }
+
     let cmd = EaCommand {
         request_id: order_cmd.request_id.clone(),
-        kind: EaCommandKind::PlaceOrder(order_cmd.order),
+        kind: EaCommandKind::PlaceOrder(order_cmd.order.clone()),
     };
     route_ea_command(sender, refs, cmd, "envio de ordem").await;
 }

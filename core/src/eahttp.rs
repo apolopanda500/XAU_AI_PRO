@@ -13,11 +13,13 @@ use tracing::info;
 use xau_ai_pro_core::config::HttpConfig;
 use xau_ai_pro_core::market::MarketDataService;
 use xau_ai_pro_core::mt5session::{EaAck, EaHeartbeat, EaHello, Mt5SessionManager};
+use xau_ai_pro_core::risk::RiskEngine;
 
 #[derive(Clone)]
 struct EaState {
     mt5: Arc<Mt5SessionManager>,
     market: Arc<MarketDataService>,
+    risk: Arc<RiskEngine>,
 }
 
 /// Sobe o HTTP do EA na porta configurada (padrão 9003).
@@ -25,15 +27,18 @@ pub async fn serve(
     config: &HttpConfig,
     mt5: Arc<Mt5SessionManager>,
     market: Arc<MarketDataService>,
+    risk: Arc<RiskEngine>,
 ) -> anyhow::Result<()> {
     let addr = format!("{}:{}", config.bind_address, config.port);
     info!("HTTP do EA em {}", addr);
-    let state = EaState { mt5, market };
+    let state = EaState { mt5, market, risk };
     let app = Router::new()
         .route("/api/ea/hello", post(route_hello))
         .route("/api/ea/heartbeat", post(route_heartbeat))
         .route("/api/ea/status", get(route_status))
         .route("/api/ea/reconcile", get(route_reconcile))
+        .route("/api/risk/kill", post(route_kill))
+        .route("/api/risk/status", get(route_risk_status))
         .route("/health", get(route_health))
         .with_state(state);
     let listener = tokio::net::TcpListener::bind(&addr).await?;
@@ -114,4 +119,34 @@ async fn route_reconcile(State(s): State<EaState>) -> Json<ReconcileOut> {
 
 async fn route_health() -> Json<serde_json::Value> {
     Json(serde_json::json!({"ok": true, "service": "xau-ai-pro-core"}))
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct KillRequest {
+    enabled: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct KillOut {
+    ok: bool,
+    kill_switch_active: bool,
+}
+
+async fn route_kill(State(s): State<EaState>, Json(body): Json<KillRequest>) -> Json<KillOut> {
+    s.risk.set_trading_enabled(body.enabled).await;
+    Json(KillOut {
+        ok: true,
+        kill_switch_active: !body.enabled,
+    })
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct RiskStatusOut {
+    kill_switch_active: bool,
+}
+
+async fn route_risk_status(State(s): State<EaState>) -> Json<RiskStatusOut> {
+    Json(RiskStatusOut {
+        kill_switch_active: s.risk.kill_switch_active().await,
+    })
 }

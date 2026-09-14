@@ -8,11 +8,13 @@ pub mod execution;
 pub mod market;
 pub mod mt5session;
 pub mod protocol;
+pub mod risk;
 
 pub use bridge::MT5Bridge;
 pub use config::Config;
 pub use execution::ExecutionEngine;
 pub use market::MarketDataService;
+pub use risk::RiskEngine;
 
 /// Versão do core.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

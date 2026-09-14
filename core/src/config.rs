@@ -15,6 +15,7 @@ pub struct Config {
     pub websocket: WebSocketConfig,
     pub http: HttpConfig,
     pub database: DatabaseConfig,
+    pub risk: crate::risk::RiskConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
