@@ -6,6 +6,7 @@ pub mod bridge;
 pub mod config;
 pub mod execution;
 pub mod market;
+pub mod mt5session;
 pub mod protocol;
 
 pub use bridge::MT5Bridge;

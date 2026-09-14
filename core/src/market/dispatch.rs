@@ -7,6 +7,7 @@ use tracing::info;
 use super::handler::reply_bad_request;
 use super::state::{encode_message, push_text, send_error, WsSender};
 use super::types::ServerRefs;
+use crate::mt5session::{EaCommand, EaCommandKind};
 use crate::protocol::{error_codes, OrderResponse, PongMessage, Quote, WsCommand, WsMessage};
 
 /// Roteia um comando ja parseado.
@@ -25,49 +26,27 @@ pub async fn dispatch(cmd: WsCommand, refs: &ServerRefs, sender: &mut WsSender) 
             reply_pong(sender, request_id, ts_ms).await;
         }
         WsCommand::PlaceOrder(order_cmd) => {
-            reply_place_order(sender, order_cmd.order.volume, order_cmd.request_id).await;
+            route_place_order(sender, refs, order_cmd.order.volume, order_cmd).await;
         }
         WsCommand::ClosePosition { ticket, request_id } => {
-            send_error(
-                sender,
-                error_codes::MT5_OFFLINE,
-                format!(
-                    "Fechamento da posicao {} indisponivel: EA MT5 nao conectado (Fase 6)",
-                    ticket
-                ),
-                Some(request_id),
-            )
-            .await;
+            let cmd = EaCommand {
+                request_id: request_id.clone(),
+                kind: EaCommandKind::ClosePosition { ticket },
+            };
+            route_ea_command(sender, refs, cmd, "fechamento de posição").await;
         }
         WsCommand::CancelOrder { ticket, request_id } => {
-            send_error(
-                sender,
-                error_codes::MT5_OFFLINE,
-                format!(
-                    "Cancelamento da ordem {} indisponivel: EA MT5 nao conectado (Fase 6)",
-                    ticket
-                ),
-                Some(request_id),
-            )
-            .await;
+            let cmd = EaCommand {
+                request_id: request_id.clone(),
+                kind: EaCommandKind::CancelOrder { ticket },
+            };
+            route_ea_command(sender, refs, cmd, "cancelamento de ordem").await;
         }
         WsCommand::GetAccount { request_id } => {
-            send_error(
-                sender,
-                error_codes::MT5_OFFLINE,
-                "Conta indisponivel: EA MT5 nao conectado (Fase 6)".into(),
-                Some(request_id),
-            )
-            .await;
+            answer_account(sender, refs, request_id).await;
         }
         WsCommand::GetPositions { request_id } => {
-            send_error(
-                sender,
-                error_codes::MT5_OFFLINE,
-                "Posicoes indisponiveis: EA MT5 nao conectado (Fase 6)".into(),
-                Some(request_id),
-            )
-            .await;
+            answer_positions(sender, refs, request_id).await;
         }
     }
     true
@@ -83,26 +62,119 @@ async fn reply_pong(sender: &mut WsSender, request_id: String, ts_ms: i64) {
     push_text(sender, encode_message(&msg)).await;
 }
 
-/// Valida volume e responde (ordem real chega na Fase 6).
-async fn reply_place_order(sender: &mut WsSender, volume: f64, request_id: String) {
+/// Valida volume e enfileira ordem para o EA (roteamento real item 6).
+async fn route_place_order(
+    sender: &mut WsSender,
+    refs: &ServerRefs,
+    volume: f64,
+    order_cmd: crate::protocol::OrderCommand,
+) {
     if !(0.01..=0.50).contains(&volume) {
         let resp = WsMessage::OrderResponse(OrderResponse {
             success: false,
             ticket: 0,
             message: format!("Volume invalido: {} (permitido: 0.01-0.50)", volume),
-            request_id: Some(request_id),
+            request_id: Some(order_cmd.request_id),
         });
         push_text(sender, encode_message(&resp)).await;
         return;
     }
-    send_error(
-        sender,
-        error_codes::MT5_OFFLINE,
-        "Roteamento de ordens via WS sera ativado na Fase 6 (EA MT5)".into(),
-        Some(request_id),
-    )
-    .await;
-    info!("Ordem validada no Core; aguardando EA MT5 (Fase 6)");
+    let cmd = EaCommand {
+        request_id: order_cmd.request_id.clone(),
+        kind: EaCommandKind::PlaceOrder(order_cmd.order),
+    };
+    route_ea_command(sender, refs, cmd, "envio de ordem").await;
+}
+
+/// Enfileira comando para o EA; sem EA online responde MT5_OFFLINE.
+async fn route_ea_command(sender: &mut WsSender, refs: &ServerRefs, cmd: EaCommand, acao: &str) {
+    let request_id = cmd.request_id.clone();
+    if refs.mt5.enqueue(cmd).await {
+        let resp = WsMessage::OrderResponse(OrderResponse {
+            success: true,
+            ticket: 0,
+            message: format!("{} enfileirado para o EA MT5 (acompanhe a execução)", acao),
+            request_id: Some(request_id.clone()),
+        });
+        push_text(sender, encode_message(&resp)).await;
+        info!("Comando {} enfileirado p/ EA (req={})", acao, request_id);
+    } else {
+        send_error(
+            sender,
+            error_codes::MT5_OFFLINE,
+            "EA MT5 offline: conecte o Expert Advisor (item 6 do roadmap)".into(),
+            Some(request_id),
+        )
+        .await;
+    }
+}
+
+/// Responde GetAccount com a sessão ativa do EA.
+async fn answer_account(sender: &mut WsSender, refs: &ServerRefs, request_id: String) {
+    match refs.mt5.snapshot().await {
+        Some(s) => {
+            let info = crate::protocol::AccountInfo {
+                login: s.login.clone(),
+                balance: 0.0,
+                equity: 0.0,
+                margin: 0.0,
+                free_margin: 0.0,
+                leverage: 0,
+                server: s.server.clone(),
+                currency: "".into(),
+                profit: s.ea_positions.iter().map(|p| p.profit).sum(),
+            };
+            let msg = WsMessage::Account(info);
+            push_text(sender, encode_message(&msg)).await;
+            let _ = request_id;
+        }
+        None => {
+            send_error(
+                sender,
+                error_codes::MT5_OFFLINE,
+                "Conta indisponivel: EA MT5 ainda não conectado".into(),
+                Some(request_id),
+            )
+            .await;
+        }
+    }
+}
+
+/// Responde GetPositions com as posições do último heartbeat.
+async fn answer_positions(sender: &mut WsSender, refs: &ServerRefs, request_id: String) {
+    match refs.mt5.snapshot().await {
+        Some(s) => {
+            for p in &s.ea_positions {
+                let pos = crate::protocol::Position {
+                    ticket: p.ticket,
+                    symbol: p.symbol.clone(),
+                    side: p.side.clone(),
+                    volume: p.volume,
+                    open_price: p.open_price,
+                    current_price: p.current_price,
+                    sl: None,
+                    tp: None,
+                    profit: p.profit,
+                    open_time: chrono::Utc::now(),
+                    magic: p.magic,
+                };
+                let msg = WsMessage::PositionUpdate(pos);
+                if !push_text(sender, encode_message(&msg)).await {
+                    return;
+                }
+            }
+            let _ = request_id;
+        }
+        None => {
+            send_error(
+                sender,
+                error_codes::MT5_OFFLINE,
+                "Posições indisponíveis: EA MT5 ainda não conectado".into(),
+                Some(request_id),
+            )
+            .await;
+        }
+    }
 }
 
 /// Envia cotacao somente se o simbolo estiver assinado.

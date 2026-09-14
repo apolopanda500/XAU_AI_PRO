@@ -4,8 +4,10 @@
 use std::sync::Arc;
 
 use super::state::WsSharedState;
+use crate::mt5session::Mt5SessionManager;
 
 /// Referencias compartilhadas das rotas WS.
 pub struct ServerRefs {
     pub shared: Arc<WsSharedState>,
+    pub mt5: Arc<Mt5SessionManager>,
 }

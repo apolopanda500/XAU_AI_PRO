@@ -1,10 +1,11 @@
-// XAU AI PRO Core - Entry point
-// Motor de execucao critica, market data streaming, e bridge MT5.
+// XAU AI PRO Core - Entry point (item 6: sessão MT5 + HTTP do EA).
 
 use std::sync::Arc;
 use tracing::{info, warn};
 
 use xau_ai_pro_core::{Config, MT5Bridge, MarketDataService};
+
+mod eahttp;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -14,22 +15,35 @@ async fn main() -> anyhow::Result<()> {
     info!("XAU AI PRO Core v0.1.0 - modo: {}", config.app.mode);
     info!("MT5 habilitado: {}", config.mt5.enabled);
 
-    // Inicializa serviço de market data
+    let mt5 = Arc::new(xau_ai_pro_core::mt5session::Mt5SessionManager::new());
     let market_service = MarketDataService::new(&config.market).await?;
     let market = Arc::new(market_service);
 
-    // Inicia WebSocket server para frontend (se habilitado)
     if config.websocket.enabled {
         let ws_config = config.websocket.clone();
         let ws_market = market.clone();
+        let ws_mt5 = mt5.clone();
         tokio::spawn(async move {
-            if let Err(e) = xau_ai_pro_core::market::start_market_ws(&ws_config, ws_market).await {
+            let r =
+                xau_ai_pro_core::market::start_market_ws_with_mt5(&ws_config, ws_market, ws_mt5)
+                    .await;
+            if let Err(e) = r {
                 warn!("Erro no servidor WebSocket: {}", e);
             }
         });
     }
 
-    // Inicia market data loop
+    if config.http.enabled {
+        let http_config = config.http.clone();
+        let http_mt5 = mt5.clone();
+        let http_market = market.clone();
+        tokio::spawn(async move {
+            if let Err(e) = eahttp::serve(&http_config, http_mt5, http_market).await {
+                warn!("Erro no HTTP do EA: {}", e);
+            }
+        });
+    }
+
     let market_loop = market.clone();
     tokio::spawn(async move {
         if let Err(e) = market_loop.run().await {
@@ -37,7 +51,6 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    // Inicializa bridge MT5
     let _bridge = if config.mt5.enabled {
         match MT5Bridge::new(&config.mt5).await {
             Ok(b) => {
