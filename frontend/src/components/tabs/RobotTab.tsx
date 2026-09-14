@@ -2,7 +2,6 @@ import { useAppStore } from '../../hooks/useAppStore';
 
 export default function RobotTab() {
   const robotStatus = useAppStore((s) => s.robotStatus);
-  const setRobotStatus = useAppStore((s) => s.setRobotStatus);
   const magicNumber = useAppStore((s) => s.magicNumber);
   const setMagicNumber = useAppStore((s) => s.setMagicNumber);
   const account = useAppStore((s) => s.account);
@@ -25,11 +24,9 @@ export default function RobotTab() {
               <div className="switch-label">Robô ativo</div>
               <div className="switch-desc">EA envia sinais de execucao ao Core</div>
             </div>
-            <button
-              className={`switch ${robotStatus === 'Ativo' ? 'on' : ''}`}
-              aria-label="Alternar robo"
-              onClick={() => setRobotStatus(robotStatus === 'Ativo' ? 'Inativo' : 'Ativo')}
-            />
+            <span className={`chip ${systemState?.mt5_connected ? 'ok' : 'warn'}`}>
+              {systemState?.mt5_connected ? 'Conectado' : 'Desconectado'}
+            </span>
           </div>
           <div className="field">
             <label htmlFor="magic">Magic Number</label>
