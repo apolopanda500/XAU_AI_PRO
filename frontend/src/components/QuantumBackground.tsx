@@ -59,6 +59,7 @@ export default function QuantumBackground({
   const animationRef = useRef<number>(0);
   const particlesRef = useRef<Particle[]>([]);
   const mouseRef = useRef({ x: 0, y: 0 });
+  const activeRef = useRef(true);
 
   // Obtém as cores do tema atual a partir das variáveis CSS
   const getThemeColors = useCallback(() => {
@@ -171,7 +172,9 @@ export default function QuantumBackground({
       updateParticles(width, height);
       drawConnections(ctx);
       drawParticles(ctx);
-      animationRef.current = requestAnimationFrame(() => animate(ctx, width, height));
+      if (activeRef.current) {
+        animationRef.current = requestAnimationFrame(() => animate(ctx, width, height));
+      }
     },
     [updateParticles, drawParticles, drawConnections]
   );
@@ -180,13 +183,13 @@ export default function QuantumBackground({
   const resizeCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
+    canvas.width = Math.floor(rect.width * dpr);
+    canvas.height = Math.floor(rect.height * dpr);
     const ctx = canvas.getContext('2d');
     if (ctx) {
-      ctx.scale(dpr, dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     }
   }, []);
 
@@ -203,6 +206,11 @@ export default function QuantumBackground({
     if (!ctx) return;
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (prefersReducedMotion) return;
+    const visibility = new IntersectionObserver(([entry]) => {
+      activeRef.current = entry.isIntersecting;
+      if (activeRef.current && !animationRef.current) animate(ctx, canvas.clientWidth, canvas.clientHeight);
+    });
+    visibility.observe(canvas);
     resizeCanvas();
     const rect = canvas.getBoundingClientRect();
     initParticles(rect.width, rect.height);
@@ -213,6 +221,8 @@ export default function QuantumBackground({
       cancelAnimationFrame(animationRef.current);
       window.removeEventListener('resize', resizeCanvas);
       window.removeEventListener('mousemove', handleMouseMove);
+      visibility.disconnect();
+      activeRef.current = false;
     };
   }, [density, speed, initParticles, animate, resizeCanvas, handleMouseMove]);
 
