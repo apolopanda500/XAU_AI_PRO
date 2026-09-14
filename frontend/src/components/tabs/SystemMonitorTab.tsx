@@ -46,32 +46,14 @@ function CircularProgress({ valor, max, tamanho = 90, espessura = 8, cor }: { va
 export default function SystemMonitorTab() {
   const systemState = useAppStore((s) => s.systemState);
   const wsConnected = useAppStore((s) => s.wsConnected);
-  const [logs, setLogs] = useState<LogEntry[]>(LOGS_INICIAIS);
-  const [cpuUsage, setCpuUsage] = useState(25);
-  const [memUsage, setMemUsage] = useState(62);
-  const [diskUsage, setDiskUsage] = useState(45);
-  const [latencia, setLatencia] = useState(120);
-  const [temperatura, setTemperatura] = useState(58);
-  const logIdRef = useRef(LOGS_INICIAIS.length + 1);
+  const [logs] = useState<LogEntry[]>([]);
+  const cpuUsage = 0;
+  const memUsage = 0;
+  const diskUsage = 0;
+  const latencia = 0;
+  const temperatura = 0;
 
-  useEffect(() => {
-    const intervalo = setInterval(() => {
-      setCpuUsage((prev) => Math.max(5, Math.min(95, prev + (Math.random() - 0.5) * 15)));
-      setMemUsage((prev) => Math.max(30, Math.min(90, prev + (Math.random() - 0.5) * 8)));
-      setDiskUsage((prev) => Math.max(20, Math.min(80, prev + (Math.random() - 0.5) * 3)));
-      setLatencia((prev) => Math.max(20, Math.min(500, prev + (Math.random() - 0.5) * 50)));
-      setTemperatura((prev) => Math.max(40, Math.min(85, prev + (Math.random() - 0.5) * 5)));
-
-      if (Math.random() > 0.6) {
-        const novaMsg = MENSAGENS_LOG[Math.floor(Math.random() * MENSAGENS_LOG.length)];
-        const agora = new Date();
-        const timestamp = `${agora.getHours().toString().padStart(2, '0')}:${agora.getMinutes().toString().padStart(2, '0')}:${agora.getSeconds().toString().padStart(2, '0')}`;
-        const level = Math.random() > 0.8 ? 'warn' : Math.random() > 0.95 ? 'error' : 'info';
-        setLogs((prev) => [...prev.slice(-49), { id: logIdRef.current++, timestamp, level, message: novaMsg }]);
-      }
-    }, 1500);
-    return () => clearInterval(intervalo);
-  }, []);
+  // Métricas reais ainda não são fornecidas pelo Core; não gerar números.
 
   const corCpu = cpuUsage > 80 ? '#ef4444' : cpuUsage > 50 ? '#eab308' : 'var(--ok)';
   const corMem = memUsage > 80 ? '#ef4444' : memUsage > 50 ? '#eab308' : 'var(--primary)';

@@ -9,6 +9,7 @@ use crate::config::MT5Config;
 use crate::protocol::{AccountInfo, OrderRequest, OrderResponse, Position, Quote};
 
 /// Bridge para comunicação com MT5
+#[derive(Clone)]
 pub struct MT5Bridge {
     config: MT5Config,
     base_url: String,
@@ -55,8 +56,13 @@ impl MT5Bridge {
 
     /// Busca cotação de um símbolo via MT5
     pub async fn get_quote(&self, symbol: &str) -> anyhow::Result<Quote> {
-        let url = format!("{}/api/mt5/quote?symbol={}", self.base_url, symbol);
-        let resp = self.client.get(&url).send().await?;
+        let url = format!("{}/api/mt5/quote", self.base_url);
+        let resp = self
+            .client
+            .get(&url)
+            .query(&[("symbol", symbol)])
+            .send()
+            .await?;
         let quote: Quote = resp.json().await?;
         Ok(quote)
     }

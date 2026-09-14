@@ -2,23 +2,16 @@
 // Controle de versão com semântica e canais de rollout (stable/beta/canary/emergency).
 
 use serde::{Deserialize, Serialize};
-use std::path::Path;
-use tracing::info;
 
 /// Versão semântica do Core (MAJOR.MINOR.PATCH) + canal de rollout.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum Channel {
+    #[default]
     Stable,
     Beta,
     Canary,
     Emergency,
-}
-
-impl Default for Channel {
-    fn default() -> Self {
-        Channel::Stable
-    }
 }
 
 /// Metadados de uma atualização disponível.
@@ -26,7 +19,7 @@ impl Default for Channel {
 pub struct UpdateInfo {
     pub version: String, // MAJOR.MINOR.PATCH
     pub channel: Channel,
-    pub artifact_url: String, // URL do pacote assinado
+    pub artifact_url: String,  // URL do pacote assinado
     pub signature_url: String, // URL da assinatura (SHA-256 + assinatura privada do mantenedor)
     pub checksum_sha256: String,
     pub release_notes: String,
@@ -48,8 +41,7 @@ pub struct LocalVersion {
 impl LocalVersion {
     pub fn current() -> anyhow::Result<Self> {
         // Lê do manifest local (gerado na instalação ou na primeira execução)
-        let manifest_path = crate::config::Config::data_dir_default()
-            .join("manifest.json");
+        let manifest_path = crate::config::Config::data_dir_default().join("manifest.json");
         if manifest_path.exists() {
             let content = std::fs::read_to_string(&manifest_path)?;
             let manifest: LocalVersion =
@@ -70,8 +62,7 @@ impl LocalVersion {
 
     /// Salva o manifest local (após update bem-sucedido ou rollback)
     pub fn persist(&self) -> anyhow::Result<()> {
-        let path = crate::config::Config::data_dir_default()
-            .join("manifest.json");
+        let path = crate::config::Config::data_dir_default().join("manifest.json");
         let dir = path.parent().unwrap();
         std::fs::create_dir_all(dir)?;
         let content = serde_json::to_string_pretty(self)?;
@@ -98,11 +89,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parse_version_leve() { assert_eq!(parse_version("0.1.0"), (0, 1, 0)); assert_eq!(parse_version("1.2.3"), (1, 2, 3)); }
+    fn parse_version_leve() {
+        assert_eq!(parse_version("0.1.0"), (0, 1, 0));
+        assert_eq!(parse_version("1.2.3"), (1, 2, 3));
+    }
     #[test]
-    fn is_compatible_true() { assert!(is_compatible("0.1.5", "0.1.0")); assert!(is_compatible("1.0.0", "0.9.9")); }
+    fn is_compatible_true() {
+        assert!(is_compatible("0.1.5", "0.1.0"));
+        assert!(is_compatible("1.0.0", "0.9.9"));
+    }
     #[test]
-    fn is_compatible_false() { assert!(!is_compatible("0.1.0", "0.2.0")); }
+    fn is_compatible_false() {
+        assert!(!is_compatible("0.1.0", "0.2.0"));
+    }
     #[test]
-    fn version_default_stable() { assert_eq!(Channel::default(), Channel::Stable); }
+    fn version_default_stable() {
+        assert_eq!(Channel::default(), Channel::Stable);
+    }
 }

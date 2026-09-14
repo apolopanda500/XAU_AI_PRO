@@ -25,7 +25,11 @@ mod tests {
 
     #[tokio::test]
     async fn aprova_ordem_com_risco_ok() {
-        let engine = RiskEngine::new(RiskConfig::default());
+        let config = RiskConfig {
+            trading_enabled: true,
+            ..Default::default()
+        };
+        let engine = RiskEngine::new(config);
         let req = OrderRequest {
             symbol: "XAUUSD".into(),
             side: "buy".into(),
@@ -39,8 +43,28 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn bloqueia_ordem_com_lote_acima_do_max() {
+    async fn default_fail_closed_bloqueia_ordem_ate_habilitacao_manual() {
         let engine = RiskEngine::new(RiskConfig::default());
+        let req = OrderRequest {
+            symbol: "XAUUSD".into(),
+            side: "buy".into(),
+            volume: 0.1,
+            sl: Some(2300.0),
+            tp: Some(2400.0),
+            magic: None,
+        };
+        let decision = engine.evaluate(&req, Some(&market(10_000.0))).await;
+        assert!(!decision.approved);
+        assert_eq!(decision.code.as_deref(), Some("KILL_SWITCH"));
+    }
+
+    #[tokio::test]
+    async fn bloqueia_ordem_com_lote_acima_do_max() {
+        let config = RiskConfig {
+            trading_enabled: true,
+            ..Default::default()
+        };
+        let engine = RiskEngine::new(config);
         let req = OrderRequest {
             symbol: "XAUUSD".into(),
             side: "buy".into(),
@@ -73,7 +97,11 @@ mod tests {
 
     #[tokio::test]
     async fn bloqueia_spread_acima_do_max() {
-        let engine = RiskEngine::new(RiskConfig::default());
+        let config = RiskConfig {
+            trading_enabled: true,
+            ..Default::default()
+        };
+        let engine = RiskEngine::new(config);
         let mut m = market(10_000.0);
         m.spread_points = 5000;
         let req = OrderRequest {

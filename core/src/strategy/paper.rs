@@ -228,7 +228,14 @@ mod tests {
     use super::*;
 
     fn trader() -> PaperTrader {
-        PaperTrader::new(StrategyConfig::default(), Arc::new(RiskEngine::default()))
+        let risk_config = crate::risk::RiskConfig {
+            trading_enabled: true,
+            ..Default::default()
+        };
+        PaperTrader::new(
+            StrategyConfig::default(),
+            Arc::new(RiskEngine::new(risk_config)),
+        )
     }
 
     #[tokio::test]
@@ -247,7 +254,11 @@ mod tests {
             take_profit_points: 100.0,
             ..Default::default()
         };
-        let t = PaperTrader::new(cfg.clone(), Arc::new(RiskEngine::default()));
+        let risk_config = crate::risk::RiskConfig {
+            trading_enabled: true,
+            ..Default::default()
+        };
+        let t = PaperTrader::new(cfg.clone(), Arc::new(RiskEngine::new(risk_config)));
 
         // Queda longa + retomada: encontra o prefixo que dispara Buy
         // (mesma lógica do `evaluate` — sinal no último candle).

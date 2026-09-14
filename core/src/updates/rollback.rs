@@ -2,11 +2,10 @@
 // Rollback automático ou manual para versão anterior, com verficação de integridade
 // e preservação de dados (config, histórico de trades, logs).
 
-use std::path::Path;
+use crate::updates::version::{is_compatible, LocalVersion};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{info, warn};
-use crate::updates::version::{LocalVersion, is_compatible};
+use tracing::info;
 
 /// Estratégia de rollback: automático ou manual.
 pub enum RollbackStrategy {
@@ -41,12 +40,15 @@ impl RollbackManager {
     }
 
     /// Registra uma versão no histórico de rollback (chamado após update bem-sucedido).
-    pub fn record_version(&self, version: &str) {
-        let mut history = self.history.write().unwrap();
+    pub async fn record_version(&self, version: &str) {
+        let mut history = self.history.write().await;
         history.retain(|v| v != version);
         history.insert(0, version.to_string());
         history.truncate(10); // mantém últimas 10 versões
-        info!("RollbackManager: versão {} registrada no histórico", version);
+        info!(
+            "RollbackManager: versão {} registrada no histórico",
+            version
+        );
     }
 
     /// Tenta fazer rollback para uma versão anterior.
@@ -55,18 +57,28 @@ impl RollbackManager {
         // Verifica se a versão target é compatível
         let current = self.local_version.read().await.current_version.clone();
         if !is_compatible(&current, target_version) {
-            anyhow::bail!("rollback incompatível: versão atual {} é menor que a versão alvo {}", current, target_version);
+            anyhow::bail!(
+                "rollback incompatível: versão atual {} é menor que a versão alvo {}",
+                current,
+                target_version
+            );
         }
 
         // Verifica se a versão está no histórico
         let history = self.history.read().await;
         if !history.contains(&target_version.to_string()) {
-            anyhow::bail!("versão {} não está no histórico de rollback", target_version);
+            anyhow::bail!(
+                "versão {} não está no histórico de rollback",
+                target_version
+            );
         }
         drop(history);
 
         // Executa rollback (simulado — em produção, restauraria pacote assinado)
-        info!("RollbackManager: executando rollback para versão {}", target_version);
+        info!(
+            "RollbackManager: executando rollback para versão {}",
+            target_version
+        );
         // TODO: implementar restauração do pacote assinado da versão target
         // TODO: verificar checksum e integridade do pacote restaurado
         // TODO: preservar dados (config, histórico de trades, logs)
@@ -82,9 +94,12 @@ impl RollbackManager {
     /// Faz rollback para a versão anterior no histórico.
     pub async fn rollback_to_previous(&self) -> anyhow::Result<()> {
         let history = self.history.read().await;
-        let target = history.get(1).ok_or_else(|| anyhow::anyhow!("sem versão anterior no histórico"))?;
+        let target = history
+            .get(1)
+            .cloned()
+            .ok_or_else(|| anyhow::anyhow!("sem versão anterior no histórico"))?;
         drop(history);
-        self.rollback(target).await
+        self.rollback(&target).await
     }
 
     /// Verifica se rollback é possível para uma versão target.
@@ -101,25 +116,51 @@ impl RollbackManager {
 
 impl Default for RollbackManager {
     fn default() -> Self {
-        Self::new(Arc::new(RwLock::new(LocalVersion::current().unwrap_or_else(|_| LocalVersion {
-            current_version: env!("CARGO_PKG_VERSION").into(),
-            channel: crate::updates::channel::Channel::Stable,
-            last_update_attempt: None,
-            last_update_success: None,
-            pending_rollforward: None,
-        }))))
+        Self::new(Arc::new(RwLock::new(
+            LocalVersion::current().unwrap_or_else(|_| LocalVersion {
+                current_version: env!("CARGO_PKG_VERSION").into(),
+                channel: crate::updates::Channel::Stable,
+                last_update_attempt: None,
+                last_update_success: None,
+                pending_rollforward: None,
+            }),
+        )))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn rollback_manager_registra_versao() { let mgr = RollbackManager::default(); mgr.record_version("0.1.0"); mgr.record_version("0.2.0"); let history = mgr.history().await; assert!(history.contains(&"0.2.0".to_string())); assert!(history.contains(&"0.1.0".to_string())); }
-    #[test]
-    fn rollback_manager_cola_version_repetida() { let mgr = RollbackManager::default(); mgr.record_version("0.1.0"); mgr.record_version("0.1.0"); let history = mgr.history().await; assert_eq!(history.iter().filter(|v| *v == "0.1.0").count(), 1); }
     #[tokio::test]
-    async fn rollback_manager_reverte_para_versao_anterior() { let mgr = RollbackManager::default(); mgr.record_version("0.2.0"); mgr.record_version("0.1.0"); assert!(mgr.can_rollback("0.1.0").await); assert!(!mgr.can_rollback("0.0.9").await); }
+    async fn rollback_manager_registra_versao() {
+        let mgr = RollbackManager::default();
+        mgr.record_version("0.1.0").await;
+        mgr.record_version("0.2.0").await;
+        let history = mgr.history().await;
+        assert!(history.contains(&"0.2.0".to_string()));
+        assert!(history.contains(&"0.1.0".to_string()));
+    }
     #[tokio::test]
-    async fn rollback_manager_falha_para_versao_incompativel() { let mgr = RollbackManager::default(); mgr.record_version("0.2.0"); let result = mgr.rollback("0.3.0").await; assert!(result.is_err()); }
+    async fn rollback_manager_cola_version_repetida() {
+        let mgr = RollbackManager::default();
+        mgr.record_version("0.1.0").await;
+        mgr.record_version("0.1.0").await;
+        let history = mgr.history().await;
+        assert_eq!(history.iter().filter(|v| *v == "0.1.0").count(), 1);
+    }
+    #[tokio::test]
+    async fn rollback_manager_reverte_para_versao_anterior() {
+        let mgr = RollbackManager::default();
+        mgr.record_version("0.2.0").await;
+        mgr.record_version("0.1.0").await;
+        assert!(mgr.can_rollback("0.1.0").await);
+        assert!(!mgr.can_rollback("0.0.9").await);
+    }
+    #[tokio::test]
+    async fn rollback_manager_falha_para_versao_incompativel() {
+        let mgr = RollbackManager::default();
+        mgr.record_version("0.2.0").await;
+        let result = mgr.rollback("0.3.0").await;
+        assert!(result.is_err());
+    }
 }

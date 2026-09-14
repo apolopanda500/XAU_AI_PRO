@@ -169,7 +169,17 @@ function salvarNoCache(dados: NewsItem[]): void {
 }
 
 function processarDadosApi(_dados: unknown): NewsItem[] {
-  return gerarMockNoticias();
+  const payload = _dados as { articles?: Array<Record<string, unknown>> };
+  return (payload.articles ?? []).flatMap((item, index) => {
+    const titulo = typeof item.title === 'string' ? item.title : '';
+    const fonteObj = item.source as Record<string, unknown> | undefined;
+    const fonte = typeof fonteObj?.name === 'string' ? fonteObj.name : '';
+    const timestamp = typeof item.publishedAt === 'string' ? new Date(item.publishedAt) : new Date(NaN);
+    if (!titulo || !fonte || Number.isNaN(timestamp.getTime())) return [];
+    return [{ id: `news-${timestamp.toISOString()}-${index}`, titulo, fonte, timestamp,
+      categoria: 'forex' as NewsCategory, impactoMercado: 'neutral' as MarketImpact,
+      resumo: typeof item.description === 'string' ? item.description : undefined }];
+  });
 }
 
 export function useNewsStream(
@@ -245,26 +255,9 @@ export function useNewsStream(
       console.info('[useNewsStream] API indisponível, usando dados simulados');
     }
 
-    const mock = gerarMockNoticias();
-    if (montadoRef.current) {
-      const novasNoticias = mock.filter(
-        (n) => !idsProcessadosRef.current.has(n.id)
-      );
-      novasNoticias.forEach((n) => idsProcessadosRef.current.add(n.id));
-      setEstado((prev) => {
-        const todasNoticias = [...(prev.dados ?? []), ...novasNoticias]
-          .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
-          .slice(0, MAX_NOTICIAS);
-        salvarNoCache(todasNoticias);
-        return {
-          ...prev,
-          dados: todasNoticias,
-          carregando: false,
-          erro: null,
-          ultimaAtualizacao: new Date(),
-        };
-      });
-    }
+    if (montadoRef.current) setEstado((prev) => ({ ...prev, dados: prev.dados ?? [],
+      carregando: false, erro: 'Fonte de notícias indisponível; dados simulados bloqueados.',
+      ultimaAtualizacao: new Date() }));
   }, []);
 
   const noticiasFiltradas = estado.dados?.filter((noticia) => {

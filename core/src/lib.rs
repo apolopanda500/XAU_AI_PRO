@@ -6,13 +6,13 @@ pub mod bridge;
 pub mod config;
 pub mod connectors;
 pub mod connectors_mock;
-pub mod updates;
 pub mod execution;
 pub mod market;
 pub mod mt5session;
 pub mod protocol;
 pub mod risk;
 pub mod strategy;
+pub mod updates;
 
 pub use bridge::MT5Bridge;
 pub use config::Config;
@@ -32,6 +32,9 @@ pub async fn init_core() -> anyhow::Result<CoreRuntime> {
     } else {
         None
     };
+    if let Some(ref b) = bridge {
+        market.set_bridge(b.clone()).await;
+    }
     Ok(CoreRuntime {
         config,
         market,

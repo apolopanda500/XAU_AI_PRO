@@ -5,6 +5,8 @@ Cores escuras profissionais, glassmorphism, sombras e animações suaves.
 """
 from __future__ import annotations
 
+from collections.abc import Callable
+
 
 class MexcTheme:
     # === FUNDOS ===
@@ -99,6 +101,22 @@ class MexcTheme:
 # Alias para importação mais curta
 Theme = MexcTheme
 
+_THEME_CALLBACKS: list[Callable[[], None]] = []
+
+
+def on_theme_change(callback: Callable[[], None]) -> Callable[[], None]:
+    """Registra callback para atualizar widgets após troca de tema."""
+    if callback not in _THEME_CALLBACKS:
+        _THEME_CALLBACKS.append(callback)
+
+    def unsubscribe() -> None:
+        try:
+            _THEME_CALLBACKS.remove(callback)
+        except ValueError:
+            pass
+
+    return unsubscribe
+
 # ============================================================
 # TEMAS MULTIPLOS (aplicados no boot antes de construir a UI)
 # ============================================================
@@ -162,3 +180,12 @@ def apply_theme(name: str) -> None:
         palette = _THEMES["dark"]
     for key, value in palette.items():
         setattr(Theme, key, value)
+    for callback in tuple(_THEME_CALLBACKS):
+        try:
+            callback()
+        except Exception:
+            # Um widget destruido nao pode impedir a troca global de tema.
+            try:
+                _THEME_CALLBACKS.remove(callback)
+            except ValueError:
+                pass

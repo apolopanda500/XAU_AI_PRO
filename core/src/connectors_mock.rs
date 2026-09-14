@@ -1,7 +1,6 @@
 // XAU AI PRO Core — Conectores mock para CI e teste (item 9).
 use chrono::Utc;
-use std::sync::Arc;
-use tokio::sync::RwLock;
+use std::sync::{Arc, RwLock};
 
 use crate::connectors::BrokerConnector;
 use crate::connectors::BrokerError;
@@ -20,9 +19,12 @@ pub struct MockConnector {
 
 impl MockConnector {
     pub fn new(exchange: &str, rate_limiter: Arc<crate::connectors::RateLimiter>) -> Self {
-        let mut cfg = crate::connectors::BrokerConfig::default();
-        cfg.sandbox = true;
-        cfg.enabled = true;
+        rate_limiter.configure(exchange, 10.0, 5.0);
+        let cfg = crate::connectors::BrokerConfig {
+            sandbox: true,
+            enabled: true,
+            ..Default::default()
+        };
         Self {
             exchange: exchange.into(),
             config: cfg,
@@ -43,10 +45,10 @@ impl MockConnector {
             reconcile_fail: false,
         }
     }
-    pub fn set_config(&self, config: crate::connectors::BrokerConfig) {
+    pub fn set_config(&mut self, config: crate::connectors::BrokerConfig) {
         self.config = config;
     }
-    pub fn set_reconcile_fail(&self, fail: bool) {
+    pub fn set_reconcile_fail(&mut self, fail: bool) {
         self.reconcile_fail = fail;
     }
 }
@@ -91,9 +93,8 @@ impl BrokerConnector for MockConnector {
             return Err(BrokerError::SandboxRequired);
         }
         self.rate_limiter
-            .acquire(self.exchange)
-            .await
-            .map_err(BrokerError::RateLimit)?;
+            .try_acquire(&self.exchange)
+            .map_err(|e| BrokerError::RateLimit(e.to_string()))?;
         let ticket = {
             let mut n = self.next_ticket.write().unwrap();
             let t = *n;
@@ -159,7 +160,7 @@ mod tests {
     #[tokio::test]
     async fn mock_connector_bloqueia_em_producao_sem_sandbox() {
         let rl = Arc::new(crate::connectors::RateLimiter::new());
-        let conn = MockConnector::new("binance", rl);
+        let mut conn = MockConnector::new("binance", rl);
         conn.set_config(crate::connectors::BrokerConfig {
             sandbox: false,
             ..Default::default()
@@ -180,7 +181,7 @@ mod tests {
             point_value_per_lot: 10.0,
         };
         assert!(matches!(
-            conn.place_order(&req, &mkt).await,
+            conn.place_order(&req, &mkt),
             Err(BrokerError::SandboxRequired)
         ));
     }
@@ -204,9 +205,9 @@ mod tests {
             equity: 10000.0,
             point_value_per_lot: 10.0,
         };
-        let ticket = conn.place_order(&req, &mkt).await.unwrap();
+        let ticket = conn.place_order(&req, &mkt).unwrap();
         assert!(conn.positions().iter().any(|p| p.ticket == ticket));
-        conn.reconcile_positions().await.unwrap();
+        conn.reconcile_positions().unwrap();
         assert!(conn.positions().iter().any(|p| p.ticket == ticket));
     }
 
@@ -229,8 +230,8 @@ mod tests {
             equity: 10000.0,
             point_value_per_lot: 10.0,
         };
-        let ticket = conn.place_order(&req, &mkt).await.unwrap();
-        conn.close_position(ticket).await.unwrap();
+        let ticket = conn.place_order(&req, &mkt).unwrap();
+        conn.close_position(ticket).unwrap();
         assert!(conn.positions().is_empty());
     }
 }

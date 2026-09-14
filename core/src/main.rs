@@ -21,6 +21,22 @@ async fn main() -> anyhow::Result<()> {
     let market_service = MarketDataService::new(&config.market).await?;
     let market = Arc::new(market_service);
 
+    let bridge = if config.mt5.enabled {
+        match MT5Bridge::new(&config.mt5).await {
+            Ok(b) => {
+                info!("MT5 Bridge conectado");
+                market.set_bridge(b.clone()).await;
+                Some(b)
+            }
+            Err(e) => {
+                warn!("MT5 Bridge: {}", e);
+                None
+            }
+        }
+    } else {
+        None
+    };
+
     if config.websocket.enabled {
         let ws_config = config.websocket.clone();
         let ws_market = market.clone();
@@ -56,20 +72,7 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    let _bridge = if config.mt5.enabled {
-        match MT5Bridge::new(&config.mt5).await {
-            Ok(b) => {
-                info!("MT5 Bridge conectado");
-                Some(b)
-            }
-            Err(e) => {
-                warn!("MT5 Bridge: {}", e);
-                None
-            }
-        }
-    } else {
-        None
-    };
+    let _bridge = bridge;
 
     // Item 8: estratégia assistiva + paper trading (sinais auditáveis).
     let paper = Arc::new(xau_ai_pro_core::strategy::PaperTrader::new(

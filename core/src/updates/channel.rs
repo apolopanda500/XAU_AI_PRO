@@ -4,7 +4,6 @@
 
 use super::Channel;
 use crate::config::Config;
-use tracing::info;
 
 /// Canais de rollout do XAU AI PRO Core.
 /// Ordem de prioridade (do mais restrito para o menos):
@@ -85,11 +84,20 @@ pub fn is_beta_channel() -> bool {
 mod tests {
     use super::*;
     #[test]
-    fn default_channel_stable() { assert_eq!(UpdateChannelPolicy::default().channel, Channel::Stable); }
+    fn default_channel_stable() {
+        assert_eq!(UpdateChannelPolicy::default().channel, Channel::Stable);
+    }
     #[test]
-    fn default_auto_updates_true() { assert!(UpdateChannelPolicy::default().auto_updates_enabled()); }
+    fn default_auto_updates_true() {
+        assert!(UpdateChannelPolicy::default().auto_updates_enabled());
+    }
     #[test]
-    fn default_rollback_on_failure_true() { assert!(UpdateChannelPolicy::default().rollback_on_failure()); }
+    fn default_rollback_on_failure_true() {
+        assert!(UpdateChannelPolicy::default().rollback_on_failure());
+    }
     #[test]
-    fn channel_eq() { assert_eq!(Channel::Stable, Channel::Stable); assert_ne!(Channel::Stable, Channel::Beta); }
+    fn channel_eq() {
+        assert_eq!(Channel::Stable, Channel::Stable);
+        assert_ne!(Channel::Stable, Channel::Beta);
+    }
 }

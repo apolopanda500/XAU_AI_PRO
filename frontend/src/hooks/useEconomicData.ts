@@ -115,7 +115,8 @@ function salvarNoCache(dados: EconomicEvent[]): void {
 }
 
 function processarDadosApi(_dados: unknown): EconomicEvent[] {
-  return gerarMockEventos();
+  return Array.isArray(_dados) ? _dados.filter((item): item is EconomicEvent =>
+    Boolean(item && typeof item === 'object' && 'horario' in item && 'titulo' in item)) : [];
 }
 
 export function useEconomicData(
@@ -167,13 +168,11 @@ export function useEconomicData(
       console.info('[useEconomicData] API indisponível, usando dados simulados');
     }
 
-    const mock = gerarMockEventos();
     if (montadoRef.current) {
-      salvarNoCache(mock);
       setEstado({
-        dados: mock,
+        dados: doCache ?? [],
         carregando: false,
-        erro: null,
+        erro: 'Calendário econômico indisponível; dados simulados bloqueados.',
         ultimaAtualizacao: new Date(),
       });
     }

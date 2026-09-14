@@ -2,10 +2,6 @@
 // Garante conformidade com limites de API das corretoras e protege contra
 // thundering herd quando múltiplas estratégias operam no mesmo gateway.
 
-use std::sync::Arc;
-use tokio::sync::RwLock;
-use tracing::debug;
-
 /// Bucket de tokens por exchange/connector.
 pub struct RateLimiter {
     buckets: std::sync::Mutex<std::collections::HashMap<String, Bucket>>,
@@ -78,21 +74,37 @@ impl RateLimiter {
         &self,
         exchange: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let retries = 3_usize;
+        for _ in 0..retries {
+            let wait = {
+                let mut buckets = self.buckets.lock().unwrap();
+                let bucket = buckets
+                    .get_mut(exchange)
+                    .ok_or_else(|| format!("exchange sem bucket configurado: {}", exchange))?;
+                if bucket.try_consume() {
+                    return Ok(());
+                }
+                1.0 / bucket.refill_per_sec.max(1.0)
+            };
+            // Espera o tempo necessário para o próximo token.
+            tokio::time::sleep(std::time::Duration::from_secs_f64(wait.max(0.05))).await;
+        }
+        Err(format!("rate limit excedido para {}", exchange).into())
+    }
+
+    pub fn try_acquire(
+        &self,
+        exchange: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let mut buckets = self.buckets.lock().unwrap();
         let bucket = buckets
             .get_mut(exchange)
             .ok_or_else(|| format!("exchange sem bucket configurado: {}", exchange))?;
-        let retries = 3_usize;
-        for _ in 0..retries {
-            if bucket.try_consume() {
-                return Ok(());
-            }
-            // Espera o tempo necessário para o próximo token.
-            let wait = 1.0 / bucket.refill_per_sec.max(1.0);
-            tokio::time::sleep(std::time::Duration::from_secs_f64(wait.max(0.05))).await;
-            bucket.refill();
+        if bucket.try_consume() {
+            Ok(())
+        } else {
+            Err(format!("rate limit excedido para {}", exchange).into())
         }
-        Err(format!("rate limit excedido para {}", exchange).into())
     }
 }
 
@@ -105,6 +117,7 @@ impl Default for RateLimiter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
 
     #[tokio::test]
     async fn rate_limiter_bloqueia_acoes_acima_do_limit() {
@@ -112,7 +125,7 @@ mod tests {
         rl.configure("binance", 2.0, 1.0); // 2 burst, 1/seg refill
         assert!(rl.acquire("binance").await.is_ok());
         assert!(rl.acquire("binance").await.is_ok());
-        assert!(rl.acquire("binance").await.is_err());
+        assert!(rl.try_acquire("binance").is_err());
     }
 
     #[tokio::test]
@@ -121,13 +134,13 @@ mod tests {
         rl.configure("mexc", 1.0, 2.0);
         for _ in 0..3 {
             assert!(rl.acquire("mexc").await.is_ok());
-            tokio::time::sleep(std::time::Duration::from_secs_f64(0.6));
+            tokio::time::sleep(std::time::Duration::from_secs_f64(0.6)).await;
         }
         // Após um breve pause, o bucket se recupera.
         assert!(rl.acquire("mexc").await.is_ok());
     }
 
-    #[tokio::test]
+    #[test]
     fn configuracao_dinamica_aumenta_o_burst() {
         let rl = RateLimiter::new();
         rl.configure("binance", 1.0, 1.0);

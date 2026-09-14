@@ -36,6 +36,11 @@ impl MarketDataService {
         })
     }
 
+    pub async fn set_bridge(&self, bridge: MT5Bridge) {
+        let mut slot = self.bridge.write().await;
+        *slot = Some(bridge);
+    }
+
     /// Inicia o loop de coleta de cotacoes
     pub async fn run(&self) -> anyhow::Result<()> {
         let mut ticker = interval(Duration::from_millis(self.config.refresh_interval_ms));
@@ -68,7 +73,17 @@ impl MarketDataService {
         if let Ok(quote) = self.try_mt5_quote(symbol).await {
             return Ok(quote);
         }
-        self.simulate_quote(symbol).await
+
+        if self.config.allow_simulated_data
+            && self.config.providers.iter().any(|p| p == "simulated")
+        {
+            return self.simulate_quote(symbol).await;
+        }
+
+        Err(anyhow::anyhow!(
+            "nenhuma fonte real disponivel para {} e dados simulados estao desabilitados",
+            symbol
+        ))
     }
 
     async fn try_mt5_quote(&self, symbol: &str) -> anyhow::Result<Quote> {

@@ -2,10 +2,10 @@
 // Canais stable/beta/canary/emergency com verificação de integridade,
 // rollback automático e guia de migração.
 
-mod version;
 mod channel;
 mod rollback;
+mod version;
 
-pub use version::*;
 pub use channel::*;
 pub use rollback::*;
+pub use version::*;

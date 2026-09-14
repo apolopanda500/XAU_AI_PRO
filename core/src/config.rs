@@ -65,6 +65,9 @@ pub struct MarketConfig {
     pub symbols: Vec<String>,
     pub refresh_interval_ms: u64,
     pub providers: Vec<String>, // "mt5" | "binance" | "mexc" | "yahoo" | "stooq"
+    /// Permite cotacoes sinteticas somente em desenvolvimento/paper.
+    /// Deve permanecer false em producao para impedir dados falsos.
+    pub allow_simulated_data: bool,
 }
 
 impl Default for MarketConfig {
@@ -80,6 +83,7 @@ impl Default for MarketConfig {
             ],
             refresh_interval_ms: 1000,
             providers: vec!["mt5".into(), "binance".into(), "yahoo".into()],
+            allow_simulated_data: false,
         }
     }
 }
@@ -137,6 +141,12 @@ impl Default for DatabaseConfig {
 }
 
 impl Config {
+    pub fn data_dir_default() -> PathBuf {
+        dirs::config_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("XAU_AI_PRO")
+    }
+
     pub fn load() -> Result<Self> {
         // Tenta carregar de config.json no data_dir ou current dir
         let paths = Self::config_paths();

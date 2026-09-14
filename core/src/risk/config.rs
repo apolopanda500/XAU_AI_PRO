@@ -37,7 +37,9 @@ impl Default for RiskConfig {
             max_spread_points: 30,
             max_drawdown_pct: 0.10,
             max_daily_loss_pct: 0.05,
-            trading_enabled: true,
+            // Fail-closed: uma instalação nova nunca pode operar sem
+            // habilitação explícita do usuário no painel/configuração.
+            trading_enabled: false,
         }
     }
 }

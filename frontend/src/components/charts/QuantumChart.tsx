@@ -14,23 +14,6 @@ interface CandleData {
 const SIMBOLOS = ['XAUUSD', 'EURUSD', 'GBPUSD', 'USDJPY', 'BTCUSD'];
 const CORES_NEON = ['#f0b90b', '#4f7cff', '#22c55e', '#a855f7', '#ef4444'];
 
-function gerarCandles(base: number, quantidade = 100): CandleData[] {
-  const candles: CandleData[] = [];
-  let preco = base;
-  const agora = Math.floor(Date.now() / 1000);
-  for (let i = quantidade; i >= 0; i--) {
-    const variacao = (Math.random() - 0.5) * base * 0.002;
-    const open = preco;
-    const close = preco + variacao;
-    const high = Math.max(open, close) + Math.random() * base * 0.001;
-    const low = Math.min(open, close) - Math.random() * base * 0.001;
-    const volume = Math.floor(Math.random() * 1000) + 100;
-    candles.push({ time: agora - i * 60, open, high, low, close, volume });
-    preco = close;
-  }
-  return candles;
-}
-
 export default function QuantumChart() {
   const quotes = useAppStore((s) => s.quotes);
   const selectedSymbol = useAppStore((s) => s.selectedSymbol);
@@ -43,11 +26,9 @@ export default function QuantumChart() {
   const [candles, setCandles] = useState<CandleData[]>([]);
 
   const quoteAtual = quotes.find((q) => q.symbol === simboloAtivo);
-  const basePrice = quoteAtual?.price ?? (simboloAtivo === 'XAUUSD' ? 2345 : simboloAtivo === 'BTCUSD' ? 43000 : 1.0850);
-
   useEffect(() => {
-    setCandles(gerarCandles(basePrice));
-  }, [simboloAtivo, basePrice]);
+    setCandles([]);
+  }, [simboloAtivo]);
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -107,7 +88,7 @@ export default function QuantumChart() {
         <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
           <span className="muted" style={{ marginLeft: 'auto', fontSize: 12 }}>Ativo: <strong>{simboloAtivo}</strong> | Preço: <strong>{quoteAtual?.price.toFixed(2) ?? '--'}</strong></span>
         </div>
-        <div ref={chartContainerRef} style={{ width: '100%', height: 400, borderRadius: 8, overflow: 'hidden' }} />
+        {candles.length === 0 ? <div className="placeholder">Histórico OHLCV real indisponível para este ativo.</div> : <div ref={chartContainerRef} style={{ width: '100%', height: 400, borderRadius: 8, overflow: 'hidden' }} />}
       </div>
 
       <div className="grid cols-4">

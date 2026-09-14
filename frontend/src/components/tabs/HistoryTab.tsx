@@ -17,14 +17,7 @@ interface OrdemHistorico {
   dataFechamento: string;
 }
 
-const HISTORICO_MOCK: OrdemHistorico[] = [
-  { ticket: 9001, simbolo: 'XAUUSD', tipo: 'compra', lote: 1.0, precoAbertura: 2330.00, precoFechamento: 2345.00, sl: 2320, tp: 2350, lucro: 150.00, comissao: -3.50, swap: -1.20, dataAbertura: '2026-01-14 09:00', dataFechamento: '2026-01-14 15:30' },
-  { ticket: 9002, simbolo: 'EURUSD', tipo: 'venda', lote: 0.5, precoAbertura: 1.0900, precoFechamento: 1.0850, sl: 1.0950, tp: 1.0800, lucro: 250.00, comissao: -2.00, swap: 0, dataAbertura: '2026-01-14 10:00', dataFechamento: '2026-01-14 14:00' },
-  { ticket: 9003, simbolo: 'GBPUSD', tipo: 'compra', lote: 0.3, precoAbertura: 1.2600, precoFechamento: 1.2550, sl: 1.2550, tp: 1.2700, lucro: -150.00, comissao: -1.50, swap: -0.80, dataAbertura: '2026-01-13 11:00', dataFechamento: '2026-01-13 16:00' },
-  { ticket: 9004, simbolo: 'BTCUSD', tipo: 'venda', lote: 0.02, precoAbertura: 44000.00, precoFechamento: 43500.00, sl: 45000, tp: 43000, lucro: 100.00, comissao: -5.00, swap: 0, dataAbertura: '2026-01-13 14:00', dataFechamento: '2026-01-13 20:00' },
-  { ticket: 9005, simbolo: 'USDJPY', tipo: 'compra', lote: 0.5, precoAbertura: 148.00, precoFechamento: 148.50, sl: 147.50, tp: 149.00, lucro: 250.00, comissao: -2.50, swap: -1.00, dataAbertura: '2026-01-12 08:00', dataFechamento: '2026-01-12 17:00' },
-  { ticket: 9006, simbolo: 'XAUUSD', tipo: 'venda', lote: 0.5, precoAbertura: 2350.00, precoFechamento: 2340.00, sl: 2360, tp: 2335, lucro: 50.00, comissao: -2.00, swap: -0.50, dataAbertura: '2026-01-12 12:00', dataFechamento: '2026-01-12 18:00' },
-];
+const HISTORICO_MOCK: OrdemHistorico[] = [];
 
 export default function HistoryTab() {
   const settings = useAppStore((s) => s.settings);
