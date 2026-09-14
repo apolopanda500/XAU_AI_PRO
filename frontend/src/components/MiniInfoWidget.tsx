@@ -19,18 +19,16 @@ interface Noticia {
   sentimento: 'bullish' | 'bearish' | 'neutral';
 }
 
-const EVENTOS_MOCK: EventoCalendario[] = [
-  { hora: '08:30', pais: 'EUA', impacto: 'alto', titulo: 'Payroll' },
-  { hora: '10:00', pais: 'EUA', impacto: 'medio', titulo: 'ISM PMI' },
-  { hora: '14:00', pais: 'EUA', impacto: 'alto', titulo: 'FOMC' },
-];
+const EVENTOS_MOCK: EventoCalendario[] = [];
 
-const NOTICIAS_MOCK: Noticia[] = [
+const NOTICIAS_MOCK: Noticia[] = [];
+/* legado removido: dados sintéticos não são exibidos em produção.
   { titulo: 'Fed mantém taxas estáveis', fonte: 'Reuters', tempo: '5min', sentimento: 'bullish' },
   { titulo: 'Ouro sobe com tensão geopolítica', fonte: 'Bloomberg', tempo: '12min', sentimento: 'bullish' },
   { titulo: 'Bitcoin testa resistência', fonte: 'CoinDesk', tempo: '30min', sentimento: 'neutral' },
 ];
 
+*/
 export const MiniInfoWidget: React.FC = () => {
   const [eventos] = useState<EventoCalendario[]>(EVENTOS_MOCK);
   const [noticias] = useState<Noticia[]>(NOTICIAS_MOCK);
