@@ -9,6 +9,7 @@ pub mod market;
 pub mod mt5session;
 pub mod protocol;
 pub mod risk;
+pub mod strategy;
 
 pub use bridge::MT5Bridge;
 pub use config::Config;

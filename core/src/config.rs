@@ -16,6 +16,7 @@ pub struct Config {
     pub http: HttpConfig,
     pub database: DatabaseConfig,
     pub risk: crate::risk::RiskConfig,
+    pub strategy: crate::strategy::StrategyConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

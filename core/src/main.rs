@@ -71,6 +71,37 @@ async fn main() -> anyhow::Result<()> {
         None
     };
 
+    // Item 8: estratégia assistiva + paper trading (sinais auditáveis).
+    let paper = Arc::new(xau_ai_pro_core::strategy::PaperTrader::new(
+        config.strategy.clone(),
+        risk.clone(),
+    ));
+    let db_dir = config
+        .app
+        .data_dir
+        .clone()
+        .or_else(|| dirs::data_local_dir().map(|d| d.join("XAU_AI_PRO")))
+        .unwrap_or_else(|| std::path::PathBuf::from("."));
+    let _ = std::fs::create_dir_all(&db_dir);
+    let db_path = db_dir.join("strategy.db");
+    match xau_ai_pro_core::strategy::CandleStore::new(&db_path, &config.strategy.symbol) {
+        Ok(store) => {
+            let store = Arc::new(store);
+            let rx = market.subscribe();
+            let symbol = config.strategy.symbol.clone();
+            tokio::spawn(async move {
+                paper.run(store, rx, symbol).await;
+            });
+            info!(
+                "Estratégia assistiva ativa: {} (autopilot {}, paper {})",
+                config.strategy.symbol,
+                config.strategy.autopilot_enabled,
+                config.strategy.paper_only
+            );
+        }
+        Err(e) => warn!("Falha ao abrir banco de candles: {}", e),
+    }
+
     info!("XAU AI PRO Core pronto. Pressione Ctrl+C para sair.");
     tokio::signal::ctrl_c().await?;
     info!("Encerrando...");

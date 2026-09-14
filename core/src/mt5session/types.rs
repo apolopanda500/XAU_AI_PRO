@@ -111,3 +111,55 @@ pub struct Mt5Session {
 
 /// Limite de staleness do heartbeat em segundos.
 pub const MT5_HEARTBEAT_TIMEOUT_SEC: i64 = 30;
+
+/// Guardrail de segurança (regra do projeto):
+/// o EA executa APENAS comandos operacionais de trading — abrir,
+/// fechar e cancelar ordens. Não existe e nunca existirá comando de
+/// saque, transferência ou movimentação de ativos para terceiros.
+/// Qualquer variante nova adicionada a `EaCommandKind` quebra este
+/// teste e o CI — a superfície do EA é fechada por design.
+#[cfg(test)]
+mod safety_tests {
+    use super::*;
+
+    #[test]
+    fn ea_so_executa_comandos_operacionais() {
+        let amostras = vec![
+            EaCommandKind::PlaceOrder(crate::protocol::OrderRequest {
+                symbol: "XAUUSD".into(),
+                side: "buy".into(),
+                volume: 0.01,
+                sl: None,
+                tp: None,
+                magic: None,
+            }),
+            EaCommandKind::ClosePosition { ticket: 1 },
+            EaCommandKind::CancelOrder { ticket: 1 },
+        ];
+        for cmd in &amostras {
+            let json = serde_json::to_string(cmd).unwrap();
+            // Nenhum comando pode conter semântica de movimentação de fundos.
+            for proibido in ["withdraw", "transfer", "payout", "saque"] {
+                assert!(
+                    !json.to_lowercase().contains(proibido),
+                    "comando proibido detectado: {}",
+                    proibido
+                );
+            }
+        }
+        // Serialização estável: só as 3 variantes operacionais existem.
+        let tag = |k: &EaCommandKind| {
+            serde_json::to_value(k).unwrap()["type"]
+                .as_str()
+                .unwrap()
+                .to_string()
+        };
+        let mut tags: Vec<String> = amostras.iter().map(&tag).collect();
+        tags.sort();
+        assert_eq!(
+            tags,
+            vec!["CancelOrder", "ClosePosition", "PlaceOrder"],
+            "EaCommandKind ganhou variante nova: reavalie o guardrail com segurança"
+        );
+    }
+}

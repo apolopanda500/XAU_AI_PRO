@@ -7,8 +7,8 @@
 5. ✅ **CONCLUÍDO** — Protocolo versionado entre React, Rust Core e EA MT5. (commits `50e721e` + `e3a2770`; handshake Hello, heartbeat, erros tipados, request_id, contrato TS + include MQL5, CI verde)
 6. ✅ **CONCLUÍDO** — Conexão MT5 demo, handshake, heartbeat e reconciliação. (commit `7c5160d`; módulo `mt5session` con estado online/stale, HTTP del EA `eahttp`, enrutamiento de órdenes WS al EA en línea, CoreBridge.mqh con hello+heartbeat)
 7. ✅ **CONCLUÍDO** — Risk Engine: lote, spread, drawdown, perda diária e kill switch. (módulo `risk` com `RiskEngine` integrado ao roteamento WS de PlaceOrder, endpoints `/api/risk/kill` e `/api/risk/status` no HTTP do EA, contadores diários com roll à meia-noite, 5 testes unitários; CI verde)
-8. ⬜ **PRÓXIMO** — IA assistiva: sinais auditáveis, backtest, walk-forward e paper trading.
-9. ⬜ Conectores de corretoras com sandbox, rate limit e reconciliação.
+8. ✅ **CONCLUÍDO** — IA assistiva: sinais auditáveis, backtest, walk-forward e paper trading. (módulo `strategy`: EMA 9/21 + filtro RSI, candles 1m persistidos em SQLite, walk-forward `run_walk_forward` sem vazamento de dados futuros, `PaperTrader` integrado ao RiskEngine (kill switch e lote sugerido), autopilot off por padrão, guardrail de segurança no `EaCommandKind`; CI verde)
+9. ⬜ **PRÓXIMO** — Conectores de corretoras com sandbox, rate limit e reconciliação.
 10. ⬜ Atualizações stable/beta/canary/emergency com rollback.
 11. ⬜ Instalador assinado, documentação PT-BR/EN, suporte e observabilidade.
 
