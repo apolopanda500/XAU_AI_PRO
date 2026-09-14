@@ -14,6 +14,7 @@ import time
 from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -75,6 +76,32 @@ def _payload() -> dict:
     return out
 
 
+def _quote(symbol: str) -> dict:
+    mt5 = _mt5()
+    if not symbol:
+        raise ValueError("symbol obrigatorio")
+    if not mt5.symbol_select(symbol, True):
+        raise LookupError(f"simbolo indisponivel no MT5: {symbol}")
+    tick = mt5.symbol_info_tick(symbol)
+    if not tick:
+        raise LookupError(f"cotacao indisponivel no MT5: {symbol}")
+    info = mt5.symbol_info(symbol)
+    bid = float(tick.bid or 0.0)
+    ask = float(tick.ask or 0.0)
+    return {
+        "symbol": symbol,
+        "bid": bid,
+        "ask": ask,
+        "last": float(getattr(tick, "last", 0.0) or 0.0),
+        "volume": float(getattr(tick, "volume", 0) or 0),
+        "high": float(getattr(info, "session_price_high", 0.0) or 0.0),
+        "low": float(getattr(info, "session_price_low", 0.0) or 0.0),
+        "change_pct": 0.0,
+        "timestamp": datetime.now().isoformat(),
+        "source": "mt5_gateway",
+    }
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):  # silencia log
         pass
@@ -89,7 +116,9 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):  # noqa: N802
-        path = self.path.split("?")[0]
+        parsed = urlparse(self.path)
+        path = parsed.path
+        query = parse_qs(parsed.query)
         if path in ("/", "/api/health"):
             self._send(200, {"ok": True, "uptime_sec": int(time.time() - _T0),
                              "source": "mt5_gateway"})
@@ -102,6 +131,23 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, {"positions": _payload().get("positions", [])})
         elif path == "/api/history":
             self._send(200, {"count": _payload().get("history_count", 0)})
+        elif path == "/api/mt5/quote":
+            try:
+                self._send(200, _quote(query.get("symbol", [""])[0]))
+            except (LookupError, ValueError) as exc:
+                self._send(404, {"ok": False, "error": str(exc)})
+            except Exception as exc:
+                self._send(503, {"ok": False, "error": str(exc)})
+        elif path == "/api/mt5/quotes":
+            symbols = query.get("symbols", ["XAUUSD"])[0].split(",")
+            quotes = []
+            errors = []
+            for symbol in symbols:
+                try:
+                    quotes.append(_quote(symbol.strip()))
+                except Exception as exc:
+                    errors.append({"symbol": symbol, "error": str(exc)})
+            self._send(200, {"quotes": quotes, "errors": errors})
         else:
             self._send(404, {"ok": False, "error": "not_found"})
 
