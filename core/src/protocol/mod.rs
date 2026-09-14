@@ -55,19 +55,14 @@ pub struct Position {
 }
 
 /// Origem da conexão no handshake.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ClientKind {
     React,
     EaMt5,
     Cli,
+    #[default]
     Unknown,
-}
-
-impl Default for ClientKind {
-    fn default() -> Self {
-        Self::Unknown
-    }
 }
 
 /// Primeira mensagem enviada pelo Core a cada conexão (resposta ao Hello).
