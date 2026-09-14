@@ -3,7 +3,7 @@
 // O EA MQL5 pode expor uma API local que este módulo consome.
 
 use reqwest;
-use tracing::{info, warn};
+use tracing::info;
 
 use crate::config::MT5Config;
 use crate::protocol::{AccountInfo, OrderRequest, OrderResponse, Position, Quote};
@@ -36,10 +36,8 @@ impl MT5Bridge {
         };
 
         // Testa conexão
-        match bridge.health_check().await {
-            Ok(_) => info!("MT5 Bridge conectado com sucesso"),
-            Err(e) => warn!("MT5 Bridge: conexão inicial falhou: {}", e),
-        }
+        bridge.health_check().await?;
+        info!("MT5 Bridge conectado com sucesso");
 
         Ok(bridge)
     }
