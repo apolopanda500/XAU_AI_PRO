@@ -1,7 +1,7 @@
 // Configuração do XAU AI PRO Core
 // Carregada de arquivo JSON, environment variables, ou defaults.
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tracing::warn;
@@ -153,7 +153,9 @@ impl Config {
         for path in &paths {
             if path.exists() {
                 let contents = std::fs::read_to_string(path)?;
-                let config: Config = serde_json::from_str(&contents)?;
+                let contents = contents.trim_start_matches('\u{feff}');
+                let config: Config = serde_json::from_str(contents)
+                    .with_context(|| format!("config invalido: {}", path.display()))?;
                 info_configure(&config);
                 return Ok(config);
             }

@@ -66,8 +66,11 @@ fn save_auth(payload: serde_json::Value) -> Result<(), String> {
     let dir = dados_dir()?;
     fs::create_dir_all(&dir).map_err(|e| format!("falha ao criar diretorio de dados: {}", e))?;
     let arquivo = dir.join("auth.json");
-    fs::write(&arquivo, serde_json::to_string(&payload).map_err(|e| e.to_string())?)
-        .map_err(|e| format!("falha ao gravar auth.json: {}", e))
+    fs::write(
+        &arquivo,
+        serde_json::to_string(&payload).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| format!("falha ao gravar auth.json: {}", e))
 }
 
 /// Le auth.json; retorna None quando nao ha PIN cadastrado.
@@ -77,10 +80,10 @@ fn load_auth() -> Result<Option<serde_json::Value>, String> {
     if !arquivo.exists() {
         return Ok(None);
     }
-    let conteudo = fs::read_to_string(&arquivo)
-        .map_err(|e| format!("falha ao ler auth.json: {}", e))?;
-    let valor: serde_json::Value = serde_json::from_str(&conteudo)
-        .map_err(|e| format!("auth.json invalido: {}", e))?;
+    let conteudo =
+        fs::read_to_string(&arquivo).map_err(|e| format!("falha ao ler auth.json: {}", e))?;
+    let valor: serde_json::Value =
+        serde_json::from_str(&conteudo).map_err(|e| format!("auth.json invalido: {}", e))?;
     Ok(Some(valor))
 }
 
@@ -117,7 +120,19 @@ fn localizar_core(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 fn spawn_core(app: &tauri::AppHandle) -> Result<(), String> {
     let path = localizar_core(app)?;
     log_core(&format!("iniciando core: {}", path.display()));
-    Command::new(&path)
+    let working_dir = path
+        .parent()
+        .ok_or_else(|| "diretorio do core invalido".to_string())?;
+    let config_path = std::env::var_os("APPDATA")
+        .map(PathBuf::from)
+        .map(|base| base.join("XAU_AI_PRO").join("config.json"));
+    let mut command = Command::new(&path);
+    command.current_dir(working_dir);
+    if let Some(config) = config_path {
+        command.env("XAU_AI_PRO_CONFIG", config);
+    }
+    command
+        .current_dir(working_dir)
         .spawn()
         .map(|_| {
             log_core("core spawnado com sucesso");

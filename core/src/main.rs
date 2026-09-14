@@ -12,7 +12,11 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt().with_env_filter("info").init();
 
     let config = Arc::new(Config::load()?);
-    info!("XAU AI PRO Core v0.1.0 - modo: {}", config.app.mode);
+    info!(
+        "XAU AI PRO Core v{} - modo: {}",
+        env!("CARGO_PKG_VERSION"),
+        config.app.mode
+    );
     info!("MT5 habilitado: {}", config.mt5.enabled);
 
     let mt5 = Arc::new(xau_ai_pro_core::mt5session::Mt5SessionManager::new());
@@ -106,7 +110,15 @@ async fn main() -> anyhow::Result<()> {
     }
 
     info!("XAU AI PRO Core pronto. Pressione Ctrl+C para sair.");
-    tokio::signal::ctrl_c().await?;
+    match tokio::signal::ctrl_c().await {
+        Ok(()) => info!("Sinal de encerramento recebido"),
+        Err(e) => {
+            // Processos filhos iniciados pelo Tauri podem não possuir console
+            // para registrar Ctrl+C; nesse caso, mantém o serviço ativo.
+            warn!("Ctrl+C indisponível neste processo: {}", e);
+            std::future::pending::<()>().await;
+        }
+    }
     info!("Encerrando...");
     Ok(())
 }
