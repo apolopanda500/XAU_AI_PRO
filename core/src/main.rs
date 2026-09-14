@@ -28,12 +28,15 @@ async fn main() -> anyhow::Result<()> {
     let bridge = if config.mt5.enabled {
         match MT5Bridge::new(&config.mt5).await {
             Ok(b) => {
-                info!("MT5 Bridge conectado");
+                info!("MT5 Bridge conectado e health check aprovado");
                 market.set_bridge(b.clone()).await;
                 Some(b)
             }
             Err(e) => {
-                warn!("MT5 Bridge: {}", e);
+                warn!(
+                    "MT5 Bridge indisponível; dados de mercado ficarão sem fonte: {}",
+                    e
+                );
                 None
             }
         }

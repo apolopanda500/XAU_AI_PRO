@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { invoke } from '@tauri-apps/api/tauri';
 
 // Detecta se o frontend esta rodando dentro do webview do Tauri
 const isTauri = (): boolean =>
@@ -30,16 +29,10 @@ export function useCoreBootstrap() {
       return;
     }
 
-    setCoreStatus('starting');
-    invoke('start_core')
-      .then(() => {
-        setCoreStatus('started');
-        console.log('[Core] Rust Core iniciado pelo Tauri');
-      })
-      .catch((err) => {
-        setCoreStatus('error');
-        console.error('[Core] Falha ao iniciar Rust Core via Tauri:', err);
-      });
+    // O Tauri inicia o Core uma única vez no hook `setup`. Não invoque
+    // `start_core` aqui: o WebView pode montar este hook mais de uma vez.
+    setCoreStatus('started');
+    console.log('[Core] inicialização delegada ao setup do Tauri');
   }, []);
 
   return { coreStatus };
