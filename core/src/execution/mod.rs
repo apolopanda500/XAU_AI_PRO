@@ -49,6 +49,7 @@ impl ExecutionEngine {
                     "Volume inválido: {} (max: {})",
                     request.volume, self.max_lot
                 ),
+                request_id: None,
             });
         }
 
@@ -59,6 +60,7 @@ impl ExecutionEngine {
                 success: false,
                 ticket: 0,
                 message: "MT5 Bridge não conectado".to_string(),
+                request_id: None,
             }),
         }
     }
@@ -71,6 +73,7 @@ impl ExecutionEngine {
                 success: false,
                 ticket,
                 message: "MT5 Bridge não conectado".to_string(),
+                request_id: None,
             }),
         }
     }
@@ -83,6 +86,7 @@ impl ExecutionEngine {
                 success: false,
                 ticket,
                 message: "MT5 Bridge não conectado".to_string(),
+                request_id: None,
             }),
         }
     }
