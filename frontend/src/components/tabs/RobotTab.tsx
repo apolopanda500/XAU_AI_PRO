@@ -1,13 +1,41 @@
+import { useState } from 'react';
 import { useAppStore } from '../../hooks/useAppStore';
 
 export default function RobotTab() {
+  const [connecting, setConnecting] = useState(false);
+  const [connectionMessage, setConnectionMessage] = useState('');
   const robotStatus = useAppStore((s) => s.robotStatus);
+  const setRobotStatus = useAppStore((s) => s.setRobotStatus);
   const magicNumber = useAppStore((s) => s.magicNumber);
   const setMagicNumber = useAppStore((s) => s.setMagicNumber);
   const account = useAppStore((s) => s.account);
   const systemState = useAppStore((s) => s.systemState);
   const settings = useAppStore((s) => s.settings);
   const setSettings = useAppStore((s) => s.setSettings);
+  const setAccount = useAppStore((s) => s.setAccount);
+
+  const connectRobot = async () => {
+    setConnecting(true);
+    setConnectionMessage('Verificando MT5 e o EA...');
+    try {
+      const response = await fetch('http://127.0.0.1:9001/health', { signal: AbortSignal.timeout(5000) });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      setRobotStatus('Conectado');
+      setConnectionMessage('MT5 e EA conectados com dados reais.');
+    } catch {
+      setRobotStatus('Desconectado');
+      setAccount(null);
+      setConnectionMessage('MT5/EA não respondeu em 127.0.0.1:9001. Inicie o EA e tente novamente.');
+    } finally {
+      setConnecting(false);
+    }
+  };
+
+  const disconnectRobot = () => {
+    setRobotStatus('Desconectado');
+    setAccount(null);
+    setConnectionMessage('Conexão do app encerrada. O EA não foi alterado nem desligado.');
+  };
 
   return (
     <div>
@@ -24,8 +52,8 @@ export default function RobotTab() {
               <div className="switch-label">Robô ativo</div>
               <div className="switch-desc">EA envia sinais de execucao ao Core</div>
             </div>
-            <span className={`chip ${systemState?.mt5_connected ? 'ok' : 'warn'}`}>
-              {systemState?.mt5_connected ? 'Conectado' : 'Desconectado'}
+            <span className={`chip ${robotStatus === 'Conectado' ? 'ok' : 'warn'}`}>
+              {robotStatus}
             </span>
           </div>
           <div className="field">
@@ -58,6 +86,15 @@ export default function RobotTab() {
             />
             <label htmlFor="mt5auto">Conectar automaticamente ao iniciar</label>
           </div>
+          <div className="btn-row" style={{ marginTop: 16 }}>
+            <button className="btn primary" type="button" onClick={connectRobot} disabled={connecting}>
+              {connecting ? 'Conectando...' : 'Conectar robô'}
+            </button>
+            <button className="btn danger" type="button" onClick={disconnectRobot} disabled={connecting}>
+              Desconectar
+            </button>
+          </div>
+          {connectionMessage && <div className="hint" role="status" style={{ marginTop: 10 }}>{connectionMessage}</div>}
         </div>
 
         <div className="card">
