@@ -5,6 +5,33 @@ use std::process::Command;
 
 use serde::Serialize;
 
+#[cfg(target_os = "windows")]
+fn acquire_single_instance() -> bool {
+    use std::os::windows::ffi::OsStrExt;
+    use std::ptr::null_mut;
+
+    extern "system" {
+        fn CreateMutexW(attributes: *mut (), initial_owner: i32, name: *const u16) -> *mut ();
+        fn GetLastError() -> u32;
+    }
+
+    let name: Vec<u16> = std::ffi::OsStr::new("Global\\XAU_AI_PRO_SINGLE_INSTANCE")
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    let handle = unsafe { CreateMutexW(null_mut(), 0, name.as_ptr()) };
+    if handle.is_null() {
+        return false;
+    }
+    // ERROR_ALREADY_EXISTS: outra instância já detém o mutex.
+    unsafe { GetLastError() != 183 }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn acquire_single_instance() -> bool {
+    true
+}
+
 fn log_core(msg: &str) {
     if let Some(base) = std::env::var("LOCALAPPDATA").ok().map(PathBuf::from) {
         let dir = base.join("XAU_AI_PRO").join("logs");
@@ -150,6 +177,9 @@ fn start_core(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 fn main() {
+    if !acquire_single_instance() {
+        return;
+    }
     log_core("tauri app inicializando");
     tauri::Builder::default()
         .setup(|app| {
