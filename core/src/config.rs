@@ -155,16 +155,19 @@ impl Config {
 
     fn config_paths() -> Vec<PathBuf> {
         let mut paths = Vec::new();
-        // Current directory
-        paths.push(PathBuf::from("config.json"));
-        // XAU_AI_PRO data dir
-        if let Some(base) = dirs::data_local_dir() {
-            paths.push(base.join("XAU_AI_PRO").join("config.json"));
+        // 1) Caminho explicito definido pelo shell Tauri (var. de ambiente)
+        if let Ok(p) = std::env::var("XAU_AI_PRO_CONFIG") {
+            if !p.is_empty() {
+                paths.push(PathBuf::from(p));
+            }
         }
-        // User config dir
+        // 2) Caminho canonico: %APPDATA%\XAU_AI_PRO\config.json (Roaming)
+        //    Nao se usa mais %LOCALAPPDATA%\XAU_AI_PRO (legado, continha segredos)
         if let Some(base) = dirs::config_dir() {
             paths.push(base.join("XAU_AI_PRO").join("config.json"));
         }
+        // 3) Diretorio atual (desenvolvedor / execucao manual do core)
+        paths.push(PathBuf::from("config.json"));
         paths
     }
 }

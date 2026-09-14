@@ -560,6 +560,106 @@ a {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 20px;
+
+/* ---------- Autenticacao / Onboarding (Fase 3) ---------- */
+.auth-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background:
+    radial-gradient(1200px 500px at 70% -10%, rgba(212, 175, 55, 0.08), transparent 60%),
+    var(--bg);
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 460px;
+  padding: 26px;
+}
+
+.auth-logo {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.auth-logo span {
+  color: var(--primary);
+}
+
+.auth-sub {
+  color: var(--muted);
+  margin: 4px 0 16px;
+}
+
+.stepper {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+
+.stepper i {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+}
+
+.stepper i.on {
+  background: var(--primary);
+}
+
+.auth-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.auth-erro {
+  color: var(--danger);
+  font-size: 13px;
+  display: block;
+  margin-top: 6px;
+}
+
+
+/* Resumo do onboarding */
+.ob-resumo {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  font-size: 13px;
+}
+.ob-resumo li {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+}
+.ob-resumo code {
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.btn.linklike {
+  background: none;
+  border: none;
+  margin-top: 10px;
+  width: 100%;
+  color: var(--muted);
+}
+
+.btn.linklike:hover {
+  color: var(--text);
+  background: none;
+  border: none;
+}
+
   min-width: 340px;
   max-width: 92vw;
   max-height: 88vh;

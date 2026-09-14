@@ -3,6 +3,7 @@ import { useAppStore, TabType } from './hooks/useAppStore';
 import { useTheme } from './hooks/useTheme';
 import { useCoreBootstrap } from './hooks/useCoreBootstrap';
 import { useMarketWebSocket } from './hooks/useMarketWebSocket';
+import AuthGate from './components/AuthGate';
 import Sidebar from './components/Sidebar';
 import TopNav from './components/TopNav';
 import DashboardTab from './components/tabs/DashboardTab';
@@ -36,12 +37,14 @@ export default function App() {
   useMarketWebSocket();
 
   return (
-    <div className="app-shell">
-      <Sidebar />
-      <main className="main">
-        <TopNav />
-        <section className="content">{TAB_COMPONENTS[activeTab] ?? TAB_COMPONENTS.dashboard}</section>
-      </main>
-    </div>
+    <AuthGate>
+      <div className="app-shell">
+        <Sidebar />
+        <main className="main">
+          <TopNav />
+          <section className="content">{TAB_COMPONENTS[activeTab] ?? TAB_COMPONENTS.dashboard}</section>
+        </main>
+      </div>
+    </AuthGate>
   );
 }

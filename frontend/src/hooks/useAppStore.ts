@@ -160,6 +160,8 @@ interface AppState {
   settings: Settings;
   setSettings: (patch: Partial<Settings>) => void;
   resetSettings: () => void;
+  onboardingDone: boolean;
+  completeOnboarding: () => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -196,6 +198,8 @@ export const useAppStore = create<AppState>()(
       settings: DEFAULT_SETTINGS,
       setSettings: (patch) => set((state) => ({ settings: { ...state.settings, ...patch } })),
       resetSettings: () => set({ settings: DEFAULT_SETTINGS }),
+      onboardingDone: false,
+      completeOnboarding: () => set({ onboardingDone: true }),
     }),
     {
       name: 'xau-ai-pro',
@@ -204,6 +208,7 @@ export const useAppStore = create<AppState>()(
         selectedSymbol: state.selectedSymbol,
         settings: state.settings,
         sidebarOpen: state.sidebarOpen,
+        onboardingDone: state.onboardingDone,
       }),
       // Mescla defaults com settings persistidos (garante chaves novas apos atualizacao)
       merge: (persisted, current) => {
