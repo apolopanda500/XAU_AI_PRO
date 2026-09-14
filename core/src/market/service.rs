@@ -74,6 +74,12 @@ impl MarketDataService {
             return Ok(quote);
         }
 
+        if self.config.providers.iter().any(|p| p == "binance") {
+            if let Ok(quote) = self.try_binance_quote(symbol).await {
+                return Ok(quote);
+            }
+        }
+
         if self.config.allow_simulated_data
             && self.config.providers.iter().any(|p| p == "simulated")
         {
@@ -93,6 +99,48 @@ impl MarketDataService {
         } else {
             Err(anyhow::anyhow!("MT5 bridge nao conectado"))
         }
+    }
+
+    async fn try_binance_quote(&self, symbol: &str) -> anyhow::Result<Quote> {
+        let pair = match symbol {
+            "BTCUSD" => "BTCUSDT",
+            "ETHUSD" => "ETHUSDT",
+            "BNBUSD" => "BNBUSDT",
+            "XRPUSD" => "XRPUSDT",
+            "DOGEUSD" => "DOGEUSDT",
+            "LINKUSD" => "LINKUSDT",
+            "AVAXUSD" => "AVAXUSDT",
+            "SOLUSDT" => "SOLUSDT",
+            "ADAUSDT" => "ADAUSDT",
+            _ => anyhow::bail!("símbolo não suportado pela Binance: {}", symbol),
+        };
+        let data: serde_json::Value = reqwest::Client::new()
+            .get("https://api.binance.com/api/v3/ticker/24hr")
+            .query(&[("symbol", pair)])
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+        let number = |key: &str| -> anyhow::Result<f64> {
+            data[key]
+                .as_str()
+                .ok_or_else(|| anyhow::anyhow!("campo ausente: {}", key))?
+                .parse::<f64>()
+                .map_err(Into::into)
+        };
+        Ok(Quote {
+            symbol: symbol.to_string(),
+            bid: number("bidPrice")?,
+            ask: number("askPrice")?,
+            last: number("lastPrice")?,
+            volume: number("volume")?,
+            high: number("highPrice")?,
+            low: number("lowPrice")?,
+            change_pct: number("priceChangePercent")?,
+            timestamp: Utc::now(),
+            source: "binance_public".to_string(),
+        })
     }
 
     async fn simulate_quote(&self, symbol: &str) -> anyhow::Result<Quote> {
