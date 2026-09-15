@@ -934,6 +934,88 @@ a {
   overflow-x: auto;
 }
 
+/* Layout profissional: separa leitura, contexto e acao em todas as abas. */
+.content {
+  padding-top: 24px;
+}
+
+.content > .page-head {
+  margin-bottom: 20px;
+  padding: 2px 2px 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+}
+
+.content > .grid {
+  align-items: start;
+  margin-bottom: 18px;
+}
+
+.content > .grid:last-child {
+  margin-bottom: 0;
+}
+
+.content .card {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .12);
+}
+
+.content .card h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+  margin-bottom: 16px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.content .card > .grid {
+  margin-top: 14px;
+}
+
+.content .btn-row {
+  margin-top: 12px;
+  padding-top: 4px;
+}
+
+.content .switch-row + .field,
+.content .field + .field,
+.content .field + .check-row {
+  margin-top: 16px;
+}
+
+.content .hint {
+  display: block;
+  line-height: 1.55;
+}
+
+/* Gavetas semânticas para detalhes secundários, compatíveis com qualquer aba. */
+.drawer {
+  margin-top: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--panel2) 54%, transparent);
+  overflow: hidden;
+}
+
+.drawer > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 12px 14px;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.drawer > summary::-webkit-details-marker { display: none; }
+.drawer > summary::before { content: '›'; display: inline-block; margin-right: 8px; color: var(--primary); transition: transform .18s ease; }
+.drawer[open] > summary::before { transform: rotate(90deg); }
+.drawer > .drawer-body { padding: 0 14px 14px; }
+
+@media (max-width: 700px) {
+  .content { padding: 16px 12px 24px; }
+  .content > .page-head { margin-bottom: 14px; }
+  .content .card { padding: 14px; }
+}
+
 .topnav-status {
   display: flex;
   align-items: center;
