@@ -8,6 +8,8 @@ Rodar: python backend/mt5_gateway.py
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 import sys
 import threading
 import time
@@ -28,6 +30,22 @@ def _mt5():
 
 
 def _ensure_mt5() -> bool:
+    # MetaTrader5.initialize() pode abrir o terminal automaticamente.
+    # O app deve somente conectar a uma sessao que o usuario ja abriu.
+    if os.name == "nt":
+        try:
+            result = subprocess.run(
+                ["tasklist", "/FI", "IMAGENAME eq terminal64.exe", "/FO", "CSV", "/NH"],
+                capture_output=True,
+                text=True,
+                timeout=2,
+                check=False,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            if "terminal64.exe" not in result.stdout.lower():
+                return False
+        except (OSError, subprocess.SubprocessError):
+            return False
     mt5 = _mt5()
     if not mt5.initialize():
         return False
