@@ -102,6 +102,38 @@ def _quote(symbol: str) -> dict:
     }
 
 
+def _history(days: int = 30, symbol: str = "") -> dict:
+    """Retorna deals fechados reais do MT5; nunca cria dados de teste."""
+    mt5 = _mt5()
+    days = max(1, min(days, 3650))
+    end = datetime.now()
+    start = end - timedelta(days=days)
+    deals = mt5.history_deals_get(start, end, group=f"*{symbol}*") if symbol else mt5.history_deals_get(start, end)
+    rows = []
+    for deal in deals or []:
+        deal_type = getattr(deal, "type", None)
+        entry = getattr(deal, "entry", None)
+        # In/Out são mantidos para auditoria; somente saídas representam resultado realizado.
+        rows.append({
+            "ticket": int(getattr(deal, "ticket", 0)),
+            "order": int(getattr(deal, "order", 0)),
+            "position_id": int(getattr(deal, "position_id", 0)),
+            "symbol": str(getattr(deal, "symbol", "")),
+            "type": "BUY" if deal_type == getattr(mt5, "DEAL_TYPE_BUY", 0) else "SELL",
+            "entry": "IN" if entry == getattr(mt5, "DEAL_ENTRY_IN", 0) else "OUT" if entry == getattr(mt5, "DEAL_ENTRY_OUT", 1) else str(entry),
+            "volume": float(getattr(deal, "volume", 0.0) or 0.0),
+            "price": float(getattr(deal, "price", 0.0) or 0.0),
+            "profit": float(getattr(deal, "profit", 0.0) or 0.0),
+            "commission": float(getattr(deal, "commission", 0.0) or 0.0),
+            "swap": float(getattr(deal, "swap", 0.0) or 0.0),
+            "fee": float(getattr(deal, "fee", 0.0) or 0.0),
+            "magic": int(getattr(deal, "magic", 0)),
+            "time": datetime.fromtimestamp(int(getattr(deal, "time", 0))).isoformat(),
+        })
+    rows.sort(key=lambda row: row["time"], reverse=True)
+    return {"deals": rows, "count": len(rows), "days": days, "source": "mt5_gateway"}
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):  # silencia log
         pass
@@ -130,7 +162,12 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/positions":
             self._send(200, {"positions": _payload().get("positions", [])})
         elif path == "/api/history":
-            self._send(200, {"count": _payload().get("history_count", 0)})
+            try:
+                days = int(query.get("days", ["30"])[0])
+                symbol = query.get("symbol", [""])[0].strip()
+                self._send(200, _history(days, symbol))
+            except Exception as exc:
+                self._send(503, {"ok": False, "error": str(exc), "deals": [], "count": 0})
         elif path == "/api/mt5/quote":
             try:
                 self._send(200, _quote(query.get("symbol", [""])[0]))

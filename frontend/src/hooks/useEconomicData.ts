@@ -115,8 +115,25 @@ function salvarNoCache(dados: EconomicEvent[]): void {
 }
 
 function processarDadosApi(_dados: unknown): EconomicEvent[] {
-  return Array.isArray(_dados) ? _dados.filter((item): item is EconomicEvent =>
-    Boolean(item && typeof item === 'object' && 'horario' in item && 'titulo' in item)) : [];
+  if (!Array.isArray(_dados)) return [];
+  return _dados.flatMap((raw, index) => {
+    if (!raw || typeof raw !== 'object') return [];
+    const item = raw as Record<string, unknown>;
+    const horario = new Date(String(item.horario ?? item.date ?? item.datetime ?? ''));
+    const titulo = String(item.titulo ?? item.title ?? item.event ?? '').trim();
+    if (!titulo || Number.isNaN(horario.getTime())) return [];
+    const impacto = item.impacto === 'alto' || item.impacto === 'medio' ? item.impacto : 'baixo';
+    const codigoPais = String(item.codigoPais ?? item.country ?? '').toUpperCase();
+    return [{
+      id: String(item.id ?? `calendar-${horario.toISOString()}-${index}`), horario,
+      codigoPais, nomePais: String(item.nomePais ?? item.countryName ?? codigoPais),
+      bandeira: String(item.bandeira ?? ''), impacto: impacto as ImpactLevel, titulo,
+      anterior: item.anterior == null ? null : String(item.anterior),
+      consenso: item.consenso == null ? null : String(item.consenso),
+      real: item.real == null ? null : String(item.real),
+      divulgado: Boolean(item.divulgado ?? horario.getTime() <= Date.now()),
+    }];
+  });
 }
 
 export function useEconomicData(

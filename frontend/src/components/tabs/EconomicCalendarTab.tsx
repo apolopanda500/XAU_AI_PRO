@@ -118,6 +118,10 @@ function EventoRow({ evento }: { evento: EconomicEvent }) {
 }
 
 export function EconomicCalendarTab() {
+  const [copilotPrompt, setCopilotPrompt] = useState('Quais eventos podem aumentar a volatilidade do XAUUSD e quais cuidados devo tomar?');
+  const [copilotReply, setCopilotReply] = useState('');
+  const [copilotLoading, setCopilotLoading] = useState(false);
+  const [copilotError, setCopilotError] = useState('');
   const [filtro, setFiltro] = useState<FiltroCalendario>({
     paises: [], impactos: [], dataInicio: null, dataFim: null,
   });
@@ -150,6 +154,27 @@ export function EconomicCalendarTab() {
 
   const limparFiltros = () => { setFiltro({ paises: [], impactos: [], dataInicio: null, dataFim: null }); };
 
+  const consultarCopiloto = async () => {
+    if (!copilotPrompt.trim() || !eventos.length) return;
+    setCopilotLoading(true); setCopilotError('');
+    const contexto = eventos.slice(0, 40).map((evento) => ({
+      horario: evento.horario.toISOString(), pais: evento.codigoPais, impacto: evento.impacto,
+      titulo: evento.titulo, anterior: evento.anterior, consenso: evento.consenso, real: evento.real,
+    }));
+    try {
+      const base = 'https://xau-ai-pro-api-apolopanda500.vercel.app';
+      const response = await fetch(`${base}/api/chat`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: `Analise somente os eventos econômicos reais abaixo para um trader de XAUUSD. Não dê ordem de compra/venda, não invente números e deixe claro quando não houver evidência. Pergunta: ${copilotPrompt}\nEventos: ${JSON.stringify(contexto)}` }),
+        signal: AbortSignal.timeout(30000),
+      });
+      const data = await response.json() as { reply?: string; error?: string };
+      if (!response.ok) throw new Error(data.error || `IA HTTP ${response.status}`);
+      setCopilotReply(data.reply || 'A IA não retornou uma análise.');
+    } catch (error) { setCopilotError(error instanceof Error ? error.message : 'Copiloto indisponível'); }
+    finally { setCopilotLoading(false); }
+  };
+
   if (erro) {
     return (
       <div style={{ padding: '20px', color: '#fca5a5', textAlign: 'center' }}>
@@ -160,7 +185,7 @@ export function EconomicCalendarTab() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', color: '#f3f4f6', fontSize: '13px' }}>
+    <div className="calendar-tab" style={{ display: 'flex', flexDirection: 'column', height: '100%', color: '#f3f4f6', fontSize: '13px' }}>
       <div style={{ padding: '12px 16px', borderBottom: '1px solid #374151', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>📅 Calendário Econômico</h2>
@@ -211,6 +236,20 @@ export function EconomicCalendarTab() {
             </button>
           )}
         </div>
+      </div>
+
+      <div className="card" style={{ margin: '12px 16px', padding: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+          <div><h3 style={{ margin: 0 }}>Copiloto econômico</h3><span className="muted" style={{ fontSize: 11 }}>IA contextual baseada apenas nos eventos reais carregados</span></div>
+          <span className="chip warn">Somente análise</span>
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+          <input value={copilotPrompt} onChange={(event) => setCopilotPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void consultarCopiloto(); } }} placeholder="Pergunte sobre risco, volatilidade ou agenda..." style={{ flex: 1 }} />
+          <button className="btn sm primary" type="button" onClick={() => void consultarCopiloto()} disabled={copilotLoading || !eventos.length}>{copilotLoading ? 'Analisando...' : 'Analisar'}</button>
+        </div>
+        {copilotError && <div className="hint neg" role="alert" style={{ marginTop: 8 }}>Copiloto indisponível: {copilotError}</div>}
+        {copilotReply && <div className="placeholder" style={{ marginTop: 10, whiteSpace: 'pre-wrap', textAlign: 'left', alignItems: 'flex-start' }}>{copilotReply}</div>}
+        <div className="hint" style={{ marginTop: 8 }}>A IA não envia ordens, não altera o EA e não movimenta ativos. Chaves permanecem no backend.</div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '60px 40px 1fr 100px 80px 80px 80px', gap: '10px', padding: '8px 12px', backgroundColor: '#111827', borderBottom: '1px solid #374151', fontSize: '10px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase' }}>

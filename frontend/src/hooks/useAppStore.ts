@@ -116,7 +116,8 @@ export const DEFAULT_SETTINGS: Settings = {
   precision: 2,
   refreshInterval: 1000,
   mt5Path: '',
-  mt5AutoConnect: true,
+  // MT5 nunca e iniciado pelo app; a conexao deve ser explicitamente acionada pelo usuario.
+  mt5AutoConnect: false,
   aiEnabled: true,
   aiModel: 'xau-pro-v2',
   aiInterval: 60,
@@ -214,7 +215,9 @@ export const useAppStore = create<AppState>()(
         return {
           ...current,
           ...p,
-          settings: { ...DEFAULT_SETTINGS, ...(p.settings ?? {}) },
+          // Compatibilidade segura: versoes antigas podiam persistir auto-connect=true.
+          // A inicializacao do MT5 exige acao explicita do usuario.
+          settings: { ...DEFAULT_SETTINGS, ...(p.settings ?? {}), mt5AutoConnect: false },
         } as AppState;
       },
     },

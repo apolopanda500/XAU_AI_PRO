@@ -1,54 +1,20 @@
+import { useCallback, useEffect, useState } from 'react';
 import { useAppStore } from '../../hooks/useAppStore';
+
+const MT5 = 'http://127.0.0.1:9001';
 
 export default function StrategyTesterTab() {
   const selectedSymbol = useAppStore((s) => s.selectedSymbol);
-
-  return (
-    <div>
-      <div className="page-head">
-        <h1>Teste de Estratégia</h1>
-        <span className="muted">Backtest e otimizacao (Fase 5 - motor no Core)</span>
-      </div>
-
-      <div className="grid cols-2">
-        <div className="card">
-          <h2>Configuração do Backtest</h2>
-          <div className="field">
-            <label htmlFor="bt-symbol">Símbolo</label>
-            <input id="bt-symbol" type="text" value={selectedSymbol} readOnly />
-            <span className="hint">Siga o simbolo selecionado na aba Mercado.</span>
-          </div>
-          <div className="field">
-            <label htmlFor="bt-period">Período</label>
-            <select id="bt-period" defaultValue="6m">
-              <option value="1m">1 mês</option>
-              <option value="3m">3 meses</option>
-              <option value="6m">6 meses</option>
-              <option value="1y">1 ano</option>
-            </select>
-          </div>
-          <div className="field">
-            <label htmlFor="bt-model">Modelo</label>
-            <select id="bt-model" defaultValue="tick">
-              <option value="tick">Cada tick</option>
-              <option value="1m">OHLC 1 min</option>
-              <option value="open">Somente abertura</option>
-            </select>
-          </div>
-          <button className="btn primary" disabled title="Disponivel na Fase 5">
-            Executar Backtest
-          </button>
-        </div>
-
-        <div className="card">
-          <h2>Resultados</h2>
-          <div className="placeholder">
-            <div className="ph-icon">🧪</div>
-            <span>Motor de backtest ainda nao integrado.</span>
-            <span className="muted">Previsto no roadmap (Fase 5: estrategia e backtest no Core Rust).</span>
-          </div>
-        </div>
-      </div>
+  const [period, setPeriod] = useState('6m'); const [model, setModel] = useState('tick'); const [status, setStatus] = useState<'Aguardando' | 'MT5 conectado' | 'MT5 indisponível'>('Aguardando'); const [checking, setChecking] = useState(false); const [checkedAt, setCheckedAt] = useState('nunca'); const [modelStatus, setModelStatus] = useState('Não verificado'); const [modelCount, setModelCount] = useState<number | null>(null); const [modelChecking, setModelChecking] = useState(false);
+  const validateEnvironment = useCallback(async () => { setChecking(true); try { const r = await fetch(`${MT5}/api/status`, { signal: AbortSignal.timeout(5000) }); if (!r.ok) throw new Error(); setStatus('MT5 conectado'); } catch { setStatus('MT5 indisponível'); } finally { setCheckedAt(new Date().toLocaleTimeString('pt-BR')); setChecking(false); } }, []);
+  useEffect(() => { void validateEnvironment(); }, [validateEnvironment]);
+  const validateModels = async () => { setModelChecking(true); try { const r = await fetch('https://raw.githubusercontent.com/apolopanda500/XAU_AI_PRO/main/Models/manifest.json', { signal: AbortSignal.timeout(10000) }); if (!r.ok) throw new Error(`manifest HTTP ${r.status}`); const data = await r.json() as { models?: unknown[] }; setModelCount(Array.isArray(data.models) ? data.models.length : 0); setModelStatus('Manifest real disponível'); } catch { setModelCount(null); setModelStatus('Manifest indisponível'); } finally { setModelChecking(false); } };
+  return <div>
+    <div className="page-head"><h1>Estratégia</h1><span className="muted">Configuração, validação e preparação de testes reais</span></div>
+    <div className="grid cols-2">
+      <div className="card"><h2>Configuração do teste</h2><div className="field"><label htmlFor="bt-symbol">Símbolo</label><input id="bt-symbol" value={selectedSymbol} readOnly /><span className="hint">Símbolo selecionado no Mercado.</span></div><div className="field"><label htmlFor="bt-period">Janela histórica</label><select id="bt-period" value={period} onChange={(e) => setPeriod(e.target.value)}><option value="1m">1 mês</option><option value="3m">3 meses</option><option value="6m">6 meses</option><option value="1y">1 ano</option></select></div><div className="field"><label htmlFor="bt-model">Modelo de ticks</label><select id="bt-model" value={model} onChange={(e) => setModel(e.target.value)}><option value="tick">Cada tick</option><option value="1m">OHLC de 1 minuto</option><option value="open">Somente abertura</option></select></div><div className="hint">Configuração selecionada: {period} · {model}. O EA permanece intocável e nenhum teste envia ordens.</div><button className="btn primary" type="button" onClick={validateEnvironment} disabled={checking} style={{ marginTop: 14 }}>{checking ? 'Validando...' : 'Validar MT5 e dados'}</button></div>
+      <div className="card"><h2>Estado do ambiente</h2><div className="switch-row"><div><div className="switch-label">Fonte de dados</div><div className="switch-desc">Terminal MT5 local via gateway somente leitura</div></div><span className={`chip ${status === 'MT5 conectado' ? 'ok' : 'warn'}`}>{status}</span></div><div className="tbl-wrap" style={{ marginTop: 12 }}><table className="tbl"><tbody><tr><td>Mercado</td><td className="mono">{selectedSymbol}</td></tr><tr><td>MT5</td><td>{status}</td></tr><tr><td>Última validação</td><td className="mono">{checkedAt}</td></tr><tr><td>Execução</td><td><span className="chip warn">Manual</span></td></tr></tbody></table></div><div className="hint" style={{ marginTop: 12 }}>Sem dados simulados. Sem saque, sem envio de ordens e sem alteração de parâmetros do EA.</div></div>
     </div>
-  );
+    <div className="card" style={{ marginTop: 14 }}><h2>Modelos treinados e validação</h2><div className="grid cols-4"><div><span className="kpi-label">Modelo principal</span><div className="kpi-value">XAUUSD_M5</div><div className="kpi-sub">Manifesto público v1.2.0</div></div><div><span className="kpi-label">Modelos publicados</span><div className="kpi-value">{modelCount ?? '--'}</div><div className="kpi-sub">{modelStatus}</div></div><div><span className="kpi-label">Treinamento</span><div className="kpi-value">Manual</div><div className="kpi-sub">Requer dataset MT5 real</div></div><div><span className="kpi-label">Validação</span><div className="kpi-value">{status === 'MT5 conectado' ? 'Pronta' : 'Bloqueada'}</div><div className="kpi-sub">Sem resultados inventados</div></div></div><div className="btn-row" style={{ marginTop: 14 }}><button className="btn sm ghost" type="button" onClick={() => void validateModels()} disabled={modelChecking}>{modelChecking ? 'Verificando...' : 'Validar modelos publicados'}</button></div><div className="placeholder" style={{ marginTop: 14 }}><span>Treino e teste só devem iniciar com dataset histórico real, separação treino/teste e métricas fora da amostra.</span><span className="muted">A aba não ativa treinamento automático nem altera o EA. O Strategy Tester do MT5 continua sendo a fonte oficial dos resultados.</span></div></div>
+  </div>;
 }

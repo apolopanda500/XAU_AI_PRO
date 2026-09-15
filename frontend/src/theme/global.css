@@ -39,6 +39,44 @@ textarea {
   color: inherit;
 }
 
+/* Controles nativos devem respeitar o tema em todas as abas. */
+input,
+select,
+textarea {
+  color-scheme: dark;
+  background-color: var(--panel2);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+[data-theme='light'] input,
+[data-theme='light'] select,
+[data-theme='light'] textarea {
+  color-scheme: light;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--muted);
+  opacity: 0.85;
+}
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+  -webkit-text-fill-color: var(--text);
+  -webkit-box-shadow: 0 0 0 1000px var(--panel2) inset;
+  box-shadow: 0 0 0 1000px var(--panel2) inset;
+  transition: background-color 9999s ease-out 0s;
+}
+
+option {
+  background: var(--panel2);
+  color: var(--text);
+}
+
 button {
   cursor: pointer;
   border: none;
@@ -385,11 +423,185 @@ a {
 .field input,
 .field select,
 .field textarea {
-  background: var(--panel2);
+  background-color: var(--panel2);
+  color: var(--text);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 8px 10px;
   outline: none;
+}
+
+/* Dashboard visual language from the approved Figma reference.
+   Values remain sourced from MT5/Core; this block changes presentation only. */
+.dashboard-tab > .grid:first-of-type .card {
+  position: relative;
+  min-height: 104px;
+  background: linear-gradient(115deg, var(--panel) 0%, color-mix(in srgb, var(--panel) 86%, var(--primary) 14%) 100%);
+  overflow: hidden;
+}
+
+.dashboard-tab > .grid:first-of-type .card:nth-child(1) { border-top-color: color-mix(in srgb, var(--warn) 70%, var(--border)); }
+.dashboard-tab > .grid:first-of-type .card:nth-child(2) { border-top-color: color-mix(in srgb, var(--ok) 70%, var(--border)); }
+.dashboard-tab > .grid:first-of-type .card:nth-child(3) { border-top-color: color-mix(in srgb, var(--danger) 70%, var(--border)); }
+.dashboard-tab > .grid:first-of-type .card:nth-child(4) { border-top-color: color-mix(in srgb, var(--primary) 70%, var(--border)); }
+
+.dashboard-tab > .grid:first-of-type .card::after {
+  content: '';
+  position: absolute;
+  width: 90px;
+  height: 90px;
+  right: -24px;
+  bottom: -38px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--primary) 45%, transparent);
+  box-shadow: 0 0 30px color-mix(in srgb, var(--primary) 18%, transparent);
+  pointer-events: none;
+}
+
+.dashboard-tab .tbl tbody tr:hover {
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+
+.dashboard-tab .page-head h1 {
+  letter-spacing: .02em;
+}
+
+.robot-tab {
+  position: relative;
+  z-index: 1;
+  min-height: 100%;
+  isolation: isolate;
+}
+
+.robot-tab::before {
+  content: '';
+  position: absolute;
+  inset: -8px -10px;
+  z-index: -1;
+  border-radius: 16px;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--bg) 96%, var(--primary) 4%), var(--bg));
+  pointer-events: none;
+}
+
+/* Campos compactos usados por tabelas, filtros e painéis. */
+.input,
+.search-input,
+.filter-input,
+.tbl input,
+.tbl select,
+.toolbar input,
+.toolbar select {
+  background-color: var(--panel2);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.input::placeholder,
+.search-input::placeholder,
+.filter-input::placeholder,
+.tbl input::placeholder,
+.toolbar input::placeholder {
+  color: var(--muted);
+}
+
+/* Calendário: alinhamento visual com Mercado, Histórico e Robô. */
+.calendar-tab {
+  gap: 0 !important;
+  color: var(--text) !important;
+}
+
+/* Camada de leitura ao vivo: energia discreta, sem travar tabelas ou gráficos. */
+.mini-info-widget {
+  position: relative;
+  overflow: hidden;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(90deg, var(--panel), color-mix(in srgb, var(--panel) 82%, var(--primary)), var(--panel));
+  background-size: 220% 100%;
+  animation: xau-reading-sweep 8s linear infinite;
+}
+
+.mini-info-widget::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(90deg, transparent 0 90px, var(--quantum-border, rgba(79,124,255,.12)) 91px, transparent 92px);
+  opacity: .35;
+  transform: translateX(-92px);
+  animation: xau-reading-lines 12s linear infinite;
+}
+
+.mini-info-widget .mini-item {
+  position: relative;
+  z-index: 1;
+}
+
+.mini-info-widget .pos,
+.mini-info-widget .neg {
+  animation: xau-status-pulse 2.4s ease-in-out infinite;
+}
+
+.calendar-tab,
+.content > .card,
+.content > .grid > .card {
+  position: relative;
+}
+
+.content > .card::before,
+.content > .grid > .card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 14px;
+  right: 14px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--quantum-primary, var(--primary)), transparent);
+  opacity: .45;
+  pointer-events: none;
+}
+
+@keyframes xau-reading-sweep { from { background-position: 0% 50%; } to { background-position: 220% 50%; } }
+@keyframes xau-reading-lines { from { transform: translateX(-92px); } to { transform: translateX(92px); } }
+@keyframes xau-status-pulse { 0%, 100% { opacity: .78; } 50% { opacity: 1; text-shadow: 0 0 10px currentColor; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .mini-info-widget, .mini-info-widget::after, .mini-info-widget .pos, .mini-info-widget .neg { animation: none; }
+}
+
+.calendar-tab > div:first-child,
+.calendar-tab > div:nth-child(3) {
+  background: var(--panel) !important;
+  border-color: var(--border) !important;
+}
+
+.calendar-tab button {
+  background: var(--panel2) !important;
+  border-color: var(--border) !important;
+  color: var(--text) !important;
+  transition: border-color .15s ease, background-color .15s ease, transform .15s ease !important;
+}
+
+.calendar-tab button:hover:not(:disabled) {
+  border-color: var(--primary) !important;
+  transform: translateY(-1px);
+}
+
+.calendar-tab input {
+  min-width: 0;
+  background: var(--panel2) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text) !important;
+}
+
+.calendar-tab [style*='backgroundColor: rgb(17, 24, 39)'],
+.calendar-tab [style*='backgroundColor: rgb(31, 41, 55)'] {
+  background: var(--panel2) !important;
+  border-color: var(--border) !important;
+}
+
+@media (max-width: 900px) {
+  .calendar-tab [style*='gridTemplateColumns'] { grid-template-columns: 54px 30px minmax(180px, 1fr) 70px 70px 70px 70px !important; gap: 6px !important; }
+  .calendar-tab .card { margin-left: 8px !important; margin-right: 8px !important; }
 }
 
 .field input:focus,

@@ -35,7 +35,7 @@ export default function Sidebar() {
           </button>
         ))}
       </nav>
-      <div className="sidebar-footer muted">v0.1.0 • Rust Core + Tauri</div>
+      {sidebarOpen && <div className="sidebar-footer muted">XAU AI PRO · Operação manual segura</div>}
     </aside>
   );
 }

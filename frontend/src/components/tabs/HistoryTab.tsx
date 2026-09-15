@@ -1,145 +1,23 @@
-﻿import { useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAppStore } from '../../hooks/useAppStore';
 
-interface OrdemHistorico {
-  ticket: number;
-  simbolo: string;
-  tipo: string;
-  lote: number;
-  precoAbertura: number;
-  precoFechamento: number;
-  sl?: number;
-  tp?: number;
-  lucro: number;
-  comissao: number;
-  swap: number;
-  dataAbertura: string;
-  dataFechamento: string;
-}
-
-const HISTORICO_MOCK: OrdemHistorico[] = [];
+type Deal = { ticket: number; symbol: string; type: 'BUY' | 'SELL'; entry: string; volume: number; price: number; profit: number; commission: number; swap: number; fee: number; time: string };
+const MT5 = 'http://127.0.0.1:9001';
 
 export default function HistoryTab() {
-  const settings = useAppStore((s) => s.settings);
-  const [filtroSimbolo, setFiltroSimbolo] = useState<string>('');
-  const [filtroTipo, setFiltroTipo] = useState<string>('');
-  const [filtroDataInicio, setFiltroDataInicio] = useState<string>('');
-  const [filtroDataFim, setFiltroDataFim] = useState<string>('');
-
-  const fmt = (v: number, d = settings.precision) =>
-    v.toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
-
-  const filtradas = HISTORICO_MOCK.filter((o) => {
-    const matchSimbolo = !filtroSimbolo || o.simbolo.toLowerCase().includes(filtroSimbolo.toLowerCase());
-    const matchTipo = !filtroTipo || o.tipo === filtroTipo;
-    const matchDataInicio = !filtroDataInicio || o.dataAbertura >= filtroDataInicio;
-    const matchDataFim = !filtroDataFim || o.dataFechamento <= filtroDataFim + ' 23:59';
-    return matchSimbolo && matchTipo && matchDataInicio && matchDataFim;
-  });
-
-  const totalLucro = filtradas.reduce((acc, o) => acc + o.lucro, 0);
-  const totalTrades = filtradas.length;
-  const wins = filtradas.filter((o) => o.lucro > 0).length;
-  const winRate = totalTrades > 0 ? (wins / totalTrades) * 100 : 0;
-  const totalComissao = filtradas.reduce((acc, o) => acc + Math.abs(o.comissao), 0);
-  const totalSwap = filtradas.reduce((acc, o) => acc + Math.abs(o.swap), 0);
-
-  const exportCSV = () => {
-    const cabecalho = 'Ticket;Simbolo;Tipo;Lote;Preco Abertura;Preco Fechamento;SL;TP;Lucro;Comissao;Swap;Abertura;Fechamento\n';
-    const linhas = filtradas.map((o) =>
-      `${o.ticket};${o.simbolo};${o.tipo};${o.lote};${o.precoAbertura};${o.precoFechamento};${o.sl ?? ''};${o.tp ?? ''};${o.lucro};${o.comissao};${o.swap};${o.dataAbertura};${o.dataFechamento}`
-    ).join('\n');
-    const conteudo = cabecalho + linhas;
-    const blob = new Blob([conteudo], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `historico_${new Date().toISOString().slice(0, 10)}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
-
-  return (
-    <div>
-      <div className="page-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h1>Histórico</h1>
-          <span className="muted">Todas as ordens executadas e finalizadas</span>
-        </div>
-        <div className="btn-row">
-          <button className="btn sm primary" onClick={exportCSV}>⬇ Exportar CSV</button>
-        </div>
-      </div>
-
-      <div className="card" style={{ marginBottom: 14, padding: 12 }}>
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-          <div>
-            <label className="muted" style={{ fontSize: 12 }}>Símbolo</label>
-            <input type="text" placeholder="Ex: XAUUSD" value={filtroSimbolo} onChange={(e) => setFiltroSimbolo(e.target.value)}
-              style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--panel2)', color: 'var(--text)', fontSize: 13 }} />
-          </div>
-          <div>
-            <label className="muted" style={{ fontSize: 12 }}>Tipo</label>
-            <select value={filtroTipo} onChange={(e) => setFiltroTipo(e.target.value)}
-              style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--panel2)', color: 'var(--text)', fontSize: 13 }}>
-              <option value="">Todos</option>
-              <option value="compra">Compra</option>
-              <option value="venda">Venda</option>
-            </select>
-          </div>
-          <div>
-            <label className="muted" style={{ fontSize: 12 }}>De</label>
-            <input type="date" value={filtroDataInicio} onChange={(e) => setFiltroDataInicio(e.target.value)}
-              style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--panel2)', color: 'var(--text)', fontSize: 13 }} />
-          </div>
-          <div>
-            <label className="muted" style={{ fontSize: 12 }}>Até</label>
-            <input type="date" value={filtroDataFim} onChange={(e) => setFiltroDataFim(e.target.value)}
-              style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--panel2)', color: 'var(--text)', fontSize: 13 }} />
-          </div>
-          <div style={{ marginLeft: 'auto' }}>
-            <button className="btn sm ghost" onClick={() => { setFiltroSimbolo(''); setFiltroTipo(''); setFiltroDataInicio(''); setFiltroDataFim(''); }}>Limpar</button>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid cols-4" style={{ marginBottom: 14 }}>
-        <div className="card"><div className="kpi-label">Trades</div><div className="kpi-value">{totalTrades}</div></div>
-        <div className="card"><div className="kpi-label">Resultado</div><div className={totalLucro >= 0 ? 'kpi-value pos' : 'kpi-value neg'}>{fmt(totalLucro)}</div></div>
-        <div className="card"><div className="kpi-label">Win Rate</div><div className="kpi-value">{winRate.toFixed(1)}%</div><div className="kpi-sub">{wins}W / {totalTrades - wins}L</div></div>
-        <div className="card"><div className="kpi-label">Custos</div><div className="kpi-value">{fmt(totalComissao + totalSwap)}</div><div className="kpi-sub">comissão + swap</div></div>
-      </div>
-
-      {filtradas.length === 0 ? (
-        <div className="placeholder">
-          <div className="ph-icon">📜</div>
-          <span>Nenhuma operação no período.</span>
-          <span className="muted">Ajuste os filtros de data ou símbolo.</span>
-        </div>
-      ) : (
-        <div className="tbl-wrap">
-          <table className="tbl">
-            <thead><tr><th>Ticket</th><th>Símbolo</th><th>Tipo</th><th>Lote</th><th>Abertura</th><th>Fechamento</th><th>SL</th><th>TP</th><th>Lucro</th><th>Custos</th><th>Período</th></tr></thead>
-            <tbody>
-              {filtradas.map((o) => (
-                <tr key={o.ticket}>
-                  <td className="mono">{o.ticket}</td>
-                  <td><strong>{o.simbolo}</strong></td>
-                  <td><span className={o.tipo === 'compra' ? 'chip ok' : 'chip danger'}>{o.tipo === 'compra' ? '▲ Compra' : '▼ Venda'}</span></td>
-                  <td className="mono">{o.lote}</td>
-                  <td className="mono">{fmt(o.precoAbertura)}</td>
-                  <td className="mono">{fmt(o.precoFechamento)}</td>
-                  <td className="mono">{o.sl ? fmt(o.sl) : '--'}</td>
-                  <td className="mono">{o.tp ? fmt(o.tp) : '--'}</td>
-                  <td className={o.lucro >= 0 ? 'pos' : 'neg'}>{fmt(o.lucro)}</td>
-                  <td className="mono muted">{fmt(Math.abs(o.comissao) + Math.abs(o.swap))}</td>
-                  <td className="mono muted" style={{ fontSize: 11 }}>{o.dataAbertura.slice(5, 16)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
+  const precision = useAppStore((s) => s.settings.precision);
+  const [deals, setDeals] = useState<Deal[]>([]); const [days, setDays] = useState('30'); const [symbol, setSymbol] = useState(''); const [type, setType] = useState(''); const [entry, setEntry] = useState('OUT'); const [loading, setLoading] = useState(false); const [error, setError] = useState(''); const [lastUpdate, setLastUpdate] = useState('nunca');
+  const load = useCallback(async () => { setLoading(true); setError(''); try { const r = await fetch(`${MT5}/api/history?days=${encodeURIComponent(days)}&symbol=${encodeURIComponent(symbol.trim())}`, { signal: AbortSignal.timeout(8000) }); const d = await r.json() as { deals?: Deal[]; error?: string }; if (!r.ok) throw new Error(d.error || `MT5 HTTP ${r.status}`); setDeals(Array.isArray(d.deals) ? d.deals : []); setLastUpdate(new Date().toLocaleTimeString('pt-BR')); } catch (e) { setDeals([]); setError(e instanceof Error ? e.message : 'Histórico MT5 indisponível'); } finally { setLoading(false); } }, [days, symbol]);
+  useEffect(() => { void load(); }, [load]);
+  const fmt = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: precision, maximumFractionDigits: precision });
+  const filtered = useMemo(() => deals.filter((d) => (!type || d.type === type) && (!entry || d.entry === entry)), [deals, type, entry]);
+  const result = filtered.reduce((s, d) => s + d.profit + d.commission + d.swap + d.fee, 0); const gross = filtered.reduce((s, d) => s + d.profit, 0); const costs = filtered.reduce((s, d) => s + d.commission + d.swap + d.fee, 0); const wins = filtered.filter((d) => d.profit > 0).length;
+  const exportCSV = () => { const h = 'Ticket;Simbolo;Tipo;Entrada;Volume;Preco;Lucro;Comissao;Swap;Fee;Data\n'; const b = filtered.map((d) => [d.ticket, d.symbol, d.type, d.entry, d.volume, d.price, d.profit, d.commission, d.swap, d.fee, d.time].join(';')).join('\n'); const u = URL.createObjectURL(new Blob([h + b], { type: 'text/csv;charset=utf-8' })); const a = document.createElement('a'); a.href = u; a.download = `historico_mt5_${new Date().toISOString().slice(0, 10)}.csv`; a.click(); URL.revokeObjectURL(u); };
+  return <div>
+    <div className="page-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><div><h1>Histórico MT5</h1><span className="muted">Deals reais recebidos do terminal; nenhum dado simulado</span></div><div className="btn-row"><button className="btn sm ghost" type="button" onClick={load} disabled={loading}>{loading ? 'Carregando...' : 'Atualizar'}</button><button className="btn sm primary" type="button" onClick={exportCSV} disabled={!filtered.length}>Exportar CSV</button></div></div>
+    <div className="card" style={{ marginBottom: 14, padding: 12 }}><div className="grid cols-4"><div className="field"><label htmlFor="history-days">Período</label><select id="history-days" value={days} onChange={(e) => setDays(e.target.value)}><option value="1">Último dia</option><option value="7">7 dias</option><option value="30">30 dias</option><option value="90">90 dias</option><option value="365">1 ano</option></select></div><div className="field"><label htmlFor="history-symbol">Símbolo</label><input id="history-symbol" placeholder="Todos os símbolos" value={symbol} onChange={(e) => setSymbol(e.target.value)} /></div><div className="field"><label htmlFor="history-type">Direção</label><select id="history-type" value={type} onChange={(e) => setType(e.target.value)}><option value="">Todas</option><option value="BUY">Compra</option><option value="SELL">Venda</option></select></div><div className="field"><label htmlFor="history-entry">Evento</label><select id="history-entry" value={entry} onChange={(e) => setEntry(e.target.value)}><option value="">Entradas e saídas</option><option value="OUT">Saídas realizadas</option><option value="IN">Entradas</option></select></div></div><div className="hint">Última atualização real: {lastUpdate}</div></div>
+    {error && <div className="card" role="alert" style={{ marginBottom: 14 }}><span className="neg">MT5 indisponível: {error}</span></div>}
+    <div className="grid cols-4" style={{ marginBottom: 14 }}><div className="card"><div className="kpi-label">Deals exibidos</div><div className="kpi-value">{filtered.length}</div></div><div className="card"><div className="kpi-label">Resultado líquido</div><div className={`kpi-value ${result >= 0 ? 'pos' : 'neg'}`}>{fmt(result)}</div></div><div className="card"><div className="kpi-label">Win rate</div><div className="kpi-value">{filtered.length ? `${((wins / filtered.length) * 100).toFixed(1)}%` : '--'}</div><div className="kpi-sub">{wins} ganhos</div></div><div className="card"><div className="kpi-label">Custos</div><div className="kpi-value neg">{fmt(costs)}</div><div className="kpi-sub">bruto: {fmt(gross)}</div></div></div>
+    {!loading && !error && !filtered.length ? <div className="placeholder"><div className="ph-icon">📜</div><span>Nenhum deal real no filtro selecionado.</span><span className="muted">Confirme o período e a conexão do MT5.</span></div> : <div className="tbl-wrap"><table className="tbl"><thead><tr><th>Ticket</th><th>Símbolo</th><th>Tipo</th><th>Evento</th><th>Volume</th><th>Preço</th><th>Resultado</th><th>Custos</th><th>Data</th></tr></thead><tbody>{filtered.map((d) => <tr key={`${d.ticket}-${d.time}`}><td className="mono">{d.ticket}</td><td><strong>{d.symbol}</strong></td><td><span className={`chip ${d.type === 'BUY' ? 'ok' : 'danger'}`}>{d.type === 'BUY' ? '▲ Compra' : '▼ Venda'}</span></td><td className="mono">{d.entry}</td><td className="mono">{d.volume}</td><td className="mono">{fmt(d.price)}</td><td className={d.profit >= 0 ? 'pos' : 'neg'}>{fmt(d.profit)}</td><td className="mono muted">{fmt(d.commission + d.swap + d.fee)}</td><td className="mono muted">{new Date(d.time).toLocaleString('pt-BR')}</td></tr>)}</tbody></table></div>}
+  </div>;
 }

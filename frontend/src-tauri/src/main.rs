@@ -1,7 +1,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use std::fs;
+use std::net::TcpStream;
 use std::path::PathBuf;
 use std::process::Command;
+use std::time::Duration;
 
 use serde::Serialize;
 
@@ -15,13 +17,14 @@ fn acquire_single_instance() -> bool {
         fn GetLastError() -> u32;
     }
 
-    let name: Vec<u16> = std::ffi::OsStr::new("Global\\XAU_AI_PRO_SINGLE_INSTANCE")
+    let name: Vec<u16> = std::ffi::OsStr::new("Local\\XAU_AI_PRO_SINGLE_INSTANCE")
         .encode_wide()
         .chain(std::iter::once(0))
         .collect();
     let handle = unsafe { CreateMutexW(null_mut(), 0, name.as_ptr()) };
     if handle.is_null() {
-        return false;
+        // Se o Windows bloquear o mutex, nao impedir a inicializacao da UI.
+        return true;
     }
     // ERROR_ALREADY_EXISTS: outra instância já detém o mutex.
     unsafe { GetLastError() != 183 }
@@ -47,6 +50,15 @@ fn log_core(msg: &str) {
         }
     }
 }
+
+#[cfg(target_os = "windows")]
+fn ocultar_console(command: &mut Command) {
+    use std::os::windows::process::CommandExt;
+    command.creation_flags(0x08000000);
+}
+
+#[cfg(not(target_os = "windows"))]
+fn ocultar_console(_command: &mut Command) {}
 
 /// Diretorio canonico de dados do usuario: %APPDATA%\XAU_AI_PRO (Roaming).
 fn dados_dir() -> Result<PathBuf, String> {
@@ -74,6 +86,58 @@ pub struct AppDirs {
     pub config_path: String,
     pub auth_path: String,
     pub log_dir: String,
+}
+
+#[derive(Serialize)]
+pub struct HardwareTelemetry {
+    pub cpu_temperature_c: Option<f64>,
+    pub gpu_name: Option<String>,
+    pub gpu_available: bool,
+    pub source: String,
+}
+
+/// Coleta apenas telemetria local. Nao executa ordens, saques ou alteracoes no MT5.
+#[tauri::command]
+fn hardware_telemetry() -> HardwareTelemetry {
+    #[cfg(target_os = "windows")]
+    {
+        let script = r#"$tz=Get-CimInstance MSAcpi_ThermalZoneTemperature -ErrorAction SilentlyContinue | Select-Object -First 1; $gpu=Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue | Where-Object {$_.Name} | Select-Object -First 1; [pscustomobject]@{cpu=if($tz){[math]::Round(($tz.CurrentTemperature/10)-273.15,1)}else{$null}; gpu=if($gpu){$gpu.Name}else{$null}} | ConvertTo-Json -Compress"#;
+        if let Ok(output) = Command::new("powershell.exe")
+            .args([
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
+                script,
+            ])
+            .output()
+        {
+            if let Ok(value) = serde_json::from_slice::<serde_json::Value>(&output.stdout) {
+                let cpu = value.get("cpu").and_then(|v| v.as_f64());
+                let gpu_name = value.get("gpu").and_then(|v| v.as_str()).map(str::to_owned);
+                return HardwareTelemetry {
+                    cpu_temperature_c: cpu,
+                    gpu_available: gpu_name.is_some(),
+                    gpu_name,
+                    source: "Windows WMI".to_string(),
+                };
+            }
+        }
+        return HardwareTelemetry {
+            cpu_temperature_c: None,
+            gpu_name: None,
+            gpu_available: false,
+            source: "Windows WMI indisponivel".to_string(),
+        };
+    }
+    #[cfg(not(target_os = "windows"))]
+    HardwareTelemetry {
+        cpu_temperature_c: None,
+        gpu_name: None,
+        gpu_available: false,
+        source: "Telemetria nao suportada neste sistema".to_string(),
+    }
 }
 
 #[tauri::command]
@@ -143,8 +207,72 @@ fn localizar_core(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     cand.ok_or_else(|| "core nao encontrado (resource e exe_dir)".to_string())
 }
 
+fn localizar_bridge(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    if let Some(p) = app
+        .path_resolver()
+        .resolve_resource("bridge/mt5-gateway.exe")
+    {
+        if p.exists() {
+            return Ok(p);
+        }
+    }
+    let cand = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.to_path_buf()))
+        .map(|d| d.join("bridge").join("mt5-gateway.exe"))
+        .filter(|c| c.exists());
+    cand.ok_or_else(|| "bridge MT5 nao encontrado".to_string())
+}
+
+fn spawn_bridge(app: &tauri::AppHandle) -> Result<(), String> {
+    if TcpStream::connect_timeout(
+        &"127.0.0.1:9001".parse().unwrap(),
+        Duration::from_millis(300),
+    )
+    .is_ok()
+    {
+        return Ok(());
+    }
+    let path = localizar_bridge(app)?;
+    let mut command = Command::new(&path);
+    ocultar_console(&mut command);
+    command
+        .current_dir(path.parent().unwrap())
+        .spawn()
+        .map(|_| log_core("bridge MT5 spawnado com sucesso"))
+        .map_err(|e| format!("falha ao iniciar bridge MT5: {}", e))
+}
+
+fn aguardar_bridge() {
+    for _ in 0..30 {
+        if TcpStream::connect_timeout(
+            &"127.0.0.1:9001".parse().unwrap(),
+            Duration::from_millis(300),
+        )
+        .is_ok()
+        {
+            log_core("bridge MT5 pronto antes do Core");
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(500));
+    }
+    log_core("bridge MT5 nao respondeu no prazo; Core sera iniciado em modo sem MT5");
+}
+
 /// Inicia o core em processo separado (idempotente: ignora se ja houver um).
 fn spawn_core(app: &tauri::AppHandle) -> Result<(), String> {
+    // O Core sobrevive ao fechamento da UI; nunca iniciar uma segunda cópia.
+    for port in [9002_u16, 9003_u16] {
+        if TcpStream::connect_timeout(
+            &format!("127.0.0.1:{port}").parse().unwrap(),
+            Duration::from_millis(300),
+        )
+        .is_ok()
+        {
+            log_core("core ja esta ativo; spawn ignorado");
+            return Ok(());
+        }
+    }
     let path = localizar_core(app)?;
     log_core(&format!("iniciando core: {}", path.display()));
     let working_dir = path
@@ -154,6 +282,7 @@ fn spawn_core(app: &tauri::AppHandle) -> Result<(), String> {
         .map(PathBuf::from)
         .map(|base| base.join("XAU_AI_PRO").join("config.json"));
     let mut command = Command::new(&path);
+    ocultar_console(&mut command);
     command.current_dir(working_dir);
     if let Some(config) = config_path {
         command.env("XAU_AI_PRO_CONFIG", config);
@@ -188,6 +317,10 @@ fn main() {
             // nem depende da execucao do JavaScript no webview).
             let handle = app.handle().clone();
             std::thread::spawn(move || {
+                if let Err(e) = spawn_bridge(&handle) {
+                    log_core(&format!("setup bridge: {}", e));
+                }
+                aguardar_bridge();
                 if let Err(e) = spawn_core(&handle) {
                     log_core(&format!("setup: {}", e));
                 }
@@ -200,8 +333,9 @@ fn main() {
             get_app_dirs,
             save_auth,
             load_auth,
-            remove_auth
+            remove_auth,
+            hardware_telemetry
         ])
         .run(tauri::generate_context!())
-        .expect("erro ao iniciar XAU AI PRO");
+        .unwrap_or_else(|e| log_core(&format!("erro ao iniciar XAU AI PRO: {}", e)));
 }
