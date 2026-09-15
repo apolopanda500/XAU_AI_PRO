@@ -1,9 +1,14 @@
 # -*- mode: python ; coding: utf-8 -*-
+from PyInstaller.utils.hooks import collect_all
 from PyInstaller.utils.hooks import collect_data_files
 from PyInstaller.utils.hooks import collect_dynamic_libs
 
 datas = []
 binaries = []
+numpy_datas, numpy_binaries, numpy_hiddenimports = collect_all('numpy')
+datas += numpy_datas
+binaries += numpy_binaries
+hiddenimports = list(numpy_hiddenimports)
 datas += collect_data_files('MetaTrader5')
 binaries += collect_dynamic_libs('MetaTrader5')
 
@@ -13,7 +18,7 @@ a = Analysis(
     pathex=[],
     binaries=binaries,
     datas=datas,
-    hiddenimports=['numpy', 'numpy.core._multiarray_umath'],
+    hiddenimports=hiddenimports + ['MetaTrader5'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
