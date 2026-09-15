@@ -486,6 +486,53 @@ a {
   pointer-events: none;
 }
 
+.robot-tab .page-head {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+}
+
+.robot-tab > .grid {
+  gap: 18px;
+}
+
+.robot-tab > .grid > .card {
+  min-height: 280px;
+  padding: 18px;
+}
+
+.robot-tab > .card {
+  padding: 18px;
+}
+
+.robot-tab .field {
+  padding: 10px 12px;
+  margin-bottom: 0;
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--panel2) 42%, transparent);
+}
+
+.robot-tab .check-row {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--panel2) 42%, transparent);
+}
+
+.robot-tab .tbl-wrap {
+  margin-top: 12px;
+}
+
+.robot-tab .hint[role='status'],
+.robot-tab [role='alert'] {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--primary);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--panel2) 58%, transparent);
+}
+
 /* Campos compactos usados por tabelas, filtros e painéis. */
 .input,
 .search-input,
