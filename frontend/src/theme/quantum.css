@@ -812,3 +812,35 @@
 }
 
 
+
+/* Tema Ocean Dark — Ciano profundo */
+[data-theme='ocean_dark'] {
+  --quantum-primary: #22d3ee; --quantum-secondary: #38bdf8; --quantum-accent: #0ea5e9;
+  --quantum-glow: rgba(34, 211, 238, 0.6); --quantum-glow-soft: rgba(34, 211, 238, 0.25);
+  --quantum-energy: #38bdf8; --quantum-particle: rgba(34, 211, 238, 0.8);
+  --quantum-border: rgba(34, 211, 238, 0.4); --quantum-bg-wave: rgba(34, 211, 238, 0.03);
+}
+
+/* Tema Emerald Dark — Verde esmeralda */
+[data-theme='emerald_dark'] {
+  --quantum-primary: #34d399; --quantum-secondary: #6ee7b7; --quantum-accent: #10b981;
+  --quantum-glow: rgba(52, 211, 153, 0.6); --quantum-glow-soft: rgba(52, 211, 153, 0.25);
+  --quantum-energy: #6ee7b7; --quantum-particle: rgba(52, 211, 153, 0.8);
+  --quantum-border: rgba(52, 211, 153, 0.4); --quantum-bg-wave: rgba(52, 211, 153, 0.03);
+}
+
+/* Tema Rose Dark — Rosa */
+[data-theme='rose_dark'] {
+  --quantum-primary: #fb7185; --quantum-secondary: #fda4af; --quantum-accent: #e11d48;
+  --quantum-glow: rgba(251, 113, 133, 0.6); --quantum-glow-soft: rgba(251, 113, 133, 0.25);
+  --quantum-energy: #fda4af; --quantum-particle: rgba(251, 113, 133, 0.8);
+  --quantum-border: rgba(251, 113, 133, 0.4); --quantum-bg-wave: rgba(251, 113, 133, 0.03);
+}
+
+/* Tema Violet Dark — Violeta */
+[data-theme='violet_dark'] {
+  --quantum-primary: #a78bfa; --quantum-secondary: #c4b5fd; --quantum-accent: #8b5cf6;
+  --quantum-glow: rgba(167, 139, 250, 0.6); --quantum-glow-soft: rgba(167, 139, 250, 0.25);
+  --quantum-energy: #c4b5fd; --quantum-particle: rgba(167, 139, 250, 0.8);
+  --quantum-border: rgba(167, 139, 250, 0.4); --quantum-bg-wave: rgba(167, 139, 250, 0.03);
+}

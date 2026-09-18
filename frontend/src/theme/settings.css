@@ -1,0 +1,70 @@
+/* Seções novas da Configuração: temas, PIN real e Conta/Conexão */
+.settings-grid-wrap { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin-top: 10px; }
+.theme-card { position: relative; border: 1px solid var(--border, rgba(255,255,255,.1)); border-radius: 12px; padding: 12px; cursor: pointer; background: var(--panel-2, rgba(255,255,255,.03)); display: flex; flex-direction: column; gap: 8px; }
+.theme-card.active { border-color: var(--accent, #f0a620); box-shadow: 0 0 0 1px var(--accent, #f0a620) inset; }
+.theme-swatch { height: 34px; border-radius: 8px; border: 1px solid rgba(255,255,255,.12); }
+.theme-swatch.t-dark { background: linear-gradient(120deg, #0e1117 0 55%, #1c2333 55% 100%); }
+.theme-swatch.t-xau_dark { background: linear-gradient(120deg, #100c06 0 55%, #f0a620 55% 100%); }
+.theme-swatch.t-btc_dark { background: linear-gradient(120deg, #0d0f14 0 55%, #f7931a 55% 100%); }
+.theme-swatch.t-light { background: linear-gradient(120deg, #f5f7fb 0 55%, #1c2333 55% 100%); }
+.theme-swatch.t-ocean_dark { background: linear-gradient(120deg, #07141f 0 55%, #22d3ee 55% 100%); }
+.theme-swatch.t-emerald_dark { background: linear-gradient(120deg, #071510 0 55%, #34d399 55% 100%); }
+.theme-swatch.t-rose_dark { background: linear-gradient(120deg, #16070c 0 55%, #fb7185 55% 100%); }
+.theme-swatch.t-violet_dark { background: linear-gradient(120deg, #0e0a1a 0 55%, #a78bfa 55% 100%); }
+.theme-name { font-size: 13px; font-weight: 600; }
+.theme-name small { display: block; font-weight: 400; color: var(--muted, #8b93a7); }
+.pin-status { display: inline-flex; align-items: center; gap: 8px; margin: 6px 0 12px; font-size: 13.5px; }
+.pin-status .chip { font-size: 11px; }
+.pin-block { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.pin-block input { width: 170px; }
+.pin-block select { width: auto; }
+.risk-list { margin: 10px 0 0; padding-left: 18px; color: var(--muted, #8b93a7); font-size: 12.5px; }
+.risk-list li { margin: 3px 0; }
+.acct-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 10px; margin-top: 10px; }
+.acct-cell { background: var(--panel-2, rgba(255,255,255,.03)); border: 1px solid var(--border, rgba(255,255,255,.08)); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
+.acct-cell span { font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted, #8b93a7); }
+.acct-cell strong { font-size: 15px; font-variant-numeric: tabular-nums; }
+.acct-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.mono-lbl { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px; padding: 3px 0; border-bottom: 1px dashed var(--border, rgba(255,255,255,.08)); }
+.mono-lbl:last-child { border-bottom: 0; }
+.mono-lbl b { color: var(--muted, #8b93a7); font-weight: 500; }
+.mono-lbl .v { text-align: right; word-break: break-all; }
+.mono-lbl .v.ok { color: var(--ok, #2ecc71); }
+.mono-lbl .v.err { color: var(--danger, #e74c3c); }
+
+/* Estrutura da página de Configuração */
+.settings-card { display: flex; flex-direction: column; gap: 14px; }
+.settings-layout { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 14px; align-items: start; }
+@media (max-width: 860px) { .settings-layout { grid-template-columns: 1fr; } }
+.settings-nav { display: flex; flex-direction: column; gap: 6px; position: sticky; top: 12px; }
+.settings-nav-item { text-align: left; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border, rgba(255,255,255,.08)); background: var(--panel-2, rgba(255,255,255,.03)); color: var(--text, inherit); cursor: pointer; font-size: 13.5px; font-weight: 600; }
+.settings-nav-item:hover { border-color: var(--primary, #f0b90b); }
+.settings-nav-item.active { background: var(--primary, #f0b90b); color: var(--primary-contrast, #14100a); border-color: transparent; }
+.settings-panel { background: var(--panel-2, rgba(255,255,255,.03)); border: 1px solid var(--border, rgba(255,255,255,.08)); border-radius: 12px; padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.settings-panel h3 { margin: 4px 0 0; font-size: 15px; }
+.settings-rows { display: flex; flex-direction: column; gap: 8px; }
+.settings-rows .input { max-width: 420px; }
+.pin-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.pin-form input { width: 180px; }
+
+/* Grade de temas com pré-visualização */
+.theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.theme-grid .theme-swatch { height: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; cursor: pointer; }
+.theme-grid .theme-swatch.selected { border-color: var(--primary, #f0b90b); box-shadow: 0 0 0 1px var(--primary, #f0b90b) inset; }
+.theme-preview { display: inline-flex; gap: 4px; }
+.theme-preview i { width: 16px; height: 10px; border-radius: 3px; background: currentColor; opacity: .35; }
+.theme-preview i:nth-child(2) { opacity: .65; }
+.theme-preview i:nth-child(3) { opacity: 1; }
+.theme-swatch-dark { background: linear-gradient(120deg, #0e1117 0 55%, #4f7cff 55% 100%); color: #4f7cff; }
+.theme-swatch-xau_dark { background: linear-gradient(120deg, #14100a 0 55%, #f0b90b 55% 100%); color: #f0b90b; }
+.theme-swatch-btc_dark { background: linear-gradient(120deg, #0c0f14 0 55%, #f7931a 55% 100%); color: #f7931a; }
+.theme-swatch-light { background: linear-gradient(120deg, #f3f5f9 0 55%, #3554d1 55% 100%); color: #3554d1; }
+.theme-swatch-ocean_dark { background: linear-gradient(120deg, #07141f 0 55%, #22d3ee 55% 100%); color: #22d3ee; }
+.theme-swatch-emerald_dark { background: linear-gradient(120deg, #071510 0 55%, #34d399 55% 100%); color: #34d399; }
+.theme-swatch-rose_dark { background: linear-gradient(120deg, #16070c 0 55%, #fb7185 55% 100%); color: #fb7185; }
+.theme-swatch-violet_dark { background: linear-gradient(120deg, #0e0a1a 0 55%, #a78bfa 55% 100%); color: #a78bfa; }
+
+/* Saúde das conexões */
+.conn-list { display: flex; flex-direction: column; gap: 6px; }
+.conn-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 7px 10px; border: 1px solid var(--border, rgba(255,255,255,.08)); border-radius: 10px; background: var(--panel, transparent); font-size: 13px; }
+

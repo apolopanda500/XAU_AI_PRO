@@ -1,23 +1,105 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useAppStore } from '../../hooks/useAppStore';
-
-type Deal = { ticket: number; symbol: string; type: 'BUY' | 'SELL'; entry: string; volume: number; price: number; profit: number; commission: number; swap: number; fee: number; time: string };
-const MT5 = 'http://127.0.0.1:9001';
-
+import { useCallback, useEffect, useRef, useState } from 'react';
+import '../../theme/history.css';
+const API = 'http://127.0.0.1:9001';
+type Deal = { id?: string | number; broker?: string; market?: string; symbol?: string; side?: string; quantity?: number | string; volume?: number; price?: number | string; realizedPnl?: number | string; profit?: number; executedAt?: string; close_time?: string; comment?: string; position_id?: number | string };
+const limits: Record<string, number> = { '1': 100, '7': 200, '15': 300, '30': 500, '90': 500, '365': 500, '0': 500 };
+const periods: Record<string, string> = { '1': 'Hoje', '7': '7 dias', '15': '15 dias', '30': '30 dias', '90': '90 dias', '365': '1 ano', '0': 'Tudo' };
+const num = (v: unknown, d = 2) => { const n = Number(v); return Number.isFinite(n) ? n.toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d }) : '--' };
+const money = (v: unknown) => { const n = Number(v); return Number.isFinite(n) ? `${n >= 0 ? '' : '−'}$${Math.abs(n).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '--' };
+const cls = (v: number) => (v > 0 ? 'acum-pos' : v < 0 ? 'acum-neg' : '');
+const date = (v?: string) => { if (!v) return '--'; const d = new Date(v); return Number.isNaN(d.getTime()) ? v : d.toLocaleString('pt-BR'); };
 export default function HistoryTab() {
-  const precision = useAppStore((s) => s.settings.precision);
-  const [deals, setDeals] = useState<Deal[]>([]); const [days, setDays] = useState('30'); const [symbol, setSymbol] = useState(''); const [type, setType] = useState(''); const [entry, setEntry] = useState('OUT'); const [loading, setLoading] = useState(false); const [error, setError] = useState(''); const [lastUpdate, setLastUpdate] = useState('nunca');
-  const load = useCallback(async () => { setLoading(true); setError(''); try { const r = await fetch(`${MT5}/api/history?days=${encodeURIComponent(days)}&symbol=${encodeURIComponent(symbol.trim())}`, { signal: AbortSignal.timeout(8000) }); const d = await r.json() as { deals?: Deal[]; error?: string }; if (!r.ok) throw new Error(d.error || `MT5 HTTP ${r.status}`); setDeals(Array.isArray(d.deals) ? d.deals : []); setLastUpdate(new Date().toLocaleTimeString('pt-BR')); } catch (e) { setDeals([]); setError(e instanceof Error ? e.message : 'Histórico MT5 indisponível'); } finally { setLoading(false); } }, [days, symbol]);
+  const [broker, setBroker] = useState('all');
+  const [symbol, setSymbol] = useState('');
+  const [days, setDays] = useState('1');
+  const [rows, setRows] = useState<Deal[]>([]);
+  const [error, setError] = useState('');
+  const [status, setStatus] = useState('Aguardando consulta…');
+  const [updatedAt, setUpdatedAt] = useState('--:--:--');
+  const [selected, setSelected] = useState<number[]>([]);
+  const busyRef = useRef(false);
+  const load = useCallback(async () => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setError(''); setSelected([]);
+    const list = broker === 'all' ? ['mt5', 'mexc', 'binance'] : [broker];
+    const fetched: Array<{ broker: string; deals: Deal[] }> = [];
+    try {
+      for (const b of list) {
+        if (b !== 'mt5' && !symbol.trim()) { continue; }
+        const params = new URLSearchParams({ broker: b, market: b === 'mt5' ? 'other' : 'crypto-spot', days });
+        if (symbol.trim()) params.set('symbol', symbol.trim());
+        const r = await fetch(`${API}/api/universal/history?${params}`, { signal: AbortSignal.timeout(15000) });
+        const d = await r.json() as { deals?: Deal[]; error?: string };
+        if (!r.ok) throw new Error(d.error || `${b} indisponível`);
+        fetched.push({ broker: b, deals: d.deals ?? [] });
+      }
+      const flat = fetched.flatMap(({ broker: b, deals }) => deals.map((deal) => ({ ...deal, broker: deal.broker ?? b })));
+      setRows(flat.sort((a, b) => date(b.executedAt ?? b.close_time).localeCompare(date(a.executedAt ?? a.close_time))).slice(0, limits[days] ?? 500));
+      setStatus(fetched.length ? `${fetched.map((f) => `${f.broker}: ${f.deals.length}`).join(' · ')}${flat.length > (limits[days] ?? 500) ? ` · exibindo ${limits[days] ?? 500} mais recentes` : ''}` : 'Sem fontes para o filtro atual');
+      setUpdatedAt(new Date().toLocaleTimeString('pt-BR'));
+    } catch (e) {
+      setRows([]); setStatus('Aguardando consulta…');
+      setError(e instanceof Error ? e.message : 'Histórico indisponível');
+    } finally { busyRef.current = false; }
+  }, [broker, symbol, days]);
   useEffect(() => { void load(); }, [load]);
-  const fmt = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: precision, maximumFractionDigits: precision });
-  const filtered = useMemo(() => deals.filter((d) => (!type || d.type === type) && (!entry || d.entry === entry)), [deals, type, entry]);
-  const result = filtered.reduce((s, d) => s + d.profit + d.commission + d.swap + d.fee, 0); const gross = filtered.reduce((s, d) => s + d.profit, 0); const costs = filtered.reduce((s, d) => s + d.commission + d.swap + d.fee, 0); const wins = filtered.filter((d) => d.profit > 0).length;
-  const exportCSV = () => { const h = 'Ticket;Simbolo;Tipo;Entrada;Volume;Preco;Lucro;Comissao;Swap;Fee;Data\n'; const b = filtered.map((d) => [d.ticket, d.symbol, d.type, d.entry, d.volume, d.price, d.profit, d.commission, d.swap, d.fee, d.time].join(';')).join('\n'); const u = URL.createObjectURL(new Blob([h + b], { type: 'text/csv;charset=utf-8' })); const a = document.createElement('a'); a.href = u; a.download = `historico_mt5_${new Date().toISOString().slice(0, 10)}.csv`; a.click(); URL.revokeObjectURL(u); };
-  return <div>
-    <div className="page-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><div><h1>Histórico MT5</h1><span className="muted">Deals reais recebidos do terminal; nenhum dado simulado</span></div><div className="btn-row"><button className="btn sm ghost" type="button" onClick={load} disabled={loading}>{loading ? 'Carregando...' : 'Atualizar'}</button><button className="btn sm primary" type="button" onClick={exportCSV} disabled={!filtered.length}>Exportar CSV</button></div></div>
-    <div className="card" style={{ marginBottom: 14, padding: 12 }}><div className="grid cols-4"><div className="field"><label htmlFor="history-days">Período</label><select id="history-days" value={days} onChange={(e) => setDays(e.target.value)}><option value="1">Último dia</option><option value="7">7 dias</option><option value="30">30 dias</option><option value="90">90 dias</option><option value="365">1 ano</option></select></div><div className="field"><label htmlFor="history-symbol">Símbolo</label><input id="history-symbol" placeholder="Todos os símbolos" value={symbol} onChange={(e) => setSymbol(e.target.value)} /></div><div className="field"><label htmlFor="history-type">Direção</label><select id="history-type" value={type} onChange={(e) => setType(e.target.value)}><option value="">Todas</option><option value="BUY">Compra</option><option value="SELL">Venda</option></select></div><div className="field"><label htmlFor="history-entry">Evento</label><select id="history-entry" value={entry} onChange={(e) => setEntry(e.target.value)}><option value="">Entradas e saídas</option><option value="OUT">Saídas realizadas</option><option value="IN">Entradas</option></select></div></div><div className="hint">Última atualização real: {lastUpdate}</div></div>
-    {error && <div className="card" role="alert" style={{ marginBottom: 14 }}><span className="neg">MT5 indisponível: {error}</span></div>}
-    <div className="grid cols-4" style={{ marginBottom: 14 }}><div className="card"><div className="kpi-label">Deals exibidos</div><div className="kpi-value">{filtered.length}</div></div><div className="card"><div className="kpi-label">Resultado líquido</div><div className={`kpi-value ${result >= 0 ? 'pos' : 'neg'}`}>{fmt(result)}</div></div><div className="card"><div className="kpi-label">Win rate</div><div className="kpi-value">{filtered.length ? `${((wins / filtered.length) * 100).toFixed(1)}%` : '--'}</div><div className="kpi-sub">{wins} ganhos</div></div><div className="card"><div className="kpi-label">Custos</div><div className="kpi-value neg">{fmt(costs)}</div><div className="kpi-sub">bruto: {fmt(gross)}</div></div></div>
-    {!loading && !error && !filtered.length ? <div className="placeholder"><div className="ph-icon">📜</div><span>Nenhum deal real no filtro selecionado.</span><span className="muted">Confirme o período e a conexão do MT5.</span></div> : <div className="tbl-wrap"><table className="tbl"><thead><tr><th>Ticket</th><th>Símbolo</th><th>Tipo</th><th>Evento</th><th>Volume</th><th>Preço</th><th>Resultado</th><th>Custos</th><th>Data</th></tr></thead><tbody>{filtered.map((d) => <tr key={`${d.ticket}-${d.time}`}><td className="mono">{d.ticket}</td><td><strong>{d.symbol}</strong></td><td><span className={`chip ${d.type === 'BUY' ? 'ok' : 'danger'}`}>{d.type === 'BUY' ? '▲ Compra' : '▼ Venda'}</span></td><td className="mono">{d.entry}</td><td className="mono">{d.volume}</td><td className="mono">{fmt(d.price)}</td><td className={d.profit >= 0 ? 'pos' : 'neg'}>{fmt(d.profit)}</td><td className="mono muted">{fmt(d.commission + d.swap + d.fee)}</td><td className="mono muted">{new Date(d.time).toLocaleString('pt-BR')}</td></tr>)}</tbody></table></div>}
-  </div>;
+  const toggleSel = (i: number) => setSelected((cur) => cur.includes(i) ? cur.filter((x) => x !== i) : [...cur, i]);
+  const acc = (pool: Deal[]) => {
+    const wins = pool.filter((d) => Number(d.realizedPnl) > 0).length;
+    const losses = pool.filter((d) => Number(d.realizedPnl) < 0).length;
+    const grossWin = pool.filter((d) => Number(d.realizedPnl) > 0).reduce((s, d) => s + Number(d.realizedPnl), 0);
+    const grossLoss = Math.abs(pool.filter((d) => Number(d.realizedPnl) < 0).reduce((s, d) => s + Number(d.realizedPnl), 0));
+    const closed = wins + losses;
+    return { total: pool.reduce((s, d) => s + (Number(d.realizedPnl) || 0), 0), wins, losses, closed, wr: closed ? (wins / closed) * 100 : 0, pf: grossLoss > 0 ? grossWin / grossLoss : (grossWin > 0 ? Infinity : 0), grossWin, grossLoss, qty: pool.length };
+  };
+  const tot = acc(rows);
+  const sel = acc(selected.map((i) => rows[i]).filter(Boolean));
+  const byAsset = new Map<string, Deal[]>();
+  for (const d of rows) { const k = String(d.symbol ?? '--'); byAsset.set(k, [...(byAsset.get(k) ?? []), d]); }
+  const perPeriod = Object.keys(periods).filter((k) => k !== days && k !== '0').map((k) => {
+    const ini = new Date(Date.now() - Number(k) * 86400000).toISOString();
+    const pool = rows.filter((d) => { const when = d.executedAt ?? d.close_time; if (!when) return false; const t = new Date(when); return !Number.isNaN(t.getTime()) && t >= new Date(ini); });
+    return { key: k, label: periods[k], ...acc(pool) };
+  });
+  const exportCsv = () => {
+    const csv = [['ID/Ticket', 'Corretora', 'Ativo', 'Lado', 'Quantidade', 'Preco', 'PNL', 'Data'], ...rows.map((r) => [r.id, r.broker, r.symbol, r.side, r.quantity ?? r.volume, r.price, r.realizedPnl, r.executedAt ?? r.close_time])].map((r) => r.join(';')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'historico-universal.csv'; a.click(); URL.revokeObjectURL(url);
+  };
+
+  return <main className="history-page quantum-history">
+    <div className="page-head"><div><span className="eyebrow">REGISTRO UNIVERSAL</span><h1>Histórico</h1><span className="muted">Execuções reais por corretora · PnL acumulado e seleção</span></div>
+      <div className="btn-row"><button className="btn ghost" onClick={exportCsv} disabled={!rows.length}>Exportar CSV</button><button className="btn primary" type="button" onClick={() => void load()} disabled={busyRef.current}>Atualizar</button></div></div>
+    <div className="card compact-card history-filter-card"><div className="history-filters">
+      <label className="field">Corretora<select value={broker} onChange={(e) => setBroker(e.target.value)}><option value="all">Todas</option><option value="mt5">MT5</option><option value="mexc">MEXC</option><option value="binance">Binance</option></select></label>
+      <label className="field">Ativo<input value={symbol} onChange={(e) => setSymbol(e.target.value.toUpperCase())} placeholder={broker === 'mt5' ? 'Opcional (ex.: XAUUSD)' : 'Escolha manualmente'} /></label>
+      <label className="field">Período<select value={days} onChange={(e) => setDays(e.target.value)}><option value="1">Hoje</option><option value="7">7 dias</option><option value="15">15 dias</option><option value="30">30 dias</option><option value="90">90 dias</option><option value="365">1 ano</option><option value="0">Tudo</option></select></label>
+      <div className="history-count"><span className="muted">Exibindo</span><strong>{rows.length}</strong><span className="muted">{updatedAt !== '--:--:--' ? `· ${updatedAt}` : ''}</span></div>
+    </div></div>
+    {error && <div className="placeholder">{error}</div>}
+    <div className="history-status-row"><span className="muted">Fontes: {status}</span></div>
+    <div className="metrics-grid">
+      <div className="card metric-card"><span className="muted">PnL acumulado do período</span><strong className={cls(tot.total)}>{money(tot.total)}</strong><small>{tot.qty} operações</small></div>
+      <div className="card metric-card"><span className="muted">Ganhos / Perdas</span><strong>{tot.wins} / {tot.losses}</strong><small>Taxa de acerto {tot.wr.toFixed(1)}%</small></div>
+      <div className="card metric-card"><span className="muted">Lucro / Prejuízo bruto</span><strong>{money(tot.grossWin)} / {money(-tot.grossLoss)}</strong><small>{tot.pf === Infinity ? 'Sem perdas no período' : `Fator de lucro ${tot.pf.toFixed(2)}`}</small></div>
+      <div className="card metric-card"><span className="muted">Seleção atual</span><strong className={cls(sel.total)}>{selected.length ? money(sel.total) : '--'}</strong><small>{selected.length} operação(ões) marcada(s)</small></div>
+    </div>
+    <div className="card compact-card acum-table-card"><h2>PnL acumulado por período</h2>
+      <div className="table-scroll"><table className="tbl compact-table"><thead><tr><th>Período</th><th>Operações</th><th>PnL acumulado</th><th>Ganhos</th><th>Perdas</th><th>Acerto</th><th>Fator de lucro</th></tr></thead>
+        <tbody>{perPeriod.filter((p) => p.qty > 0).map((p) => <tr key={p.key}><td>{p.label}</td><td className="num">{p.qty}</td><td className={`num ${cls(p.total)}`}>{money(p.total)}</td><td className="num acum-pos">{p.wins}</td><td className="num acum-neg">{p.losses}</td><td className="num">{p.wr.toFixed(0)}%</td><td className="num">{p.pf === Infinity ? '∞' : p.pf.toFixed(2)}</td></tr>)}
+          {perPeriod.every((p) => p.qty === 0) && <tr><td colSpan={7}>Sem operações nos demais períodos.</td></tr>}</tbody></table></div>
+      <p className="csv-note">Períodos calculados sobre os registros retornados pelo filtro atual. Use o período "Tudo" para o acumulado completo.</p></div>
+    <div className="card compact-card history-selection-card"><div className="section-head"><div><h2>PnL da seleção</h2><span className="muted">Clique em uma operação para somar ou remover da seleção</span></div><div className="history-selection-list">
+      {Array.from(byAsset.keys()).slice(0, 8).map((k) => { const a = acc(byAsset.get(k) ?? []); return <button key={k} type="button" className="sel-chip" onClick={() => { const idx = rows.map((r, i) => (r.symbol ?? '--') === k ? i : -1).filter((i) => i >= 0); setSelected((cur) => cur.length === idx.length && cur.every((v, j) => cur.includes(idx[j])) ? [] : idx); }}><input type="checkbox" readOnly checked={selected.length > 0 && selected.length === (byAsset.get(k) ?? []).length} tabIndex={-1} />{k}<span className={`sum ${cls(a.total)}`}>{money(a.total)}</span></button>; })}
+      <button type="button" className="btn xs ghost" onClick={() => setSelected([])} disabled={!selected.length}>Limpar seleção</button>
+    </div></div></div>
+    <div className="card compact-card table-scroll history-table-card"><table className="tbl compact-table"><thead><tr><th>ID/Ticket</th><th>Corretora</th><th>Ativo</th><th>Lado</th><th>Quantidade</th><th>Preço</th><th>PNL</th><th>Data</th></tr></thead>
+      <tbody>{rows.map((r, i) => { const p = Number(r.realizedPnl); const on = selected.includes(i); return <tr key={`${r.id}-${i}`} className={`${on ? 'asset-row-selected' : ''} ${p > 0 ? 'history-row-positive' : p < 0 ? 'history-row-negative' : 'history-row-neutral'}`} onClick={() => toggleSel(i)} style={{ cursor: 'pointer' }}>
+        <td className="mono">{r.id ?? '--'}</td><td><span className={`chip ${r.broker === 'mt5' ? 'mt5' : r.broker === 'mexc' ? 'ok' : r.broker === 'binance' ? 'warn' : 'neutral'}`}>{(r.broker ?? '--').toUpperCase()}</span></td>
+        <td><strong>{r.symbol ?? '--'}</strong></td><td>{r.side ?? '--'}</td><td className="num">{num(r.quantity ?? r.volume, 4)}</td><td className="num">{num(r.price, 5)}</td>
+        <td className={`num ${p > 0 ? 'pos' : p < 0 ? 'neg' : ''}`}>{num(r.realizedPnl, 2)}</td><td>{date(r.executedAt ?? r.close_time)}</td></tr>; })}
+        {!rows.length && !error && <tr><td colSpan={8}>Nenhum registro no período.</td></tr>}</tbody></table></div>
+  </main>;
 }

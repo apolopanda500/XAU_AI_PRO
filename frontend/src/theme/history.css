@@ -1,0 +1,23 @@
+/* Melhorias da aba Histórico: acumulados, seleção e status de fontes */
+.history-status-row { display: flex; align-items: center; gap: 10px; margin: 4px 0 12px; flex-wrap: wrap; }
+.history-status-row .muted { font-size: 12.5px; }
+.acum-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.acum-cell { background: var(--panel-2, rgba(255,255,255,.03)); border: 1px solid var(--border, rgba(255,255,255,.08)); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
+.acum-cell span { font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted, #8b93a7); }
+.acum-cell strong { font-size: 16px; font-variant-numeric: tabular-nums; }
+.acum-cell small { font-size: 11.5px; color: var(--muted, #8b93a7); }
+.acum-pos { color: var(--ok, #2ecc71); }
+.acum-neg { color: var(--danger, #e74c3c); }
+.acum-total-cell { grid-column: 1 / -1; }
+.acum-table-card { margin-bottom: 14px; }
+.acum-total-row td { font-weight: 700; border-top: 2px solid var(--border, rgba(255,255,255,.12)); }
+.chip.mt5 { background: rgba(240,166,32,.16); color: #f0a620; border-color: rgba(240,166,32,.4); }
+.chip.neutral { background: rgba(148,163,184,.15); color: #cbd5e1; border-color: rgba(148,163,184,.35); }
+.sel-chip { display: inline-flex; align-items: center; gap: 8px; background: var(--panel-2, rgba(255,255,255,.04)); border: 1px solid var(--border, rgba(255,255,255,.1)); border-radius: 999px; padding: 4px 12px; font-size: 12px; cursor: pointer; user-select: none; }
+.sel-chip input { accent-color: var(--accent, #f0a620); }
+.sel-chip .sum { color: var(--muted, #8b93a7); font-variant-numeric: tabular-nums; }
+.sel-chip .sum.pos { color: var(--ok, #2ecc71); }
+.sel-chip .sum.neg { color: var(--danger, #e74c3c); }
+.history-selection-card { margin-bottom: 14px; }
+.history-selection-list { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.csv-note { font-size: 12px; color: var(--muted, #8b93a7); margin-top: 10px; }

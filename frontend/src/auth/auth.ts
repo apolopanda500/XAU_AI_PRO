@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/tauri';
+import { invoke } from '@tauri-apps/api/core';
 
 // Numero de iteracoes do PBKDF2 (referencia OWASP: >= 100k para SHA-256)
 const ITERACOES_PADRAO = 150_000;

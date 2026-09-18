@@ -1,0 +1,15 @@
+/* Mini Terminal estilo MT5: conta, posições e journal */
+.mini-terminal-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.mt-account-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin-bottom: 10px; }
+.mt-account-grid > div { background: var(--panel-2, rgba(255,255,255,.03)); border: 1px solid var(--border, rgba(255,255,255,.08)); border-radius: 8px; padding: 6px 10px; display: flex; flex-direction: column; gap: 2px; }
+.mt-account-grid span { font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted, #8b93a7); }
+.mt-account-grid strong { font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.mt-account-grid strong.pos { color: var(--ok, #2ecc71); }
+.mt-account-grid strong.neg { color: var(--danger, #e74c3c); }
+.mini-terminal-positions { margin-bottom: 12px; }
+.mt-pnl-pos { color: var(--ok, #2ecc71); font-weight: 600; }
+.mt-pnl-neg { color: var(--danger, #e74c3c); font-weight: 600; }
+.mt-events td { font-size: 12.5px; }
+.mt-empty { padding: 10px 0 4px; }
+.mini-terminal-universal { margin-top: 10px; }
+.mini-terminal-universal .muted { font-size: 12px; }

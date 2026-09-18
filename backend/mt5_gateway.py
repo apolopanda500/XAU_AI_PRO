@@ -213,18 +213,73 @@ def _read_ea_heartbeat() -> dict:
         return {"live": False, "source": "EA FILE_COMMON", "reason": "heartbeat ausente"}
 
 
+def _journal_roots() -> list[Path]:
+    """Diretórios candidatos de logs do Journal do terminal MT5."""
+    roots: list[Path] = []
+    terminal_root = Path(os.environ.get("APPDATA", "")) / "MetaQuotes" / "Terminal"
+    try:
+        if terminal_root.is_dir():
+            roots.extend(entry / "MQL5" / "Logs" for entry in terminal_root.iterdir() if (entry / "MQL5" / "Logs").is_dir())
+    except OSError:
+        pass
+    base = Path(__file__).resolve().parents[3]
+    roots.extend([base / "MQL5" / "Logs", base / "Logs"])
+    unique: list[Path] = []
+    for root in roots:
+        if root not in unique:
+            unique.append(root)
+    return unique
+
+
+def _decode_log_tail(head: bytes, data: bytes, mid_file: bool) -> str:
+    """Decodifica o trecho final de um log MT5 (UTF-16 LE típico, fallback UTF-8)."""
+    has_bom = head[:2] in (b"\xff\xfe", b"\xfe\xff")
+    if has_bom and not mid_file:
+        return data.decode("utf-16", errors="replace")
+    text = data.decode("utf-16-le", errors="replace")
+    if "\x00" in text:  # não era UTF-16: provável UTF-8/ASCII
+        text = data.decode("utf-8", errors="replace")
+    return text
+
+
+def _read_log_tail(path: Path, limit: int) -> list[str]:
+    """Lê apenas a cauda do arquivo (logs do MT5 podem passar de 100 MB)."""
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return []
+    if size <= 0:
+        return []
+    chunk = min(size, max(65536, limit * 256))
+    offset = size - chunk
+    if offset % 2:
+        offset -= 1  # mantém o alinhamento de 2 bytes exigido pelo UTF-16
+    chunk = size - offset
+    try:
+        with path.open("rb") as handle:
+            head = handle.read(2)
+            handle.seek(offset)
+            data = handle.read(chunk)
+    except OSError:
+        return []
+    lines = [ln for ln in _decode_log_tail(head, data, mid_file=offset > 0).splitlines() if ln.strip()]
+    if offset > 0 and len(lines) > 1:
+        lines = lines[1:]  # a primeira linha do bloco pode estar cortada
+    return lines[-max(1, min(limit, 500)):]
+
+
 def _journal(limit: int = 100) -> dict:
     """Retorna as linhas mais recentes do Journal/Experts do terminal MT5."""
-    roots = [Path(__file__).resolve().parents[3] / "MQL5" / "Logs", Path(__file__).resolve().parents[3] / "Logs"]
-    files = [f for root in roots if root.exists() for f in root.glob("*.log")]
+    override_env = os.getenv("XAU_MT5_LOGS_DIR", "").strip()
+    roots = _journal_roots()
+    override = Path(override_env) if override_env else None
+    files = list(override.glob("*.log")) if override and override.is_dir() else []
+    if not files:
+        files = [f for root in roots if root.is_dir() for f in root.glob("*.log")]
     if not files:
         return {"ok": True, "source": "MT5 Journal", "lines": [], "count": 0}
     latest = max(files, key=lambda f: f.stat().st_mtime)
-    try:
-        lines = latest.read_text(encoding="utf-16", errors="replace").splitlines()
-    except (OSError, UnicodeError):
-        lines = latest.read_text(encoding="utf-8", errors="replace").splitlines()
-    rows = [{"source": "MT5 Journal", "file": latest.name, "message": line} for line in lines[-max(1, min(limit, 500)):]]
+    rows = [{"source": "MT5 Journal", "file": latest.name, "message": ln} for ln in _read_log_tail(latest, limit)]
     return {"ok": True, "source": "MT5 Journal", "file": latest.name, "lines": rows, "count": len(rows)}
 
 
