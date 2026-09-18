@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """MT5 Gateway - servico local na porta 9001 (MCP HTTP).
 
-Responde /api/health, /api/account, /api/positions, /api/history
-usando o pacote MetaTrader5 da maquina. Nunca faz trades.
+Responde /api/health, /api/account, /api/positions, /api/history e uma rota
+de ordem demo explicitamente protegida, usando o pacote MetaTrader5 da maquina.
 Rodar: python backend/mt5_gateway.py
 """
 from __future__ import annotations
@@ -13,15 +13,161 @@ import subprocess
 import sys
 import threading
 import time
-from datetime import datetime, timedelta
-from http.server import BaseHTTPRequestHandler, HTTPServer
+import math
+from datetime import datetime, timedelta, timezone
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlparse, unquote
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from backend.asset_registry import discover_assets
+from backend import connection_service
+from backend.mexc_client import MexcClient, MexcError
+from backend.risk_gate import validate_trade
+from backend.connection_store import save_connection, list_connections, delete_connection, set_connection_active, load_credentials
+from backend.binance_client import BinanceClient, BinanceError
+from backend.universal_contracts import UniversalOrderRequest, error_response, execution_policy
+from backend.audit_log import record as record_audit
 
 HOST = "127.0.0.1"
 PORT = 9001
+GATEWAY_BUILD = "xau-ai-pro-1.2.0-universal-20260916"
+REAL_ORDER_KEYS: set[str] = set()
+LAST_COMMAND: dict = {"command": None, "status": "idle", "updated_at": None}
+REAL_EMERGENCY_STOP = Path(os.getenv("XAU_REAL_EMERGENCY_FILE", str(Path(__file__).with_name("REAL_EMERGENCY_STOP"))))
+COMMON_FILES = Path(os.getenv("XAU_MT5_COMMON_FILES", str(Path(os.environ.get("APPDATA", "")) / "MetaQuotes" / "Terminal" / "Common" / "Files")))
+CONFIG_FILE = Path(os.getenv("XAU_APP_CONFIG", str(Path(os.environ.get("APPDATA", "")) / "XAU_AI_PRO" / "config.json")))
+AUDIT_FILE = Path(os.getenv("XAU_AUDIT_FILE", str(Path(os.environ.get("APPDATA", "")) / "XAU_AI_PRO" / "audit.jsonl")))
+CONFIG_DEFAULTS = {"theme": "dark", "language": "pt-BR", "precision": 2, "marketAutoRefresh": True, "dashboardAutoRefresh": True, "historyAutoRefresh": True}
+
+def _safe_number(value) -> float:
+    if isinstance(value, bool):
+        return 0.0
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return 0.0
+    return number if math.isfinite(number) and 0 <= number < 1e15 else 0.0
+
+def _normalize_exchange_account(account):
+    """Normaliza respostas Spot/Futuros sem usar campos de controle como saldo."""
+    if isinstance(account, dict):
+        balances = account.get("balances")
+        if isinstance(balances, list):
+            assets = [x for x in balances if isinstance(x, dict)]
+            return {"balance": sum(_safe_number(x.get("free")) + _safe_number(x.get("locked")) for x in assets),
+                    "available": sum(_safe_number(x.get("free")) for x in assets), "currency": "USDT", "assets": assets}
+        total = _safe_number(account.get("totalWalletBalance")) or _safe_number(account.get("equity")) or _safe_number(account.get("balance"))
+        available = _safe_number(account.get("availableBalance")) or _safe_number(account.get("available"))
+        return {"balance": total, "available": available, "currency": "USDT", "assets": []}
+    if isinstance(account, list):
+        assets = [x for x in account if isinstance(x, dict)]
+        total = sum(_safe_number(x.get("equity")) or _safe_number(x.get("balance")) for x in assets)
+        available = sum(_safe_number(x.get("availableBalance")) or _safe_number(x.get("available")) or _safe_number(x.get("free")) for x in assets)
+        return {"balance": total, "available": available, "currency": "USDT", "assets": assets}
+    return {"balance": 0.0, "available": 0.0, "currency": "USDT", "assets": []}
+
+def _load_local_exchange_env() -> None:
+    """Carrega apenas o arquivo local ignorado pelo Git; nunca registra valores."""
+    root = Path(__file__).resolve().parent.parent
+    try:
+        lines = []
+        locations = [root, Path.cwd(), Path(os.environ.get("APPDATA", "")) / "XAU AI PRO"]
+        for location in locations:
+            for env_file in (location / ".env.mexc.local", location / ".env.binance.local"):
+                if env_file.exists():
+                    lines.extend(env_file.read_text(encoding="utf-8").splitlines())
+        for line in lines:
+            if "=" not in line or line.lstrip().startswith("#"):
+                continue
+            key, value = line.split("=", 1)
+            if key.startswith(("MEXC_", "BINANCE_")) and value.strip():
+                os.environ.setdefault(key.strip(), value.strip())
+    except OSError:
+        pass
+
+_load_local_exchange_env()
+
+def _apply_saved_credentials(broker: str, market: str) -> None:
+    if broker not in {"mexc", "binance"}: return
+    pair = load_credentials(broker, market)
+    if not pair: return
+    prefix = broker.upper()
+    suffix = "FUTURES" if market == "crypto-futures" else "SPOT"
+    os.environ[f"{prefix}_{suffix}_API_KEY"], os.environ[f"{prefix}_{suffix}_API_SECRET"] = pair
+
+def _universal_history(broker: str, market: str, symbol: str = "", days: int = 0) -> dict:
+    _apply_saved_credentials(broker, market)
+    if broker == "mt5":
+        raw = _history(days or 30, symbol)
+        deals = [{"id": str(row.get("ticket", "")), "broker": "mt5", "accountId": "mt5-active", "market": market or "other", "symbol": row.get("symbol", symbol), "side": row.get("type", ""), "entry": row.get("entry", "TRADE"), "status": "FILLED", "quantity": row.get("volume", 0), "price": row.get("price", 0), "grossPnl": row.get("profit", 0), "commission": row.get("commission", 0), "swap": row.get("swap", 0), "fee": row.get("fee", 0), "realizedPnl": row.get("profit", 0) - row.get("commission", 0) - row.get("swap", 0) - row.get("fee", 0), "executedAt": row.get("time", ""), "source": "mt5_gateway"} for row in raw.get("deals", [])]
+        return {"ok": True, "deals": deals, "count": len(deals), "broker": "mt5", "market": market or "other", "source": "mt5_gateway"}
+    if broker not in {"mexc", "binance"}:
+        raise LookupError("corretora ainda não conectada ao gateway universal")
+    if broker == "binance":
+        client = BinanceClient("futures" if market == "crypto-futures" else "spot")
+    else:
+        client = MexcClient("futures" if market == "crypto-futures" else "spot")
+    raw = client.history(symbol=symbol)
+    rows = raw if isinstance(raw, list) else raw.get("data", []) if isinstance(raw, dict) else []
+    deals = []
+    for row in rows:
+        commission = float(row.get("commission") or 0)
+        profit = float(row.get("realizedPnl") or row.get("profit") or 0)
+        deals.append({"id": str(row.get("id") or row.get("orderId") or row.get("dealId") or ""), "broker": broker, "accountId": f"{broker}-active", "market": market or "crypto-spot", "symbol": row.get("symbol", symbol), "side": row.get("side", "BUY"), "entry": "TRADE", "status": row.get("status", "FILLED"), "quantity": float(row.get("qty") or row.get("quantity") or row.get("vol") or row.get("executedQty") or 0), "price": float(row.get("price") or row.get("dealPrice") or 0), "grossPnl": profit, "commission": commission, "swap": 0, "fee": float(row.get("fee") or 0), "realizedPnl": profit - commission - float(row.get("fee") or 0), "executedAt": row.get("time") or row.get("timeStamp") or row.get("timestamp") or "", "source": f"{broker}_api"})
+    return {"ok": True, "deals": deals, "count": len(deals), "broker": broker, "market": market or "crypto-spot", "source": f"{broker}_api"}
+
+def _universal_account(broker: str, market: str) -> dict:
+    _apply_saved_credentials(broker, market)
+    if broker == "mt5":
+        account = _payload().get("account")
+        if not account: raise LookupError("conta MT5 indisponível")
+        return {"ok": True, "broker": "mt5", "market": market or "other", "account": account, "withdrawals_enabled": False, "source": "mt5_gateway"}
+    if broker == "mexc": client = MexcClient("futures" if market == "crypto-futures" else "spot")
+    elif broker == "binance": client = BinanceClient("futures" if market == "crypto-futures" else "spot")
+    else: raise LookupError("corretora não suportada")
+    raw = client.account()
+    account = raw.get("data", raw) if isinstance(raw, dict) else raw
+    account = _normalize_exchange_account(account)
+    return {"ok": True, "broker": broker, "market": market or "crypto-spot", "account": account, "withdrawals_enabled": False, "source": f"{broker}_api"}
+
+def _universal_depth(broker: str, market: str, symbol: str) -> dict:
+    _apply_saved_credentials(broker, market)
+    if broker == "binance": raw = BinanceClient("futures" if market == "crypto-futures" else "spot").depth(symbol)
+    elif broker == "mexc": raw = MexcClient("futures" if market == "crypto-futures" else "spot").depth(symbol)
+    else: raise LookupError("livro de ordens MT5 depende do DOM fornecido pelo broker")
+
+def _universal_quote(broker: str, market: str, symbol: str) -> dict:
+    _apply_saved_credentials(broker, market)
+    if broker == "mexc": raw = MexcClient("futures" if market == "crypto-futures" else "spot").ticker(symbol)
+    elif broker == "binance": raw = BinanceClient("futures" if market == "crypto-futures" else "spot").ticker(symbol)
+    else: return _quote(symbol)
+    data = raw.get("data", raw) if isinstance(raw, dict) else raw
+    bid = float(data.get("bidPrice") or data.get("bid1") or data.get("bid") or 0)
+    ask = float(data.get("askPrice") or data.get("ask1") or data.get("ask") or 0)
+    return {"symbol": symbol.upper(), "bid": bid, "ask": ask, "last": (bid + ask) / 2 if bid and ask else 0, "price": (bid + ask) / 2 if bid and ask else 0, "spread": ask - bid, "source": f"{broker}_api", "timestamp": datetime.now().isoformat()}
+    if isinstance(raw, dict) and isinstance(raw.get("data"), dict): raw = raw["data"]
+    return {"ok": True, "broker": broker, "market": market, "symbol": symbol.upper(), "bids": raw.get("bids", []) if isinstance(raw, dict) else [], "asks": raw.get("asks", []) if isinstance(raw, dict) else [], "source": f"{broker}_public_depth"}
+
+def _universal_trades(broker: str, market: str, symbol: str) -> dict:
+    _apply_saved_credentials(broker, market)
+    if broker == "binance": raw = BinanceClient("futures" if market == "crypto-futures" else "spot").trades(symbol)
+    elif broker == "mexc": raw = MexcClient("futures" if market == "crypto-futures" else "spot").trades(symbol)
+    else: raise LookupError("negócios recentes indisponíveis para esta fonte")
+    if isinstance(raw, dict): raw = raw.get("data", raw.get("result", []))
+    return {"ok": True, "broker": broker, "market": market, "symbol": symbol.upper(), "trades": raw if isinstance(raw, list) else [], "source": f"{broker}_public_trades"}
+
+def _config() -> dict:
+    try:
+        return {**CONFIG_DEFAULTS, **json.loads(CONFIG_FILE.read_text(encoding="utf-8"))}
+    except (OSError, ValueError):
+        return dict(CONFIG_DEFAULTS)
+
+def _save_config(value: dict) -> dict:
+    CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    safe = {key: value[key] for key in CONFIG_DEFAULTS if key in value}
+    CONFIG_FILE.write_text(json.dumps({**CONFIG_DEFAULTS, **safe}, ensure_ascii=False, indent=2), encoding="utf-8")
+    return {**CONFIG_DEFAULTS, **safe}
 
 
 def _mt5():
@@ -52,9 +198,40 @@ def _ensure_mt5() -> bool:
     return True
 
 
+def _read_ea_heartbeat() -> dict:
+    """Lê o liveness publicado pelo EA, sem executar comandos no terminal."""
+    path = COMMON_FILES / "XAU_AI_PRO_heartbeat.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        timestamp = datetime.strptime(str(payload.get("timestamp", "")), "%Y.%m.%d %H:%M:%S").replace(tzinfo=timezone.utc)
+        age_sec = max(0.0, time.time() - timestamp.timestamp())
+        payload["age_sec"] = round(age_sec, 1)
+        payload["live"] = age_sec <= 15 and payload.get("state") == "RUNNING"
+        payload["source"] = "EA FILE_COMMON"
+        return payload
+    except (OSError, ValueError, TypeError):
+        return {"live": False, "source": "EA FILE_COMMON", "reason": "heartbeat ausente"}
+
+
+def _journal(limit: int = 100) -> dict:
+    """Retorna as linhas mais recentes do Journal/Experts do terminal MT5."""
+    roots = [Path(__file__).resolve().parents[3] / "MQL5" / "Logs", Path(__file__).resolve().parents[3] / "Logs"]
+    files = [f for root in roots if root.exists() for f in root.glob("*.log")]
+    if not files:
+        return {"ok": True, "source": "MT5 Journal", "lines": [], "count": 0}
+    latest = max(files, key=lambda f: f.stat().st_mtime)
+    try:
+        lines = latest.read_text(encoding="utf-16", errors="replace").splitlines()
+    except (OSError, UnicodeError):
+        lines = latest.read_text(encoding="utf-8", errors="replace").splitlines()
+    rows = [{"source": "MT5 Journal", "file": latest.name, "message": line} for line in lines[-max(1, min(limit, 500)):]]
+    return {"ok": True, "source": "MT5 Journal", "file": latest.name, "lines": rows, "count": len(rows)}
+
+
 def _payload() -> dict:
     mt5 = _mt5()
     out = {"ts": datetime.now().isoformat(), "gateway": "XAU_AI_PRO MT5 Gateway"}
+    out["ea_heartbeat"] = _read_ea_heartbeat()
     try:
         ti = mt5.terminal_info()
         out["terminal_connected"] = bool(ti.connected) if ti else False
@@ -63,6 +240,9 @@ def _payload() -> dict:
     try:
         info = mt5.account_info()
         if info:
+            demo_mode = getattr(mt5, "ACCOUNT_TRADE_MODE_DEMO", 0)
+            trade_mode = getattr(info, "trade_mode", None)
+            account_mode = "DEMO" if trade_mode == demo_mode else ("REAL" if trade_mode is not None else "UNKNOWN")
             out["account"] = {
                 "login": info.login, "name": info.name,
                 "company": info.company, "server": info.server,
@@ -72,6 +252,8 @@ def _payload() -> dict:
                 "margin_level": info.margin_level, "currency": info.currency,
                 "trade_allowed": bool(getattr(ti, "trade_allowed", False)) if ti else False,
                 "terminal_connected": bool(getattr(ti, "connected", False)) if ti else False,
+                "mode": account_mode,
+                "demo_confirmed": account_mode == "DEMO",
             }
     except Exception:
         pass
@@ -84,8 +266,20 @@ def _payload() -> dict:
             "price_current": p.price_current, "sl": p.sl, "tp": p.tp,
             "profit": p.profit, "magic": p.magic,
         } for p in (pos or [])]
+        out["exposure"] = {
+            "count": len(pos or []),
+            "volume": round(sum(float(getattr(p, "volume", 0.0)) for p in (pos or [])), 8),
+            "floating_profit": round(sum(float(getattr(p, "profit", 0.0)) for p in (pos or [])), 2),
+            "protected": sum(1 for p in (pos or []) if getattr(p, "sl", 0.0) and getattr(p, "tp", 0.0)) == len(pos or []),
+        }
     except Exception:
         out["positions"] = []
+        out["exposure"] = {"count": 0, "volume": 0, "floating_profit": 0, "protected": True}
+    try:
+        orders = mt5.orders_get() or []
+        out["pending_orders"] = [{"ticket": o.ticket, "symbol": o.symbol, "type": int(o.type), "volume": o.volume_current, "price": o.price_open, "sl": o.sl, "tp": o.tp, "time": o.time_setup} for o in orders]
+    except Exception:
+        out["pending_orders"] = []
     try:
         deals = mt5.history_deals_get(datetime.now() - timedelta(days=7), datetime.now())
         out["history_count"] = len(deals or [])
@@ -120,12 +314,21 @@ def _quote(symbol: str) -> dict:
     }
 
 
+def _symbols() -> dict:
+    """Lista somente símbolos reais visíveis no terminal MT5."""
+    mt5 = _mt5()
+    rows = discover_assets(mt5, include_hidden=True)
+    return {"symbols": rows, "count": len(rows), "source": "mt5_gateway", "scope": "broker_catalog"}
+    return {"symbols": rows, "count": len(rows), "source": "mt5_gateway", "scope": "broker_catalog"}
+
+
 def _history(days: int = 30, symbol: str = "") -> dict:
     """Retorna deals fechados reais do MT5; nunca cria dados de teste."""
     mt5 = _mt5()
     days = max(1, min(days, 3650))
     end = datetime.now()
-    start = end - timedelta(days=days)
+    # O filtro Hoje começa à meia-noite local; nunca inclui operações de ontem.
+    start = end.replace(hour=0, minute=0, second=0, microsecond=0) if days == 1 else end - timedelta(days=days)
     deals = mt5.history_deals_get(start, end, group=f"*{symbol}*") if symbol else mt5.history_deals_get(start, end)
     rows = []
     for deal in deals or []:
@@ -152,6 +355,273 @@ def _history(days: int = 30, symbol: str = "") -> dict:
     return {"deals": rows, "count": len(rows), "days": days, "source": "mt5_gateway"}
 
 
+def _demo_order(payload: dict) -> dict:
+    """Envia ordem apenas para conta DEMO quando a trava local estiver ativa."""
+    if os.getenv("XAU_ENABLE_DEMO_ORDERS", "0") != "1":
+        raise PermissionError("execucao demo desabilitada; defina XAU_ENABLE_DEMO_ORDERS=1")
+    if payload.get("confirm_demo") is not True:
+        raise PermissionError("confirm_demo=true obrigatorio")
+    mt5 = _mt5()
+    info = mt5.account_info()
+    demo_mode = getattr(mt5, "ACCOUNT_TRADE_MODE_DEMO", 0)
+    if not info or getattr(info, "trade_mode", None) != demo_mode:
+        raise PermissionError("conta MT5 nao identificada como DEMO; ordem recusada")
+    if not bool(getattr(info, "trade_allowed", False)):
+        raise PermissionError("negociacao nao permitida pelo terminal MT5")
+    symbol = str(payload.get("symbol", "")).strip()
+    side = str(payload.get("side", "")).upper()
+    volume = float(payload.get("volume", 0) or 0)
+    sl = float(payload.get("sl", 0) or 0)
+    tp = float(payload.get("tp", 0) or 0)
+    if not symbol or side not in {"BUY", "SELL"} or not (0 < volume <= 0.10) or sl <= 0 or tp <= 0:
+        raise ValueError("symbol, side, volume <= 0.10, sl e tp validos sao obrigatorios")
+    validate_trade(volume=volume, daily_loss_pct=0.0, exposure_pct=0.0, open_positions=len(mt5.positions_get() or []))
+    if not mt5.symbol_select(symbol, True):
+        raise LookupError(f"simbolo indisponivel no MT5: {symbol}")
+    tick = mt5.symbol_info_tick(symbol)
+    if not tick:
+        raise LookupError(f"cotacao indisponivel no MT5: {symbol}")
+    order_type = mt5.ORDER_TYPE_BUY if side == "BUY" else mt5.ORDER_TYPE_SELL
+    price = float(tick.ask if side == "BUY" else tick.bid)
+    request = {"action": mt5.TRADE_ACTION_DEAL, "symbol": symbol, "volume": volume,
+               "type": order_type, "price": price, "sl": sl, "tp": tp,
+               "deviation": 20, "magic": 2026001, "comment": "XAU_AI_PRO_DEMO",
+               "type_time": mt5.ORDER_TIME_GTC, "type_filling": mt5.ORDER_FILLING_IOC}
+    check = mt5.order_check(request)
+    if not check or getattr(check, "retcode", 0) != 0:
+        return {"ok": False, "stage": "order_check", "retcode": int(getattr(check, "retcode", -1)), "comment": str(getattr(check, "comment", "check falhou")), "demo": True}
+    result = mt5.order_send(request)
+    return {"ok": bool(result and getattr(result, "retcode", 0) == mt5.TRADE_RETCODE_DONE), "stage": "order_send", "retcode": int(getattr(result, "retcode", -1)), "comment": str(getattr(result, "comment", "")), "order": int(getattr(result, "order", 0)), "deal": int(getattr(result, "deal", 0)), "demo": True}
+
+
+def _universal_execution_preview(payload: dict, action: str) -> dict:
+    """Valida o contrato universal e retorna pré-envio; nunca roteia execução."""
+    try:
+        if action == "order":
+            request = UniversalOrderRequest.from_payload(payload)
+            data = request.to_dict()
+        else:
+            broker = str(payload.get("broker", "")).lower()
+            symbol = str(payload.get("symbol", "")).strip().upper()
+            if broker not in {"mt5", "mexc", "binance"} or not symbol:
+                raise ValueError("broker e symbol são obrigatórios")
+            data = {"broker": broker, "market": str(payload.get("market", "")).lower(), "symbol": symbol, "account_id": payload.get("account_id"), "ticket": payload.get("ticket")}
+        return {"ok": False, "accepted": False, "stage": "validated", "action": action, "request": data, "policy": execution_policy(), "error": {"code": "EXECUTION_ADAPTER_PENDING", "message": "contrato válido; adaptador de execução ainda não habilitado"}}
+    except (TypeError, ValueError) as exc:
+        return error_response("INVALID_UNIVERSAL_REQUEST", str(exc))
+
+
+def _real_order(payload: dict) -> dict:
+    """Execucao REAL opt-in, com trava de emergencia e idempotencia."""
+    if os.getenv("XAU_ENABLE_REAL_ORDERS", "0") != "1":
+        raise PermissionError("execucao real desabilitada; XAU_ENABLE_REAL_ORDERS=1 obrigatorio")
+    if REAL_EMERGENCY_STOP.exists():
+        raise PermissionError("parada de emergencia ativa")
+    if payload.get("confirm_real") is not True:
+        raise PermissionError("confirm_real=true obrigatorio")
+    request_id = str(payload.get("request_id", "")).strip()
+    if not request_id or request_id in REAL_ORDER_KEYS:
+        raise ValueError("request_id unico obrigatorio")
+    mt5 = _mt5(); info = mt5.account_info()
+    demo_mode = getattr(mt5, "ACCOUNT_TRADE_MODE_DEMO", 0)
+    if not info or getattr(info, "trade_mode", None) == demo_mode:
+        raise PermissionError("conta DEMO detectada; ordem real recusada")
+    if not bool(getattr(info, "trade_allowed", False)):
+        raise PermissionError("negociacao nao permitida pelo terminal MT5")
+    symbol = str(payload.get("symbol", "")).strip(); side = str(payload.get("side", "")).upper()
+    volume = float(payload.get("volume", 0) or 0); sl = float(payload.get("sl", 0) or 0); tp = float(payload.get("tp", 0) or 0)
+    if not symbol or side not in {"BUY", "SELL"} or not (0 < volume <= 0.01) or sl <= 0 or tp <= 0:
+        raise ValueError("symbol, side, volume real <= 0.01, sl e tp validos sao obrigatorios")
+    if not mt5.symbol_select(symbol, True): raise LookupError(f"simbolo indisponivel no MT5: {symbol}")
+    tick = mt5.symbol_info_tick(symbol)
+    if not tick: raise LookupError(f"cotacao indisponivel no MT5: {symbol}")
+    order_type = mt5.ORDER_TYPE_BUY if side == "BUY" else mt5.ORDER_TYPE_SELL
+    price = float(tick.ask if side == "BUY" else tick.bid)
+    request = {"action": mt5.TRADE_ACTION_DEAL, "symbol": symbol, "volume": volume, "type": order_type, "price": price, "sl": sl, "tp": tp, "deviation": 10, "magic": 2026001, "comment": "XAU_AI_PRO_REAL", "type_time": mt5.ORDER_TIME_GTC, "type_filling": mt5.ORDER_FILLING_IOC}
+    check = mt5.order_check(request)
+    if not check or getattr(check, "retcode", 0) != 0:
+        return {"ok": False, "stage": "order_check", "retcode": int(getattr(check, "retcode", -1)), "comment": str(getattr(check, "comment", "check falhou")), "real": True}
+    REAL_ORDER_KEYS.add(request_id)
+    result = mt5.order_send(request)
+    return {"ok": bool(result and getattr(result, "retcode", 0) == mt5.TRADE_RETCODE_DONE), "stage": "order_send", "retcode": int(getattr(result, "retcode", -1)), "comment": str(getattr(result, "comment", "")), "order": int(getattr(result, "order", 0)), "deal": int(getattr(result, "deal", 0)), "real": True}
+
+
+def _demo_close(payload: dict) -> dict:
+    """Fecha uma posição DEMO específica; nunca aceita conta real."""
+    if os.getenv("XAU_ENABLE_DEMO_ORDERS", "0") != "1":
+        raise PermissionError("ordens DEMO desabilitadas")
+    if payload.get("confirm_demo") is not True:
+        raise PermissionError("confirm_demo=true obrigatorio")
+    mt5 = _mt5(); info = mt5.account_info()
+    demo_mode = getattr(mt5, "ACCOUNT_TRADE_MODE_DEMO", 0)
+    if not info or getattr(info, "trade_mode", None) != demo_mode:
+        raise PermissionError("somente conta DEMO aceita")
+    ticket = int(payload.get("ticket", 0) or 0)
+    positions = mt5.positions_get(ticket=ticket) if ticket else None
+    if not positions:
+        raise LookupError("posicao DEMO nao encontrada")
+    position = positions[0]; symbol = str(getattr(position, "symbol", "")); volume = float(payload.get("_partial_volume", getattr(position, "volume", 0)) or 0)
+    tick = mt5.symbol_info_tick(symbol)
+    if not tick: raise LookupError(f"cotacao indisponivel no MT5: {symbol}")
+    position_type = getattr(position, "type", 0)
+    close_type = mt5.ORDER_TYPE_SELL if position_type == mt5.POSITION_TYPE_BUY else mt5.ORDER_TYPE_BUY
+    price = float(tick.bid if close_type == mt5.ORDER_TYPE_SELL else tick.ask)
+    request = {"action": mt5.TRADE_ACTION_DEAL, "symbol": symbol, "volume": volume, "type": close_type, "position": ticket, "price": price, "deviation": 20, "magic": 2026001, "comment": "XAU_AI_PRO_DEMO_CLOSE", "type_time": mt5.ORDER_TIME_GTC, "type_filling": mt5.ORDER_FILLING_IOC}
+    check = mt5.order_check(request)
+    if not check or getattr(check, "retcode", 0) != 0:
+        return {"ok": False, "stage": "order_check", "retcode": int(getattr(check, "retcode", -1)), "comment": str(getattr(check, "comment", "check falhou")), "demo": True}
+    result = mt5.order_send(request)
+    return {"ok": bool(result and getattr(result, "retcode", 0) == mt5.TRADE_RETCODE_DONE), "stage": "order_send", "retcode": int(getattr(result, "retcode", -1)), "comment": str(getattr(result, "comment", "")), "order": int(getattr(result, "order", 0)), "deal": int(getattr(result, "deal", 0)), "demo": True}
+
+
+def _demo_manage(payload: dict, action: str) -> dict:
+    """Gerenciamento de posição exclusivamente DEMO via TRADE_ACTION_SLTP."""
+    if os.getenv("XAU_ENABLE_DEMO_ORDERS", "0") != "1" or payload.get("confirm_demo") is not True:
+        raise PermissionError("comando DEMO desabilitado ou confirm_demo=true ausente")
+    mt5 = _mt5(); info = mt5.account_info(); demo_mode = getattr(mt5, "ACCOUNT_TRADE_MODE_DEMO", 0)
+    if not info or getattr(info, "trade_mode", None) != demo_mode: raise PermissionError("somente conta DEMO aceita")
+    ticket = int(payload.get("ticket", 0) or 0); rows = mt5.positions_get(ticket=ticket) if ticket else None
+    if not rows: raise LookupError("posição DEMO não encontrada")
+    pos = rows[0]; entry = float(getattr(pos, "price_open", 0) or 0); current_sl = float(getattr(pos, "sl", 0) or 0); current_tp = float(getattr(pos, "tp", 0) or 0)
+    side = getattr(pos, "type", 0); tick = mt5.symbol_info_tick(str(getattr(pos, "symbol", "")))
+    if not tick: raise LookupError("cotação indisponível")
+    if action == "modify": sl = float(payload.get("sl", current_sl) or 0); tp = float(payload.get("tp", current_tp) or 0)
+    elif action == "breakeven": sl = entry; tp = current_tp
+    else:
+        distance = float(payload.get("distance", 0) or 0)
+        if distance <= 0: raise ValueError("distance deve ser maior que zero")
+        market = float(tick.bid if side == getattr(mt5, "POSITION_TYPE_BUY", 0) else tick.ask)
+        sl = market - distance if side == getattr(mt5, "POSITION_TYPE_BUY", 0) else market + distance; tp = current_tp
+    request = {"action": mt5.TRADE_ACTION_SLTP, "symbol": str(getattr(pos, "symbol", "")), "position": ticket, "sl": sl, "tp": tp}
+    result = mt5.order_send(request)
+    return {"ok": bool(result and getattr(result, "retcode", 0) == mt5.TRADE_RETCODE_DONE), "ticket": ticket, "sl": sl, "tp": tp, "retcode": int(getattr(result, "retcode", -1)), "comment": str(getattr(result, "comment", "")), "demo": True}
+
+
+def _demo_close_all(payload: dict) -> dict:
+    if payload.get("confirm_demo") is not True: raise PermissionError("confirm_demo=true obrigatorio")
+    mt5 = _mt5(); rows = list(mt5.positions_get() or []); results = [_demo_close({"ticket": int(getattr(p, "ticket", 0)), "confirm_demo": True}) for p in rows]
+    return {"ok": all(item.get("ok") for item in results) if results else True, "closed": results, "count": len(results), "demo": True}
+
+
+def _demo_partial_close(payload: dict) -> dict:
+    ticket = int(payload.get("ticket", 0) or 0); part = float(payload.get("volume", 0) or 0)
+    if part <= 0: raise ValueError("volume parcial deve ser maior que zero")
+    mt5 = _mt5(); rows = mt5.positions_get(ticket=ticket) if ticket else None
+    if not rows: raise LookupError("posição DEMO não encontrada")
+    p = rows[0]; total = float(getattr(p, "volume", 0) or 0)
+    if part >= total: raise ValueError("volume parcial deve ser menor que o volume da posição")
+    data = dict(payload); data["ticket"] = ticket
+    return _demo_close({**data, "_partial_volume": part})
+
+
+def _require_demo_command(payload: dict) -> tuple:
+    """Valida a trava comum de qualquer comando que altera a conta DEMO."""
+    if os.getenv("XAU_ENABLE_DEMO_ORDERS", "0") != "1":
+        raise PermissionError("ordens DEMO desabilitadas")
+    if payload.get("confirm_demo") is not True:
+        raise PermissionError("confirm_demo=true obrigatorio")
+    mt5 = _mt5()
+    info = mt5.account_info()
+    if not info or getattr(info, "trade_mode", None) != getattr(mt5, "ACCOUNT_TRADE_MODE_DEMO", 0):
+        raise PermissionError("somente conta DEMO aceita")
+    return mt5, info
+
+
+def _demo_protection(payload: dict, remove: bool = False) -> dict:
+    mt5, _ = _require_demo_command(payload)
+    ticket = int(payload.get("ticket", 0) or 0)
+    rows = mt5.positions_get(ticket=ticket) if ticket else None
+    if not rows:
+        raise LookupError("posicao DEMO nao encontrada")
+    pos = rows[0]
+    symbol = str(getattr(pos, "symbol", ""))
+    if remove:
+        sl, tp = 0.0, 0.0
+    else:
+        sl = float(payload.get("sl", 0) or 0)
+        tp = float(payload.get("tp", 0) or 0)
+        if sl <= 0 or tp <= 0:
+            raise ValueError("sl e tp validos sao obrigatorios")
+    request = {"action": mt5.TRADE_ACTION_SLTP, "symbol": symbol, "position": ticket, "sl": sl, "tp": tp}
+    result = mt5.order_send(request)
+    return {"ok": bool(result and getattr(result, "retcode", 0) == mt5.TRADE_RETCODE_DONE),
+            "action": "remove_protection" if remove else "set_protection", "ticket": ticket,
+            "symbol": symbol, "sl": sl, "tp": tp, "retcode": int(getattr(result, "retcode", -1)),
+            "comment": str(getattr(result, "comment", "")), "demo": True}
+
+
+def _demo_close_symbol(payload: dict) -> dict:
+    mt5, _ = _require_demo_command(payload)
+    symbol = str(payload.get("symbol", "")).strip().upper()
+    if not symbol:
+        raise ValueError("symbol obrigatorio")
+    rows = list(mt5.positions_get(symbol=symbol) or [])
+    results = [_demo_close({"ticket": int(getattr(p, "ticket", 0)), "confirm_demo": True}) for p in rows]
+    return {"ok": all(r.get("ok") for r in results) if results else True, "symbol": symbol,
+            "closed": results, "count": len(results), "demo": True}
+
+
+def _demo_cancel_orders(payload: dict, all_orders: bool = False) -> dict:
+    mt5, _ = _require_demo_command(payload)
+    ticket = int(payload.get("ticket", 0) or 0)
+    rows = list(mt5.orders_get() or []) if all_orders else list(mt5.orders_get(ticket=ticket) or [])
+    if not all_orders and not ticket:
+        raise ValueError("ticket obrigatorio")
+    results = []
+    for order in rows:
+        order_ticket = int(getattr(order, "ticket", 0))
+        request = {"action": mt5.TRADE_ACTION_REMOVE, "order": order_ticket,
+                   "symbol": str(getattr(order, "symbol", "")), "magic": 2026001,
+                   "comment": "XAU_AI_PRO_DEMO_CANCEL"}
+        result = mt5.order_send(request)
+        results.append({"ok": bool(result and getattr(result, "retcode", 0) == mt5.TRADE_RETCODE_DONE),
+                        "ticket": order_ticket, "retcode": int(getattr(result, "retcode", -1)),
+                        "comment": str(getattr(result, "comment", ""))})
+    return {"ok": all(r["ok"] for r in results) if results else True, "cancelled": results,
+            "count": len(results), "demo": True}
+
+def _asset_toggle(payload: dict, enabled: bool) -> dict:
+    symbol = str(payload.get("symbol", "")).strip().upper()
+    if not symbol: raise ValueError("symbol obrigatorio")
+    mt5 = _mt5(); ok = bool(mt5.symbol_select(symbol, enabled))
+    return {"ok": ok, "symbol": symbol, "enabled": enabled, "visible": bool(getattr(mt5.symbol_info(symbol), "visible", False)), "source": "mt5_gateway"}
+
+
+def _demo_read(kind: str) -> dict:
+    mt5 = _mt5()
+    info = mt5.account_info()
+    if not info or getattr(info, "trade_mode", None) != getattr(mt5, "ACCOUNT_TRADE_MODE_DEMO", 0):
+        raise PermissionError("somente conta DEMO disponivel")
+    if kind == "positions":
+        rows = list(mt5.positions_get() or [])
+        return {"ok": True, "positions": [{"ticket": int(p.ticket), "symbol": str(p.symbol), "side": "BUY" if p.type == 0 else "SELL", "volume": float(p.volume), "open_price": float(p.price_open), "current_price": float(p.price_current), "sl": float(p.sl), "tp": float(p.tp), "profit": float(p.profit), "magic": int(p.magic)} for p in rows], "count": len(rows), "account_mode": "DEMO", "source": "mt5_gateway"}
+    if kind == "orders":
+        rows = list(mt5.orders_get() or [])
+        return {"ok": True, "orders": [{"ticket": int(o.ticket), "symbol": str(o.symbol), "type": int(o.type), "volume": float(o.volume_current), "price": float(o.price_open), "sl": float(o.sl), "tp": float(o.tp), "time_setup": int(o.time_setup)} for o in rows], "count": len(rows), "account_mode": "DEMO", "source": "mt5_gateway"}
+    payload = _payload()
+    return {"ok": True, "gateway": "online", "mt5_connected": bool(payload.get("account")), "ea_heartbeat": payload.get("ea_heartbeat"), "positions": len(payload.get("positions", [])), "account_mode": "DEMO", "last_command": LAST_COMMAND, "source": "mt5_gateway"}
+
+
+def _ea_status() -> dict:
+    hb = _read_ea_heartbeat()
+    mt5 = _mt5()
+    ti = mt5.terminal_info()
+    return {"ok": True, "ea_heartbeat": hb, "live": bool(hb.get("live")),
+            "terminal_connected": bool(ti and getattr(ti, "connected", False)),
+            "autotrading": bool(hb.get("autotrading", False)), "source": "mt5_gateway"}
+
+
+def _ea_command(payload: dict, command: str) -> dict:
+    hb = _read_ea_heartbeat()
+    if not hb.get("live"):
+        raise RuntimeError("EA sem heartbeat vivo; comando nao enviado")
+    value = str(payload.get("value", payload.get("symbol", payload.get("timeframe", ""))))
+    command_file = COMMON_FILES / "XAU_AI_PRO_ea_command.json"
+    command_file.parent.mkdir(parents=True, exist_ok=True)
+    command_file.write_text(f"command={command}\nvalue={value}\n", encoding="ascii")
+    return {"ok": True, "accepted": True, "command": command, "value": value, "status": "queued", "demo": hb.get("mode", "DEMO") == "DEMO", "source": "mt5_common_files"}
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):  # silencia log
         pass
@@ -165,20 +635,93 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def do_OPTIONS(self):  # noqa: N802
+        """Permite o preflight Tauri/browser antes dos comandos DEMO."""
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
     def do_GET(self):  # noqa: N802
         parsed = urlparse(self.path)
+        if parsed.path.startswith("/api/connections/"):
+            parts = parsed.path.strip("/").split("/"); connection_id = unquote("/".join(parts[2:-1]))
+            action = parts[-1] if parts else ""
+            if action == "test": self._send(200, {"ok": True, "configured": any(x["id"] == connection_id for x in list_connections()), "credentials_exposed": False}); return
+            if action in {"activate", "deactivate"}: self._send(200, {"ok": set_connection_active(connection_id, action == "activate"), "active": action == "activate"}); return
+        if parsed.path == "/api/connections": self._send(200, {"ok": True, "connections": list_connections()}); return
         path = parsed.path
         query = parse_qs(parsed.query)
         if path in ("/", "/api/health"):
             self._send(200, {"ok": True, "uptime_sec": int(time.time() - _T0),
-                             "source": "mt5_gateway"})
+                             "source": "mt5_gateway", "gateway_build": GATEWAY_BUILD})
+        elif path == "/api/config":
+            self._send(200, {"ok": True, "config": _config(), "source": "local_gateway"})
+        elif path == "/api/config/themes":
+            self._send(200, {"themes": [{"id": "dark", "label": "Dark"}, {"id": "xau_dark", "label": "XAU Dark"}, {"id": "btc_dark", "label": "BTC Dark"}, {"id": "light", "label": "Light"}]})
+        elif path == "/api/config/languages":
+            self._send(200, {"languages": [{"id": "pt-BR", "label": "Português (Brasil)"}, {"id": "en-US", "label": "English"}, {"id": "es-ES", "label": "Español"}]})
+        elif path == "/api/update/check":
+            self._send(200, {"ok": True, "current": "1.2.0", "available": "1.2.0", "update_available": False, "source": "local_build"})
+        elif path == "/api/audit":
+            self._send(200, {"ok": True, "records": _journal(100).get("lines", []), "source": "mt5_journal"})
+        elif path == "/api/audit/commands":
+            self._send(200, {"ok": True, "commands": [], "source": "gateway_command_log"})
+        elif path == "/api/execution/history":
+            self._send(200, _history(30, ""))
+        elif path == "/api/errors":
+            self._send(200, {"ok": True, "errors": [], "source": "gateway"})
+        elif path == "/api/sync/status":
+            payload = _payload(); self._send(200, {"ok": True, "gateway": "online", "mt5_connected": bool(payload.get("account")), "ea_heartbeat": payload.get("ea_heartbeat"), "positions": len(payload.get("positions", [])), "source": "mt5_gateway"})
+        elif path == "/api/stream/status":
+            self._send(200, {"ok": True, "transport": "http-polling", "websocket": False, "intervals": {"status": 10, "positions": 5, "journal": 10}, "source": "mt5_gateway"})
+        elif path == "/api/demo/positions":
+            try: self._send(200, _demo_read("positions"))
+            except PermissionError as exc: self._send(403, {"ok": False, "error": str(exc), "demo": True})
+        elif path == "/api/demo/orders":
+            try: self._send(200, _demo_read("orders"))
+            except PermissionError as exc: self._send(403, {"ok": False, "error": str(exc), "demo": True})
+        elif path == "/api/demo/execution-status":
+            try: self._send(200, _demo_read("status"))
+            except PermissionError as exc: self._send(403, {"ok": False, "error": str(exc), "demo": True})
+        elif path == "/api/demo/last-command":
+            self._send(200, {"ok": True, "last_command": LAST_COMMAND, "source": "gateway_memory"})
+        elif path == "/api/ea/status":
+            try: self._send(200, _ea_status())
+            except Exception as exc: self._send(503, {"ok": False, "error": str(exc), "source": "mt5_gateway"})
+        elif path == "/api/capabilities":
+            self._send(200, {"ok": True, "read": ["health", "status", "account", "inventory", "symbols", "assets", "quote", "quotes", "positions", "orders", "history", "journal"], "demo_commands": ["demo/order", "demo/close"], "real_commands": [], "real_orders_enabled": False})
         elif path in ("/api/status", "/api/system"):
             ok = _ensure_mt5()
             self._send(200, {"ok": ok, **_payload()})
+        elif path == "/api/inventory":
+            ok = _ensure_mt5()
+            payload = _payload()
+            self._send(200, {"ok": ok, "account": payload.get("account"), "positions": payload.get("positions", []), "pending_orders": payload.get("pending_orders", []), "exposure": payload.get("exposure", {}), "ea_heartbeat": payload.get("ea_heartbeat")})
+        elif path == "/api/journal":
+            try:
+                self._send(200, _journal(int(query.get("limit", ["100"])[0])))
+            except Exception as exc:
+                self._send(503, {"ok": False, "error": str(exc), "lines": [], "count": 0})
         elif path == "/api/account":
             self._send(200, _payload().get("account") or {"ok": False})
+        elif path in ("/api/symbols", "/api/assets"):
+            try:
+                self._send(200, _symbols())
+            except Exception as exc:
+                self._send(503, {"ok": False, "error": str(exc), "symbols": [], "count": 0})
+        elif path == "/api/assets/details":
+            self._send(200, _symbols())
+        elif path.startswith("/api/assets/"):
+            symbol = path.rsplit("/", 1)[-1].strip().upper(); mt5 = _mt5(); info = mt5.symbol_info(symbol)
+            if not info: self._send(404, {"ok": False, "error": f"simbolo indisponivel: {symbol}"})
+            else: self._send(200, {"ok": True, "symbol": symbol, "visible": bool(getattr(info, "visible", False)), "digits": int(getattr(info, "digits", 0)), "volume_min": float(getattr(info, "volume_min", 0)), "volume_max": float(getattr(info, "volume_max", 0)), "volume_step": float(getattr(info, "volume_step", 0)), "point": float(getattr(info, "point", 0)), "source": "mt5_gateway"})
         elif path == "/api/positions":
             self._send(200, {"positions": _payload().get("positions", [])})
+        elif path == "/api/orders":
+            self._send(200, {"orders": _payload().get("pending_orders", []), "count": len(_payload().get("pending_orders", [])), "source": "mt5_gateway"})
         elif path == "/api/history":
             try:
                 days = int(query.get("days", ["30"])[0])
@@ -186,6 +729,45 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, _history(days, symbol))
             except Exception as exc:
                 self._send(503, {"ok": False, "error": str(exc), "deals": [], "count": 0})
+        elif path == "/api/universal/history":
+            try:
+                broker = query.get("broker", ["mt5"])[0].strip().lower()
+                market = query.get("market", [""])[0].strip().lower()
+                symbol = query.get("symbol", [""])[0].strip()
+                try: days = max(0, int(query.get("days", ["0"])[0]))
+                except (TypeError, ValueError): days = 0
+                self._send(200, _universal_history(broker, market, symbol, days))
+            except (MexcError, BinanceError, LookupError, ValueError) as exc:
+                self._send(503, {"ok": False, "error": str(exc), "deals": [], "count": 0})
+            except Exception as exc:
+                self._send(503, {"ok": False, "error": f"falha no histórico universal: {exc}", "deals": [], "count": 0})
+        elif path == "/api/universal/account":
+            try:
+                broker = query.get("broker", ["mt5"])[0].strip().lower(); market = query.get("market", [""])[0].strip().lower()
+                self._send(200, _universal_account(broker, market))
+            except (MexcError, BinanceError, LookupError, ValueError) as exc:
+                self._send(503, {"ok": False, "error": str(exc), "withdrawals_enabled": False})
+        elif path == "/api/universal/quote":
+            try:
+                broker = query.get("broker", ["mt5"])[0].strip().lower(); market = query.get("market", ["crypto-spot"])[0].strip().lower(); symbol = query.get("symbol", [""])[0].strip()
+                if not symbol: raise ValueError("symbol obrigatório")
+                self._send(200, _universal_quote(broker, market, symbol))
+            except Exception as exc:
+                self._send(503, {"ok": False, "error": str(exc)})
+        elif path == "/api/universal/depth":
+            try:
+                broker = query.get("broker", ["binance"])[0].strip().lower(); market = query.get("market", ["crypto-spot"])[0].strip().lower(); symbol = query.get("symbol", [""])[0].strip()
+                if not symbol: raise ValueError("symbol obrigatório")
+                self._send(200, _universal_depth(broker, market, symbol))
+            except (MexcError, BinanceError, LookupError, ValueError) as exc:
+                self._send(503, {"ok": False, "error": str(exc), "bids": [], "asks": []})
+        elif path == "/api/universal/trades":
+            try:
+                broker = query.get("broker", ["binance"])[0].strip().lower(); market = query.get("market", ["crypto-spot"])[0].strip().lower(); symbol = query.get("symbol", [""])[0].strip()
+                if not symbol: raise ValueError("symbol obrigatório")
+                self._send(200, _universal_trades(broker, market, symbol))
+            except (MexcError, BinanceError, LookupError, ValueError) as exc:
+                self._send(503, {"ok": False, "error": str(exc), "trades": []})
         elif path == "/api/mt5/quote":
             try:
                 self._send(200, _quote(query.get("symbol", [""])[0]))
@@ -206,8 +788,121 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self._send(404, {"ok": False, "error": "not_found"})
 
+    def do_PUT(self):  # noqa: N802
+        if urlparse(self.path).path != "/api/config": self._send(404, {"ok": False, "error": "not_found"}); return
+        try:
+            length = int(self.headers.get("Content-Length", "0")); body = json.loads(self.rfile.read(length) or b"{}")
+            if not isinstance(body, dict): raise ValueError("configuração deve ser objeto")
+            self._send(200, {"ok": True, "config": _save_config({**_config(), **body})})
+        except Exception as exc: self._send(400, {"ok": False, "error": str(exc)})
+
+    def do_DELETE(self):  # noqa: N802
+        parsed = urlparse(self.path); prefix = "/api/connections/"
+        if parsed.path.startswith(prefix):
+            self._send(200, {"ok": delete_connection(unquote(parsed.path[len(prefix):]))}); return
+        self._send(404, {"ok": False, "error": "not_found"})
+
     def do_POST(self):  # noqa: N802
-        self._send(200, {"ok": True, "gateway": "post_aceito"})
+        parsed = urlparse(self.path)
+        if parsed.path == "/api/connections":
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                payload = json.loads(self.rfile.read(length) or b"{}")
+                result = connection_service.save(payload)
+                connection = next((x for x in list_connections() if x["id"] == payload["id"]), None)
+                self._send(201, {**result, "connection": connection})
+            except ValueError as exc:
+                self._send(422, {"ok": False, "error": str(exc), "credentials_exposed": False})
+            except Exception:
+                self._send(503, {"ok": False, "error": "Falha ao salvar conexao.", "credentials_exposed": False})
+            return
+        if parsed.path.startswith("/api/connections/"):
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                self.rfile.read(length)
+                connection_id, separator, command = parsed.path[len("/api/connections/"):].rpartition("/")
+                if not separator or not connection_id:
+                    raise LookupError("Conexao ou comando inexistente.")
+                self._send(200, connection_service.action(unquote(connection_id), command))
+            except LookupError:
+                self._send(404, {"ok": False, "error": "Conexao ou comando inexistente.", "credentials_exposed": False})
+            except Exception:
+                # Nao refletir erros externos: podem conter credenciais.
+                self._send(502, {"ok": False, "validated": False, "error": "Falha ao validar conexao.", "credentials_exposed": False})
+            return
+        if parsed.path in {"/api/universal/emergency-stop", "/api/universal/emergency-resume"}:
+            length = int(self.headers.get("Content-Length", "0")); payload = json.loads(self.rfile.read(length) or b"{}")
+            if payload.get("confirm") is not True:
+                self._send(422, {"ok": False, "error": "confirmação explícita obrigatória", "emergency_stop": REAL_EMERGENCY_STOP.exists()}); return
+            if parsed.path.endswith("emergency-stop"):
+                REAL_EMERGENCY_STOP.write_text(datetime.now(timezone.utc).isoformat(), encoding="utf-8")
+                LAST_COMMAND.update({"command": parsed.path, "status": "active", "updated_at": datetime.now().isoformat()})
+                self._send(200, {"ok": True, "emergency_stop": True, "status": "active", "new_orders_blocked": True, "withdrawals_enabled": False}); return
+            REAL_EMERGENCY_STOP.unlink(missing_ok=True)
+            LAST_COMMAND.update({"command": parsed.path, "status": "resumed", "updated_at": datetime.now().isoformat()})
+            self._send(200, {"ok": True, "emergency_stop": False, "status": "resumed", "new_orders_blocked": False, "withdrawals_enabled": False}); return
+        universal_actions = {"/api/universal/order": "order", "/api/universal/close": "close", "/api/universal/modify": "modify", "/api/universal/cancel": "cancel"}
+        if parsed.path in universal_actions:
+            length = int(self.headers.get("Content-Length", "0")); payload = json.loads(self.rfile.read(length) or b"{}")
+            if parsed.path == "/api/universal/order" and payload.get("execute") is True:
+                try:
+                    from backend.universal_router import UniversalRouter
+                    result = UniversalRouter().execute(payload, explicit_authorization=payload.get("authorize_execution") is True)
+                    record_audit(AUDIT_FILE, action="order", payload=payload, status=result.get("status", "unknown"))
+                    LAST_COMMAND.update({"command": parsed.path, "status": result.get("status"), "request_id": payload.get("request_id"), "updated_at": datetime.now().isoformat()})
+                    self._send(200 if result.get("ok") else 403, result); return
+                except Exception as exc:
+                    self._send(422, {"ok": False, "status": "rejected", "error": str(exc), "withdrawals_enabled": False}); return
+            result = _universal_execution_preview(payload, universal_actions[parsed.path])
+            record_audit(AUDIT_FILE, action=universal_actions[parsed.path], payload=payload, status=result.get("stage", "rejected"))
+            LAST_COMMAND.update({"command": parsed.path, "status": "validated" if result.get("stage") == "validated" else "rejected", "updated_at": datetime.now().isoformat()})
+            self._send(200 if result.get("stage") == "validated" else 422, result); return
+        if parsed.path in {"/api/assets/select", "/api/assets/enable", "/api/assets/disable"}:
+            length = int(self.headers.get("Content-Length", "0")); payload = json.loads(self.rfile.read(length) or b"{}")
+            self._send(200, _asset_toggle(payload, parsed.path != "/api/assets/disable")); return
+        if parsed.path in {"/api/command/validate", "/api/command/cancel"}:
+            length = int(self.headers.get("Content-Length", "0")); payload = json.loads(self.rfile.read(length) or b"{}")
+            allowed = {"/api/demo/order", "/api/demo/close", "/api/demo/close-all", "/api/demo/modify-position", "/api/demo/breakeven", "/api/demo/trailing", "/api/demo/partial-close", "/api/demo/set-protection", "/api/demo/remove-protection", "/api/demo/close-symbol", "/api/demo/cancel-order", "/api/demo/cancel-all-orders"}
+            command = str(payload.get("command", "")); ok = command in allowed and payload.get("confirm_demo") is True
+            self._send(200, {"ok": ok, "command": command, "valid": ok, "cancelled": parsed.path.endswith("/cancel") and ok, "reason": "comando DEMO reconhecido" if ok else "comando DEMO desconhecido ou confirmação ausente"}); return
+        if parsed.path == "/api/config/reset":
+            self._send(200, {"ok": True, "config": _save_config(CONFIG_DEFAULTS)}); return
+        if parsed.path == "/api/real/validate":
+            length = int(self.headers.get("Content-Length", "0")); payload = json.loads(self.rfile.read(length) or b"{}")
+            try:
+                validate_trade(volume=float(payload.get("volume", 0)), daily_loss_pct=float(payload.get("daily_loss_pct", 0)), exposure_pct=float(payload.get("exposure_pct", 0)), open_positions=int(payload.get("open_positions", 0)))
+                self._send(200, {"ok": True, "approved": False, "execution_enabled": False, "reason": "risco validado; liberação REAL ainda exige autorização manual", "withdrawals_enabled": False})
+            except (ValueError, TypeError) as exc: self._send(403, {"ok": False, "approved": False, "execution_enabled": False, "error": str(exc), "withdrawals_enabled": False})
+            return
+        if parsed.path == "/api/real/request":
+            length = int(self.headers.get("Content-Length", "0")); payload = json.loads(self.rfile.read(length) or b"{}")
+            request_id = str(payload.get("request_id", "")).strip()
+            if not request_id or not payload.get("account_id") or not payload.get("broker") or not payload.get("market"):
+                self._send(422, {"ok": False, "error": "request_id, account_id, broker e market são obrigatórios", "execution_enabled": False, "withdrawals_enabled": False}); return
+            LAST_COMMAND.update({"command": "/api/real/request", "status": "pending_manual_review", "request_id": request_id, "updated_at": datetime.now().isoformat()})
+            self._send(202, {"ok": True, "status": "pending_manual_review", "request_id": request_id, "execution_enabled": False, "withdrawals_enabled": False, "message": "solicitação registrada para autorização manual"}); return
+        ea_paths = {"/api/ea/start": "start", "/api/ea/stop": "stop", "/api/ea/pause": "pause", "/api/ea/resume": "resume", "/api/ea/set-symbol": "set-symbol", "/api/ea/set-mode": "set-mode", "/api/ea/set-timeframe": "set-timeframe", "/api/ea/set-autotrading": "set-autotrading"}
+        if parsed.path in ea_paths:
+            try:
+                length = int(self.headers.get("Content-Length", "0")); payload = json.loads(self.rfile.read(length) or b"{}")
+                self._send(202, _ea_command(payload, ea_paths[parsed.path]))
+            except Exception as exc: self._send(503, {"ok": False, "error": str(exc), "command": ea_paths[parsed.path]})
+            return
+        if parsed.path not in {"/api/demo/order", "/api/demo/close", "/api/demo/close-all", "/api/demo/modify-position", "/api/demo/breakeven", "/api/demo/trailing", "/api/demo/partial-close", "/api/demo/set-protection", "/api/demo/remove-protection", "/api/demo/close-symbol", "/api/demo/cancel-order", "/api/demo/cancel-all-orders", "/api/real/order"}:
+            self._send(404, {"ok": False, "error": "not_found"})
+            return
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            payload = json.loads(self.rfile.read(length) or b"{}")
+            actions = {"/api/demo/order": _demo_order, "/api/demo/close": _demo_close, "/api/demo/close-all": _demo_close_all, "/api/demo/modify-position": lambda p: _demo_manage(p, "modify"), "/api/demo/breakeven": lambda p: _demo_manage(p, "breakeven"), "/api/demo/trailing": lambda p: _demo_manage(p, "trailing"), "/api/demo/partial-close": _demo_partial_close, "/api/demo/set-protection": _demo_protection, "/api/demo/remove-protection": lambda p: _demo_protection(p, True), "/api/demo/close-symbol": _demo_close_symbol, "/api/demo/cancel-order": _demo_cancel_orders, "/api/demo/cancel-all-orders": lambda p: _demo_cancel_orders(p, True), "/api/real/order": _real_order}
+            action = actions[parsed.path]
+            result = action(payload)
+            LAST_COMMAND.update({"command": parsed.path, "status": "ok" if result.get("ok", False) else "rejected", "updated_at": datetime.now().isoformat()})
+            self._send(200, result)
+        except (PermissionError, ValueError, LookupError) as exc:
+            self._send(403, {"ok": False, "error": str(exc), "demo": True})
+        except Exception as exc:
+            self._send(503, {"ok": False, "error": str(exc), "demo": True})
 
 
 _T0 = time.time()
@@ -216,7 +911,8 @@ _T0 = time.time()
 def main() -> None:
     if not _ensure_mt5():
         print("[gateway] ERRO: MetaTrader5 nao inicializou. Inicie o MT5 primeiro.")
-    srv = HTTPServer((HOST, PORT), Handler)
+    srv = ThreadingHTTPServer((HOST, PORT), Handler)
+    srv.daemon_threads = True
     print(f"[gateway] MT5 Gateway rodando em http://{HOST}:{PORT}")
     srv.serve_forever()
 
