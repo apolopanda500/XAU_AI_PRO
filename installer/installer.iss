@@ -15,7 +15,7 @@
 ; ============================================================
 #define MyAppName "XAU AI PRO"
 #ifndef MyAppVersion
-#define MyAppVersion "1.2.0"
+#define MyAppVersion "1.2.3"
 #endif
 #define MyAppPublisher "XAU AI PRO"
 #define MyAppExeName "XAU_AI_PRO.exe"
@@ -138,9 +138,9 @@ Source: "{#MyRoot}\MQL5\Scripts\*.mq5"; DestDir: "{app}\MQL5\Scripts"; Flags: ig
 ; ============================================================
 ; 6) Presets de configuracao (.set) do EA
 ; ============================================================
-Source: "{#MyRoot}\MQL5\Experts\XAU_AI_PRO\Release\v1.2.0\Config\XAU_AI_PRO.AUTOTRADE_ON.set"; DestDir: "{app}\MQL5\Experts\XAU_AI_PRO\Release\v1.2.0\Config"; Flags: ignoreversion
-Source: "{#MyRoot}\MQL5\Experts\XAU_AI_PRO\Release\v1.2.0\Config\XAU_AI_PRO.PRO.set"; DestDir: "{app}\MQL5\Experts\XAU_AI_PRO\Release\v1.2.0\Config"; Flags: ignoreversion
-Source: "{#MyRoot}\MQL5\Experts\XAU_AI_PRO\Release\v1.2.0\Config\XAU_AI_PRO.QUALITY.set"; DestDir: "{app}\MQL5\Experts\XAU_AI_PRO\Release\v1.2.0\Config"; Flags: ignoreversion
+Source: "{#MyRoot}\MQL5\Experts\XAU_AI_PRO\Config\XAU_AI_PRO.AUTOTRADE_ON.set"; DestDir: "{app}\MQL5\Experts\XAU_AI_PRO\Config"; Flags: ignoreversion
+Source: "{#MyRoot}\MQL5\Experts\XAU_AI_PRO\Config\XAU_AI_PRO.PRO.set"; DestDir: "{app}\MQL5\Experts\XAU_AI_PRO\Config"; Flags: ignoreversion
+Source: "{#MyRoot}\MQL5\Experts\XAU_AI_PRO\Config\XAU_AI_PRO.QUALITY.set"; DestDir: "{app}\MQL5\Experts\XAU_AI_PRO\Config"; Flags: ignoreversion
 
 ; ============================================================
 ; 7) Assets / icone / docs

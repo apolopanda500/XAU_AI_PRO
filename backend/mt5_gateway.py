@@ -31,7 +31,23 @@ from backend.audit_log import record as record_audit
 
 HOST = "127.0.0.1"
 PORT = 9001
-GATEWAY_BUILD = "xau-ai-pro-1.2.0-universal-20260916"
+
+
+def _gateway_build() -> str:
+    """Build do gateway derivado da fonte unica Docs/version.json (L15)."""
+    try:
+        root = Path(__file__).resolve().parent.parent
+        data = json.loads((root / "Docs" / "version.json").read_text(encoding="utf-8"))
+        version = str(data.get("version", "1.2.3")).strip()
+        suffix = str(data.get("gateway_build_suffix", "universal")).strip() or "universal"
+        updated = str(data.get("updated_at", "")).strip().replace("-", "")
+        stamp = updated if len(updated) == 8 and updated.isdigit() else "20260918"
+        return f"xau-ai-pro-{version}-{suffix}-{stamp}"
+    except (OSError, ValueError):
+        return "xau-ai-pro-1.2.3-universal-20260918"
+
+
+GATEWAY_BUILD = _gateway_build()
 REAL_ORDER_KEYS: set[str] = set()
 LAST_COMMAND: dict = {"command": None, "status": "idle", "updated_at": None}
 REAL_EMERGENCY_STOP = Path(os.getenv("XAU_REAL_EMERGENCY_FILE", str(Path(__file__).with_name("REAL_EMERGENCY_STOP"))))
@@ -88,6 +104,14 @@ def _load_local_exchange_env() -> None:
 
 _load_local_exchange_env()
 
+def _exchange_market(market: str) -> str:
+    """Mercado interno das exchanges (spot/futures) a partir do alias do app."""
+    value = str(market or "").strip().lower()
+    if value in {"crypto-futures", "futures", "futuros", "crypto_futures"}:
+        return "futures"
+    return "spot"
+
+
 def _apply_saved_credentials(broker: str, market: str) -> None:
     if broker not in {"mexc", "binance"}: return
     pair = load_credentials(broker, market)
@@ -104,10 +128,11 @@ def _universal_history(broker: str, market: str, symbol: str = "", days: int = 0
         return {"ok": True, "deals": deals, "count": len(deals), "broker": "mt5", "market": market or "other", "source": "mt5_gateway"}
     if broker not in {"mexc", "binance"}:
         raise LookupError("corretora ainda não conectada ao gateway universal")
+    exchange = _exchange_market(market)
     if broker == "binance":
-        client = BinanceClient("futures" if market == "crypto-futures" else "spot")
+        client = BinanceClient(exchange)
     else:
-        client = MexcClient("futures" if market == "crypto-futures" else "spot")
+        client = MexcClient(exchange)
     raw = client.history(symbol=symbol)
     rows = raw if isinstance(raw, list) else raw.get("data", []) if isinstance(raw, dict) else []
     deals = []
@@ -117,15 +142,22 @@ def _universal_history(broker: str, market: str, symbol: str = "", days: int = 0
         deals.append({"id": str(row.get("id") or row.get("orderId") or row.get("dealId") or ""), "broker": broker, "accountId": f"{broker}-active", "market": market or "crypto-spot", "symbol": row.get("symbol", symbol), "side": row.get("side", "BUY"), "entry": "TRADE", "status": row.get("status", "FILLED"), "quantity": float(row.get("qty") or row.get("quantity") or row.get("vol") or row.get("executedQty") or 0), "price": float(row.get("price") or row.get("dealPrice") or 0), "grossPnl": profit, "commission": commission, "swap": 0, "fee": float(row.get("fee") or 0), "realizedPnl": profit - commission - float(row.get("fee") or 0), "executedAt": row.get("time") or row.get("timeStamp") or row.get("timestamp") or "", "source": f"{broker}_api"})
     return {"ok": True, "deals": deals, "count": len(deals), "broker": broker, "market": market or "crypto-spot", "source": f"{broker}_api"}
 
+
 def _universal_account(broker: str, market: str) -> dict:
     _apply_saved_credentials(broker, market)
     if broker == "mt5":
         account = _payload().get("account")
-        if not account: raise LookupError("conta MT5 indisponível")
-        return {"ok": True, "broker": "mt5", "market": market or "other", "account": account, "withdrawals_enabled": False, "source": "mt5_gateway"}
-    if broker == "mexc": client = MexcClient("futures" if market == "crypto-futures" else "spot")
-    elif broker == "binance": client = BinanceClient("futures" if market == "crypto-futures" else "spot")
-    else: raise LookupError("corretora não suportada")
+        if not account:
+            raise LookupError("conta MT5 indisponível")
+        return {"ok": True, "broker": "mt5", "market": market or "other", "account": account,
+                "withdrawals_enabled": False, "source": "mt5_gateway"}
+    exchange = _exchange_market(market)
+    if broker == "mexc":
+        client = MexcClient(exchange)
+    elif broker == "binance":
+        client = BinanceClient(exchange)
+    else:
+        raise LookupError("corretora não suportada")
     raw = client.account()
     account = raw.get("data", raw) if isinstance(raw, dict) else raw
     account = _normalize_exchange_account(account)
@@ -133,29 +165,82 @@ def _universal_account(broker: str, market: str) -> dict:
 
 def _universal_depth(broker: str, market: str, symbol: str) -> dict:
     _apply_saved_credentials(broker, market)
-    if broker == "binance": raw = BinanceClient("futures" if market == "crypto-futures" else "spot").depth(symbol)
-    elif broker == "mexc": raw = MexcClient("futures" if market == "crypto-futures" else "spot").depth(symbol)
-    else: raise LookupError("livro de ordens MT5 depende do DOM fornecido pelo broker")
+    exchange = _exchange_market(market)
+    if broker == "binance":
+        raw = BinanceClient(exchange).depth(symbol)
+    elif broker == "mexc":
+        raw = MexcClient(exchange).depth(symbol)
+    else:
+        raise LookupError("livro de ordens MT5 depende do DOM fornecido pelo broker")
+    if isinstance(raw, dict) and isinstance(raw.get("data"), dict):
+        raw = raw["data"]
+    bids = raw.get("bids", []) if isinstance(raw, dict) else []
+    asks = raw.get("asks", []) if isinstance(raw, dict) else []
+    return {"ok": True, "broker": broker, "market": market, "symbol": symbol.upper(),
+            "bids": bids, "asks": asks, "source": f"{broker}_public_depth"}
+
 
 def _universal_quote(broker: str, market: str, symbol: str) -> dict:
     _apply_saved_credentials(broker, market)
-    if broker == "mexc": raw = MexcClient("futures" if market == "crypto-futures" else "spot").ticker(symbol)
-    elif broker == "binance": raw = BinanceClient("futures" if market == "crypto-futures" else "spot").ticker(symbol)
-    else: return _quote(symbol)
+    exchange = _exchange_market(market)
+    if broker == "mexc":
+        raw = MexcClient(exchange).ticker(symbol)
+    elif broker == "binance":
+        raw = BinanceClient(exchange).ticker(symbol)
+    else:
+        return _quote(symbol)
     data = raw.get("data", raw) if isinstance(raw, dict) else raw
     bid = float(data.get("bidPrice") or data.get("bid1") or data.get("bid") or 0)
     ask = float(data.get("askPrice") or data.get("ask1") or data.get("ask") or 0)
-    return {"symbol": symbol.upper(), "bid": bid, "ask": ask, "last": (bid + ask) / 2 if bid and ask else 0, "price": (bid + ask) / 2 if bid and ask else 0, "spread": ask - bid, "source": f"{broker}_api", "timestamp": datetime.now().isoformat()}
-    if isinstance(raw, dict) and isinstance(raw.get("data"), dict): raw = raw["data"]
-    return {"ok": True, "broker": broker, "market": market, "symbol": symbol.upper(), "bids": raw.get("bids", []) if isinstance(raw, dict) else [], "asks": raw.get("asks", []) if isinstance(raw, dict) else [], "source": f"{broker}_public_depth"}
+    return {"symbol": symbol.upper(), "bid": bid, "ask": ask,
+            "last": (bid + ask) / 2 if bid and ask else 0,
+            "price": (bid + ask) / 2 if bid and ask else 0,
+            "spread": ask - bid, "source": f"{broker}_api",
+            "timestamp": datetime.now().isoformat()}
+
+
+def _universal_positions(broker: str, market: str) -> dict:
+    """Posicoes normalizadas por corretora (leitura real, sem simulacao)."""
+    _apply_saved_credentials(broker, market)
+    if broker == "mt5":
+        payload = _payload()
+        return {"ok": True, "broker": "mt5", "market": market or "other",
+                "positions": payload.get("positions", []),
+                "exposure": payload.get("exposure", {}), "source": "mt5_gateway"}
+    if broker not in {"mexc", "binance"}:
+        raise LookupError("corretora não suportada")
+    # Exchanges nao expoem posicao spot consolidada nesta versao: retorna leitura real vazia.
+    return {"ok": True, "broker": broker, "market": market or "crypto-spot",
+            "positions": [], "source": f"{broker}_api"}
+
+
+def _universal_quotes(broker: str, market: str, symbols: list[str]) -> dict:
+    """Cotacoes em lote para o app nao precisar de N requisicoes."""
+    quotes: list[dict] = []
+    errors: list[dict] = []
+    for symbol in symbols:
+        try:
+            quotes.append(_universal_quote(broker, market, symbol))
+        except Exception as exc:
+            errors.append({"symbol": symbol, "error": str(exc)})
+    return {"ok": True, "broker": broker, "market": market, "quotes": quotes,
+            "errors": errors, "count": len(quotes), "source": "mt5_gateway"}
+
 
 def _universal_trades(broker: str, market: str, symbol: str) -> dict:
     _apply_saved_credentials(broker, market)
-    if broker == "binance": raw = BinanceClient("futures" if market == "crypto-futures" else "spot").trades(symbol)
-    elif broker == "mexc": raw = MexcClient("futures" if market == "crypto-futures" else "spot").trades(symbol)
-    else: raise LookupError("negócios recentes indisponíveis para esta fonte")
-    if isinstance(raw, dict): raw = raw.get("data", raw.get("result", []))
-    return {"ok": True, "broker": broker, "market": market, "symbol": symbol.upper(), "trades": raw if isinstance(raw, list) else [], "source": f"{broker}_public_trades"}
+    exchange = _exchange_market(market)
+    if broker == "binance":
+        raw = BinanceClient(exchange).trades(symbol)
+    elif broker == "mexc":
+        raw = MexcClient(exchange).trades(symbol)
+    else:
+        raise LookupError("negócios recentes indisponíveis para esta fonte")
+    if isinstance(raw, dict):
+        raw = raw.get("data", raw.get("result", []))
+    return {"ok": True, "broker": broker, "market": market, "symbol": symbol.upper(),
+            "trades": raw if isinstance(raw, list) else [], "source": f"{broker}_public_trades"}
+
 
 def _config() -> dict:
     try:
@@ -802,6 +887,12 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, _universal_account(broker, market))
             except (MexcError, BinanceError, LookupError, ValueError) as exc:
                 self._send(503, {"ok": False, "error": str(exc), "withdrawals_enabled": False})
+        elif path == "/api/universal/positions":
+            try:
+                broker = query.get("broker", ["mt5"])[0].strip().lower(); market = query.get("market", [""])[0].strip().lower()
+                self._send(200, _universal_positions(broker, market))
+            except (MexcError, BinanceError, LookupError, ValueError) as exc:
+                self._send(503, {"ok": False, "error": str(exc), "positions": []})
         elif path == "/api/universal/quote":
             try:
                 broker = query.get("broker", ["mt5"])[0].strip().lower(); market = query.get("market", ["crypto-spot"])[0].strip().lower(); symbol = query.get("symbol", [""])[0].strip()
@@ -809,6 +900,15 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, _universal_quote(broker, market, symbol))
             except Exception as exc:
                 self._send(503, {"ok": False, "error": str(exc)})
+        elif path == "/api/universal/quotes":
+            try:
+                broker = query.get("broker", ["mt5"])[0].strip().lower(); market = query.get("market", ["crypto-spot"])[0].strip().lower()
+                raw = query.get("symbols", [""])[0]
+                symbols = [item.strip() for item in raw.split(",") if item.strip()]
+                if not symbols: raise ValueError("symbols obrigatório (lista separada por vírgula)")
+                self._send(200, _universal_quotes(broker, market, symbols))
+            except Exception as exc:
+                self._send(503, {"ok": False, "error": str(exc), "quotes": [], "errors": []})
         elif path == "/api/universal/depth":
             try:
                 broker = query.get("broker", ["binance"])[0].strip().lower(); market = query.get("market", ["crypto-spot"])[0].strip().lower(); symbol = query.get("symbol", [""])[0].strip()

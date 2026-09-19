@@ -22,6 +22,9 @@ Thumbs.db
 # Environment files
 .env
 .env.local
+.env.mexc.local
+.env.mexc
+.env.binance.local
 .env.integrations
 .env.integrations.example
 
@@ -119,4 +122,24 @@ frontend/.vite/
 *.sqlite
 
 # Gitleaks config pode ser versionado (documentacao)
+
+# Ciclo limpo v1.2.3 - nunca versionar binarios/artefatos de build
+frontend/src-tauri/bridge/
+frontend/src-tauri/gen/
+frontend/src-tauri/target/
+frontend/src-tauri/*.log
+frontend/src-tauri/*.flag
+frontend/tauri_bundle*.log
+frontend/tauri_bundle*.flag
+core/*.exe
+core/*.log
+core/*.flag
+dist/
+build/
+*.flag
+build_log*.txt
+versao_log.txt
+installer/XAU_AI_PRO_Setup_*.exe
+.pytest-tmp-*/
+__pycache__/
 
