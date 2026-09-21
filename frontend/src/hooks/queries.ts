@@ -143,6 +143,34 @@ export function useIntents(limit = 25) {
   });
 }
 
+// POST genérico de comando DEMO (guardian/tick, guardian/set, guardian/remove).
+// Retorna { data, busy, run } como o useReconcile: erro vira objeto, nunca throw.
+export type CommandResult = { ok?: boolean; error?: string } & Record<string, unknown>;
+export function useCommand(route: string, timeoutMs = 15000) {
+  const [data, setData] = useState<CommandResult | null>(null);
+  const [busy, setBusy] = useState(false);
+  const run = useCallback(async (payload: Record<string, unknown> = {}) => {
+    if (busy) return null;
+    setBusy(true);
+    try {
+      const r = await fetch(`${API}${route}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload), signal: AbortSignal.timeout(timeoutMs),
+      });
+      const d = (await r.json()) as CommandResult;
+      setData(d);
+      return d;
+    } catch (e) {
+      const d: CommandResult = { ok: false, error: e instanceof Error ? e.message : 'Gateway indisponível.' };
+      setData(d);
+      return d;
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, route, timeoutMs]);
+  return { data, busy, run };
+}
+
 // Reconciliação manual de intents contra a conta (POST; relatório exibido no painel).
 export type ReconcileReport = {
   ok?: boolean; checked?: number; reconciled?: number; unknown?: number;

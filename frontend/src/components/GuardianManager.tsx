@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { apiBase } from '../lib/api';
 import { requestId } from '../lib/format';
 import { notify } from '../lib/notify';
-import { useGuardian, useIntents, usePositions, useReconcile } from '../hooks/queries';
+import { useGuardian, useIntents, usePositions, useReconcile, useCommand } from '../hooks/queries';
 
 const API = `${apiBase()}`;
 type Rule = {
@@ -50,6 +50,7 @@ export default function GuardianManager() {
   const guardian = useGuardian();
   const intents = useIntents(25);
   const reconcile = useReconcile();
+  const tickNow = useCommand('/api/guardian/tick');
   const positions = usePositions();
   const posRows = ((positions.data as { positions?: unknown } | undefined)?.positions ?? []) as unknown as PosRow[];
   const [ticket, setTicket] = useState('');
@@ -153,6 +154,15 @@ export default function GuardianManager() {
         </div>
       )}
       {guardian.data?.last_error && <div className="hint danger">Último erro: {String(guardian.data.last_error)}</div>}
+      <div className="section-head"><h3>Ciclo imediato</h3>
+        <button className="btn xs ghost" onClick={() => { void tickNow.run().then(() => { void guardian.refetch(); }); }} disabled={tickNow.busy || !active}>{tickNow.busy ? 'Executando…' : 'Tick agora'}</button></div>
+      {tickNow.data && (
+        <div className="hint" role="status" aria-live="polite">
+          {tickNow.data.ok
+            ? `Tick ok · regras: ${String((tickNow.data as { count?: unknown }).count ?? 0)} · ações: ${String(((tickNow.data as { actions?: unknown[] }).actions ?? []).length)}`
+            : `Tick falhou: ${String(tickNow.data.error ?? 'erro desconhecido')}`}
+        </div>
+      )}
       <div className="guardian-live">
         <div className="section-head"><h3>Posições monitoradas (tempo real)</h3><span className="chip">{posRows.length}</span></div>
         {posRows.map((p) => (
