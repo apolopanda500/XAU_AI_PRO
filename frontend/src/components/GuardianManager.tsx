@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useState, type ChangeEvent } from 'react';
 import { apiBase } from '../lib/api';
 import { requestId } from '../lib/format';
 import { notify } from '../lib/notify';
@@ -59,10 +59,11 @@ export default function GuardianManager() {
   const [p2t, setP2t] = useState(''); const [p2v, setP2v] = useState('');
   const [p3t, setP3t] = useState(''); const [p3v, setP3v] = useState('');
   const [status, setStatus] = useState('');
-  const busy = useRef(false);
   const engine = String(guardian.data?.guardian ?? 'offline');
   const active = engine === 'enabled';
   const chip = active ? 'chip ok' : engine === 'paused_emergency_stop' ? 'chip danger' : 'chip warn';
+  const setBusy = useCommand('/api/guardian/set');
+  const removeBusy = useCommand('/api/guardian/remove');
 
   const setPart = (setter: (v: string) => void) => (e: ChangeEvent<HTMLInputElement>) => setter(e.target.value);
   const patch = (path: string, value: number | string) => setRule((prev) => {
@@ -74,37 +75,34 @@ export default function GuardianManager() {
     return next;
   });
 
-  const send = async (path: 'set' | 'remove' | 'tick', body: Record<string, unknown>) => {
-    if (busy.current) return;
-    busy.current = true; setStatus('Enviando...');
-    try {
-      const r = await fetch(`${API}/api/guardian/${path}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body), signal: AbortSignal.timeout(8000),
-      });
-      const d = (await r.json()) as { ok?: boolean; error?: string; count?: number };
-      if (r.ok && d.ok !== false) {
-        setStatus(path === 'set' ? `Guardian ativo para o ticket ${String(body.ticket)}` : path === 'remove' ? 'Regra removida.' : `Tick executado · ${d.count ?? 0} regra(s)`);
-        void notify('Guardian', path === 'set' ? 'Regra ativada.' : path === 'remove' ? 'Regra removida.' : 'Tick executado.');
-        void guardian.refetch();
-      } else {
-        setStatus(`Recusado · ${d.error || `HTTP ${r.status}`}`);
-        void notify('Guardian recusado', d.error || `HTTP ${r.status}`);
-      }
-    } catch { setStatus('Gateway indisponível.'); }
-    finally { busy.current = false; }
-  };
-
-  const activate = () => {
+  const activate = async () => {
     const tk = num(ticket);
     if (tk <= 0) { setStatus('Informe o ticket da posição DEMO.'); return; }
+    if (!window.confirm(`Ativar guardian DEMO para o ticket ${tk}? O motor passa a gerenciar SL/parciais automaticamente.`)) return;
     const partials = [[p1t, p1v], [p2t, p2v], [p3t, p3v]]
       .map(([t, v]) => ({ trigger: num(t), volume: num(v) }))
       .filter((p) => p.trigger > 0 && p.volume > 0);
-    void send('set', { ticket: tk, breakeven: rule.breakeven, trailing: rule.trailing, partials, profit_lock: rule.profit_lock, time_exit: rule.time_exit });
+    const d = await setBusy.run({
+      ticket: tk, request_id: requestId(), confirm: true, confirm_demo: true,
+      breakeven: rule.breakeven, trailing: rule.trailing, partials,
+      profit_lock: rule.profit_lock, time_exit: rule.time_exit,
+    });
+    if (d?.ok) {
+      setStatus(`Guardian ativo para o ticket ${tk}.`);
+      void notify('Guardian ativo', `Ticket ${tk} sob gestão contínua (DEMO).`);
+    } else {
+      setStatus(`Recusado · ${String(d?.error ?? 'erro desconhecido')}`);
+      void notify('Guardian recusado', String(d?.error ?? 'erro desconhecido'));
+    }
+    void guardian.refetch();
   };
 
-  const removeRule = (tk: string) => void send('remove', { ticket: num(tk) });
+  const removeRule = async (tk: string) => {
+    if (!window.confirm(`Remover regra do guardian para ${tk}? A posição continua aberta.`)) return;
+    const d = await removeBusy.run({ ticket: num(tk), confirm: true, confirm_demo: true });
+    setStatus(d?.ok ? `Regra ${tk} removida.` : `Recusado · ${String(d?.error ?? 'erro desconhecido')}`);
+    void guardian.refetch();
+  };
 
   return (
     <div className="card compact-card guardian-manager">
@@ -114,9 +112,9 @@ export default function GuardianManager() {
       </div>
       <div className="btn-row">
         <input className="input sm" type="number" min="1" placeholder="Ticket da posição" value={ticket} onChange={setPart(setTicket)} />
-        <button className="btn sm primary" onClick={activate} disabled={busy.current || !active}>Ativar guardian</button>
-        <button className="btn sm ghost" onClick={() => removeRule(ticket)} disabled={busy.current || !active}>Remover</button>
-        <button className="btn sm ghost" onClick={() => void send('tick', {})} disabled={busy.current}>Tick agora</button>
+        <button className="btn sm primary" onClick={() => { void activate(); }} disabled={setBusy.busy || !active}>{setBusy.busy ? 'Ativando…' : 'Ativar guardian'}</button>
+        <button className="btn sm ghost" onClick={() => { void removeRule(ticket); }} disabled={removeBusy.busy || !active}>Remover</button>
+        <button className="btn sm ghost" onClick={() => { void tickNow.run({}).then(() => { void guardian.refetch(); }); }} disabled={tickNow.busy}>{tickNow.busy ? 'Executando…' : 'Tick agora'}</button>
       </div>
       <div className="guardian-grid">
         <label>Breakeven gatilho <input className="input sm" type="number" step="0.1" value={rule.breakeven.trigger} onChange={(e) => patch('breakeven.trigger', num(e.target.value))} /></label>
@@ -148,7 +146,7 @@ export default function GuardianManager() {
             <div key={tk} className="guardian-rule-row">
               <span className="chip">#{tk}</span>
               <span>{String(r.symbol ?? '')} · {String(r.side ?? '')}</span>
-              <button className="btn xs ghost" onClick={() => removeRule(tk)}>Remover</button>
+              <button className="btn xs ghost" onClick={() => { void removeRule(tk); }}>Remover</button>
             </div>
           ))}
         </div>
