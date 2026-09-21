@@ -1,7 +1,7 @@
 ﻿import { useQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { useCoreHealth, useWatchdog, useTelemetry, useTelemetryHistory, useQueue } from '../hooks/queries';
+import { useCoreHealth, useWatchdog, useTelemetry, useTelemetryHistory, useQueue, useBoot } from '../hooks/queries';
 import { notify } from '../lib/notify';
 
 type H = { os?: string; architecture?: string; cpu_name?: string; gpu_name?: string; cpu_usage_percent?: number; cpu_cores?: number; memory_total_gb?: number; memory_available_gb?: number };
@@ -47,6 +47,9 @@ export default function SystemHealthOnly() {
   const telQ = useTelemetry(50);
   const histQ = useTelemetryHistory(120);
   const qQ = useQueue();
+  const bootQ = useBoot();
+  const boot = bootQ.data;
+  const bootSnap = boot?.snapshot ?? null;
   const coreDown = coreQ.data === false;
   const ea = wdQ.data;
   const eaState = ea?.state ?? 'unknown';
@@ -80,6 +83,17 @@ export default function SystemHealthOnly() {
           <tr><td>Idade do arquivo</td><td>{ea?.file_age_sec != null ? `${Math.round(ea.file_age_sec)}s` : '--'}</td></tr>
         </tbody></table>
       <div className="hint">Classificação: vivo (&lt; TTL) · travado (arquivo novo, timestamp parado) · offline (arquivo velho). Somente leitura — nunca envia comandos ao MT5.</div>
+    </div>
+    <div className="card compact-card"><h2>Diagnóstico do boot</h2>
+      {boot == null ? <div className="hint">Carregando relatório do boot…</div> :
+        <table className="tbl compact-table"><thead><tr><th>Item</th><th>Valor</th></tr></thead>
+          <tbody>
+            <tr><td>MT5 pronto</td><td>{boot.mt5_ready ? 'Sim' : 'Não'}</td></tr>
+            <tr><td>Equity no boot</td><td>{bootSnap?.equity ?? '--'}</td></tr>
+            <tr><td>Posições no boot</td><td>{bootSnap?.positions ?? '--'}</td></tr>
+            <tr><td>EA no boot</td><td>{EA_LABEL[bootSnap?.ea_state ?? 'unknown'] ?? bootSnap?.ea_state ?? '--'}</td></tr>
+          </tbody></table>}
+      <div className="hint">Reconciliação de intents + primeiro snapshot de telemetria, sem reexecutar loops. {boot?.error ? `Aviso: ${boot.error}` : ''}</div>
     </div>
     <div className="card compact-card"><h2>Telemetria (últimos eventos)</h2>
       {(telQ.data?.events?.length ?? 0) === 0 ? <div className="hint">Sem eventos registrados ainda. Ações do Guardian e reconciliações aparecem aqui.</div> :

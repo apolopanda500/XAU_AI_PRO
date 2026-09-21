@@ -33,6 +33,7 @@
 | `POST /api/watchdog/recovery` | ambos | Relatorio somente-leitura (sem acao automatica) |
 | `GET /api/telemetry` | ambos | Eventos recentes (ring 500) |
 | `GET /api/telemetry/history` | ambos | Snapshots de equity/posicoes/EA persistidos |
+| `GET /api/boot` | ambos | Diagnostico do boot (reconciliacao + snapshot inicial) |
 
 ## Boot (backfill do primeiro ciclo)
 

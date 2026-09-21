@@ -487,6 +487,15 @@ async def telemetry_history_route(limit: int = 120) -> dict:
         return _send({"ok": False, "error": str(exc), "snapshots": [], "count": 0}, 503)
 
 
+@app.get("/api/boot")
+async def boot_route() -> dict:
+    """Diagnostico do boot: reconciliacao + snapshot inicial (sem reexecutar loops)."""
+    try:
+        return boot_report()
+    except Exception as exc:
+        return _send({"ok": False, "error": str(exc), "source": "boot_report"}, 503)
+
+
 @app.post("/api/watchdog/recovery")
 async def watchdog_recovery(payload: dict) -> JSONResponse:
     try:

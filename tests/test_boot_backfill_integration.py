@@ -60,6 +60,17 @@ def test_boot_report_sem_mt5(watchdog, intent_log, fastapi) -> None:
     assert hist.get("count", 0) >= 1, hist  # primeiro ponto persistido
 
 
+def test_boot_route_fastapi_sem_mt5(watchdog, intent_log, fastapi) -> None:
+    import asyncio
+    import json
+    from fastapi.responses import JSONResponse
+    out = asyncio.run(fastapi.boot_route())
+    data = json.loads(bytes(out.body).decode("utf-8")) if isinstance(out, JSONResponse) else out
+    assert data.get("ok") is True, data
+    if isinstance(out, JSONResponse):
+        assert out.status_code == 200, data
+
+
 def test_reconcile_vazio_sem_erro(watchdog, intent_log, fastapi) -> None:
     import MetaTrader5 as mt5
     report = intent_log.reconcile(mt5)
@@ -81,6 +92,7 @@ def main() -> int:
         with tempfile.TemporaryDirectory() as tmp:
             mods = _setup(tmp)
             test_boot_report_sem_mt5(*mods)
+            test_boot_route_fastapi_sem_mt5(*mods)
             test_reconcile_vazio_sem_erro(*mods)
             test_evento_boot_na_telemetria(*mods)
         print("BOOT_BACKFILL_INTEGRATION_OK")

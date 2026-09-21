@@ -1022,11 +1022,17 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, watchdog.history(int(query.get("limit", ["120"])[0])))
             except Exception as exc:
                 self._send(503, {"ok": False, "error": str(exc), "snapshots": [], "count": 0})
+        elif path == "/api/boot":
+            from backend.fastapi_gateway import boot_report as _boot_report
+            try:
+                self._send(200, _boot_report())
+            except Exception as exc:
+                self._send(503, {"ok": False, "error": str(exc), "source": "boot_report"})
         elif path == "/api/ea/status":
             try: self._send(200, _ea_status())
             except Exception as exc: self._send(503, {"ok": False, "error": str(exc), "source": "mt5_gateway"})
         elif path == "/api/capabilities":
-            self._send(200, {"ok": True, "read": ["health", "status", "account", "inventory", "symbols", "assets", "quote", "quotes", "positions", "orders", "history", "journal", "guardian/status"], "demo_commands": ["demo/order", "demo/close", "guardian/set", "guardian/remove", "guardian/tick"], "ea_commands": ["ea/start", "ea/stop", "ea/pause", "ea/resume", "ea/close", "ea/close-all"], "real_commands": [], "real_orders_enabled": False})
+            self._send(200, {"ok": True, "read": ["health", "status", "account", "inventory", "symbols", "assets", "quote", "quotes", "positions", "orders", "history", "journal", "guardian/status", "boot"], "demo_commands": ["demo/order", "demo/close", "guardian/set", "guardian/remove", "guardian/tick"], "ea_commands": ["ea/start", "ea/stop", "ea/pause", "ea/resume", "ea/close", "ea/close-all"], "real_commands": [], "real_orders_enabled": False})
         elif path in ("/api/status", "/api/system"):
             ok = _ensure_mt5()
             self._send(200, {"ok": ok, **_payload()})

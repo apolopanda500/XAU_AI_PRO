@@ -142,6 +142,23 @@ export function useIntents(limit = 25) {
   });
 }
 
+// Diagnóstico do boot (reconciliação + snapshot inicial) — leitura única, sem polling.
+export type BootSnapshot = {
+  ts_iso?: string; equity?: number | null; balance?: number | null; positions?: number;
+  floating_profit?: number | null; ea_state?: string; terminal_connected?: boolean;
+};
+export type BootReport = {
+  ok?: boolean; mt5_ready?: boolean; error?: string; snapshot?: BootSnapshot | null;
+  snapshot_error?: string; source?: string;
+};
+export function useBoot() {
+  return useQuery<BootReport>({
+    queryKey: ['boot-report'],
+    queryFn: () => get<BootReport>('/api/boot'),
+    staleTime: 60_000, retry: 1,
+  });
+}
+
 
 // Contas universal (MEXC/Binance · Spot/Futuros) em paralelo — alimenta eventos e patrimônio.
 export type CryptoAccount = { broker: string; market: string; ok: boolean; balance: number | null; currency: string; assets: string[] };
