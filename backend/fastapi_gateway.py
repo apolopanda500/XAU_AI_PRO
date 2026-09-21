@@ -23,6 +23,43 @@ from backend import intent_log
 from backend import persistent_queue
 from backend import watchdog
 
+API_TOKEN = gw.API_TOKEN
+RATE_LIMIT_MAX = gw.RATE_LIMIT_MAX
+RATE_LIMIT_CMD_MAX = gw.RATE_LIMIT_CMD_MAX
+_RATE_STATE = {"count": 0, "window": 0.0}
+_RATE_STATE_CMD = {"count": 0, "window": 0.0}
+
+
+@app.middleware("http")
+async def _auth_rate_limit(request, call_next):  # type: ignore[no-untyped-def]
+    """Paridade com mt5_gateway: token opcional + rate limit por categoria.
+
+    GET = leitura (polling), demais verbos = comando. Rotas de documentacao
+    (/api/docs, /api/redoc, /api/openapi.json) e /api/health ficam isentas.
+    """
+    path = request.url.path
+    if path in {"/api/health", "/api/docs", "/api/redoc", "/api/openapi.json"} \
+            or path.startswith(("/docs", "/redoc", "/openapi.json")):
+        return await call_next(request)
+    if API_TOKEN:
+        auth = request.headers.get("authorization", "")
+        if auth != f"Bearer {API_TOKEN}":
+            return _send({"ok": False, "error": "token invalido"}, 401)
+    if RATE_LIMIT_MAX <= 0 and RATE_LIMIT_CMD_MAX <= 0:
+        return await call_next(request)
+    is_command = request.method.upper() != "GET"
+    limit = RATE_LIMIT_CMD_MAX if is_command else RATE_LIMIT_MAX
+    if limit > 0:
+        state = _RATE_STATE_CMD if is_command else _RATE_STATE
+        agora = time.time()
+        if agora - state["window"] >= 60.0:
+            state["window"], state["count"] = agora, 1
+        elif state["count"] + 1 > limit:
+            return _send({"ok": False, "error": "rate limit excedido"}, 429)
+        else:
+            state["count"] += 1
+    return await call_next(request)
+
 app = FastAPI(
     title="XAU AI PRO Trading Gateway",
     version="1.2.3",
@@ -441,6 +478,14 @@ async def telemetry_route(limit: int = 100) -> dict:
         return _send({"ok": False, "error": str(exc)}, 503)
 
 
+@app.get("/api/telemetry/history")
+async def telemetry_history_route(limit: int = 120) -> dict:
+    try:
+        return gw.watchdog.history(limit)
+    except Exception as exc:
+        return _send({"ok": False, "error": str(exc), "snapshots": [], "count": 0}, 503)
+
+
 @app.post("/api/watchdog/recovery")
 async def watchdog_recovery(payload: dict) -> JSONResponse:
     try:
@@ -835,6 +880,7 @@ def main() -> None:
     import uvicorn
     gw.start_guardian_loop()
     persistent_queue.start_queue_loop()
+    gw.watchdog.start_telemetry_loop()
     print(f"[gateway] FastAPI Universal Gateway v1.2.3 rodando em http://127.0.0.1:9001")
     uvicorn.run(app, host="127.0.0.1", port=9001, log_level="info")
 

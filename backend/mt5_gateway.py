@@ -61,7 +61,9 @@ AUDIT_FILE = Path(os.getenv("XAU_AUDIT_FILE", str(Path(os.environ.get("APPDATA",
 # Segurança de exposição: token opcional e rate limit (pré-requisito p/ acesso remoto/Android).
 API_TOKEN = os.getenv("XAU_GATEWAY_TOKEN", "").strip()
 RATE_LIMIT_MAX = int(os.getenv("XAU_RATE_LIMIT", "0") or 0)  # req/min; 0 = ilimitado (desktop local)
+RATE_LIMIT_CMD_MAX = int(os.getenv("XAU_RATE_LIMIT_CMD", "0") or 0)  # comandos/min; 0 = usa RATE_LIMIT_MAX
 _RATE_STATE = {"count": 0, "window": 0.0}
+_RATE_STATE_CMD = {"count": 0, "window": 0.0}
 CONFIG_DEFAULTS = {"theme": "dark", "language": "pt-BR", "precision": 2, "marketAutoRefresh": True, "dashboardAutoRefresh": True, "historyAutoRefresh": True}
 
 def _safe_number(value) -> float:
@@ -911,20 +913,34 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", "0")
         self.end_headers()
 
+    def _is_command(self) -> bool:
+        """POST e considerado comando; GET e leitura (polling de painel)."""
+        return self.command.upper() != "GET"
+
     def _autorizado(self) -> tuple[bool, str]:
-        """Token opcional (XAU_GATEWAY_TOKEN) + rate limit (XAU_RATE_LIMIT req/min)."""
+        """Token opcional (XAU_GATEWAY_TOKEN) + rate limit por categoria.
+
+        Comandos (POST) e leituras (GET) tem janelas separadas: o polling do
+        painel nao consome a cota de comandos. XAU_RATE_LIMIT_CMD define a
+        cota de comandos (fallback: XAU_RATE_LIMIT).
+        """
         if API_TOKEN:
             auth = self.headers.get("Authorization", "")
             if auth != f"Bearer {API_TOKEN}":
                 return False, "token"
-        if RATE_LIMIT_MAX > 0:
-            agora = time.time()
-            if agora - _RATE_STATE["window"] >= 60.0:
-                _RATE_STATE["window"], _RATE_STATE["count"] = agora, 1
-            elif _RATE_STATE["count"] + 1 > RATE_LIMIT_MAX:
-                return False, "rate"
-            else:
-                _RATE_STATE["count"] += 1
+        if RATE_LIMIT_MAX <= 0 and RATE_LIMIT_CMD_MAX <= 0:
+            return True, ""
+        limit = RATE_LIMIT_CMD_MAX if self._is_command() else RATE_LIMIT_MAX
+        if limit <= 0:
+            return True, ""
+        state = _RATE_STATE_CMD if self._is_command() else _RATE_STATE
+        agora = time.time()
+        if agora - state["window"] >= 60.0:
+            state["window"], state["count"] = agora, 1
+        elif state["count"] + 1 > limit:
+            return False, "rate"
+        else:
+            state["count"] += 1
         return True, ""
 
     def do_GET(self):  # noqa: N802
@@ -994,6 +1010,11 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, watchdog.telemetry(int(query.get("limit", ["100"])[0])))
             except Exception as exc:
                 self._send(503, {"ok": False, "error": str(exc)})
+        elif path == "/api/telemetry/history":
+            try:
+                self._send(200, watchdog.history(int(query.get("limit", ["120"])[0])))
+            except Exception as exc:
+                self._send(503, {"ok": False, "error": str(exc), "snapshots": [], "count": 0})
         elif path == "/api/ea/status":
             try: self._send(200, _ea_status())
             except Exception as exc: self._send(503, {"ok": False, "error": str(exc), "source": "mt5_gateway"})
@@ -1284,6 +1305,7 @@ def main() -> None:
         print("[gateway] MT5 offline; modo universal continua ativo.")
     start_guardian_loop()
     persistent_queue.start_queue_loop()
+    watchdog.start_telemetry_loop()
     srv = ThreadingHTTPServer((HOST, PORT), Handler)
     srv.daemon_threads = True
     print(f"[gateway] MT5 Gateway rodando em http://{HOST}:{PORT}")

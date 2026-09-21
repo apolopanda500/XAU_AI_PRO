@@ -142,3 +142,95 @@ def recovery(
         pass
     return {"ok": True, "state": state, "severity": severity,
             "actions": actions or []}
+
+
+# ---------------------------------------------------------------------------
+# Telemetria historica persistida (JSONL; observabilidade temporal).
+# ---------------------------------------------------------------------------
+HISTORY_FILE = Path(os.getenv("XAU_TELEMETRY_FILE", str(
+    Path(os.environ.get("APPDATA", "")) / "XAU_AI_PRO" / "telemetry_history.jsonl")))
+HISTORY_MAX_BYTES = int(os.getenv("XAU_TELEMETRY_MAX_BYTES", str(2 * 1024 * 1024)) or 0)
+_SNAP_LOCK = threading.Lock()
+_LAST_SNAPSHOT: dict = {}
+
+
+def snapshot_metrics(source: str = "loop") -> dict:
+    """Um snapshot pontual de saude/conta; persiste em JSONL com rotacao simples.
+
+    Falhas de MT5 sao toleradas: campos ficam None e o snapshot ainda registra
+    o estado do EA/watchdog (util justamente quando o terminal caiu).
+    """
+    snapshot: dict = {"ts": _now(), "ts_iso": datetime.now().isoformat(),
+                      "source": source}
+    try:
+        from backend import mt5_gateway as gw
+        payload = gw._payload()
+        account = payload.get("account") or {}
+        snapshot.update({
+            "terminal_connected": bool(payload.get("terminal_connected")),
+            "equity": account.get("equity"),
+            "balance": account.get("balance"),
+            "margin_free": account.get("margin_free"),
+            "positions": len(payload.get("positions", []) or []),
+            "floating_profit": (payload.get("exposure") or {}).get("floating_profit"),
+        })
+    except Exception as exc:
+        snapshot["terminal_connected"] = False
+        snapshot["error"] = str(exc)[:200]
+    try:
+        snapshot["ea_state"] = ea_state().get("state")
+    except Exception:
+        snapshot["ea_state"] = "unknown"
+    with _SNAP_LOCK:
+        _LAST_SNAPSHOT.clear()
+        _LAST_SNAPSHOT.update(snapshot)
+        try:
+            HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
+            if HISTORY_MAX_BYTES > 0 and HISTORY_FILE.exists() \
+               and HISTORY_FILE.stat().st_size > HISTORY_MAX_BYTES:
+                HISTORY_FILE.write_text("", encoding="utf-8")  # rotacao simples
+            with HISTORY_FILE.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(snapshot, ensure_ascii=False, default=str) + "\n")
+        except Exception:
+            pass
+    return snapshot
+
+
+def history(limit: int = 120) -> dict:
+    """Ultimos snapshots persistidos (mais recentes primeiro)."""
+    limit = max(1, min(int(limit), 1000))
+    rows: list[dict] = []
+    try:
+        if HISTORY_FILE.exists():
+            lines = HISTORY_FILE.read_text(encoding="utf-8").splitlines()
+            for line in reversed(lines[-limit:]):
+                try:
+                    rows.append(json.loads(line))
+                except Exception:
+                    continue
+    except Exception:
+        pass
+    with _SNAP_LOCK:
+        last = dict(_LAST_SNAPSHOT)
+    return {"ok": True, "snapshots": rows, "count": len(rows),
+            "file": str(HISTORY_FILE), "last": last or None, "source": "watchdog"}
+
+
+def _history_loop(interval_sec: float) -> None:
+    while True:
+        try:
+            snapshot_metrics("loop")
+        except Exception:
+            pass
+        time.sleep(max(10.0, interval_sec))
+
+
+def start_telemetry_loop() -> None:
+    """Sobe o coletor periodico (idempotente; intervalo via XAU_TELEMETRY_INTERVAL)."""
+    with _LOCK:
+        if getattr(start_telemetry_loop, "_started", False):
+            return
+        start_telemetry_loop._started = True  # type: ignore[attr-defined]
+    interval = float(os.getenv("XAU_TELEMETRY_INTERVAL", "60") or 60)
+    threading.Thread(target=_history_loop, args=(interval,),
+                     name="telemetry-history", daemon=True).start()
