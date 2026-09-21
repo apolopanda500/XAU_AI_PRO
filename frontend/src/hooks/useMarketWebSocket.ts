@@ -2,15 +2,23 @@
 // Handshake Hello, heartbeat com latencia e reconexao com backoff.
 
 import { useEffect, useRef, useCallback } from 'react';
+import { apiBase, wsUrl } from '../lib/api';
 import { useAppStore } from './useAppStore';
 import {
   PROTOCOL_VERSION,
   WS_PING_INTERVAL_MS,
+  DEFAULT_SYMBOLS,
   type WsMessageV1,
 } from '../lib/protocol';
 
-const getWsUrl = (): string => 'ws://127.0.0.1:9002/ws/market';
+const getWsUrl = (): string => wsUrl();
 const nowMs = (): number => Date.now();
+
+// Símbolos ativos: watchlist informada pelo painel ou o padrão do protocolo.
+const desiredSymbols = (): string[] => {
+  const wanted = useAppStore.getState().subscribeSymbols;
+  return wanted.length ? wanted : DEFAULT_SYMBOLS;
+};
 
 const newRequestId = (): string =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -23,12 +31,30 @@ export function useMarketWebSocket() {
   const pingTimer = useRef<number | null>(null);
   const helloOk = useRef<boolean>(false);
   const {
-    addQuote,
+    setQuotes,
     setWsConnected,
     setAccount,
     setPositions,
     setSystemState,
   } = useAppStore();
+  const quoteBufferRef = useRef<Map<string, WsMessageV1>>(new Map());
+  const renderFrameRef = useRef<number | null>(null);
+  // Ultima lista enviada ao Core; evita Subscribe redundante a cada clique.
+  const subscribedRef = useRef<string[]>([]);
+
+  const scheduleQuoteFlush = useCallback(() => {
+    if (renderFrameRef.current !== null) return;
+    renderFrameRef.current = window.requestAnimationFrame(() => {
+      renderFrameRef.current = null;
+      const buffered = quoteBufferRef.current;
+      if (!buffered.size) return;
+      const current = useAppStore.getState().quotes;
+      const next = new Map(current.map((quote) => [quote.symbol, quote]));
+      buffered.forEach((message, symbol) => next.set(symbol, message as never));
+      quoteBufferRef.current = new Map();
+      setQuotes(Array.from(next.values()) as never);
+    });
+  }, [setQuotes]);
 
   const stopPing = () => {
     if (pingTimer.current !== null) {
@@ -58,15 +84,16 @@ export function useMarketWebSocket() {
           helloOk.current = true;
           retryRef.current = 0;
           setWsConnected(true);
-          ws.send(
-            JSON.stringify({
-              type: 'Subscribe',
-              symbols: ['XAUUSD', 'EURUSD', 'GBPUSD', 'USDJPY', 'BTCUSD'],
-            }),
-          );
+          {
+            // Subscribe dinâmico: watchlist atual (ou padrão do protocolo) no handshake.
+            const symbols = desiredSymbols();
+            subscribedRef.current = symbols;
+            ws.send(JSON.stringify({ type: 'Subscribe', symbols }));
+          }
           break;
         case 'Quote':
-          addQuote(msg as never);
+          quoteBufferRef.current.set(String((msg as unknown as { symbol?: string }).symbol ?? ''), msg);
+          scheduleQuoteFlush();
           break;
         case 'Account':
           setAccount(msg as never);
@@ -95,7 +122,7 @@ export function useMarketWebSocket() {
           break;
       }
     },
-    [addQuote, setWsConnected, setAccount, setPositions, setSystemState],
+    [scheduleQuoteFlush, setWsConnected, setAccount, setPositions, setSystemState],
   );
 
   const connectWebSocket = useCallback(() => {
@@ -147,14 +174,30 @@ export function useMarketWebSocket() {
     }, delay);
   }, [handleMessage, startPing, setWsConnected]);
 
+  // Reaplica subscriptions quando a watchlist muda (diff minimo Subscribe/Unsubscribe).
+  const applySubscriptions = useCallback((symbols: string[]) => {
+    const ws = wsRef.current;
+    const next = symbols.filter(Boolean);
+    if (!ws || ws.readyState !== WebSocket.OPEN || !helloOk.current || !next.length) return;
+    const current = subscribedRef.current;
+    const add = next.filter((s) => !current.includes(s));
+    const remove = current.filter((s) => !next.includes(s));
+    if (!add.length && !remove.length) return;
+    if (add.length) ws.send(JSON.stringify({ type: 'Subscribe', symbols: add }));
+    if (remove.length) ws.send(JSON.stringify({ type: 'Unsubscribe', symbols: remove }));
+    subscribedRef.current = next;
+  }, []);
+
   useEffect(() => {
     connectWebSocket();
     return () => {
       stopPing();
+      if (renderFrameRef.current !== null) window.cancelAnimationFrame(renderFrameRef.current);
+      quoteBufferRef.current.clear();
       retryRef.current = 999;
       if (wsRef.current) wsRef.current.close();
     };
   }, [connectWebSocket]);
 
-  return { wsRef, connectWebSocket };
+  return { wsRef, connectWebSocket, applySubscriptions };
 }

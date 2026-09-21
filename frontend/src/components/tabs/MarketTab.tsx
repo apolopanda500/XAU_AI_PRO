@@ -12,6 +12,7 @@ export default function MarketTab() {
   const quotes = useAppStore((s) => s.quotes);
   const selectedSymbol = useAppStore((s) => s.selectedSymbol);
   const setSelectedSymbol = useAppStore((s) => s.setSelectedSymbol);
+  const setSubscribeSymbols = useAppStore((s) => s.setSubscribeSymbols);
   const addQuote = useAppStore((s) => s.addQuote);
   const wsConnected = useAppStore((s) => s.wsConnected);
   const account = useAppStore((s) => s.account);
@@ -59,7 +60,12 @@ export default function MarketTab() {
   };
 
   useEffect(() => { let active = true; let timer: number | undefined; const loadSymbols = async () => { try { const response = await fetch(`${MT5}/api/assets`, { signal: AbortSignal.timeout(5000) }); if (!response.ok) return; const data = await response.json() as { symbols?: Array<{ symbol: string }> }; const discovered = (data.symbols ?? []).map((item) => item.symbol).filter(Boolean); if (active && discovered.length) setWatchlist(discovered); } catch { /* MT5 indisponível permanece explícito */ } if (active) timer = window.setTimeout(loadSymbols, 30000); }; void loadSymbols(); return () => { active = false; if (timer) window.clearTimeout(timer); }; }, []);
-  useEffect(() => { let active = true; let timer: number | undefined; const cycle = async () => { if (!active) return; if (document.visibilityState === 'visible') await realRefresh(); if (active && marketAutoRefresh) timer = window.setTimeout(cycle, Math.max(5000, marketRefreshMs)); }; void cycle(); return () => { active = false; if (timer) window.clearTimeout(timer); }; }, [watchlist, selectedSymbol, marketAutoRefresh, marketRefreshMs]);
+    // Publica a watchlist ativa (seleção + lista) para o WebSocket subscrever no Core.
+  useEffect(() => {
+    setSubscribeSymbols([selectedSymbol, ...watchlist].filter(Boolean));
+  }, [selectedSymbol, watchlist, setSubscribeSymbols]);
+
+useEffect(() => { let active = true; let timer: number | undefined; const cycle = async () => { if (!active) return; if (document.visibilityState === 'visible') await realRefresh(); if (active && marketAutoRefresh) timer = window.setTimeout(cycle, Math.max(5000, marketRefreshMs)); }; void cycle(); return () => { active = false; if (timer) window.clearTimeout(timer); }; }, [watchlist, selectedSymbol, marketAutoRefresh, marketRefreshMs]);
 
   return <div>
     <div className="card" style={{ marginBottom: 14 }}><h2>Movimentação do preço</h2><MiniPriceChart quote={selected} symbol={selectedSymbol} /><div className="hint" style={{ marginTop: 10 }}>Uso auxiliar: mostra direção e amplitude das últimas leituras reais. Não é sinal de entrada e não envia ordens.</div></div>

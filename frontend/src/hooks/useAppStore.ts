@@ -3,15 +3,19 @@ import { persist } from 'zustand/middleware';
 
 export type TabType =
   | 'dashboard'
+  | 'portfolio'
   | 'market'
   | 'robot'
   | 'history'
-  | 'calendar'
   | 'system'
   | 'settings'
-  | 'strategy-tester';
+  | 'strategy-tester'
+  | 'risk'
+  | 'alert'
+    | 'analytics'
+  | 'ai';
 
-export type ThemeName = 'dark' | 'xau_dark' | 'btc_dark' | 'light';
+export type ThemeName = 'dark' | 'xau_dark' | 'btc_dark' | 'light' | 'ocean_dark' | 'emerald_dark' | 'rose_dark' | 'violet_dark';
 
 export interface Quote {
   symbol: string;
@@ -86,6 +90,8 @@ export interface SystemState {
 }
 
 export interface Settings {
+  pinEnabled: boolean;
+  pinCode: string;
   theme: ThemeName;
   animations: boolean;
   soundEnabled: boolean;
@@ -93,6 +99,12 @@ export interface Settings {
   autoScroll: boolean;
   precision: number;
   refreshInterval: number;
+  dashboardAutoRefresh: boolean;
+  marketAutoRefresh: boolean;
+  historyAutoRefresh: boolean;
+  dashboardRefreshMs: number;
+  marketRefreshMs: number;
+  historyRefreshMs: number;
   mt5Path: string;
   mt5AutoConnect: boolean;
   aiEnabled: boolean;
@@ -108,6 +120,8 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
+  pinEnabled: false,
+  pinCode: '',
   theme: 'xau_dark',
   animations: true,
   soundEnabled: true,
@@ -115,6 +129,12 @@ export const DEFAULT_SETTINGS: Settings = {
   autoScroll: true,
   precision: 2,
   refreshInterval: 1000,
+  dashboardAutoRefresh: true,
+  marketAutoRefresh: true,
+  historyAutoRefresh: true,
+  dashboardRefreshMs: 5000,
+  marketRefreshMs: 5000,
+  historyRefreshMs: 10000,
   mt5Path: '',
   // MT5 nunca e iniciado pelo app; a conexao deve ser explicitamente acionada pelo usuario.
   mt5AutoConnect: false,
@@ -138,6 +158,10 @@ interface AppState {
   addQuote: (quote: Quote) => void;
   selectedSymbol: string;
   setSelectedSymbol: (symbol: string) => void;
+  // Símbolos que o painel de mercado quer receber em tempo real (watchlist + seleção).
+  // Vazio = usa DEFAULT_SYMBOLS do protocolo.
+  subscribeSymbols: string[];
+  setSubscribeSymbols: (symbols: string[]) => void;
   wsConnected: boolean;
   setWsConnected: (connected: boolean) => void;
   account: AccountInfo | null;
@@ -166,7 +190,7 @@ interface AppState {
 export const useAppStore = create<AppState>()(
   persist(
     (set) => ({
-      activeTab: 'dashboard',
+      activeTab: 'portfolio',
       setActiveTab: (tab) => set({ activeTab: tab }),
       quotes: [],
       setQuotes: (quotes) => set({ quotes }),
@@ -174,8 +198,11 @@ export const useAppStore = create<AppState>()(
         set((state) => ({
           quotes: [...state.quotes.filter((q) => q.symbol !== quote.symbol), quote],
         })),
-      selectedSymbol: 'XAUUSD',
+      // O produto é universal; XAUUSD é apenas uma opção do catálogo.
+      selectedSymbol: '',
       setSelectedSymbol: (symbol) => set({ selectedSymbol: symbol }),
+      subscribeSymbols: [],
+      setSubscribeSymbols: (symbols) => set({ subscribeSymbols: [...new Set(symbols.filter(Boolean))].slice(0, 24) }),
       wsConnected: false,
       setWsConnected: (connected) => set({ wsConnected: connected }),
       account: null,
@@ -215,9 +242,11 @@ export const useAppStore = create<AppState>()(
         return {
           ...current,
           ...p,
+          // Mantem a navegacao acessivel apos a troca do asset da marca.
+          sidebarOpen: true,
           // Compatibilidade segura: versoes antigas podiam persistir auto-connect=true.
           // A inicializacao do MT5 exige acao explicita do usuario.
-          settings: { ...DEFAULT_SETTINGS, ...(p.settings ?? {}), mt5AutoConnect: false },
+          settings: { ...DEFAULT_SETTINGS, ...(p.settings ?? {}), marketAutoRefresh: true, mt5AutoConnect: false },
         } as AppState;
       },
     },

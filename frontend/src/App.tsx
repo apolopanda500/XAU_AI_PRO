@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useRef } from 'react';
+﻿import React, { useEffect, useLayoutEffect, useRef } from 'react';
 import { useAppStore, TabType } from './hooks/useAppStore';
 import { useTheme } from './hooks/useTheme';
 import { useCoreBootstrap } from './hooks/useCoreBootstrap';
@@ -11,6 +11,7 @@ import PortfolioHomeClean from './components/tabs/PortfolioHomeSafe';
 import UniversalLiveTerminal from './components/UniversalLiveTerminalLatest';
 import RobotTableCommands from './components/RobotAssetTableFixed';
 import RobotCommandActions from './components/RobotCommandActions';
+import GuardianManager from './components/GuardianManager';
 import MarketTab from './components/tabs/MarketTab';
 import RobotTab from './components/tabs/RobotWorkspaceTab';
 import HistoryTab from './components/tabs/HistoryTab';
@@ -22,16 +23,24 @@ import AppIdentity from './components/AppIdentity';
 import SystemStartupSync from './components/SystemStartupSync';
 import ConnectionManager from './components/ConnectionSettings';
 import StrategyTesterTab from './components/tabs/StrategyTesterTab';
+import RiskTab from './components/tabs/RiskTab';
+import AlertTab from './components/tabs/AlertTab';
+import AIControlTab from './components/tabs/AIControlTab';
+import AnalyticsTab from './components/tabs/AnalyticsTab';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 
 const TAB_COMPONENTS: Partial<Record<TabType, React.ReactNode>> = {
   portfolio: <PortfolioHomeClean />,
   market: <MarketTab />,
-  robot: <><RobotTableCommands /><RobotCommandActions /><UniversalLiveTerminal /></>,
+  robot: <><RobotTableCommands /><RobotCommandActions /><GuardianManager /><UniversalLiveTerminal /></>,
   history: <HistoryTab />,
   system: <SystemMonitorUniversalTab />,
   settings: <><ConnectionManager /><ConnectedDevicesPanel /><SettingsTab /><ExitAppButton /></>,
   'strategy-tester': <StrategyTesterTab />,
+  risk: <RiskTab />,
+  alert: <AlertTab />,
+    analytics: <AnalyticsTab />,
+  ai: <AIControlTab />,
 };
 
 export default function App() {
@@ -41,7 +50,10 @@ export default function App() {
   const scrollByTab = useRef<Record<string, number>>({});
   useTheme();
   useCoreBootstrap();
-  useMarketWebSocket();
+  const { applySubscriptions } = useMarketWebSocket();
+  const subscribeSymbols = useAppStore((s) => s.subscribeSymbols);
+  // Mantem as subscriptions do Core alinhadas a watchlist exibida.
+  useEffect(() => { applySubscriptions(subscribeSymbols); }, [applySubscriptions, subscribeSymbols]);
   useKeyboardShortcuts(setActiveTab);
 
   useLayoutEffect(() => {
@@ -54,7 +66,7 @@ export default function App() {
 
   return (
     <>
-      {/* Camada de fundo quântico com partículas e linhas de energia */}
+      {/* Camada de fundo quÃ¢ntico com partÃ­culas e linhas de energia */}
       <QuantumBackground density={60} speed={1} />
       <SystemStartupSync />
       <AuthGate>
