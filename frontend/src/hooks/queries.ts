@@ -1,4 +1,5 @@
 import { QueryClient } from '@tanstack/react-query';
+import { useCallback, useState } from 'react';
 import { apiBase } from '../lib/api';
 import { useQuery } from '@tanstack/react-query';
 
@@ -140,6 +141,36 @@ export function useIntents(limit = 25) {
     queryFn: () => get<IntentsSnapshot>(`/api/intents?limit=${limit}`),
     refetchInterval: 8_000, staleTime: 7_000, retry: 1,
   });
+}
+
+// Reconciliação manual de intents contra a conta (POST; relatório exibido no painel).
+export type ReconcileReport = {
+  ok?: boolean; checked?: number; reconciled?: number; unknown?: number;
+  still_pending?: number; error?: string;
+};
+export function useReconcile() {
+  const [report, setReport] = useState<ReconcileReport | null>(null);
+  const [busy, setBusy] = useState(false);
+  const run = useCallback(async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const r = await fetch(`${API}/api/intents/reconcile`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}), signal: AbortSignal.timeout(15000),
+      });
+      const d = (await r.json()) as ReconcileReport;
+      setReport(d);
+      return d;
+    } catch (e) {
+      const d: ReconcileReport = { ok: false, error: e instanceof Error ? e.message : 'Gateway indisponível.' };
+      setReport(d);
+      return d;
+    } finally {
+      setBusy(false);
+    }
+  }, [busy]);
+  return { report, busy, run };
 }
 
 // Diagnóstico do boot (reconciliação + snapshot inicial) — leitura única, sem polling.
