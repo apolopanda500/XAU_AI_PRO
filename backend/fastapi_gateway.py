@@ -29,6 +29,15 @@ RATE_LIMIT_CMD_MAX = gw.RATE_LIMIT_CMD_MAX
 _RATE_STATE = {"count": 0, "window": 0.0}
 _RATE_STATE_CMD = {"count": 0, "window": 0.0}
 
+app = FastAPI(
+    title="XAU AI PRO Trading Gateway",
+    version="1.2.3",
+    description="Gateway local HTTP (FastAPI) - somente leitura e comandos DEMO.",
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+    openapi_url="/api/openapi.json",
+)
+
 
 @app.middleware("http")
 async def _auth_rate_limit(request, call_next):  # type: ignore[no-untyped-def]
@@ -60,14 +69,6 @@ async def _auth_rate_limit(request, call_next):  # type: ignore[no-untyped-def]
             state["count"] += 1
     return await call_next(request)
 
-app = FastAPI(
-    title="XAU AI PRO Trading Gateway",
-    version="1.2.3",
-    description="Gateway local HTTP (FastAPI) - somente leitura e comandos DEMO.",
-    docs_url="/api/docs",
-    redoc_url="/api/redoc",
-    openapi_url="/api/openapi.json",
-)
 
 app.add_middleware(
     CORSMiddleware,
