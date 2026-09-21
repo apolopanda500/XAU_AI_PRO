@@ -358,8 +358,15 @@ def _ensure_mt5() -> bool:
         report = intent_log.reconcile(mt5)
         if report.get("checked"):
             print(f"[gateway] reconciliacao de intents: {report}")
+        watchdog.record("boot", {"mt5_ready": True, "reconcile": report})
     except Exception as exc:
         print(f"[gateway] reconciliacao indisponivel: {exc}")
+    try:
+        snapshot = watchdog.snapshot_metrics("boot")
+        print(f"[gateway] snapshot inicial: equity={snapshot.get('equity')} "
+              f"posicoes={snapshot.get('positions')} ea={snapshot.get('ea_state')}")
+    except Exception as exc:
+        print(f"[gateway] snapshot inicial indisponivel: {exc}")
     return True
 
 

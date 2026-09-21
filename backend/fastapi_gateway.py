@@ -876,8 +876,34 @@ async def _unhandled(request: Any, exc: Exception) -> JSONResponse:
     return _send({"ok": False, "error": "internal_error"}, 500)
 
 
+def boot_report() -> dict:
+    """Backfill de boot: reconciliacao de intents + snapshot inicial de telemetria.
+
+    Espelha o boot do gateway stdlib (gw._ensure_mt5 ja grava ambos) sem
+    bloquear: falhas de MT5 viram campos None/reporte parcial, nunca excecao.
+    """
+    ready, err = False, ""
+    try:
+        ready = bool(gw._ensure_mt5())
+    except Exception as exc:
+        err = str(exc)[:200]
+    snap, snap_err = {}, ""
+    try:
+        snapshot = gw.watchdog.snapshot_metrics("boot")
+        snap = {k: snapshot.get(k) for k in
+                ("ts_iso", "equity", "balance", "positions",
+                 "floating_profit", "ea_state", "terminal_connected")}
+    except Exception as exc:
+        snap_err = str(exc)[:200]
+    out = {"ok": True, "mt5_ready": ready, "error": err, "snapshot": snap,
+           "snapshot_error": snap_err, "source": "boot_report"}
+    print(f"[gateway] boot: {out}")
+    return out
+
+
 def main() -> None:
     import uvicorn
+    print(f"[gateway] boot: {boot_report()}")
     gw.start_guardian_loop()
     persistent_queue.start_queue_loop()
     gw.watchdog.start_telemetry_loop()
