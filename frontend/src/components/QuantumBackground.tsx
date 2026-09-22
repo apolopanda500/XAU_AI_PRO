@@ -15,7 +15,7 @@
  * - className: classes CSS adicionais
  */
 
-import { useEffect, useRef, useCallback } from 'react';
+import { memo, useEffect, useRef, useCallback } from 'react';
 import { cssVar } from '../hooks/useTheme';
 
 /* ---------- Tipos ---------- */
@@ -50,7 +50,7 @@ const LINE_WIDTH = 0.5;
 
 /* ---------- Componente Principal ---------- */
 
-export default function QuantumBackground({
+function QuantumBackground({
   density = DEFAULT_DENSITY,
   speed = DEFAULT_SPEED,
   className = '',
@@ -259,3 +259,5 @@ export default function QuantumBackground({
     />
   );
 }
+
+export default memo(QuantumBackground);

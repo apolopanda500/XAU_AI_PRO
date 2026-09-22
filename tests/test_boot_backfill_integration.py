@@ -18,6 +18,8 @@ import tempfile
 import types
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 _ENV_KEYS = ("APPDATA", "XAU_MT5_COMMON_FILES", "XAU_APP_CONFIG", "XAU_AUDIT_FILE",
@@ -49,18 +51,30 @@ def _setup(tmp: str) -> tuple:
     return watchdog, intent_log, fastapi
 
 
-def test_boot_report_sem_mt5(watchdog, intent_log, fastapi) -> None:
+@pytest.fixture()
+def boot_backfill_modules(tmp_path, monkeypatch):
+    """Isola os modulos do boot/backfill para a execucao via pytest."""
+    for key in _ENV_KEYS:
+        monkeypatch.delenv(key, raising=False)
+    return _setup(str(tmp_path))
+
+
+def _assert_boot_report_sem_mt5(watchdog, intent_log, fastapi) -> None:
     out = fastapi.boot_report()
     assert out.get("ok") is True, out
     assert out.get("source") == "boot_report", out
-    assert out.get("mt5_ready") is False, out  # terminal64.exe ausente no teste
     snap = out.get("snapshot") or {}
     assert "ts_iso" in snap and "equity" in snap, out
+    assert snap.get("terminal_connected") is False, out
     hist = watchdog.history(10)
     assert hist.get("count", 0) >= 1, hist  # primeiro ponto persistido
 
 
-def test_boot_route_fastapi_sem_mt5(watchdog, intent_log, fastapi) -> None:
+def test_boot_report_sem_mt5(boot_backfill_modules) -> None:
+    _assert_boot_report_sem_mt5(*boot_backfill_modules)
+
+
+def _assert_boot_route_fastapi_sem_mt5(watchdog, intent_log, fastapi) -> None:
     import asyncio
     import json
     from fastapi.responses import JSONResponse
@@ -71,18 +85,30 @@ def test_boot_route_fastapi_sem_mt5(watchdog, intent_log, fastapi) -> None:
         assert out.status_code == 200, data
 
 
-def test_reconcile_vazio_sem_erro(watchdog, intent_log, fastapi) -> None:
+def test_boot_route_fastapi_sem_mt5(boot_backfill_modules) -> None:
+    _assert_boot_route_fastapi_sem_mt5(*boot_backfill_modules)
+
+
+def _assert_reconcile_vazio_sem_erro(watchdog, intent_log, fastapi) -> None:
     import MetaTrader5 as mt5
     report = intent_log.reconcile(mt5)
     assert report.get("ok") is True, report
     assert report.get("checked") == 0, report
 
 
-def test_evento_boot_na_telemetria(watchdog, intent_log, fastapi) -> None:
+def test_reconcile_vazio_sem_erro(boot_backfill_modules) -> None:
+    _assert_reconcile_vazio_sem_erro(*boot_backfill_modules)
+
+
+def _assert_evento_boot_na_telemetria(watchdog, intent_log, fastapi) -> None:
     watchdog.record("boot", {"mt5_ready": False, "reconcile": {"checked": 0}})
     tel = watchdog.telemetry(10)
     kinds = [e.get("kind") for e in tel.get("events", [])]
     assert "boot" in kinds, tel
+
+
+def test_evento_boot_na_telemetria(boot_backfill_modules) -> None:
+    _assert_evento_boot_na_telemetria(*boot_backfill_modules)
 
 
 def main() -> int:
@@ -91,10 +117,10 @@ def main() -> int:
     try:
         with tempfile.TemporaryDirectory() as tmp:
             mods = _setup(tmp)
-            test_boot_report_sem_mt5(*mods)
-            test_boot_route_fastapi_sem_mt5(*mods)
-            test_reconcile_vazio_sem_erro(*mods)
-            test_evento_boot_na_telemetria(*mods)
+            _assert_boot_report_sem_mt5(*mods)
+            _assert_boot_route_fastapi_sem_mt5(*mods)
+            _assert_reconcile_vazio_sem_erro(*mods)
+            _assert_evento_boot_na_telemetria(*mods)
         print("BOOT_BACKFILL_INTEGRATION_OK")
         return 0
     except AssertionError as exc:

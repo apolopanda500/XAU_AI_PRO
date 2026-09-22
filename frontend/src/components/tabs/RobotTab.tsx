@@ -1,83 +1,32 @@
 import { useCallback, useEffect, useState } from 'react';
-import { invoke } from '@tauri-apps/api/tauri';
+import { apiBase } from '../../lib/api';
 import { useAppStore } from '../../hooks/useAppStore';
+import RobotCommandPanel from '../RobotCommandPanel';
+import StrategyGovernancePanel from '../StrategyGovernancePanel';
+import StrategyOperationsPanel from '../StrategyOperationsPanel';
+import InventoryPanel from '../InventoryPanel';
+import { assetIcon } from '../../lib/assetIcons';
 
-const MT5 = 'http://127.0.0.1:9001';
+const MT5 = `${apiBase()}`;
+type TerminalLog = { time: string; level: 'INFO' | 'WARN' | 'ERROR'; source: string; message: string };
 
 export default function RobotTab() {
-  const [connecting, setConnecting] = useState(false);
-  const [connectionMessage, setConnectionMessage] = useState('');
-  const [lastCheck, setLastCheck] = useState('nunca');
-  const [error, setError] = useState('');
-  const [cpuCores, setCpuCores] = useState<number | null>(null);
-  const [memoryMb, setMemoryMb] = useState<number | null>(null);
-  const [cpuTemperature, setCpuTemperature] = useState<number | null>(null);
-  const [gpuName, setGpuName] = useState<string | null>(null);
-  const [gpuMonitoring, setGpuMonitoring] = useState(false);
-  const robotStatus = useAppStore((s) => s.robotStatus);
-  const setRobotStatus = useAppStore((s) => s.setRobotStatus);
-  const magicNumber = useAppStore((s) => s.magicNumber);
-  const setMagicNumber = useAppStore((s) => s.setMagicNumber);
-  const account = useAppStore((s) => s.account);
-  const systemState = useAppStore((s) => s.systemState);
-  const settings = useAppStore((s) => s.settings);
-  const setSettings = useAppStore((s) => s.setSettings);
-  const setAccount = useAppStore((s) => s.setAccount);
-
-  const checkConnection = useCallback(async () => {
-    setConnecting(true);
-    try {
-      const response = await fetch(`${MT5}/api/status`, { signal: AbortSignal.timeout(5000) });
-      if (!response.ok) throw new Error(`MT5 HTTP ${response.status}`);
-      const data = await response.json() as { account?: Record<string, unknown> };
-      if (data.account) {
-        const a = data.account;
-        setAccount({ login: String(a.login ?? ''), balance: Number(a.balance ?? 0), equity: Number(a.equity ?? 0), margin: Number(a.margin ?? 0), free_margin: Number(a.free_margin ?? a.margin_free ?? 0), leverage: String(a.leverage ?? 0), server: String(a.server ?? ''), currency: String(a.currency ?? ''), profit: Number(a.profit ?? 0), trade_allowed: Boolean(a.trade_allowed) });
-      }
-      setRobotStatus('Conectado'); setError(''); setConnectionMessage('MT5 conectado com dados reais.');
-    } catch (err) {
-      setRobotStatus('Desconectado'); setAccount(null); setError(err instanceof Error ? err.message : 'MT5 indisponível'); setConnectionMessage('MT5 não respondeu. Verifique o terminal e o bridge.');
-    } finally { setLastCheck(new Date().toLocaleTimeString('pt-BR')); setConnecting(false); }
-  }, [setAccount, setRobotStatus]);
-
-  useEffect(() => {
-    setCpuCores(navigator.hardwareConcurrency || null);
-    const memory = (performance as Performance & { memory?: { usedJSHeapSize: number } }).memory;
-    if (memory) setMemoryMb(Math.round(memory.usedJSHeapSize / 1024 / 1024));
-    const readHardware = async () => {
-      try {
-        const telemetry = await invoke<{ cpu_temperature_c?: number; gpu_name?: string; gpu_available: boolean }>('hardware_telemetry');
-        setCpuTemperature(telemetry.cpu_temperature_c ?? null);
-        setGpuName(telemetry.gpu_available ? telemetry.gpu_name ?? null : null);
-      } catch {
-        setCpuTemperature(null);
-        setGpuName(null);
-      }
-    };
-    void readHardware();
-    const hardwareTimer = window.setInterval(() => void readHardware(), 15000);
-    let timer: number | undefined;
-    if (settings.mt5AutoConnect) {
-      void checkConnection();
-      timer = window.setInterval(() => void checkConnection(), 5000);
-    }
-    return () => { if (timer) window.clearInterval(timer); window.clearInterval(hardwareTimer); };
-  }, [checkConnection, settings.mt5AutoConnect]);
-
-  const disconnectRobot = () => { setRobotStatus('Desconectado'); setAccount(null); setConnectionMessage('Conexão visual encerrada. O EA não foi desligado nem alterado.'); };
-
-  return <div className="robot-tab">
-    <div className="page-head"><h1>Robô MT5</h1><span className="muted">Conexão real, execução manual e estado do Expert Advisor</span></div>
-    <div className="grid cols-2">
-      <div className="card"><h2>Controle seguro</h2><div className="switch-row"><div><div className="switch-label">Estado da conexão</div><div className="switch-desc">Somente leitura e sincronização com o terminal</div></div><span className={`chip ${robotStatus === 'Conectado' ? 'ok' : 'warn'}`}>{robotStatus}</span></div>
-        <div className="field"><label htmlFor="magic">Magic Number</label><input id="magic" type="number" value={magicNumber} onChange={(e) => setMagicNumber(Number(e.target.value) || 0)} /><span className="hint">Identificação das operações do XAU AI PRO.</span></div>
-        <div className="field"><label htmlFor="mt5path">Caminho do terminal MT5</label><input id="mt5path" type="text" placeholder="C:\Program Files\MetaTrader 5\terminal64.exe" value={settings.mt5Path} onChange={(e) => setSettings({ mt5Path: e.target.value })} /></div>
-        <div className="check-row"><input id="mt5auto" type="checkbox" checked={settings.mt5AutoConnect} onChange={(e) => setSettings({ mt5AutoConnect: e.target.checked })} /><label htmlFor="mt5auto">Sincronizar automaticamente ao iniciar</label></div>
-        <div className="btn-row" style={{ marginTop: 16 }}><button className="btn primary" type="button" onClick={checkConnection} disabled={connecting}>{connecting ? 'Verificando...' : 'Conectar e atualizar'}</button><button className="btn danger" type="button" onClick={disconnectRobot} disabled={connecting}>Desconectar app</button></div>
-        <div className="hint" style={{ marginTop: 10 }}>Última verificação real: {lastCheck}</div>{connectionMessage && <div className="hint" role="status" style={{ marginTop: 8 }}>{connectionMessage}</div>}{error && <div className="hint neg" role="alert" style={{ marginTop: 8 }}>Erro: {error}</div>}
-      </div>
-      <div className="card"><h2>Terminal MT5</h2>{account ? <div className="tbl-wrap"><table className="tbl"><tbody><tr><td>Login</td><td className="mono">{account.login}</td></tr><tr><td>Servidor</td><td>{account.server}</td></tr><tr><td>Saldo / equidade</td><td className="mono">{account.balance} / {account.equity} {account.currency}</td></tr><tr><td>Margem livre</td><td className="mono">{account.free_margin}</td></tr><tr><td>Negociação</td><td><span className={`chip ${account.trade_allowed ? 'ok' : 'warn'}`}>{account.trade_allowed ? 'Permitida' : 'Bloqueada'}</span></td></tr></tbody></table></div> : <div className="placeholder"><span>Terminal MT5 aguardando conexão real.</span><span className="muted">Nenhum dado simulado é exibido.</span></div>}<div style={{ marginTop: 12 }}><span className="chip">Core: {systemState?.status ?? 'aguardando'}</span> <span className="chip">EA: {robotStatus}</span></div><div className="hint" style={{ marginTop: 12 }}>Desconectar o app não desliga nem altera o EA. Ordens dependem da configuração manual do usuário.</div></div>
-    </div>
-    <div className="card" style={{ marginTop: 14 }}><h2>Recursos e segurança</h2><div className="grid cols-4"><div><span className="kpi-label">CPU disponível</span><div className="kpi-value">{cpuCores ?? '--'}<span className="kpi-sub"> núcleos</span></div></div><div><span className="kpi-label">Temperatura CPU</span><div className="kpi-value">{cpuTemperature != null ? `${cpuTemperature.toFixed(1)} °C` : '--'}</div><div className="kpi-sub">Leitura nativa; indisponível sem sensor</div></div><div><span className="kpi-label">GPU opcional</span><div className="check-row" style={{ margin: '6px 0' }}><input id="gpu-monitoring" type="checkbox" checked={gpuMonitoring} onChange={(e) => setGpuMonitoring(e.target.checked)} /><label htmlFor="gpu-monitoring">Monitorar</label></div><div className="kpi-sub">{gpuMonitoring ? (gpuName ?? 'GPU não exposta pelo driver') : 'Desativado pelo usuário'}</div></div><div><span className="kpi-label">Operação</span><div><span className="chip warn">Manual</span></div><div className="kpi-sub">Sem saque e sem ordem automática</div></div></div><div className="hint" style={{ marginTop: 12 }}>A GPU é apenas monitorada quando habilitada; o app não envia ordens nem movimenta ativos.</div></div>
+  const [connecting, setConnecting] = useState(false); const [lastCheck, setLastCheck] = useState('nunca'); const [error, setError] = useState(''); const [logs, setLogs] = useState<TerminalLog[]>([]);
+  const [assets, setAssets] = useState<Array<{ symbol: string; asset_class?: string; volume_min?: number; volume_max?: number }>>([]);
+  const robotStatus = useAppStore(s=>s.robotStatus); const setRobotStatus = useAppStore(s=>s.setRobotStatus); const magicNumber = useAppStore(s=>s.magicNumber); const setMagicNumber = useAppStore(s=>s.setMagicNumber); const account = useAppStore(s=>s.account); const setAccount = useAppStore(s=>s.setAccount); const systemState = useAppStore(s=>s.systemState); const positions = useAppStore(s=>s.positions); const quotes = useAppStore(s=>s.quotes); const selectedSymbol = useAppStore(s=>s.selectedSymbol); const setSelectedSymbol = useAppStore(s=>s.setSelectedSymbol);
+  useEffect(() => { let active = true; const loadAssets = async () => { try { const response = await fetch(`${MT5}/api/assets`, { signal: AbortSignal.timeout(5000) }); if (!response.ok) return; const data = await response.json() as { symbols?: Array<{ symbol: string; asset_class?: string; volume_min?: number; volume_max?: number }> }; if (active) setAssets(data.symbols ?? []); } catch { /* MT5 indisponível permanece explícito */ } }; void loadAssets(); const timer = window.setInterval(loadAssets, 30000); return () => { active = false; window.clearInterval(timer); }; }, []);
+  const selectedAsset = assets.find(asset => asset.symbol === selectedSymbol);
+  useEffect(() => { let active = true; const pollJournal = async () => { try { const response = await fetch(`${MT5}/api/status`, { signal: AbortSignal.timeout(5000) }); const data = await response.json() as { ea_heartbeat?: { live?: boolean; age_sec?: number; symbol?: string; autotrading?: boolean } }; if (!active || !data.ea_heartbeat) return; const hb = data.ea_heartbeat; log(hb.live ? 'INFO' : 'WARN', hb.live ? `EA ativo · ${hb.symbol ?? selectedSymbol} · heartbeat ${hb.age_sec ?? 0}s · AutoTrading ${hb.autotrading ? 'ativo' : 'desativado'}` : 'EA sem heartbeat recente; verifique o gráfico e o Journal do MT5.', 'EA'); } catch { if (active) log('WARN', 'Gateway sem resposta durante a leitura do Journal.', 'GATEWAY'); } }; void pollJournal(); const timer = window.setInterval(pollJournal, 10000); return () => { active = false; window.clearInterval(timer); }; }, [selectedSymbol]);
+  const log = (level: TerminalLog['level'], message: string, source = 'APP') => setLogs(prev => [{ time: new Date().toLocaleTimeString('pt-BR'), level, source, message }, ...prev].slice(0, 100));
+  useEffect(() => { let active = true; let last = ''; const pollRuntime = async () => { try { const response = await fetch(`${MT5}/api/status`, { signal: AbortSignal.timeout(5000) }); if (!response.ok) return; const data = await response.json() as { terminal_connected?: boolean; account?: { login?: number; server?: string; mode?: string; balance?: number; equity?: number; margin_free?: number; trade_allowed?: boolean }; ea_heartbeat?: { live?: boolean; age_sec?: number; symbol?: string; autotrading?: boolean }; positions?: unknown[]; quote?: { bid?: number; ask?: number } }; const a = data.account; const hb = data.ea_heartbeat; const message = `Plataforma MT5 ${data.terminal_connected ? 'conectada' : 'desconectada'} · ${a?.server ?? 'servidor --'} · conta ${a?.login ?? '--'} ${a?.mode ?? 'modo --'} · EA ${hb?.live ? 'vivo' : 'sem heartbeat'} (${hb?.age_sec ?? '--'}s) · AutoTrading ${hb?.autotrading ? 'ativo' : 'desativado'} · posições ${data.positions?.length ?? 0} · margem livre ${a?.margin_free ?? '--'} · negociação ${a?.trade_allowed ? 'permitida' : 'bloqueada'}`; if (active && message !== last) { last = message; log(data.terminal_connected && hb?.live ? 'INFO' : 'WARN', message, 'STATUS'); } } catch { /* indisponibilidade permanece representada pelos eventos do gateway */ } }; void pollRuntime(); const timer = window.setInterval(pollRuntime, 10000); return () => { active = false; window.clearInterval(timer); }; }, []);
+  useEffect(() => { let active = true; const pollMt5Journal = async () => { try { const response = await fetch(`${MT5}/api/journal?limit=25`, { signal: AbortSignal.timeout(5000) }); if (!response.ok) return; const data = await response.json() as { lines?: Array<{ message?: string }> }; if (!active || !data.lines?.length) return; setLogs(prev => { const existing = new Set(prev.map(item => item.message)); const incoming = data.lines!.filter(item => item.message && !existing.has(item.message)).map(item => ({ time: new Date().toLocaleTimeString('pt-BR'), level: 'INFO' as const, source: 'MT5', message: item.message! })); return [...incoming.reverse(), ...prev].slice(0, 100); }); } catch { /* Journal fica explícito quando o Gateway voltar */ } }; void pollMt5Journal(); const timer = window.setInterval(pollMt5Journal, 10000); return () => { active = false; window.clearInterval(timer); }; }, []);
+  const checkConnection = useCallback(async () => { setConnecting(true); try { const response=await fetch(`${MT5}/api/status`,{signal:AbortSignal.timeout(5000)}); const data=await response.json() as {account?:Record<string,unknown>;terminal_connected?:boolean;positions?:unknown[]}; if(!response.ok) throw new Error(`MT5 HTTP ${response.status}`); if(data.account){const a=data.account;setAccount({login:String(a.login??''),balance:Number(a.balance??0),equity:Number(a.equity??0),margin:Number(a.margin??0),free_margin:Number(a.margin_free??0),leverage:String(a.leverage??0),server:String(a.server??''),currency:String(a.currency??''),profit:Number(a.profit??0),trade_allowed:Boolean(a.trade_allowed)});} setRobotStatus(data.terminal_connected?'Conectado':'Desconectado'); setError(''); log('INFO',data.terminal_connected?'MT5 conectado; estado real sincronizado.':'MT5 respondeu, mas o terminal está desconectado.'); } catch(err){setRobotStatus('Desconectado');setAccount(null);const msg=err instanceof Error?err.message:'MT5 indisponível';setError(msg);log('ERROR',msg);} finally{setLastCheck(new Date().toLocaleTimeString('pt-BR'));setConnecting(false);} },[setAccount,setRobotStatus]);
+  const disconnectRobot=()=>{setRobotStatus('Desconectado');setAccount(null);log('INFO','Conexão visual encerrada; EA e MT5 não foram desligados.');};
+  return <div className="robot-tab"><div className="page-head"><h1>Robô MT5</h1><span className="muted">Conexão real, estado do EA e terminal somente leitura</span></div><div className="card" style={{ marginBottom: 14 }}><div className="field"><label htmlFor="robot-asset">Ativo operacional do robô</label><select id="robot-asset" value={selectedSymbol} onChange={event => setSelectedSymbol(event.target.value)}><option value={selectedSymbol}>{selectedSymbol}</option>{assets.filter(asset => asset.symbol !== selectedSymbol).map(asset => <option key={asset.symbol} value={asset.symbol}>{asset.symbol} · {asset.asset_class ?? 'other'}</option>)}</select><span className="hint">Catálogo MT5: {assets.length || 'aguardando'} ativos. Limites: {selectedAsset?.volume_min ?? '--'} até {selectedAsset?.volume_max ?? '--'}. Ordens reais continuam bloqueadas.</span></div></div><RobotCommandPanel symbol={selectedSymbol} /><StrategyGovernancePanel symbol={selectedSymbol} />
+    <div className="grid cols-2"><div className="card"><h2>Conexão e configuração</h2><div className="switch-row"><div><div className="switch-label">Estado MT5 / EA</div><div className="switch-desc">Sincronização real; não inicia o MT5 automaticamente</div></div><span className={`chip ${robotStatus==='Conectado'?'ok':'warn'}`}>{robotStatus}</span></div><div className="field"><label htmlFor="magic">Magic Number</label><input id="magic" type="number" value={magicNumber} onChange={e=>setMagicNumber(Number(e.target.value)||0)}/><span className="hint">Identificação local das operações do XAU AI PRO.</span></div><div className="btn-row"><button className="btn primary" type="button" onClick={checkConnection} disabled={connecting}>{connecting?'Verificando...':'Conectar e atualizar'}</button><button className="btn danger" type="button" onClick={disconnectRobot} disabled={connecting}>Desconectar app</button></div><div className="hint">Última verificação real: {lastCheck}</div>{error&&<div className="hint neg" role="alert">Erro: {error}</div>}</div>
+      <div className="card"><h2>Conta e estado operacional</h2>{account?<div className="tbl-wrap"><table className="tbl"><tbody><tr><td>Login / servidor</td><td className="mono">{account.login} · {account.server}</td></tr><tr><td>Saldo / equidade</td><td className="mono">{account.balance} / {account.equity} {account.currency}</td></tr><tr><td>Margem livre</td><td className="mono">{account.free_margin}</td></tr><tr><td>Negociação</td><td><span className={`chip ${account.trade_allowed?'ok':'warn'}`}>{account.trade_allowed?'Permitida':'Bloqueada'}</span></td></tr></tbody></table></div>:<div className="placeholder"><span>Aguardando dados reais do MT5.</span><span className="muted">Nenhum dado simulado é exibido.</span></div>}<div className="btn-row"><span className="chip">Core: {systemState?.status??'aguardando'}</span><span className="chip">EA: {robotStatus}</span><span className="chip">Posições: {positions.length}</span></div></div></div>
+    <div className="card" style={{marginTop:14}}><div className="btn-row" style={{justifyContent:'space-between',marginTop:0}}><h2 style={{margin:0}}>Mini terminal · eventos reais</h2><span className="muted">somente leitura</span></div><div className="log-box" style={{marginTop:12,maxHeight:260}}>{logs.length?logs.map((entry,index)=><div key={`${entry.time}-${index}`}><span className="muted">[{entry.time}]</span> <span className={entry.level==='ERROR'?'neg':entry.level==='WARN'?'warn-text':'pos'}>{entry.level}</span> {entry.message}</div>):<div className="muted">Aguardando eventos reais do MT5/Core...</div>}</div><div className="hint" style={{marginTop:10}}>Este terminal consolida apenas respostas recebidas do gateway e do Core. Não envia ordens, saques ou comandos ao EA.</div></div>
+    <div className="card" style={{marginTop:14}}><h2>Mercado operacional</h2>{quotes.length?<div className="tbl-wrap"><table className="tbl"><thead><tr><th>Ativo</th><th>Bid</th><th>Ask</th><th>Spread</th><th>Fonte</th></tr></thead><tbody>{quotes.slice(0,12).map(q=><tr key={q.symbol} className={q.symbol===selectedSymbol?'selected':''}><td><button className="btn xs ghost" type="button" onClick={()=>setSelectedSymbol(q.symbol)}>{q.symbol}</button></td><td className="mono">{q.bid.toFixed(q.digits)}</td><td className="mono">{q.ask.toFixed(q.digits)}</td><td className="mono">{q.spread.toFixed(q.digits)}</td><td><span className="chip ok">{q.source}</span></td></tr>)}</tbody></table></div>:<div className="placeholder"><span>Aguardando cotações reais.</span><span className="muted">Conecte o MT5 para alimentar o terminal do Robô.</span></div>}</div>
+    <div className="card" style={{marginTop:14}}><h2>Estratégia e validação</h2><div className="grid cols-4"><div><span className="kpi-label">Ativo</span><div className="mono">{selectedSymbol}</div></div><div><span className="kpi-label">Fonte</span><div className="muted">MT5 real</div></div><div><span className="kpi-label">Execução</span><div><span className="chip warn">Manual</span></div></div><div><span className="kpi-label">EA</span><div><span className={`chip ${robotStatus === 'Conectado' ? 'ok' : 'warn'}`}>{robotStatus}</span></div></div></div><div className="hint" style={{marginTop:10}}>A validação de estratégia deve usar histórico real e permanecer separada da execução. Nenhum teste altera o EA ou envia ordens.</div></div>
   </div>;
 }

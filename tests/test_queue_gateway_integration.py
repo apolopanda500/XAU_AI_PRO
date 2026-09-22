@@ -20,10 +20,13 @@ import tempfile
 import types
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 _ENV_KEYS = ("APPDATA", "XAU_MT5_COMMON_FILES", "XAU_APP_CONFIG", "XAU_AUDIT_FILE",
-             "XAU_REAL_EMERGENCY_FILE", "XAU_QUEUE_FILE", "XAU_ENABLE_DEMO_ORDERS")
+             "XAU_REAL_EMERGENCY_FILE", "XAU_QUEUE_FILE", "XAU_ENABLE_DEMO_ORDERS",
+             "XAU_RATE_LIMIT", "XAU_RATE_LIMIT_CMD")
 
 
 class _Ctx:
@@ -41,6 +44,8 @@ def _setup(tmp: str) -> None:
     os.environ["XAU_REAL_EMERGENCY_FILE"] = str(Path(tmp) / "STOP")
     os.environ["XAU_QUEUE_FILE"] = str(Path(tmp) / "command_queue.json")
     os.environ["XAU_ENABLE_DEMO_ORDERS"] = "1"
+    os.environ["XAU_RATE_LIMIT"] = "1000"
+    os.environ["XAU_RATE_LIMIT_CMD"] = "1000"
     _Ctx.fake = types.ModuleType("MetaTrader5")
     sys.modules["MetaTrader5"] = _Ctx.fake
     import backend.persistent_queue as pq  # primeiro import: envs ja aplicados
@@ -48,9 +53,33 @@ def _setup(tmp: str) -> None:
     _Ctx.pq, _Ctx.gw = pq, gw_mod
 
 
+@pytest.fixture()
+def queue_gateway_context(tmp_path, monkeypatch):
+    """Inicializa fila, gateway e MT5 fake para a execucao via pytest."""
+    old_fake = sys.modules.get("MetaTrader5")
+    for key in _ENV_KEYS:
+        monkeypatch.delenv(key, raising=False)
+    _setup(str(tmp_path))
+    import backend.persistent_queue as pq_mod
+    import backend.mt5_gateway as gw_mod
+    _Ctx.pq = importlib.reload(pq_mod)
+    _Ctx.gw = importlib.reload(gw_mod)
+    try:
+        yield
+    finally:
+        _Ctx.gw = None
+        _Ctx.pq = None
+        _Ctx.fake = None
+        if old_fake is None:
+            sys.modules.pop("MetaTrader5", None)
+        else:
+            sys.modules["MetaTrader5"] = old_fake
+
+
 def _make_handler(path: str, body: bytes = b""):
     handler = _Ctx.gw.Handler.__new__(_Ctx.gw.Handler)
     handler.path = path
+    handler.command = "POST" if body else "GET"
     handler.rfile = io.BytesIO(body)
     handler.wfile = io.BytesIO()
     handler.headers = {"Content-Type": "application/json",
@@ -66,7 +95,7 @@ def _json_out(handler) -> dict:
     return json.loads(handler.wfile.getvalue().decode("utf-8"))
 
 
-def test_offline_close_enfileira_202():
+def _assert_offline_close_enfileira_202():
     handler, status = _make_handler("/api/demo/close", b'{"ticket": 123}')
     _Ctx.gw.Handler.do_POST(handler)
     assert status == [202], f"status inesperado {status}: {_json_out(handler)}"
@@ -77,7 +106,11 @@ def test_offline_close_enfileira_202():
     assert "close" in [x["kind"] for x in resumo["recent"]]
 
 
-def test_terminal_online_nao_enfileira():
+def test_offline_close_enfileira_202(queue_gateway_context):
+    _assert_offline_close_enfileira_202()
+
+
+def _assert_terminal_online_nao_enfileira():
     _Ctx.fake.terminal_info = lambda: types.SimpleNamespace(connected=True)
     antes = _Ctx.pq.queue_status()["count"]
     handler, status = _make_handler("/api/demo/close", b'{"ticket": 456}')
@@ -86,7 +119,11 @@ def test_terminal_online_nao_enfileira():
     assert _Ctx.pq.queue_status()["count"] == antes
 
 
-def test_ordem_nunca_enfileira():
+def test_terminal_online_nao_enfileira(queue_gateway_context):
+    _assert_terminal_online_nao_enfileira()
+
+
+def _assert_ordem_nunca_enfileira():
     handler, status = _make_handler("/api/demo/order", b"{}")
     _Ctx.gw.Handler.do_POST(handler)
     assert status == [403], f"status inesperado {status}: {_json_out(handler)}"
@@ -94,12 +131,20 @@ def test_ordem_nunca_enfileira():
     assert all(x.get("kind") != "order" for x in resumo["recent"])
 
 
-def test_get_queue_status_200():
+def test_ordem_nunca_enfileira(queue_gateway_context):
+    _assert_ordem_nunca_enfileira()
+
+
+def _assert_get_queue_status_200():
     handler, status = _make_handler("/api/queue/status")
     _Ctx.gw.Handler.do_GET(handler)
     assert status == [200], f"status inesperado {status}"
     data = _json_out(handler)
     assert data.get("ok") is True and "pending" in data and "count" in data
+
+
+def test_get_queue_status_200(queue_gateway_context):
+    _assert_get_queue_status_200()
 
 
 def main() -> int:
@@ -108,10 +153,10 @@ def main() -> int:
     try:
         with tempfile.TemporaryDirectory() as tmp:
             _setup(tmp)
-            test_offline_close_enfileira_202()
-            test_terminal_online_nao_enfileira()
-            test_ordem_nunca_enfileira()
-            test_get_queue_status_200()
+            _assert_offline_close_enfileira_202()
+            _assert_terminal_online_nao_enfileira()
+            _assert_ordem_nunca_enfileira()
+            _assert_get_queue_status_200()
         print("QUEUE_GATEWAY_INTEGRATION_OK")
         return 0
     except AssertionError as exc:

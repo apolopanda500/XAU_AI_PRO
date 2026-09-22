@@ -153,7 +153,7 @@ class SettingsTab:
         req_card = Card(self.frame, title="Sobre o Robo + Requisitos Minimos e Recomendados")
         req_card.pack(fill="x", padx=24, pady=10)
         req_text = (
-            "XAU AI PRO v1.2.0 - robo + desk operacional para MetaTrader 5 (Windows 64-bit).\n"
+            "XAU AI PRO v1.2.3 - robo + desk operacional para MetaTrader 5 (Windows 64-bit).\n"
             "O EA (.ex5) executa a estrategia no MT5; este app monitora, audita e opera manualmente.\n"
             "----------------------------------------------------------------\n"
             "MINIMO: Windows 10 64-bit | 4 nucleos CPU | 8 GB RAM | 2 GB disco livre |\n"

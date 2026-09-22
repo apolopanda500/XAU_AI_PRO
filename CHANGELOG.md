@@ -1,5 +1,19 @@
 ﻿# CHANGELOG
 
+## [Unreleased] - Auditoria de segurança + correção anti-falso-positivo
+### Segurança
+- `launcher.spec`: `upx=True` → `upx=False` (elimina gatilho de heurística
+  associado à detecção falsa `Trojan:Win32/Bearfoos.A!ml` em 21/09/2026).
+- `app/updater.py`: `check_update()` agora localiza o asset versionado
+  `XAU_AI_PRO_Setup_<versão>.exe` (antes buscava nome literal inexistente).
+- `.gitignore`: nova seção operacional — nunca versionar backups locais,
+  logs de build/validação, laudos gerados por máquina, dados
+  `*.dpapi.json`/`*.dpapi.tmp`, nem a pasta local `XAU AI PRO/`.
+### Corrigido
+- Resolução da raiz do projeto em `validar_build.ps1` robusta a CWD incorreto.
+- Gates do validador agora leem apenas código (ignoram comentários/docstrings),
+  evitando falso alarme sobre `upx` e falso OK sobre onefile/onedir.
+
 ## [1.3.2] - 2026-08-30
 ### Integração Slack + Notificações
 - Novos módulos Python: `slack_notifier.py` (cliente Webhook) e `slack_watcher.py` (monitor de eventos MT5).

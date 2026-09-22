@@ -18,6 +18,8 @@ export type TabType =
 export type ThemeName = 'dark' | 'xau_dark' | 'btc_dark' | 'light' | 'ocean_dark' | 'emerald_dark' | 'rose_dark' | 'violet_dark';
 
 export interface Quote {
+  broker?: string;
+  market?: string;
   symbol: string;
   price: number;
   bid: number;
@@ -32,6 +34,7 @@ export interface Quote {
   digits: number;
   point: number;
   timestamp: string;
+  received_at?: string;
   source: string;
 }
 
@@ -119,6 +122,18 @@ export interface Settings {
   discordActive: boolean;
 }
 
+export const DEFAULT_MARKET_WATCHLIST = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XAUUSD', 'EURUSD', 'GBPUSD', 'USDJPY'];
+
+const normalizeSymbols = (symbols: string[]): string[] => [...new Set(
+  symbols.map((symbol) => String(symbol ?? '').trim().toUpperCase()).filter(Boolean),
+)].slice(0, 24);
+
+const quoteKey = (quote: Quote): string => [
+  String(quote.broker ?? '').trim().toLowerCase(),
+  String(quote.market ?? '').trim().toLowerCase(),
+  String(quote.symbol ?? '').trim().toUpperCase(),
+].join(':');
+
 export const DEFAULT_SETTINGS: Settings = {
   pinEnabled: false,
   pinCode: '',
@@ -158,6 +173,9 @@ interface AppState {
   addQuote: (quote: Quote) => void;
   selectedSymbol: string;
   setSelectedSymbol: (symbol: string) => void;
+  // Lista de interesse do usuário. Persiste mesmo que nenhuma corretora esteja conectada.
+  marketWatchlist: string[];
+  setMarketWatchlist: (symbols: string[]) => void;
   // Símbolos que o painel de mercado quer receber em tempo real (watchlist + seleção).
   // Vazio = usa DEFAULT_SYMBOLS do protocolo.
   subscribeSymbols: string[];
@@ -196,13 +214,15 @@ export const useAppStore = create<AppState>()(
       setQuotes: (quotes) => set({ quotes }),
       addQuote: (quote) =>
         set((state) => ({
-          quotes: [...state.quotes.filter((q) => q.symbol !== quote.symbol), quote],
+          quotes: [...state.quotes.filter((q) => quoteKey(q) !== quoteKey(quote)), quote],
         })),
       // O produto é universal; XAUUSD é apenas uma opção do catálogo.
       selectedSymbol: '',
       setSelectedSymbol: (symbol) => set({ selectedSymbol: symbol }),
+      marketWatchlist: DEFAULT_MARKET_WATCHLIST,
+      setMarketWatchlist: (symbols) => set({ marketWatchlist: normalizeSymbols(symbols) }),
       subscribeSymbols: [],
-      setSubscribeSymbols: (symbols) => set({ subscribeSymbols: [...new Set(symbols.filter(Boolean))].slice(0, 24) }),
+      setSubscribeSymbols: (symbols) => set({ subscribeSymbols: normalizeSymbols(symbols) }),
       wsConnected: false,
       setWsConnected: (connected) => set({ wsConnected: connected }),
       account: null,
@@ -232,6 +252,8 @@ export const useAppStore = create<AppState>()(
       partialize: (state) => ({
         activeTab: state.activeTab,
         selectedSymbol: state.selectedSymbol,
+        marketWatchlist: state.marketWatchlist,
+        subscribeSymbols: state.subscribeSymbols,
         settings: state.settings,
         sidebarOpen: state.sidebarOpen,
         onboardingDone: state.onboardingDone,
@@ -244,6 +266,8 @@ export const useAppStore = create<AppState>()(
           ...p,
           // Mantem a navegacao acessivel apos a troca do asset da marca.
           sidebarOpen: true,
+          marketWatchlist: normalizeSymbols(p.marketWatchlist ?? current.marketWatchlist),
+          subscribeSymbols: normalizeSymbols(p.subscribeSymbols ?? current.subscribeSymbols),
           // Compatibilidade segura: versoes antigas podiam persistir auto-connect=true.
           // A inicializacao do MT5 exige acao explicita do usuario.
           settings: { ...DEFAULT_SETTINGS, ...(p.settings ?? {}), marketAutoRefresh: true, mt5AutoConnect: false },

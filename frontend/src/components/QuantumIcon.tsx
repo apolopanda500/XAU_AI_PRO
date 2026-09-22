@@ -27,7 +27,8 @@ export type IconName =
   | 'dashboard' | 'market' | 'positions' | 'robot' | 'charts'
   | 'vision' | 'strategy' | 'tools' | 'integrations' | 'settings'
   | 'calendar' | 'news' | 'system' | 'info' | 'movements'
-  | 'balances' | 'history' | 'quantum' | 'wallet' | 'lock';
+  | 'balances' | 'history' | 'quantum' | 'wallet' | 'lock'
+  | 'warning' | 'bell' | 'chart';
 
 interface Props {
   name: IconName;
@@ -41,6 +42,9 @@ const iconMap: Record<IconName, (c: string, a: string) => React.ReactNode> = {
   movements, balances, history, calendar, news, system, settings, info,
   wallet, lock, quantum,
   integrations: tools, // fallback
+  warning: info, // reuse info icon
+  bell: info,      // reuse info icon
+  chart: charts,   // reuse charts icon
 };
 
 export const QuantumIcon: React.FC<Props> = ({ name, size = 24, className, glow = true }) => {

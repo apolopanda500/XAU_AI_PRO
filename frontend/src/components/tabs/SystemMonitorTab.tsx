@@ -1,151 +1,19 @@
-﻿import { useState, useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { useAppStore } from '../../hooks/useAppStore';
+import UniversalConnectivityPanel from '../UniversalConnectivityPanel';
 
-interface LogEntry {
-  id: number;
-  timestamp: string;
-  level: 'info' | 'warn' | 'error';
-  message: string;
-}
-
-const LOGS_INICIAIS: LogEntry[] = [
-  { id: 1, timestamp: '10:30:01', level: 'info', message: 'Sistema inicializado com sucesso' },
-  { id: 2, timestamp: '10:30:02', level: 'info', message: 'Conexão WebSocket estabelecida' },
-  { id: 3, timestamp: '10:30:05', level: 'warn', message: 'Latência acima do esperado (250ms)' },
-  { id: 4, timestamp: '10:31:00', level: 'info', message: 'MT5 conectado - servidor OK' },
-  { id: 5, timestamp: '10:32:15', level: 'error', message: 'Falha ao enviar ordem #1002: saldo insuficiente' },
-];
-
-const MENSAGENS_LOG = [
-  'Heartbeat enviado - latência OK',
-  'Cotação XAUUSD atualizada: 2345.50',
-  'Ordem #1003 executada com sucesso',
-  'Margin level: 245% - saudável',
-  'IA processando sinal de compra EURUSD',
-  'WebSocket reconectado automaticamente',
-  'Cache de cotacoes limpo',
-  'Robô EA reportou status: ativo',
-];
-
-function CircularProgress({ valor, max, tamanho = 90, espessura = 8, cor }: { valor: number; max: number; tamanho?: number; espessura?: number; cor: string }) {
-  const raio = (tamanho - espessura) / 2;
-  const circunferencia = 2 * Math.PI * raio;
-  const progresso = Math.min(valor / max, 1);
-  const offset = circunferencia * (1 - progresso);
-
-  return (
-    <svg width={tamanho} height={tamanho} style={{ transform: 'rotate(-90deg)' }}>
-      <circle cx={tamanho/2} cy={tamanho/2} r={raio} fill="none" stroke="var(--border)" strokeWidth={espessura} />
-      <circle cx={tamanho/2} cy={tamanho/2} r={raio} fill="none" stroke={cor} strokeWidth={espessura}
-        strokeDasharray={circunferencia} strokeDashoffset={offset} strokeLinecap="round"
-        style={{ transition: 'stroke-dashoffset 0.5s ease' }} />
-    </svg>
-  );
-}
+type Hardware = { os: string; architecture: string; cpu_name?: string; cpu_cores: number; cpu_usage_percent?: number; memory_total_gb?: number; memory_available_gb?: number; disk_total_gb?: number; disk_free_gb?: number; cpu_temperature_c?: number; gpu_name?: string; };
+type Sensor = { Text?: string; Type?: string; Value?: string; Children?: Sensor[] };
+const flatten = (node: Sensor, out: Sensor[] = []) => { if (node.Type && node.Value) out.push(node); (node.Children ?? []).forEach(child => flatten(child, out)); return out; };
+const readSensor = (nodes: Sensor[], type: string, names: string[]) => { const item = nodes.find(node => node.Type === type && names.some(name => (node.Text ?? '').toLowerCase().includes(name))); const match = item?.Value?.replace(',', '.').match(/-?\d+(?:\.\d+)?/); return match ? Number(match[0]) : undefined; };
+const gaugeColor = (value: number) => value > 80 ? '#ef4444' : value > 60 ? '#eab308' : 'var(--ok)';
 
 export default function SystemMonitorTab() {
-  const systemState = useAppStore((s) => s.systemState);
-  const wsConnected = useAppStore((s) => s.wsConnected);
-  const [logs] = useState<LogEntry[]>([]);
-  const cpuUsage = 0;
-  const memUsage = 0;
-  const diskUsage = 0;
-  const latencia = 0;
-  const temperatura = 0;
-
-  // Métricas reais ainda não são fornecidas pelo Core; não gerar números.
-
-  const corCpu = cpuUsage > 80 ? '#ef4444' : cpuUsage > 50 ? '#eab308' : 'var(--ok)';
-  const corMem = memUsage > 80 ? '#ef4444' : memUsage > 50 ? '#eab308' : 'var(--primary)';
-  const corDisk = diskUsage > 80 ? '#ef4444' : 'var(--muted)';
-  const corTemp = temperatura > 75 ? '#ef4444' : temperatura > 60 ? '#eab308' : 'var(--ok)';
-
-  return (
-    <div>
-      <div className="page-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h1>Monitor do Sistema</h1>
-          <span className="muted">CPU, memória, disco, rede e temperatura em tempo real</span>
-        </div>
-        <span className={wsConnected ? 'chip ok' : 'chip danger'}>{wsConnected ? '● Online' : '○ Offline'}</span>
-      </div>
-
-      <div className="grid cols-4" style={{ marginBottom: 14 }}>
-        <div className="card" style={{ textAlign: 'center' }}>
-          <div className="kpi-label">CPU</div>
-          <div style={{ position: 'relative', display: 'inline-block', margin: '8px 0' }}>
-            <CircularProgress valor={cpuUsage} max={100} cor={corCpu} />
-            <span style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', fontWeight: 700, fontSize: 16 }}>{cpuUsage.toFixed(0)}%</span>
-          </div>
-          <div className="kpi-sub">8 threads</div>
-        </div>
-        <div className="card" style={{ textAlign: 'center' }}>
-          <div className="kpi-label">Memória RAM</div>
-          <div style={{ margin: '16px 0' }}>
-            <div style={{ background: 'var(--border)', borderRadius: 6, height: 12, overflow: 'hidden' }}>
-              <div style={{ width: `${memUsage}%`, height: '100%', background: corMem, borderRadius: 6, transition: 'width 0.5s ease' }} />
-            </div>
-            <div className="kpi-value" style={{ fontSize: 16, marginTop: 8 }}>{memUsage.toFixed(0)}%</div>
-          </div>
-          <div className="kpi-sub">{(memUsage * 0.16).toFixed(1)} GB / 16 GB</div>
-        </div>
-        <div className="card" style={{ textAlign: 'center' }}>
-          <div className="kpi-label">Disco</div>
-          <div style={{ margin: '16px 0' }}>
-            <div style={{ background: 'var(--border)', borderRadius: 6, height: 12, overflow: 'hidden' }}>
-              <div style={{ width: `${diskUsage}%`, height: '100%', background: corDisk, borderRadius: 6, transition: 'width 0.5s ease' }} />
-            </div>
-            <div className="kpi-value" style={{ fontSize: 16, marginTop: 8 }}>{diskUsage.toFixed(0)}%</div>
-          </div>
-          <div className="kpi-sub">{(diskUsage * 5.12).toFixed(0)} GB / 512 GB</div>
-        </div>
-        <div className="card" style={{ textAlign: 'center' }}>
-          <div className="kpi-label">Rede (Latência)</div>
-          <div className="kpi-value" style={{ fontSize: 28, margin: '12px 0' }}>{latencia.toFixed(0)}</div>
-          <div className="kpi-sub">ms</div>
-          <div className="kpi-sub">{latencia < 100 ? '▲ Rápida' : latencia < 200 ? '● Normal' : '▼ Lenta'}</div>
-        </div>
-      </div>
-
-      <div className="grid cols-2" style={{ marginBottom: 14 }}>
-        <div className="card">
-          <h2>Temperatura</h2>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 12 }}>
-            <CircularProgress valor={temperatura} max={100} tamanho={80} espessura={6} cor={corTemp} />
-            <div>
-              <div className="kpi-value" style={{ fontSize: 24 }}>{temperatura.toFixed(1)}°C</div>
-              <div className="kpi-sub">{temperatura > 75 ? '⚠ Superaquecimento' : temperatura > 60 ? '● Aquecido' : '✓ Normal'}</div>
-            </div>
-          </div>
-        </div>
-        <div className="card">
-          <h2>Estado do Core</h2>
-          {systemState ? (
-            <div className="tbl-wrap">
-              <table className="tbl"><tbody>
-                <tr><td>Status</td><td className="mono">{systemState.status}</td></tr>
-                <tr><td>Uptime</td><td className="mono">{Math.floor(systemState.uptime_sec / 60)}m {systemState.uptime_sec % 60}s</td></tr>
-                <tr><td>Clientes WS</td><td className="mono">{systemState.ws_clients}</td></tr>
-                <tr><td>MT5</td><td><span className={systemState.mt5_connected ? 'chip ok' : 'chip warn'}>{systemState.mt5_connected ? 'Conectado' : 'Desconectado'}</span></td></tr>
-                <tr><td>IA</td><td><span className={systemState.ai_enabled ? 'chip primary' : ''}>{systemState.ai_enabled ? 'Ativa' : 'Inativa'}</span></td></tr>
-              </tbody></table>
-            </div>
-          ) : (
-            <span className="muted">aguardando estado...</span>
-          )}
-        </div>
-      </div>
-
-      <div className="card">
-        <h2>Logs do Sistema</h2>
-        <div className="log-box" style={{ maxHeight: 220, fontSize: 12 }}>
-          {logs.map((log) => (
-            <div key={log.id} style={{ color: log.level === 'error' ? 'var(--danger)' : log.level === 'warn' ? 'var(--warn)' : 'var(--text)' }}>
-              <span className="muted">[{log.timestamp}]</span> {log.message}
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
+  const systemState = useAppStore(state => state.systemState); const wsConnected = useAppStore(state => state.wsConnected); const [hardware, setHardware] = useState<Hardware | null>(null); const [sensors, setSensors] = useState<Sensor[]>([]);
+  useEffect(() => { let active = true; const loadHardware = async () => { try { const value = await invoke<Hardware>('hardware_telemetry'); if (active) setHardware(value); } catch {} }; const loadSensors = async () => { try { const response = await fetch('http://127.0.0.1:8085/data.json', { signal: AbortSignal.timeout(3000) }); if (response.ok && active) setSensors(flatten(await response.json() as Sensor)); } catch { if (active) setSensors([]); } }; void loadHardware(); void loadSensors(); const hardwareTimer = window.setInterval(loadHardware, 30000); const sensorTimer = window.setInterval(loadSensors, 5000); return () => { active = false; window.clearInterval(hardwareTimer); window.clearInterval(sensorTimer); }; }, []);
+  const lhmTemp = readSensor(sensors, 'Temperature', ['cpu package', 'core max', 'core average']); const lhmGpuTemp = readSensor(sensors, 'Temperature', ['gpu core', 'gpu temperature']); const lhmLoad = readSensor(sensors, 'Load', ['cpu total']); const temperature = lhmTemp ?? hardware?.cpu_temperature_c; const cpu = lhmLoad ?? hardware?.cpu_usage_percent ?? 0; const total = hardware?.memory_total_gb ?? 0; const free = hardware?.memory_available_gb ?? 0; const memory = total ? ((total - free) / total) * 100 : 0; const tempReady = typeof temperature === 'number' && temperature > 0; const sensorSource = lhmTemp != null ? 'LibreHardwareMonitor' : hardware?.cpu_temperature_c != null ? 'Tauri/WMI' : 'nenhum sensor';
+  return <div><div className="page-head"><div><h1>Monitor do Sistema</h1><span className="muted">Leituras locais reais, atualização suave a cada 30 segundos</span></div><span className={`chip ${wsConnected ? 'ok' : 'danger'}`}>{wsConnected ? 'Online' : 'Offline'}</span></div>
+    <div className="grid cols-4" style={{ marginBottom: 14 }}><div className="card"><span className="kpi-label">CPU · carga</span><div className="kpi-value">{cpu.toFixed(0)}%</div><span className="kpi-sub">{hardware?.cpu_cores ?? '--'} threads · leitura instantânea</span></div><div className="card"><span className="kpi-label">RAM · ocupação</span><div className="kpi-value">{total ? `${memory.toFixed(0)}%` : '—'}</div><span className="kpi-sub">{total ? `${(total - free).toFixed(1)} / ${total.toFixed(1)} GB` : 'sensor indisponível'}</span></div><div className="card"><span className="kpi-label">CPU · temperatura</span><div className="kpi-value" style={{ color: tempReady ? gaugeColor(temperature as number) : undefined }}>{tempReady ? `${(temperature as number).toFixed(1)}°C` : '—'}</div><span className="kpi-sub">Fonte: {sensorSource}</span></div><div className="card"><span className="kpi-label">Core · integridade</span><div className="kpi-value" style={{ fontSize: 20 }}>{systemState?.status ?? 'aguardando'}</div><span className="kpi-sub">{systemState ? `${Math.floor(systemState.uptime_sec / 60)}m de uptime` : 'sem estado recebido'}</span></div></div>
+    <div className="grid cols-2"><div className="card"><h2>Hardware e sensores</h2><div className="tbl-wrap"><table className="tbl"><tbody><tr><td>CPU</td><td>{hardware?.cpu_name ?? 'aguardando identificação'}</td></tr><tr><td>Sistema</td><td>{hardware ? `${hardware.os} · ${hardware.architecture}` : 'aguardando identificação'}</td></tr><tr><td>GPU</td><td>{hardware?.gpu_name ?? 'não detectada / opcional'}</td></tr><tr><td>Temperatura GPU</td><td>{lhmGpuTemp != null ? `${lhmGpuTemp.toFixed(1)}°C · LibreHardwareMonitor` : 'sensor GPU indisponível'}</td></tr><tr><td>MT5</td><td><span className={`chip ${systemState?.mt5_connected ? 'ok' : 'warn'}`}>{systemState?.mt5_connected ? 'Conectado' : 'Desconectado'}</span></td></tr></tbody></table></div></div><div className="card"><h2>Diagnóstico térmico</h2><p className="muted">{tempReady ? `CPU em ${temperature?.toFixed(1)}°C; fonte confirmada: ${sensorSource}.` : 'Nenhum sensor térmico respondeu. Inicie o LibreHardwareMonitor ou permita a leitura Tauri.'}</p><div className="hint">Os valores são somente leitura. Sem valores simulados, sem comandos ao MT5. Atualização a cada 30 segundos para reduzir carga e aquecimento.</div></div></div></div>;
 }

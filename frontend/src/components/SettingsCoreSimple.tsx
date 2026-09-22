@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { apiBase } from '../lib/api';
 import { useAppStore } from '../hooks/useAppStore';
 import { definirPin, removerPin, validarPin } from '../auth/auth';
 import { THEMES } from '../hooks/useTheme';
@@ -18,11 +19,11 @@ export default function SettingsCoreSimple() {
   const [account, setAccount] = useState<Record<string, unknown> | null>(null);
   const [connectivity, setConnectivity] = useState<Record<string, string>>({});
   const refreshAccount = () => {
-    fetch('http://127.0.0.1:9001/api/status', { signal: AbortSignal.timeout(5000) }).then((r) => r.json()).then((d: any) => setConnected(Boolean(d?.terminal_connected))).catch(() => setConnected(false));
-    fetch('http://127.0.0.1:9001/api/account', { signal: AbortSignal.timeout(5000) }).then((r) => r.json()).then((data: any) => { const a = data && typeof data === 'object' ? (data.account ?? data) : null; setAccount(a && typeof a === 'object' ? a : null); }).catch(() => setAccount(null));
+    fetch(`${apiBase()}/api/status`, { signal: AbortSignal.timeout(5000) }).then((r) => r.json()).then((d: any) => setConnected(Boolean(d?.terminal_connected))).catch(() => setConnected(false));
+    fetch(`${apiBase()}/api/account`, { signal: AbortSignal.timeout(5000) }).then((r) => r.json()).then((data: any) => { const a = data && typeof data === 'object' ? (data.account ?? data) : null; setAccount(a && typeof a === 'object' ? a : null); }).catch(() => setAccount(null));
   };
   useEffect(() => { refreshAccount(); const timer = window.setInterval(refreshAccount, 15000); return () => window.clearInterval(timer); }, []);
-  useEffect(() => { if (section !== 'connections') return; let active = true; const check = async () => { const items: Record<string, string> = {}; for (const [name, path] of [['Gateway local', '/api/health'], ['MT5', '/api/status'], ['MEXC API', '/api/universal/account?broker=mexc&market=crypto-spot'], ['Binance API', '/api/universal/account?broker=binance&market=crypto-spot']] as const) { const started = performance.now(); try { const response = await fetch(`http://127.0.0.1:9001${path}`, { signal: AbortSignal.timeout(5000) }); items[name] = response.ok ? `Online · ${Math.round(performance.now() - started)} ms` : 'Indisponível'; } catch { items[name] = 'Indisponível'; } } if (active) setConnectivity(items); }; void check(); const timer = window.setInterval(check, 15000); return () => { active = false; window.clearInterval(timer); }; }, [section]);
+  useEffect(() => { if (section !== 'connections') return; let active = true; const check = async () => { const items: Record<string, string> = {}; for (const [name, path] of [['Gateway local', '/api/health'], ['MT5', '/api/status'], ['MEXC API', '/api/universal/account?broker=mexc&market=crypto-spot'], ['Binance API', '/api/universal/account?broker=binance&market=crypto-spot']] as const) { const started = performance.now(); try { const response = await fetch(`${apiBase()}${path}`, { signal: AbortSignal.timeout(5000) }); items[name] = response.ok ? `Online · ${Math.round(performance.now() - started)} ms` : 'Indisponível'; } catch { items[name] = 'Indisponível'; } } if (active) setConnectivity(items); }; void check(); const timer = window.setInterval(check, 15000); return () => { active = false; window.clearInterval(timer); }; }, [section]);
   const createPin = async () => {
     if (!pin1 || pin1 !== pin2) { setStatus('Os PINs digitados não conferem.'); return; }
     const error = validarPin(pin1);

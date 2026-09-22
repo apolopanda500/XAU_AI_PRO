@@ -381,11 +381,13 @@ async def ea_command(command: str, payload: dict) -> dict:
 
 @app.get("/api/capabilities")
 async def capabilities() -> dict:
+    """Expõe capacidades auditáveis mantendo a execução REAL bloqueada."""
     return {
         "ok": True,
         "source": "fastapi_gateway",
         "withdrawals_enabled": False,
         "generic_commands": False,
+        "real_orders_enabled": False,
         "ea_commands": sorted(f"ea/{item}" for item in _EA_COMMANDS),
         "brokers": {
             "mt5": {"markets": ["forex", "metals", "indices"], "execution": ["ea/close", "ea/close-all", "ea/pause", "ea/resume"]},

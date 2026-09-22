@@ -31,7 +31,7 @@ class LoginScreen(tk.Frame):
         tk.Label(header, text="XAU AI PRO", bg=Theme.BG_SECONDARY,
                  fg=Theme.PRIMARY, font=(Theme.FONT_FAMILY, 32, "bold"),
                  anchor="w").pack(side="left")
-        tk.Label(header, text="v1.2.0  ·  Trading Desk PRO",
+        tk.Label(header, text="v1.2.3  ·  Trading Desk PRO",
                  bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
                  font=(Theme.FONT_FAMILY, 11)).pack(side="left", padx=(12, 0))
         self.card = Card(self._bg_canvas, title="Acesso à Plataforma")

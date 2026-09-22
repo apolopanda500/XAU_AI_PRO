@@ -4,6 +4,24 @@ Spec ENXUTA GUI-ONLY do EXE do XAU_AI_PRO v1.3.2+ (build 2026).
 
 Entry point: Python/launcher.py (GUI nativa Tkinter + comandos CLI simples).
 
+--------------------------------------------------------------------------
+REQUISITO DE SEGURANCA: ZERO FALSO POSITIVO EM AMBIENTE DE DINHEIRO REAL
+--------------------------------------------------------------------------
+Este spec alimenta um produto que opera capital real. O binario gerado
+NAO pode disparar heuristica de antivirus. Regras obrigatorias:
+
+  1) upx=False            -> UPX e assinatura de malware; nao usar.
+  2) console=False        -> manter (GUI), mas exige assinatura de codigo.
+  3) codesign_identity    -> OBRIGATORIO preencher com certificado EV antes
+                             de qualquer distribuicao a terceiros.
+  4) Preferir --onedir    -> onefile auto-extrai em %TEMP%\\_MEI* e e
+                             classificado como dropper por heuristica.
+
+Historico: a deteccao falsa Trojan:Win32/Bearfoos.A!ml (21/09/2026) neste
+ambiente teve como causa raiz upx=True + binario sem assinatura. Ver
+RELATORIO_AUDITORIA_SEGURANCA.md (raiz do projeto).
+--------------------------------------------------------------------------
+
 Estrategia GUI-ONLY (objetivo 40-60 MB):
   1) NO embute Streamlit/Altair/Uvicorn/OpenAI: o dashboard web foi retirado
      do EXE (o desktop usa so a interface nativa app/core.py). Isso elimina
@@ -81,7 +99,17 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    # ------------------------------------------------------------------
+    # ANTI-FALSO-POSITIVO (auditoria 2026-09-22)
+    # ------------------------------------------------------------------
+    # upx=False: o UPX e o packer mais usado por malware e o Microsoft
+    # Defender marca QUALQUER binario compactado com UPX como suspeito.
+    # Foi este parametro, somado a ausencia de assinatura de codigo, que
+    # produziu a deteccao falsa "Trojan:Win32/Bearfoos.A!ml" em
+    # C:\Users\Micro\AppData\Local\XAU AI PRO\XAU AI PRO.exe (21/09).
+    # O ganho de tamanho do UPX nao compensa a perda de reputacao do
+    # binario em ambiente de dinheiro real. NAO reativar sem assinatura EV.
+    upx=False,
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,

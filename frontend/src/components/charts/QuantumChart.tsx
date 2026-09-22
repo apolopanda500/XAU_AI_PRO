@@ -11,7 +11,7 @@ interface CandleData {
   volume: number;
 }
 
-const SIMBOLOS = ['XAUUSD', 'EURUSD', 'GBPUSD', 'USDJPY', 'BTCUSD'];
+const SIMBOLOS = ['XAUUSD', 'EURUSD', 'GBPUSD', 'USDJPY', 'BTCUSD', 'BTCUSDC'];
 const CORES_NEON = ['#f0b90b', '#4f7cff', '#22c55e', '#a855f7', '#ef4444'];
 
 export default function QuantumChart() {
@@ -75,7 +75,7 @@ export default function QuantumChart() {
         </div>
         <div className="btn-row">
           {SIMBOLOS.map((s, i) => (
-            <button key={s} className={simboloAtivo === s ? 'btn sm primary' : 'btn sm ghost'}
+            <button key={s} type="button" className={simboloAtivo === s ? 'btn sm primary' : 'btn sm ghost'}
               onClick={() => { setSimboloAtivo(s); setSelectedSymbol(s); }}
               style={simboloAtivo === s ? { borderColor: CORES_NEON[i], boxShadow: `0 0 8px ${CORES_NEON[i]}40` } : {}}>
               {s}

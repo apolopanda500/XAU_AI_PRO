@@ -1,0 +1,1 @@
+.robot-operations .asset-picker strong:before{content:'◈';display:inline-grid;place-items:center;width:18px;height:18px;margin-right:5px;border:1px solid rgba(103,232,249,.45);border-radius:50%;color:#67e8f9;font-size:10px;vertical-align:-3px}.robot-operations .asset-picker small:before{content:'LIVE  ';color:#22c55e;font-weight:700}

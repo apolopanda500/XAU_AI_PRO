@@ -121,7 +121,18 @@ frontend/.vite/
 *.db
 *.sqlite
 
+
 # Gitleaks config pode ser versionado (documentacao)
+
+# Ferramentas locais volumosas (binarios de terceiros, nao versionar)
+Tools/LibreHardwareMonitor/
+Tools/create_fg.bat
+Tools/create_fg.py
+frontend/public/xau-ai-pro-*.png
+frontend/public/favicon.png
+frontend/src-tauri/icons/xau-ai-pro-mark.png
+Docs/branding/*.png
+
 
 # Ciclo limpo v1.2.3 - nunca versionar binarios/artefatos de build
 frontend/src-tauri/bridge/
@@ -142,4 +153,21 @@ versao_log.txt
 installer/XAU_AI_PRO_Setup_*.exe
 .pytest-tmp-*/
 __pycache__/
+
+# Auditoria/ciclo operacional: nunca versionar backups locais, logs de build,
+# relatorios gerados por maquina, nem dados locais de conexoes/teste
+.backup_auditoria/
+Logs/backup_prebuild_*/
+Logs/build_*.log
+Logs/check_*.log
+Logs/validacao_build_*.txt
+*.dpapi.json
+*.dpapi.tmp
+XAU AI PRO/
+RELATORIO_AUDITORIA_SEGURANCA.md
+LAUDO_FINAL_AUDITORIA.md
+build_validacao.cmd
+build_headless.cmd
+validar_build.ps1
+
 

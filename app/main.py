@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Ponto de entrada do app XAU_AI_PRO v1.2.0.
+    Ponto de entrada do app XAU_AI_PRO v1.2.3.
 """
 from __future__ import annotations
 

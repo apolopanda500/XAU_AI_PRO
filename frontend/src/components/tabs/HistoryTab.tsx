@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { apiBase } from '../../lib/api';
 import '../../theme/history.css';
-const API = 'http://127.0.0.1:9001';
+const API = `${apiBase()}`;
 type Deal = { id?: string | number; broker?: string; market?: string; symbol?: string; side?: string; quantity?: number | string; volume?: number; price?: number | string; realizedPnl?: number | string; profit?: number; executedAt?: string; close_time?: string; comment?: string; position_id?: number | string };
 const limits: Record<string, number> = { '1': 100, '7': 200, '15': 300, '30': 500, '90': 500, '365': 500, '0': 500 };
 const periods: Record<string, string> = { '1': 'Hoje', '7': '7 dias', '15': '15 dias', '30': '30 dias', '90': '90 dias', '365': '1 ano', '0': 'Tudo' };

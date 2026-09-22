@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { apiBase } from '../../lib/api';
 import { useAppStore } from '../../hooks/useAppStore';
 
-const MT5 = 'http://127.0.0.1:9001';
+const API = `${apiBase()}`;
 
 export default function DashboardTab() {
   const account = useAppStore((s) => s.account);
@@ -15,26 +16,38 @@ export default function DashboardTab() {
   const setSystemState = useAppStore((s) => s.setSystemState);
   const addQuote = useAppStore((s) => s.addQuote);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
+  const selectedSymbol = useAppStore((s) => s.selectedSymbol);
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefresh, setLastRefresh] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const [gatewayLatencyMs, setGatewayLatencyMs] = useState<number | null>(null);
+  const [latencySamples, setLatencySamples] = useState<number[]>([]);
+  const requestInFlight = useRef(false);
 
   const fmt = (v: number | undefined | null, decimals = settings.precision) =>
     v == null ? '--' : v.toLocaleString('pt-BR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 
-  const quote = quotes.find((item) => item.symbol === 'XAUUSD');
+  const quote = quotes.find((item) => item.symbol === selectedSymbol) ?? quotes[0];
+  const quoteAgeSec = quote ? Math.max(0, Math.floor((Date.now() - new Date(quote.timestamp).getTime()) / 1000)) : null;
   const exposure = positions.reduce((sum, item) => sum + (Number(item.profit) || 0), 0);
 
   const refreshRealData = useCallback(async () => {
+    if (requestInFlight.current) return;
+    requestInFlight.current = true;
     setRefreshing(true);
     setError('');
+    const startedAt = performance.now();
     try {
       const [statusResponse, quoteResponse] = await Promise.all([
-        fetch(`${MT5}/api/status`, { signal: AbortSignal.timeout(5000) }),
-        fetch(`${MT5}/api/mt5/quote?symbol=XAUUSD`, { signal: AbortSignal.timeout(5000) }),
+        fetch(`${API}/api/status`, { signal: AbortSignal.timeout(5000) }),
+        fetch(`${API}/api/mt5/quotes?symbols=${encodeURIComponent(selectedSymbol || 'BTCUSDT')}`, { signal: AbortSignal.timeout(5000) }),
       ]);
-      if (!statusResponse.ok || !quoteResponse.ok) throw new Error(`MT5 HTTP ${statusResponse.status}/${quoteResponse.status}`);
+      const latency = Math.round(performance.now() - startedAt);
+      setGatewayLatencyMs(latency);
+      setLatencySamples((previous) => [...previous, latency].slice(-20));
+      if (!statusResponse.ok) throw new Error(`MT5 HTTP ${statusResponse.status}`);
       const data = await statusResponse.json() as { terminal_connected?: boolean; history_count?: number; account?: Record<string, unknown>; positions?: Array<Record<string, unknown>> };
+      setSystemState({ status: data.terminal_connected ? 'operacional' : 'offline', uptime_sec: 0, ws_clients: 0, mt5_connected: Boolean(data.terminal_connected), ai_enabled: false, ai_age_sec: 0, recent_events: Number(data.history_count ?? 0) });
       if (data.account) {
         const a = data.account;
         setAccount({
@@ -43,7 +56,6 @@ export default function DashboardTab() {
           leverage: String(a.leverage ?? 0), server: String(a.server ?? ''), currency: String(a.currency ?? ''),
           profit: Number(a.profit ?? 0), trade_allowed: Boolean(a.trade_allowed),
         });
-        setSystemState({ status: data.terminal_connected ? 'operacional' : 'offline', uptime_sec: 0, ws_clients: 0, mt5_connected: Boolean(data.terminal_connected), ai_enabled: false, ai_age_sec: 0, recent_events: Number(data.history_count ?? 0) });
       }
       if (Array.isArray(data.positions)) {
         setPositions(data.positions.map((p) => ({
@@ -53,23 +65,33 @@ export default function DashboardTab() {
           open_time: String(p.open_time ?? ''), magic: Number(p.magic ?? 0), comment: String(p.comment ?? ''),
         })));
       }
-      const rawQuote = await quoteResponse.json() as { symbol: string; bid: number; ask: number; last: number; volume: number; high: number; low: number; change_pct: number; timestamp: string; source: string };
-      addQuote({ ...rawQuote, price: rawQuote.last || (rawQuote.bid + rawQuote.ask) / 2, change: rawQuote.change_pct, spread: rawQuote.ask - rawQuote.bid, digits: 2, point: 0.01 });
+      const quotePayload = await quoteResponse.json() as { quotes?: Array<{ symbol: string; bid: number; ask: number; last: number; volume: number; high: number; low: number; change_pct: number; timestamp: string; source: string }>; errors?: Array<{ symbol: string; error: string }> };
+      const rawQuote = quotePayload.quotes?.[0];
+      if (rawQuote) addQuote({ ...rawQuote, price: rawQuote.last || (rawQuote.bid + rawQuote.ask) / 2, change: rawQuote.change_pct, spread: rawQuote.ask - rawQuote.bid, digits: 2, point: 0.01 });
+      if (quotePayload.errors?.length) setError(`Cotação indisponível: ${quotePayload.errors[0].error}`);
       setLastRefresh(new Date().toLocaleTimeString('pt-BR'));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'MT5 indisponível');
     } finally {
       setRefreshing(false);
+      requestInFlight.current = false;
     }
-  }, [addQuote, setAccount, setPositions, setSystemState]);
+  }, [addQuote, selectedSymbol, setAccount, setPositions, setSystemState]);
 
   useEffect(() => {
-    void refreshRealData();
-    const timer = window.setInterval(() => void refreshRealData(), 2000);
-    return () => window.clearInterval(timer);
-  }, [refreshRealData]);
+    let active = true;
+    let timer: number | undefined;
+    const cycle = async () => {
+      if (!active) return;
+      if (document.visibilityState === 'visible') await refreshRealData();
+      if (active && settings.dashboardAutoRefresh) timer = window.setTimeout(cycle, Math.max(5000, settings.dashboardRefreshMs));
+    };
+    void cycle();
+    return () => { active = false; if (timer) window.clearTimeout(timer); };
+  }, [refreshRealData, settings.dashboardAutoRefresh, settings.dashboardRefreshMs]);
 
   const statusText = systemState?.mt5_connected && wsConnected ? 'Operacional' : 'Atenção necessária';
+  const averageLatency = latencySamples.length ? Math.round(latencySamples.reduce((sum, value) => sum + value, 0) / latencySamples.length) : null;
 
   return (
     <div className="dashboard-tab">
@@ -79,20 +101,16 @@ export default function DashboardTab() {
           <span className="muted">Visão operacional com dados reais do Core e MT5</span>
         </div>
         <div className="btn-row">
-          <button className="btn ghost" type="button" onClick={() => setActiveTab('market')}>Ver mercado</button>
-          <button className="btn primary" type="button" onClick={refreshRealData} disabled={refreshing}>
-            {refreshing ? 'Atualizando...' : 'Atualizar dados reais'}
-          </button>
         </div>
       </div>
 
-      {error && <div className="placeholder" role="alert"><strong>Fonte MT5 indisponível</strong><span className="muted">{error}. Nenhum dado simulado é exibido.</span></div>}
+      {error && <div className="placeholder" role="status"><strong>Uma fonte está indisponível</strong><span className="muted">{error}. As demais fontes continuam disponíveis; nenhum dado simulado é exibido.</span></div>}
 
       <div className="grid cols-4">
         <div className="card"><div className="kpi-label">Saldo real</div><div className="kpi-value">{fmt(account?.balance)}</div><div className="kpi-sub">{account?.currency ?? 'Sem conta'}</div></div>
         <div className="card"><div className="kpi-label">Equidade real</div><div className="kpi-value">{fmt(account?.equity)}</div><div className="kpi-sub">Flutuante: <span className={(account?.profit ?? 0) >= 0 ? 'pos' : 'neg'}>{fmt(account?.profit)}</span></div></div>
         <div className="card"><div className="kpi-label">Posições abertas</div><div className="kpi-value">{positions.length}</div><div className="kpi-sub">Resultado: <span className={exposure >= 0 ? 'pos' : 'neg'}>{fmt(exposure)}</span></div></div>
-        <div className="card"><div className="kpi-label">Estado operacional</div><div className="kpi-value"><span className={`chip ${statusText === 'Operacional' ? 'ok' : 'warn'}`}>{statusText}</span></div><div className="kpi-sub">WS {wsConnected ? 'online' : 'offline'} · Core {systemState?.status ?? 'aguardando'}</div></div>
+        <div className="card"><div className="kpi-label">Estado operacional</div><div className="kpi-value"><span className={`chip ${statusText === 'Operacional' ? 'ok' : 'warn'}`}>{statusText}</span></div><div className="kpi-sub">WS {wsConnected ? 'online' : 'offline'} · Core {systemState?.status ?? 'sem telemetria'}</div></div>
       </div>
 
       <div className="grid cols-2" style={{ marginTop: 14 }}>
@@ -115,16 +133,23 @@ export default function DashboardTab() {
             <tr><td>Alavancagem</td><td className="mono">1:{account.leverage}</td></tr>
             <tr><td>Negociação</td><td><span className={`chip ${account.trade_allowed ? 'ok' : 'warn'}`}>{account.trade_allowed ? 'Permitida' : 'Bloqueada'}</span></td></tr>
           </tbody></table></div> : <div className="placeholder"><span>Conta MT5 não disponível.</span><span className="muted">Conecte o terminal e atualize os dados.</span></div>}
-          <div className="btn-row" style={{ marginTop: 14 }}><button className="btn ghost" type="button" onClick={() => setActiveTab('robot')}>Configurar MT5</button><button className="btn ghost" type="button" onClick={() => setActiveTab('system')}>Ver monitor</button></div>
         </div>
+      </div>
+
+      <div className="card" style={{ marginTop: 14 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><h2>Inventário operacional</h2><span className="muted">somente dados reais</span></div>
+        {positions.length ? <div className="tbl-wrap"><table className="tbl"><thead><tr><th>Ticket</th><th>Ativo</th><th>Lado</th><th>Volume</th><th>Entrada</th><th>Atual</th><th>SL / TP</th><th>Resultado</th></tr></thead><tbody>{positions.map((p) => <tr key={p.ticket}><td className="mono">{p.ticket}</td><td><strong>{p.symbol}</strong></td><td><span className={`chip ${p.side.toUpperCase().includes('BUY') ? 'ok' : 'danger'}`}>{p.side}</span></td><td className="mono">{p.volume}</td><td className="mono">{fmt(p.open_price)}</td><td className="mono">{fmt(p.current_price)}</td><td className="mono">{fmt(p.sl)} / {fmt(p.tp)}</td><td className={p.profit >= 0 ? 'pos' : 'neg'}>{fmt(p.profit)}</td></tr>)}</tbody></table></div> : <div className="placeholder"><span>Nenhuma posição aberta informada pelo MT5.</span><span className="muted">O inventário permanece vazio quando não há conexão ou posições reais.</span></div>}
+        <div className="grid cols-4" style={{ marginTop: 12 }}><div><span className="kpi-label">Exposição flutuante</span><div className={exposure >= 0 ? 'pos' : 'neg'}>{fmt(exposure)}</div></div><div><span className="kpi-label">Margem usada</span><div>{fmt(account?.margin)}</div></div><div><span className="kpi-label">Margem livre</span><div>{fmt(account?.free_margin)}</div></div><div><span className="kpi-label">Ação recomendada</span><div className="muted">{!account ? 'Conectar MT5' : !systemState?.mt5_connected ? 'Verificar terminal' : positions.some((p) => !p.sl || !p.tp) ? 'Revisar proteção SL/TP' : 'Monitorar'}</div></div></div>
       </div>
 
       <div className="card" style={{ marginTop: 14 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><h2>Diagnóstico da conexão</h2><span className="muted">{lastRefresh ? `Atualizado às ${lastRefresh}` : 'Ainda não atualizado manualmente'}</span></div>
         <div className="grid cols-4">
-          <div><span className="kpi-label">Bridge MT5</span><div><span className={`chip ${systemState?.mt5_connected ? 'ok' : 'warn'}`}>{systemState?.mt5_connected ? 'Conectado' : 'Aguardando'}</span></div></div>
+          <div><span className="kpi-label">Bridge MT5</span><div><span className={`chip ${systemState?.mt5_connected ? 'ok' : 'warn'}`}>{systemState?.mt5_connected ? 'Conectado' : 'Sem resposta'}</span></div></div>
           <div><span className="kpi-label">WebSocket Core</span><div><span className={`chip ${wsConnected ? 'ok' : 'danger'}`}>{wsConnected ? 'Online' : 'Offline'}</span></div></div>
-          <div><span className="kpi-label">IA</span><div><span className="chip">{systemState?.ai_enabled ? 'Ativa' : 'Desligada'}</span></div></div>
+          <div><span className="kpi-label">Latência gateway</span><div><span className={`chip ${gatewayLatencyMs != null && gatewayLatencyMs < 1000 ? 'ok' : 'warn'}`}>{gatewayLatencyMs == null ? 'Sem leitura' : `${gatewayLatencyMs} ms`}</span></div></div>
+          <div><span className="kpi-label">Média últimos ciclos</span><div className="mono">{averageLatency == null ? '--' : `${averageLatency} ms`}</div></div>
+          <div><span className="kpi-label">Idade da cotação</span><div><span className={`chip ${quoteAgeSec != null && quoteAgeSec <= 10 ? 'ok' : 'warn'}`}>{quoteAgeSec == null ? 'Sem dado' : `${quoteAgeSec}s`}</span></div></div>
           <div><span className="kpi-label">Uptime Core</span><div className="mono">{systemState ? `${Math.floor(systemState.uptime_sec / 60)}m ${systemState.uptime_sec % 60}s` : '--'}</div></div>
         </div>
       </div>

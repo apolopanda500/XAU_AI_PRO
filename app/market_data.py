@@ -362,7 +362,7 @@ class MarketData:
                     return q
                 reasons.append("Stooq sin datos")
 
-        self._set_error(symbol, " | ".join(dict.fromkeys(reasons)) or "sin proveedores")
+        self._set_error(symbol, "INDISPONIVEL | " + " | ".join(dict.fromkeys(reasons)) if reasons else "INDISPONIVEL - sem provedores")
         return None
 
     def get_many(self, symbols: list[str], provider: str | None = None) -> dict[str, Quote]:

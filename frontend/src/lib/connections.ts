@@ -1,4 +1,6 @@
-const API = 'http://127.0.0.1:9001';
+import { apiBase } from './api';
+
+const API = `${apiBase()}`;
 export type Broker = 'mt5' | 'binance' | 'mexc';
 export type Connection = { id: string; broker: string; market: string; configured?: boolean; active?: boolean };
 export type TerminalAccount = { login: number; server: string; name?: string };

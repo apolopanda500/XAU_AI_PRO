@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Nucleo do app XAU_AI_PRO v1.2.0 com design PRO estilo TradingView/Binance.
+    Nucleo do app XAU_AI_PRO v1.2.3 com design PRO estilo TradingView/Binance.
 """
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ class XAUAProApp:
         ensure_paths()
         self.cfg = get_config()
         self.root = tk.Tk()
-        self.root.title("XAU AI PRO v1.2.0 - Trading Desk")
+        self.root.title("XAU AI PRO v1.2.3 - Trading Desk")
         self.root.configure(bg=Theme.BG)
 
         # Centraliza a janela
@@ -197,6 +197,8 @@ class XAUAProApp:
             "vision": lambda: RobotVision(self.tab_container, self.robot, self.market, self._set_status),
             "settings": lambda: SettingsTab(self.tab_container, self.robot, self.market, self._set_status),
             "connections": lambda: IntegrationsTab(self.tab_container, self.robot, self.market, self._set_status),
+            "tools": lambda: ToolsTab(self.tab_container, self.robot, self.market, self._set_status),
+            "integrations": lambda: IntegrationsTab(self.tab_container, self.robot, self.market, self._set_status),
         }
         # Compatibilidade: chaves antigas da Sidebar mapeiam para os destinos
         # do TopNav (a Sidebar continua funcionando sem duplicar abas).
@@ -235,8 +237,11 @@ class XAUAProApp:
             try:
                 self.tabs[key] = self._tab_factories[key]()
             except Exception as exc:  # noqa: BLE001 — aba nunca trava a navegação
+                import traceback as _tb
                 self._navigation_pending = None
                 self._set_status(f"Falha ao abrir aba: {exc}")
+                print(f"[ERROR] Falha ao carregar aba '{key}': {exc}", flush=True)
+                print(_tb.format_exc(), flush=True)
                 return
             try:
                 self.tabs[key].frame.pack_forget()
@@ -389,7 +394,7 @@ class XAUAProApp:
         self.root.after(250, self._realtime_tick)
 
     def _start_threads(self) -> None:
-        # v1.2.0 - Auto-refresh removido: o loop de 10s acumulava chamadas em
+        # v1.2.3 - Auto-refresh removido: o loop de 10s acumulava chamadas em
         # background e travava a GUI (freeze). Atualizacao agora e MANUAL.
                 # Opcoes de CPU (prioridade/afinidade) definidas na aba Configuracoes.
         try:
@@ -457,6 +462,10 @@ class XAUAProApp:
                 pass
             try:
                 self.tabs["market"].stop_auto_refresh()
+            except Exception:
+                pass
+            try:
+                self.tabs["robot"].stop_auto_refresh()
             except Exception:
                 pass
             try:

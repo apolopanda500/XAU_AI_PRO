@@ -1,11 +1,43 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use std::fs;
+use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Child, Command};
+use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
 use serde::Serialize;
+use tauri::path::BaseDirectory;
+use tauri::Manager;
+
+static OWNED_CHILDREN: OnceLock<Mutex<Vec<Child>>> = OnceLock::new();
+
+fn register_child(child: Child) {
+    OWNED_CHILDREN
+        .get_or_init(|| Mutex::new(Vec::new()))
+        .lock()
+        .unwrap()
+        .push(child);
+}
+
+fn shutdown_children() {
+    if let Some(children) = OWNED_CHILDREN.get() {
+        if let Ok(mut children) = children.lock() {
+            for child in children.iter_mut() {
+                let _ = child.kill();
+            }
+            children.clear();
+            log_core("processos filhos encerrados com a UI");
+        }
+    }
+}
+
+#[tauri::command]
+fn exit_app() {
+    shutdown_children();
+    std::process::exit(0);
+}
 
 #[cfg(target_os = "windows")]
 fn acquire_single_instance() -> bool {
@@ -90,6 +122,15 @@ pub struct AppDirs {
 
 #[derive(Serialize)]
 pub struct HardwareTelemetry {
+    pub os: String,
+    pub architecture: String,
+    pub cpu_name: Option<String>,
+    pub cpu_cores: u32,
+    pub cpu_usage_percent: Option<f64>,
+    pub memory_total_gb: Option<f64>,
+    pub memory_available_gb: Option<f64>,
+    pub disk_total_gb: Option<f64>,
+    pub disk_free_gb: Option<f64>,
     pub cpu_temperature_c: Option<f64>,
     pub gpu_name: Option<String>,
     pub gpu_available: bool,
@@ -101,8 +142,11 @@ pub struct HardwareTelemetry {
 fn hardware_telemetry() -> HardwareTelemetry {
     #[cfg(target_os = "windows")]
     {
-        let script = r#"$tz=Get-CimInstance MSAcpi_ThermalZoneTemperature -ErrorAction SilentlyContinue | Select-Object -First 1; $gpu=Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue | Where-Object {$_.Name} | Select-Object -First 1; [pscustomobject]@{cpu=if($tz){[math]::Round(($tz.CurrentTemperature/10)-273.15,1)}else{$null}; gpu=if($gpu){$gpu.Name}else{$null}} | ConvertTo-Json -Compress"#;
-        if let Ok(output) = Command::new("powershell.exe")
+        let script = r#"$os=Get-CimInstance Win32_OperatingSystem; $cpu=Get-CimInstance Win32_Processor | Select-Object -First 1; $gpu=Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue | Where-Object {$_.Name} | Select-Object -First 1; $tz=Get-CimInstance MSAcpi_ThermalZoneTemperature -ErrorAction SilentlyContinue | Select-Object -First 1; $disk=Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'" | Select-Object -First 1; $load=Get-CimInstance Win32_Processor | Measure-Object -Property LoadPercentage -Average; [pscustomobject]@{os=$os.Caption; arch=$os.OSArchitecture; cpu_name=$cpu.Name; cores=$cpu.NumberOfLogicalProcessors; usage=if($load.Average -ne $null){[math]::Round($load.Average,1)}else{$null}; mem_total=if($os.TotalVisibleMemorySize){[math]::Round($os.TotalVisibleMemorySize/1MB,2)}else{$null}; mem_free=if($os.FreePhysicalMemory){[math]::Round($os.FreePhysicalMemory/1MB,2)}else{$null}; disk_total=if($disk.Size){[math]::Round($disk.Size/1GB,2)}else{$null}; disk_free=if($disk.FreeSpace){[math]::Round($disk.FreeSpace/1GB,2)}else{$null}; temp=if($tz){[math]::Round(($tz.CurrentTemperature/10)-273.15,1)}else{$null}; gpu=if($gpu){$gpu.Name}else{$null}} | ConvertTo-Json -Compress"#;
+        let mut powershell = Command::new("powershell.exe");
+        use std::os::windows::process::CommandExt;
+        powershell.creation_flags(0x08000000);
+        if let Ok(output) = powershell
             .args([
                 "-NoProfile",
                 "-NonInteractive",
@@ -117,6 +161,26 @@ fn hardware_telemetry() -> HardwareTelemetry {
                 let cpu = value.get("cpu").and_then(|v| v.as_f64());
                 let gpu_name = value.get("gpu").and_then(|v| v.as_str()).map(str::to_owned);
                 return HardwareTelemetry {
+                    os: value
+                        .get("os")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("Windows")
+                        .to_string(),
+                    architecture: value
+                        .get("arch")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("desconhecida")
+                        .to_string(),
+                    cpu_name: value
+                        .get("cpu_name")
+                        .and_then(|v| v.as_str())
+                        .map(str::to_owned),
+                    cpu_cores: value.get("cores").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
+                    cpu_usage_percent: value.get("usage").and_then(|v| v.as_f64()),
+                    memory_total_gb: value.get("mem_total").and_then(|v| v.as_f64()),
+                    memory_available_gb: value.get("mem_free").and_then(|v| v.as_f64()),
+                    disk_total_gb: value.get("disk_total").and_then(|v| v.as_f64()),
+                    disk_free_gb: value.get("disk_free").and_then(|v| v.as_f64()),
                     cpu_temperature_c: cpu,
                     gpu_available: gpu_name.is_some(),
                     gpu_name,
@@ -125,6 +189,15 @@ fn hardware_telemetry() -> HardwareTelemetry {
             }
         }
         return HardwareTelemetry {
+            os: "Windows".to_string(),
+            architecture: "desconhecida".to_string(),
+            cpu_name: None,
+            cpu_cores: 0,
+            cpu_usage_percent: None,
+            memory_total_gb: None,
+            memory_available_gb: None,
+            disk_total_gb: None,
+            disk_free_gb: None,
             cpu_temperature_c: None,
             gpu_name: None,
             gpu_available: false,
@@ -133,6 +206,15 @@ fn hardware_telemetry() -> HardwareTelemetry {
     }
     #[cfg(not(target_os = "windows"))]
     HardwareTelemetry {
+        os: "desconhecido".to_string(),
+        architecture: "desconhecida".to_string(),
+        cpu_name: None,
+        cpu_cores: 0,
+        cpu_usage_percent: None,
+        memory_total_gb: None,
+        memory_available_gb: None,
+        disk_total_gb: None,
+        disk_free_gb: None,
         cpu_temperature_c: None,
         gpu_name: None,
         gpu_available: false,
@@ -191,9 +273,9 @@ fn remove_auth() -> Result<(), String> {
 /// Localiza o executavel do core: primeiro como resource empacotado,
 /// depois como pasta "core" ao lado do executavel principal.
 fn localizar_core(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    if let Some(p) = app
-        .path_resolver()
-        .resolve_resource("core/xau-ai-pro-core.exe")
+    if let Ok(p) = app
+        .path()
+        .resolve("core/xau-ai-pro-core.exe", BaseDirectory::Resource)
     {
         if p.exists() {
             return Ok(p);
@@ -208,9 +290,9 @@ fn localizar_core(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 }
 
 fn localizar_bridge(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    if let Some(p) = app
-        .path_resolver()
-        .resolve_resource("bridge/mt5-gateway.exe")
+    if let Ok(p) = app
+        .path()
+        .resolve("bridge/mt5-gateway.exe", BaseDirectory::Resource)
     {
         if p.exists() {
             return Ok(p);
@@ -224,13 +306,30 @@ fn localizar_bridge(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     cand.ok_or_else(|| "bridge MT5 nao encontrado".to_string())
 }
 
-fn spawn_bridge(app: &tauri::AppHandle) -> Result<(), String> {
-    if TcpStream::connect_timeout(
+fn bridge_atual_ativo() -> bool {
+    let Ok(mut stream) = TcpStream::connect_timeout(
         &"127.0.0.1:9001".parse().unwrap(),
         Duration::from_millis(300),
-    )
-    .is_ok()
-    {
+    ) else {
+        return false;
+    };
+    let _ = stream.set_read_timeout(Some(Duration::from_millis(500)));
+    let _ = stream.set_write_timeout(Some(Duration::from_millis(300)));
+    let request = b"GET /api/health HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    if stream.write_all(request).is_err() {
+        return false;
+    }
+    let mut response = String::new();
+    let _ = stream.read_to_string(&mut response);
+    // O build muda a cada ciclo; basta validar que a resposta é um healthcheck
+    // do gateway XAU AI PRO, sem prender a inicialização a uma versão antiga.
+    // Aceita a serializacao JSON com ou sem espaco apos os dois pontos.
+    (response.contains("\"ok\":true") || response.contains("\"ok\": true"))
+        && response.contains("gateway_build")
+}
+
+fn spawn_bridge(app: &tauri::AppHandle) -> Result<(), String> {
+    if bridge_atual_ativo() {
         return Ok(());
     }
     let path = localizar_bridge(app)?;
@@ -238,13 +337,20 @@ fn spawn_bridge(app: &tauri::AppHandle) -> Result<(), String> {
     ocultar_console(&mut command);
     command
         .current_dir(path.parent().unwrap())
+        .env("XAU_ENABLE_DEMO_ORDERS", "1")
+        .env("XAU_ENABLE_REAL_ORDERS", "0")
         .spawn()
-        .map(|_| log_core("bridge MT5 spawnado com sucesso"))
+        .map(|child| {
+            register_child(child);
+            log_core("bridge MT5 spawnado com sucesso");
+        })
         .map_err(|e| format!("falha ao iniciar bridge MT5: {}", e))
 }
 
 fn aguardar_bridge() {
-    for _ in 0..30 {
+    // FastAPI pode levar alguns segundos para carregar dependencias no primeiro inicio.
+    // Aguarde ate 30s antes de iniciar o Core em modo degradado.
+    for _ in 0..60 {
         if TcpStream::connect_timeout(
             &"127.0.0.1:9001".parse().unwrap(),
             Duration::from_millis(300),
@@ -290,7 +396,8 @@ fn spawn_core(app: &tauri::AppHandle) -> Result<(), String> {
     command
         .current_dir(working_dir)
         .spawn()
-        .map(|_| {
+        .map(|child| {
+            register_child(child);
             log_core("core spawnado com sucesso");
         })
         .map_err(|e| {
@@ -334,8 +441,14 @@ fn main() {
             save_auth,
             load_auth,
             remove_auth,
-            hardware_telemetry
+            hardware_telemetry,
+            exit_app
         ])
+        .on_window_event(|_, event| {
+            if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
+                shutdown_children();
+            }
+        })
         .run(tauri::generate_context!())
         .unwrap_or_else(|e| log_core(&format!("erro ao iniciar XAU AI PRO: {}", e)));
 }

@@ -16,7 +16,7 @@ from app.utils.paths import get_config_path
 
 
 DEFAULT_CONFIG: dict[str, Any] = {
-    "app_version": "1.2.0",
+    "app_version": "1.2.3",
     "theme": "mexc_dark",
     "language": "pt_BR",
     "session": None,

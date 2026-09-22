@@ -5,7 +5,7 @@
 export const PROTOCOL_VERSION = '1.0.0';
 export const PROTOCOL_ENVELOPE = 'xau-ai-pro/1';
 export const WS_PING_INTERVAL_MS = 30000;
-export const DEFAULT_SYMBOLS = ['XAUUSD', 'EURUSD', 'GBPUSD', 'USDJPY', 'BTCUSD'];
+export const DEFAULT_SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XAUUSD', 'EURUSD', 'GBPUSD', 'USDJPY'];
 
 export type ClientKind = 'react' | 'ea_mt5' | 'cli' | 'unknown';
 

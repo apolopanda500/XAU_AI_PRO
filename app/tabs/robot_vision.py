@@ -166,7 +166,11 @@ class RobotVision(tk.Frame):
                 }
                 self.frame.after(0, self._update_ui)
         except Exception as e:
-            self.frame.after(0, lambda e=e: self.on_status(f"Robot Vision erro: {e}"))
+            try:
+                self.frame.after(0, lambda e=e: self.on_status(f"Robot Vision erro: {e}"))
+            except Exception:
+                # Janela fechada durante a analise: apenas descarta o erro.
+                pass
 
     def _update_ui(self):
         """Atualiza a interface com os dados analisados."""

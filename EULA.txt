@@ -1,0 +1,37 @@
+# EULA - XAU AI PRO
+
+**CONTRATO DE LICENÇA DE USO - XAU AI PRO v1.2.3**
+
+Este Contrato de Licença de Usuário Final ("EULA") é um acordo entre você ("Usuário") e XAU AI PRO ("Desenvolvedor"), regulando o uso do software XAU AI PRO.
+
+## 1. DA CONCESSÃO DE LICENÇA
+O Desenvolvedor concede ao Usuário uma licença **não exclusiva, não transferível** para usar o software XAU AI PRO apenas para fins pessoais ou comerciais, observando os termos deste EULA.
+
+## 2. RESTRITOS
+2.1 É **proibido**:
+- Copiar, modificar, distribuir ou criar obras derivadas sem autorização prévia escrita
+- Usar o software para fins ilegais ou fraudulentos
+- Realizar operações reais de trading sem revisão humana prévia
+- Remover ou alterar avisos de copyright ou marca registrada
+
+## 3. INTEGRAÇÃO COM MT5
+3.1 O software requer o MetaTrader 5 instalado localmente
+3.2 As ordens de trading são enviadas ao MT5 apenas com configuração explícita do usuário
+3.3 O software **não executa ordens automáticas** por padrão - ordens demo exigem `confirm_demo=true`
+
+## 4. LIMITAÇÃO DE RESPONSABILIDADE
+4.1 O software é fornecido "como está", sem garantias de qualquer tipo
+4.2 O Desenvolvedor **não se responsabiliza** por perdas financeiras decorrentes do uso do software
+4.3 O Usuário está ciente dos riscos de trading e assume total responsabilidade
+
+## 5. SEGURANÇA
+5.1 Ordens reais são bloqueadas por padrão (`XAU_ENABLE_DEMO_ORDERS=0`)
+5.2 Arquivo de emergência `REAL_EMERGENCY_STOP` pode bloquear todas as operações
+
+## 6. RESCISÃO
+O Desenvolvedor pode rescindir esta licença a qualquer momento notificando o Usuário.
+
+## 7. LEI APLICÁVEL
+Este EULA é regido pela legislação brasileira.
+
+**© 2026 XAU AI PRO. Todos os direitos reservados.**

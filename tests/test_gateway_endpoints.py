@@ -228,6 +228,13 @@ def test_cobertura_restante_sem_envio(gateway):
     status, data = _request(gateway, "POST", "/api/demo/close-all", {})
     assert status in {403, 503}
 
+
+def test_capabilities_declara_trava_real(gateway):
+    status, data = _request(gateway, "GET", "/api/capabilities")
+    assert status == 200
+    assert data["real_orders_enabled"] is False
+    assert data["real_commands"] == []
+
 def test_rotas_restantes_sem_envio(gateway, monkeypatch):
     from unittest.mock import patch
 

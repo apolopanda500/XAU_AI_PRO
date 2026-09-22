@@ -179,7 +179,7 @@ export function EconomicCalendarTab() {
     return (
       <div style={{ padding: '20px', color: '#fca5a5', textAlign: 'center' }}>
         <p>Erro ao carregar calendário: {erro}</p>
-        <button onClick={refreshManual}>Tentar novamente</button>
+        <button type="button" onClick={refreshManual}>Tentar novamente</button>
       </div>
     );
   }
@@ -195,7 +195,7 @@ export function EconomicCalendarTab() {
           {ultimaAtualizacao && (
             <span style={{ color: '#6b7280', fontSize: '10px' }}>Atualizado: {ultimaAtualizacao.toLocaleTimeString('pt-BR')}</span>
           )}
-          <button onClick={refreshManual} disabled={carregando} style={{ padding: '4px 10px', backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '4px', color: '#d1d5db', cursor: carregando ? 'not-allowed' : 'pointer', fontSize: '11px' }}>
+          <button type="button" onClick={refreshManual} disabled={carregando} style={{ padding: '4px 10px', backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '4px', color: '#d1d5db', cursor: carregando ? 'not-allowed' : 'pointer', fontSize: '11px' }}>
             {carregando ? '⏳' : '🔄'} Refresh
           </button>
         </div>
@@ -207,7 +207,7 @@ export function EconomicCalendarTab() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
           <span style={{ color: '#9ca3af', fontSize: '11px', minWidth: '40px' }}>País:</span>
           {PAISES_SUPORTADOS.map((pais) => (
-            <button key={pais.codigo} onClick={() => togglePais(pais.codigo)} style={{
+          <button key={pais.codigo} type="button" onClick={() => togglePais(pais.codigo)} style={{
               padding: '3px 8px', backgroundColor: filtro.paises.includes(pais.codigo) ? '#2563eb' : '#1f2937',
               border: `1px solid ${filtro.paises.includes(pais.codigo) ? '#3b82f6' : '#374151'}`,
               borderRadius: '4px', color: '#d1d5db', cursor: 'pointer', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px',
@@ -219,7 +219,7 @@ export function EconomicCalendarTab() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <span style={{ color: '#9ca3af', fontSize: '11px', minWidth: '40px' }}>Impacto:</span>
           {(['alto', 'medio', 'baixo'] as ImpactLevel[]).map((impacto) => (
-            <button key={impacto} onClick={() => toggleImpacto(impacto)} style={{
+          <button key={impacto} type="button" onClick={() => toggleImpacto(impacto)} style={{
               padding: '3px 8px',
               backgroundColor: filtro.impactos.includes(impacto) ? CORES_IMPACTO[impacto] : '#1f2937',
               border: `1px solid ${CORES_IMPACTO[impacto]}`,
@@ -231,7 +231,7 @@ export function EconomicCalendarTab() {
             </button>
           ))}
           {(filtro.paises.length > 0 || filtro.impactos.length > 0) && (
-            <button onClick={limparFiltros} style={{ padding: '3px 8px', backgroundColor: 'transparent', border: '1px solid #6b7280', borderRadius: '4px', color: '#9ca3af', cursor: 'pointer', fontSize: '10px', marginLeft: 'auto' }}>
+          <button type="button" onClick={limparFiltros} style={{ padding: '3px 8px', backgroundColor: 'transparent', border: '1px solid #6b7280', borderRadius: '4px', color: '#9ca3af', cursor: 'pointer', fontSize: '10px', marginLeft: 'auto' }}>
               ✕ Limpar
             </button>
           )}

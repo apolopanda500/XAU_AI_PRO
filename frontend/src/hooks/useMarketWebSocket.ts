@@ -20,6 +20,10 @@ const desiredSymbols = (): string[] => {
   return wanted.length ? wanted : DEFAULT_SYMBOLS;
 };
 
+const normalizeSymbols = (symbols: string[]): string[] => [...new Set(
+  symbols.map((symbol) => String(symbol ?? '').trim().toUpperCase()).filter(Boolean),
+)].slice(0, 24);
+
 const newRequestId = (): string =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? crypto.randomUUID()
@@ -177,7 +181,7 @@ export function useMarketWebSocket() {
   // Reaplica subscriptions quando a watchlist muda (diff minimo Subscribe/Unsubscribe).
   const applySubscriptions = useCallback((symbols: string[]) => {
     const ws = wsRef.current;
-    const next = symbols.filter(Boolean);
+    const next = normalizeSymbols(symbols);
     if (!ws || ws.readyState !== WebSocket.OPEN || !helloOk.current || !next.length) return;
     const current = subscribedRef.current;
     const add = next.filter((s) => !current.includes(s));

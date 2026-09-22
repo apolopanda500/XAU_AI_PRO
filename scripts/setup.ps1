@@ -5,33 +5,48 @@ Write-Host "=== XAU AI PRO - Setup ===" -ForegroundColor Cyan
 
 $PROJECT_ROOT = Split-Path -Parent $PSScriptRoot
 
-# 1. Verificar Rust
-Write-Host "`n[1/6] Verificando Rust..." -ForegroundColor Yellow
-try {
-    $rustVersion = rustc --version 2>$null
-    Write-Host "  Rust instalado: $rustVersion" -ForegroundColor Green
-} catch {
-    Write-Host "  Rust nao encontrado. Instalando via rustup..." -ForegroundColor Yellow
-    Invoke-WebRequest -Uri https://win.rustup.rs/x86_64 -OutFile "$env:TEMP\rustup-init.exe"
-    & "$env:TEMP\rustup-init.exe" -y --default-toolchain stable
-    $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "User") + ";" + [System.Environment]::GetEnvironmentVariable("PATH", "Machine")
-    Write-Host "  Rust instalado com sucesso!" -ForegroundColor Green
+# 1. Verificar Python
+Write-Host "`n[1/7] Verificando Python..." -ForegroundColor Yellow
+$python = Join-Path $PROJECT_ROOT ".venv\Scripts\python.exe"
+if (-not (Test-Path $python)) {
+    if (Get-Command py -ErrorAction SilentlyContinue) {
+        py -3 -m venv (Join-Path $PROJECT_ROOT ".venv")
+    } elseif (Get-Command python -ErrorAction SilentlyContinue) {
+        python -m venv (Join-Path $PROJECT_ROOT ".venv")
+    } else {
+        Write-Host "  ERRO: Python 3 nao encontrado." -ForegroundColor Red
+        exit 1
+    }
+}
+& $python -m pip install --upgrade pip --disable-pip-version-check
+if ($LASTEXITCODE -ne 0) { Write-Host "  ERRO: atualizacao do pip falhou" -ForegroundColor Red; exit 1 }
+& $python -m pip install -r (Join-Path $PROJECT_ROOT "requirements.txt") -r (Join-Path $PROJECT_ROOT "requirements-dev.txt") --disable-pip-version-check
+if ($LASTEXITCODE -ne 0) { Write-Host "  ERRO: dependencias Python falharam" -ForegroundColor Red; exit 1 }
+Write-Host "  Python validado: $(& $python --version)" -ForegroundColor Green
+
+# 2. Verificar Rust
+Write-Host "`n[2/7] Verificando Rust..." -ForegroundColor Yellow
+if (Get-Command rustc -ErrorAction SilentlyContinue) {
+    Write-Host "  Rust instalado: $(rustc --version)" -ForegroundColor Green
+} else {
+    Write-Host "  ERRO: Rust nao encontrado. Instale rustup antes de continuar." -ForegroundColor Red
+    exit 1
 }
 
 # 2. Verificar Node.js
-Write-Host "`n[2/6] Verificando Node.js..." -ForegroundColor Yellow
-try {
-    $nodeVersion = node --version 2>$null
+Write-Host "`n[3/7] Verificando Node.js..." -ForegroundColor Yellow
+if (Get-Command node -ErrorAction SilentlyContinue) {
+    $nodeVersion = node --version
     Write-Host "  Node.js instalado: $nodeVersion" -ForegroundColor Green
-} catch {
+} else {
     Write-Host "  ERRO: Node.js nao encontrado. Instale de https://nodejs.org/" -ForegroundColor Red
     exit 1
 }
 
 # 3. Instalar dependencias do frontend
-Write-Host "`n[3/6] Instalando dependencias do frontend..." -ForegroundColor Yellow
+Write-Host "`n[4/7] Instalando dependencias do frontend..." -ForegroundColor Yellow
 Set-Location "$PROJECT_ROOT\frontend"
-npm install --no-audit --no-fund
+npm ci --no-audit --no-fund
 if ($LASTEXITCODE -eq 0) {
     Write-Host "  Dependencias instaladas!" -ForegroundColor Green
 } else {
@@ -40,9 +55,9 @@ if ($LASTEXITCODE -eq 0) {
 }
 
 # 4. Compilar Core Rust
-Write-Host "`n[4/6] Compilando Core Rust..." -ForegroundColor Yellow
+Write-Host "`n[5/7] Compilando Core Rust..." -ForegroundColor Yellow
 Set-Location "$PROJECT_ROOT\core"
-cargo build --release
+cargo build --release --locked
 if ($LASTEXITCODE -eq 0) {
     Write-Host "  Core compilado com sucesso!" -ForegroundColor Green
 } else {
@@ -51,17 +66,18 @@ if ($LASTEXITCODE -eq 0) {
 }
 
 # 5. Build Frontend
-Write-Host "`n[5/6] Compilando Frontend..." -ForegroundColor Yellow
+Write-Host "`n[6/7] Compilando Frontend..." -ForegroundColor Yellow
 Set-Location "$PROJECT_ROOT\frontend"
 npm run build
 if ($LASTEXITCODE -eq 0) {
     Write-Host "  Frontend compilado!" -ForegroundColor Green
 } else {
-    Write-Host "  AVISO: Build do frontend teve erros (continuando)" -ForegroundColor Yellow
+    Write-Host "  ERRO: Build do frontend falhou" -ForegroundColor Red
+    exit 1
 }
 
 # 6. Criar diretorio de dados
-Write-Host "`n[6/6] Criando diretorio de dados..." -ForegroundColor Yellow
+Write-Host "`n[7/7] Criando diretorio de dados..." -ForegroundColor Yellow
 $dataDir = "$PROJECT_ROOT\data"
 if (-not (Test-Path $dataDir)) {
     New-Item -ItemType Directory -Path $dataDir -Force | Out-Null

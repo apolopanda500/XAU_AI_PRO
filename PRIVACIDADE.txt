@@ -1,0 +1,40 @@
+# Política de Privacidade - XAU AI PRO
+
+**Última atualização: 2026-09-18**
+
+A XAU AI PRO respeita sua privacidade e está comprometida em proteger seus dados pessoais.
+
+## 1. INFORMAÇÕES QUE COLETAMOS
+- **Dados de conexão**: broker, servidor, login (apenas armazenados localmente)
+- **Configurações**: preferências de tema, notificações, modelo de IA
+- **Logs de auditoria**: timestamps de operações demo (não inclui dados pessoais)
+
+## 2. COMO USAMOS SUAS INFORMAÇÕES
+- Conectar-se a contas de corretagem conforme configurado
+- Executar comandos de trading conforme suas diretrizes
+- Melhorar a experiência do usuário
+
+## 3. COMO ARMAZENAMOS
+- **Dados sensíveis** são armazenados **localmente** em sua máquina
+- **Nenhum dado de corretagem é enviado para nossos servidores**
+- Backup local via `config.json` no diretório `%APPDATA%\XAU_AI_PRO\`
+
+## 4. COMPARTILHAMOS?
+- **Não vendemos dados pessoais**
+- Não compartilhamos com terceiros sem seu consentimento
+- Dados anônimos podem ser usados para melhorias de produto
+
+## 5. SUA SEGURANÇA
+- Credenciais em criptografia AES-256
+- Conexões via HTTPS/WSS
+- Rate limiting integrado
+
+## 6. SEUS DIREITOS (LGPD)
+- Direito de acesso, retificação e eliminação
+- Direito de revogação do consentimento
+- Direito de portabilidade dos dados
+
+Contato: privacy@xau-ai.pro
+
+---
+Esta política se aplica apenas a dados coletados localmente. O software não possui rastreadores externos.

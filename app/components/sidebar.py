@@ -126,7 +126,7 @@ class Sidebar(tk.Frame):
         self.logo_label = tk.Label(logo, text="XAU", bg=Theme.PANEL,
                                    fg=Theme.PRIMARY, font=(Theme.FONT_FAMILY, 16, "bold"))
         self.logo_label.pack(anchor="w", padx=16)
-        self.brand_label = tk.Label(logo, text="v1.2.0", bg=Theme.PANEL,
+        self.brand_label = tk.Label(logo, text="v1.2.3", bg=Theme.PANEL,
                                     fg=Theme.TEXT_MUTED, font=(Theme.FONT_FAMILY, 8))
         self.brand_label.pack(anchor="w", padx=16)
         tk.Frame(self, bg=Theme.BORDER, height=1).pack(fill="x", padx=10, pady=8)
@@ -200,10 +200,10 @@ class Sidebar(tk.Frame):
         for _key, item in self._items.items():
             item.show_text(expanded)
         if expanded:
-            self.brand_label.configure(text="v1.2.0 · Trading Desk")
+            self.brand_label.configure(text="v1.2.3 · Trading Desk")
             self.logo_label.configure(text="XAU AI PRO")
         else:
-            self.brand_label.configure(text="v1.2.0")
+            self.brand_label.configure(text="v1.2.3")
             self.logo_label.configure(text="XAU")
 
     # ------------------------------------------------------------------

@@ -1,0 +1,52 @@
+/* Guardian Trade Manager — painel de gestao continua de posicoes DEMO. */
+.guardian-manager .guardian-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 8px 12px;
+  margin-top: 10px;
+}
+
+.guardian-manager .guardian-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  opacity: 0.85;
+}
+
+.guardian-manager .guardian-rules {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.guardian-manager .guardian-rule-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  font-size: 12px;
+}
+
+.guardian-manager .guardian-rule-row span:nth-child(2) {
+  flex: 1;
+}
+
+.guardian-manager .hint.danger {
+  color: var(--danger, #ff5c7a);
+}
+
+.guardian-manager input[type='number']::-webkit-outer-spin-button,
+.guardian-manager input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.guardian-manager input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}

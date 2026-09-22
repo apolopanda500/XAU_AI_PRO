@@ -1,0 +1,23 @@
+import { useQuery } from '@tanstack/react-query';
+import { apiBase } from '../../lib/api';
+
+type Account = { balance?: number; available?: number; equity?: number; currency?: string };
+type Position = { symbol?: string; volume?: number; profit?: number; side?: string; pnl_available?: boolean };
+type Connection = { id: string; broker: string; market: string; status: string; account?: Account | null; positions?: Position[]; pnl?: { value?: number | null; available?: boolean }; error?: string | null };
+type Overview = { ok?: boolean; mt5_required?: boolean; connected?: number; connections?: Connection[] };
+const API = apiBase();
+const money = (value: unknown, currency = '') => { const n = Number(value); return Number.isFinite(n) ? `${n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`.trim() : '--'; };
+const label = (broker: string) => broker === 'binance' ? 'Binance' : broker === 'mexc' ? 'MEXC' : broker === 'mt5' ? 'MetaTrader 5' : broker.toUpperCase();
+async function loadOverview(): Promise<Overview> { const response = await fetch(`${API}/api/universal/overview`, { signal: AbortSignal.timeout(10000) }); if (!response.ok) throw new Error(`Gateway HTTP ${response.status}`); return response.json() as Promise<Overview>; }
+
+export default function PortfolioHomeClean() {
+  const query = useQuery({ queryKey: ['universal-overview'], queryFn: loadOverview, refetchInterval: 10000, staleTime: 8000, retry: 1 });
+  const rows = query.data?.connections ?? [], connected = rows.filter((row) => row.status === 'conectada'), positions = connected.flatMap((row) => row.positions ?? []), pnl = connected.reduce((sum, row) => sum + (row.pnl?.available ? Number(row.pnl.value ?? 0) : 0), 0), updated = query.dataUpdatedAt ? new Date(query.dataUpdatedAt).toLocaleTimeString('pt-BR') : '--:--:--';
+  return <div className="portfolio-page">
+    <div className="page-head"><div><h1>Patrimônio universal</h1><span className="muted">MT5 é opcional · corretoras conectadas funcionam independentemente</span></div><div className="btn-row"><span className={`chip ${query.isError ? 'warn' : 'ok'}`}>{query.isError ? 'Gateway indisponível' : `Atualizado · ${updated}`}</span><button className="btn primary" type="button" onClick={() => void query.refetch()} disabled={query.isFetching}>{query.isFetching ? 'Atualizando…' : 'Atualizar'}</button></div></div>
+    {query.isError && <div className="placeholder" role="status">{query.error instanceof Error ? query.error.message : 'Não foi possível consultar o gateway.'}</div>}
+    <div className="metrics-grid"><div className="card metric-card"><span className="muted">Contas conectadas</span><strong>{connected.length}/{rows.length}</strong><small>MT5 não é obrigatório</small></div><div className="card metric-card"><span className="muted">Posições / holdings</span><strong>{positions.length}</strong><small>somente dados recebidos</small></div><div className="card metric-card"><span className="muted">PnL disponível</span><strong>{pnl ? money(pnl) : '--'}</strong><small>{pnl ? 'fontes com PnL' : 'não fornecido pelas fontes'}</small></div><div className="card metric-card"><span className="muted">Saques</span><strong className="warn-text">Bloqueados</strong><small>proteção da aplicação</small></div></div>
+    <div className="card compact-card"><h2>Contas e carteiras</h2><div className="table-scroll"><table className="tbl compact-table"><thead><tr><th>Corretora</th><th>Mercado</th><th>Estado</th><th>Saldo / equity</th><th>Disponível</th><th>Moeda</th><th>Posições</th><th>PnL</th></tr></thead><tbody>{rows.length ? rows.map((row) => { const currency = row.account?.currency ?? (row.broker === 'mt5' ? 'USD' : 'USDT'); return <tr key={row.id}><td><strong>{label(row.broker)}</strong></td><td>{row.market || '—'}</td><td><span className={`chip ${row.status === 'conectada' ? 'ok' : 'warn'}`}>{row.status}</span></td><td className="num">{money(row.account?.balance ?? row.account?.equity, currency)}</td><td className="num">{money(row.account?.available, currency)}</td><td>{currency}</td><td className="num">{row.positions?.length ?? 0}</td><td className="num">{row.pnl?.available ? money(row.pnl.value, currency) : 'N/D'}</td></tr>; }) : <tr><td colSpan={8}><div className="placeholder">Nenhuma corretora salva. Configure uma conexão em Configurações; o app continuará funcional sem MT5.</div></td></tr>}</tbody></table></div></div>
+    {rows.some((row) => row.error) && <div className="hint">Fontes indisponíveis: {rows.filter((row) => row.error).map((row) => `${label(row.broker)}: ${row.error}`).join(' · ')}</div>}
+  </div>;
+}

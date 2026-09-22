@@ -33,8 +33,9 @@ AppVersion={#MyAppVersion}
 AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 ; O destino final e resolvido por GetDefaultDirName antes da tela do wizard.
-; Este fallback e usado apenas quando nao ha uma pasta de dados MT5 detectavel.
-DefaultDirName={userappdata}\XAU_AI_PRO
+; Detecta a pasta de dados do MT5 (instala dentro dela, junto do EA);
+; sem MT5 detectado, usa o fallback em APPDATA.
+DefaultDirName={code:GetDefaultDirName}
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 
@@ -64,7 +65,7 @@ Name: "brazilianportuguese"; MessagesFile: "compiler:Languages\BrazilianPortugue
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 Name: "autostart"; Description: "Iniciar o XAU AI PRO automaticamente ao ligar o Windows"; GroupDescription: "Inicializacao:"; Flags: unchecked
 
 [InstallDelete]
@@ -138,9 +139,9 @@ Source: "{#MyRoot}\MQL5\Scripts\*.mq5"; DestDir: "{app}\MQL5\Scripts"; Flags: ig
 ; ============================================================
 ; 6) Presets de configuracao (.set) do EA
 ; ============================================================
-Source: "{#MyRoot}\MQL5\Experts\XAU_AI_PRO\Config\XAU_AI_PRO.AUTOTRADE_ON.set"; DestDir: "{app}\MQL5\Experts\XAU_AI_PRO\Config"; Flags: ignoreversion
-Source: "{#MyRoot}\MQL5\Experts\XAU_AI_PRO\Config\XAU_AI_PRO.PRO.set"; DestDir: "{app}\MQL5\Experts\XAU_AI_PRO\Config"; Flags: ignoreversion
-Source: "{#MyRoot}\MQL5\Experts\XAU_AI_PRO\Config\XAU_AI_PRO.QUALITY.set"; DestDir: "{app}\MQL5\Experts\XAU_AI_PRO\Config"; Flags: ignoreversion
+Source: "{#MyRoot}\MQL5\Experts\XAU_AI_PRO\Release\v1.2.0\Config\XAU_AI_PRO.AUTOTRADE_ON.set"; DestDir: "{app}\MQL5\Experts\XAU_AI_PRO\Config"; Flags: ignoreversion
+Source: "{#MyRoot}\MQL5\Experts\XAU_AI_PRO\Release\v1.2.0\Config\XAU_AI_PRO.PRO.set"; DestDir: "{app}\MQL5\Experts\XAU_AI_PRO\Config"; Flags: ignoreversion
+Source: "{#MyRoot}\MQL5\Experts\XAU_AI_PRO\Release\v1.2.0\Config\XAU_AI_PRO.QUALITY.set"; DestDir: "{app}\MQL5\Experts\XAU_AI_PRO\Config"; Flags: ignoreversion
 
 ; ============================================================
 ; 7) Assets / icone / docs

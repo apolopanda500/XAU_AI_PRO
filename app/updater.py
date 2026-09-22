@@ -55,6 +55,54 @@ def is_newer(remote: str, local: str) -> bool:
     return parse_semver(remote) > parse_semver(local)
 
 
+def expected_asset_name() -> str:
+    """Nome canônico do asset de update, alinhado ao installer.iss.
+
+    O instalador gera ``XAU_AI_PRO_Setup_<versao>.exe`` (installer.iss:
+    ``OutputBaseFilename=XAU_AI_PRO_Setup_{#MyAppVersion}``). Buscar um nome
+    literal diferente faz ``check_update()`` nunca encontrar atualização,
+    deixando usuários presos em builds antigos e inseguros.
+    """
+    return "xau_ai_pro_setup"
+
+
+def find_update_asset(assets: list) -> dict[str, Any] | None:
+    """Seleciona o asset Setup do release mais recente com fallback seguro.
+
+    Ordem:
+      1) correspondência exata versionada ``XAU_AI_PRO_Setup_<versão>.exe``;
+      2) qualquer asset iniciado por ``XAU_AI_PRO_Setup_`` e terminado em
+         ``.exe`` (o mais recente por nome).
+    """
+    expected = expected_asset_name()
+    candidates = []
+    for asset in assets or []:
+        name = str(asset.get("name", ""))
+        lowered = name.lower()
+        if not lowered.startswith(expected) or not lowered.endswith(".exe"):
+            continue
+        candidates.append(asset)
+    if not candidates:
+        return None
+
+    def asset_key(asset: dict) -> tuple:
+        name = str(asset.get("name", ""))
+        stem = name[:-4] if name.lower().endswith(".exe") else name
+        version_text = stem[len("XAU_AI_PRO_Setup_"):] if len(stem) > len("XAU_AI_PRO_Setup_") else ""
+        try:
+            return (1, parse_semver(version_text), name.lower())
+        except Exception:
+            return (0, (0, 0, 0), name.lower())
+
+    candidates.sort(key=asset_key, reverse=True)
+    chosen = candidates[0]
+    return {
+        "name": chosen.get("name", ""),
+        "url": chosen.get("browser_download_url", ""),
+        "size": chosen.get("size", 0),
+    }
+
+
 def latest_release(timeout: int = 15) -> dict[str, Any]:
     """Consulta o release mais recente publicado. Nunca levanta excecao."""
     req = urllib.request.Request(API_LATEST, headers=_UA)
@@ -85,12 +133,7 @@ def check_update() -> dict[str, Any]:
         return _res(False, has_update=False, local=local, error=rel.get("error", ""))
     remote = rel.get("tag", "")
     has = is_newer(remote, local)
-    asset = None
-    for a in rel.get("assets", []):
-        if a.get("name", "").lower() == "xau_ai_pro_setup.exe":
-            asset = {"name": a["name"], "url": a.get("browser_download_url", ""),
-                     "size": a.get("size", 0)}
-            break
+    asset = find_update_asset(rel.get("assets", []))
     return _res(True, has_update=has, local=local, remote=remote,
                 asset=asset, notes=rel.get("notes", ""))
 

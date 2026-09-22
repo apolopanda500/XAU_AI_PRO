@@ -1,41 +1,5 @@
-import React from 'react';
 import { useAppStore, TabType } from '../hooks/useAppStore';
 import { QuantumIcon } from './QuantumIcon';
 import type { IconName } from './QuantumIcon';
-
-const ITEMS: [TabType, string, IconName][] = [
-  ['dashboard', 'Painel', 'dashboard'],
-  ['market', 'Mercado', 'market'],
-  ['robot', 'Robô', 'robot'],
-  ['history', 'Histórico', 'history'],
-  ['calendar', 'Calendário', 'calendar'],
-  ['system', 'Sistema', 'system'],
-  ['strategy-tester', 'Estratégia', 'strategy'],
-  ['settings', 'Config', 'settings'],
-];
-
-export default function Sidebar() {
-  const activeTab = useAppStore((s) => s.activeTab);
-  const setActiveTab = useAppStore((s) => s.setActiveTab);
-  const sidebarOpen = useAppStore((s) => s.sidebarOpen);
-  const setSidebarOpen = useAppStore((s) => s.setSidebarOpen);
-
-  return (
-    <aside className={`sidebar ${sidebarOpen ? '' : 'collapsed'}`}>
-      <div className="brand">
-        <span className="brand-mark">◆</span>
-        <span className="brand-name">XAU AI PRO</span>
-        <button className="btn ghost sm collapse-btn" title={sidebarOpen ? 'Recolher' : 'Expandir'} onClick={() => setSidebarOpen(!sidebarOpen)}>{sidebarOpen ? '‹' : '›'}</button>
-      </div>
-      <nav className="nav-list">
-        {ITEMS.map(([key, label, icon]) => (
-          <button key={key} className={`nav-item ${activeTab === key ? 'active' : ''}`} onClick={() => setActiveTab(key)} title={label}>
-            <QuantumIcon name={icon} size={24} glow={activeTab === key} />
-            {sidebarOpen && <span className="nav-label">{label}</span>}
-          </button>
-        ))}
-      </nav>
-      {sidebarOpen && <div className="sidebar-footer muted">XAU AI PRO · Operação manual segura</div>}
-    </aside>
-  );
-}
+const ITEMS:[TabType,string,IconName][]=[['portfolio','Patrimônio','wallet'],['robot','Robô','robot'],['history','Histórico','history'],['system','Sistema','system'],['settings','Configuração','settings'],['risk','Risco','warning'],['alert','Alertas','bell'],['analytics','Analytics','chart'],['ai','Inteligência Artificial','quantum']];
+export default function Sidebar(){const active=useAppStore(s=>s.activeTab);const setActive=useAppStore(s=>s.setActiveTab);const open=useAppStore(s=>s.sidebarOpen);const setOpen=useAppStore(s=>s.setSidebarOpen);return <aside className={`sidebar ${open?'':'collapsed'}`}><div className="brand"><img className="brand-mark brand-image" src="/xau-ai-pro-mark.png" alt="XAU AI PRO"/>{open&&<span className="brand-name">XAU AI PRO</span>}<button type="button" className="btn ghost sm collapse-btn" title={open?'Recolher':'Expandir'} onClick={()=>setOpen(!open)}>{open?'‹':'›'}</button></div><nav className="nav-list">{ITEMS.map(([key,label,icon])=><button key={key} type="button" className={`nav-item ${active===key?'active':''}`} onClick={()=>setActive(key)} title={label}><QuantumIcon name={icon} size={24} glow={active===key}/>{open&&<span className="nav-label">{label}</span>}</button>)}</nav>{open&&<div className="sidebar-footer muted"><span>XAU AI PRO · Operação segura</span><small>Versão 1.2.0</small></div>}</aside>}

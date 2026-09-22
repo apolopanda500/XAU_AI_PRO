@@ -7,6 +7,14 @@
 .mt-account-grid strong.pos { color: var(--ok, #2ecc71); }
 .mt-account-grid strong.neg { color: var(--danger, #e74c3c); }
 .mini-terminal-positions { margin-bottom: 12px; }
+.positions-table { table-layout: fixed; width: 100%; }
+.positions-table th, .positions-table td { padding: 5px 6px; white-space: nowrap; vertical-align: middle; }
+.positions-table th:nth-child(1), .positions-table td:nth-child(1) { width: 9%; }
+.positions-table th:nth-child(2), .positions-table td:nth-child(2) { width: 11%; }
+.positions-table th:nth-child(3), .positions-table td:nth-child(3) { width: 8%; }
+.positions-table th:nth-child(4), .positions-table td:nth-child(4), .positions-table th:nth-child(5), .positions-table td:nth-child(5), .positions-table th:nth-child(6), .positions-table td:nth-child(6), .positions-table th:nth-child(7), .positions-table td:nth-child(7), .positions-table th:nth-child(8), .positions-table td:nth-child(8), .positions-table th:nth-child(9), .positions-table td:nth-child(9), .positions-table th:nth-child(10), .positions-table td:nth-child(10) { width: 8%; text-align: right; font-variant-numeric: tabular-nums; }
+.positions-table th:last-child, .positions-table td:last-child { width: 10%; text-align: center; }
+.positions-table .chip { padding: 2px 5px; font-size: 10px; }
 .mt-pnl-pos { color: var(--ok, #2ecc71); font-weight: 600; }
 .mt-pnl-neg { color: var(--danger, #e74c3c); font-weight: 600; }
 .mt-events td { font-size: 12.5px; }

@@ -5,6 +5,7 @@ Aba de controle do Robo MT5.
 from __future__ import annotations
 
 import threading
+import time
 import tkinter as tk
 from tkinter import messagebox
 from typing import Callable
@@ -26,8 +27,31 @@ class RobotTab:
         self.on_status = on_status
         self.frame = tk.Frame(parent, bg=Theme.BG)
         self.frame.pack(fill="both", expand=True)
+        self._auto_running = False
         self._build()
         self.start_refresh_loop()
+
+    # ------------------------------------------------------------------
+    # Auto-refresh (a cada 1 min) - status do robô e EA
+    # ------------------------------------------------------------------
+    def start_refresh_loop(self, interval_sec: int = 60) -> None:
+        """Inicia loop em thread daemon que atualiza o status do robô a cada 1 min."""
+        self._auto_running = True
+
+        def loop() -> None:
+            while self._auto_running:
+                try:
+                    interval = max(30, interval_sec)
+                    time.sleep(interval)
+                    if self._auto_running:
+                        self.check_ea()
+                except Exception:
+                    time.sleep(10)
+
+        threading.Thread(target=loop, daemon=True).start()
+
+    def stop_auto_refresh(self) -> None:
+        self._auto_running = False
 
     def _build(self) -> None:
         from app.components.banner import TabBanner

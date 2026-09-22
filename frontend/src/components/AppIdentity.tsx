@@ -1,0 +1,1 @@
+export default function AppIdentity(){return <div className="app-identity"><img src="/xau-ai-pro-mark.png" alt="XAU AI PRO"/><span>XAU AI PRO · versão 1.2.0</span><span>Desenvolvedor: Micro</span></div>}

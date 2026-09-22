@@ -57,6 +57,19 @@ class MexcTreeview(ttk.Treeview):
         )
         self.configure(style="Mexc.Treeview")
 
+    def _cell_str(self, value: Any) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, (int, float)):
+            if value == 0 and not isinstance(value, bool):
+                return "0.00"
+            return f"{value:,.4f}".rstrip("0").rstrip(".") if abs(value) >= 0.01 else f"{value:.4f}"
+        text = str(value).strip()
+        if not text:
+            return ""
+        return text.upper() if len(text) <= 12 and text.replace(" ", "").isalpha() else text
+
+
     def clear(self) -> None:
         for item in self.get_children():
             self.delete(item)
@@ -77,7 +90,7 @@ class MexcTreeview(ttk.Treeview):
 
         if len(items) == len(rows):
             for item, row, tag in zip(items, rows, row_tags):
-                values = tuple(str(value) for value in row)
+                values = tuple(self._cell_str(value) for value in row)
                 if self.item(item, "values") != values:
                     self.item(item, values=row)
                 if self.item(item, "tags") != (tag,):

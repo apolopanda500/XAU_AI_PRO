@@ -198,15 +198,25 @@ def _universal_quote(broker: str, market: str, symbol: str) -> dict:
     elif broker == "binance":
         raw = BinanceClient(exchange).ticker(symbol)
     else:
-        return _quote(symbol)
+        quote = dict(_quote(symbol))
+        now = datetime.now(timezone.utc).isoformat()
+        quote.update({
+            "broker": "mt5",
+            "market": market or "forex",
+            "source": str(quote.get("source") or "mt5_gateway"),
+            "timestamp": str(quote.get("timestamp") or now),
+            "received_at": now,
+        })
+        return quote
     data = raw.get("data", raw) if isinstance(raw, dict) else raw
     bid = float(data.get("bidPrice") or data.get("bid1") or data.get("bid") or 0)
     ask = float(data.get("askPrice") or data.get("ask1") or data.get("ask") or 0)
-    return {"symbol": symbol.upper(), "bid": bid, "ask": ask,
+    now = datetime.now(timezone.utc).isoformat()
+    return {"broker": broker, "market": market, "symbol": symbol.upper(), "bid": bid, "ask": ask,
             "last": (bid + ask) / 2 if bid and ask else 0,
             "price": (bid + ask) / 2 if bid and ask else 0,
             "spread": ask - bid, "source": f"{broker}_api",
-            "timestamp": datetime.now().isoformat()}
+            "timestamp": now, "received_at": now}
 
 
 def _universal_positions(broker: str, market: str) -> dict:
@@ -294,11 +304,21 @@ def _universal_quotes(broker: str, market: str, symbols: list[str]) -> dict:
     errors: list[dict] = []
     for symbol in symbols:
         try:
-            quotes.append(_universal_quote(broker, market, symbol))
+            quote = dict(_universal_quote(broker, market, symbol))
+            now = datetime.now(timezone.utc).isoformat()
+            quote.update({
+                "broker": str(quote.get("broker") or broker).lower(),
+                "market": str(quote.get("market") or market).lower(),
+                "source": str(quote.get("source") or f"{broker}_gateway"),
+                "timestamp": str(quote.get("timestamp") or now),
+                "received_at": str(quote.get("received_at") or now),
+                "symbol": str(quote.get("symbol") or symbol).upper(),
+            })
+            quotes.append(quote)
         except Exception as exc:
             errors.append({"symbol": symbol, "error": str(exc)})
     return {"ok": True, "broker": broker, "market": market, "quotes": quotes,
-            "errors": errors, "count": len(quotes), "source": "mt5_gateway"}
+            "errors": errors, "count": len(quotes), "source": "universal_gateway"}
 
 
 def _universal_trades(broker: str, market: str, symbol: str) -> dict:
