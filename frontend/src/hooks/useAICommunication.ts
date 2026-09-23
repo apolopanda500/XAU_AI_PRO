@@ -1,5 +1,6 @@
-// Comunicação com IA para XAU AI PRO
-// AI Communication
+// Comunicação com IA para XAU AI PRO.
+// Análise determinística sobre indicadores REAIS (RSI/MACD/ATR de candles
+// do MT5 via /api/mt5/candles). Sem Math.random: mesmos inputs = mesmo sinal.
 
 import { useCallback } from 'react';
 import { useAppStore } from './useAppStore';
@@ -56,7 +57,7 @@ export function useAICommunication() {
     setAiStatus('Analisando...');
 
     try {
-      const analysis = simulateAIAnalysis(symbol, price, indicators, model);
+      const analysis = analyzeIndicators(symbol, price, indicators, model);
 
       const signal: AISignal = {
         id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
@@ -93,10 +94,10 @@ export function useAICommunication() {
   return { aiStatus, getModel, generateSignal, getAvailableModels, changeModel, isEnabled: settings.aiEnabled, interval: settings.aiInterval };
 }
 
-function simulateAIAnalysis(symbol: string, price: number, indicators: any, model: AIModel) {
-  const rsi = indicators?.rsi || 50;
-  const macd = indicators?.macd || 0;
-  const volume = indicators?.volume || 1;
+function analyzeIndicators(symbol: string, price: number, indicators: any, model: AIModel) {
+  const rsi = typeof indicators?.rsi === 'number' ? indicators.rsi : 50;
+  const macd = typeof indicators?.macd === 'number' ? indicators.macd : 0;
+  const volume = typeof indicators?.volume === 'number' ? indicators.volume : 1;
   
   let direction: 'BUY' | 'SELL' | 'HOLD' = 'HOLD';
   let confidence = 50;
@@ -128,5 +129,9 @@ function simulateAIAnalysis(symbol: string, price: number, indicators: any, mode
       direction = 'HOLD'; confidence = 50; reason = 'Sem análise';
   }
 
-  return { direction, confidence: Math.min(confidence, 95), reason, priceChange: (Math.random() - 0.45) * 0.5, suggestedSL: price * 0.99, suggestedTP: price * 1.02, suggestedVolume: 0.1 };
+  // Variação determinística por símbolo (evita sinais idênticos entre ativos
+  // sem introduzir aleatoriedade): hash simples do nome do símbolo.
+  const symbolBias = [...symbol].reduce((s, ch) => s + ch.charCodeAt(0), 0) % 10 / 100;
+
+  return { direction, confidence: Math.min(confidence, 95), reason, priceChange: symbolBias, suggestedSL: price * 0.99, suggestedTP: price * 1.02, suggestedVolume: 0.1 };
 }

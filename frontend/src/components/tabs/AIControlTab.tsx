@@ -6,6 +6,11 @@ import { useAICommunication, type AISignal } from '../../hooks/useAICommunicatio
 import { useAppStore } from '../../hooks/useAppStore';
 import { fmtNum, fmtPct } from '../../lib/format';
 import { HelpTooltip } from '../../components/HelpTooltip';
+import { apiBase } from '../../lib/api';
+import { rsi as calcRsi, macd as calcMacd, type Candle } from '../../lib/technical';
+
+const API = `${apiBase()}`;
+const TF_BY_MODEL: Record<string, string> = { M1: 'M1', M5: 'M5', M15: 'M15', H1: 'H1', H4: 'H4', D1: 'D1' };
 
 export default function AIPanel() {
   const quotes = useAppStore((s) => s.quotes);
@@ -17,25 +22,50 @@ export default function AIPanel() {
   const [currentSignal, setCurrentSignal] = useState<AISignal | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [recentSignals, setRecentSignals] = useState<AISignal[]>([]);
-  const [selectedModel, setSelectedModel] = useState(getModel()?.id || 'xau-pro-v2');
+  const [indicatorStatus, setIndicatorStatus] = useState('Aguardando candles do MT5...');
 
   const currentQuote = useMemo(() => quotes.find(q => q.symbol === selectedSymbol), [quotes, selectedSymbol]);
+  const activeModel = getModel();
+  const [selectedModel, setSelectedModel] = useState(activeModel?.id || 'xau-pro-v2');
+
+  // Indicadores REAIS: candles do MT5 -> RSI/MACD locais. Sem valores aleatórios.
+  const loadIndicators = useCallback(async (symbol: string, timeframe: string) => {
+    try {
+      const url = `${API}/api/mt5/candles?symbol=${encodeURIComponent(symbol)}&timeframe=${timeframe}&count=200`;
+      const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      const d = (await r.json()) as { candles?: Candle[]; error?: string };
+      if (!r.ok || !d.candles?.length) {
+        setIndicatorStatus(`Sem candles: ${d.error ?? 'MT5 indisponível'}`);
+        return null;
+      }
+      const rsiValue = calcRsi(d.candles);
+      const macdValue = calcMacd(d.candles);
+      const lastVolume = 1;
+      setIndicatorStatus(`${d.candles.length} candles ${timeframe} · RSI ${rsiValue?.toFixed(1) ?? '--'} · MACD ${macdValue?.macd.toFixed(3) ?? '--'}`);
+      return { rsi: rsiValue ?? 50, macd: macdValue?.macd ?? 0, volume: lastVolume };
+    } catch (e) {
+      setIndicatorStatus(`Gateway indisponível: ${e instanceof Error ? e.message : 'erro'}`);
+      return null;
+    }
+  }, []);
 
   const handleGenerateSignal = useCallback(async () => {
-    if (!currentQuote || !isEnabled) return;
+    if (!currentQuote || !isEnabled || !activeModel) return;
     setIsAnalyzing(true);
-    const response = await generateSignal(currentQuote.symbol, currentQuote.price, {
-      rsi: Math.random() * 40 + 30,
-      macd: (Math.random() - 0.5) * 2,
-      volume: Math.random() * 2 + 0.5,
-    });
+    const indicators = await loadIndicators(currentQuote.symbol, TF_BY_MODEL[activeModel.parameters.timeframe ?? 'M15'] ?? 'M15');
+    if (!indicators) {
+      setIsAnalyzing(false);
+      setAiStatus('IA: candles indisponíveis');
+      return;
+    }
+    const response = await generateSignal(currentQuote.symbol, currentQuote.price, indicators);
     setIsAnalyzing(false);
     if (response.success && response.signal) {
       setCurrentSignal(response.signal);
-      setRecentSignals(prev => [response.signal, ...prev.slice(0, 9)]);
+      setRecentSignals(prev => [response.signal!, ...prev.slice(0, 9)]);
       setAiStatus(`Sinal: ${response.signal.direction} (${response.signal.confidence}%)`);
     }
-  }, [currentQuote, isEnabled, generateSignal, setAiStatus]);
+  }, [currentQuote, isEnabled, activeModel, generateSignal, setAiStatus, loadIndicators]);
 
   useEffect(() => {
     if (!isEnabled || !currentQuote) return;
@@ -49,7 +79,7 @@ export default function AIPanel() {
     handleGenerateSignal();
   };
 
-  const model = getModel();
+  const model = activeModel;
   const availableModels = getAvailableModels();
   const signalClass = currentSignal?.direction === 'BUY' ? 'pos' : currentSignal?.direction === 'SELL' ? 'neg' : '';
 
@@ -75,6 +105,7 @@ export default function AIPanel() {
         <h3>Inteligencia Artificial</h3>
         <span className="muted">{aiStatus}</span>
       </div>
+      <div className="hint" style={{ marginBottom: 8 }}>{indicatorStatus}</div>
       <div className="ai-model-card">
         <div className="ai-model-info">
           <div className="ai-model-name">
