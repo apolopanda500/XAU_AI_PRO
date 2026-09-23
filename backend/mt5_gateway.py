@@ -617,6 +617,18 @@ def _history(days: int = 30, symbol: str = "") -> dict:
 _TIMEFRAME_MAP = {"M1": 1, "M5": 5, "M15": 15, "M30": 30, "H1": 16385, "H4": 16388, "D1": 16408}
 
 
+def _economic_alerts_within(hours: float = 6.0, tz: str = "BRT") -> list[dict]:
+    """Proximos eventos de alto impacto dentro de N horas (agenda local).
+
+    Fonte: app/economic_calendar.alerts_within. Usado pelo endpoint
+    /api/economic/alerts como trigger de notificacao no app (Tauri).
+    """
+    from app.economic_calendar import alerts_within
+
+    hours = max(0.0, min(float(hours), 72.0))
+    return alerts_within(hours=hours, tz=tz or "BRT")
+
+
 def _economic_calendar(limit: int = 30, tz: str = "BRT", days: int = 14) -> dict:
     """Agenda economica real (tabela local recorrente) — nunca retorna mock.
 

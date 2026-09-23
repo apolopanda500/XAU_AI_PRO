@@ -5,6 +5,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { useAppStore } from './useAppStore';
 import type { Quote } from './useAppStore';
 import { notify } from '../lib/notify';
+import { apiBase } from '../lib/api';
 
 export type AlertType = 'price_above' | 'price_below' | 'spread_above' | 'time';
 
@@ -135,6 +136,35 @@ export function useAlertManager(): AlertManager {
     // Reavalia quando quotes mudam (ticks do Core via WebSocket).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quotes]);
+
+  // Alerta de evento econômico: a cada 60s consulta /api/economic/alerts
+  // e dispara notificação nativa 1x por evento (janela de 6h).
+  const notifiedEventsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const check = async () => {
+      try {
+        const r = await fetch(`${apiBase()}/api/economic/alerts?hours=6&tz=BRT`, {
+          signal: AbortSignal.timeout(8000),
+        });
+        const d = (await r.json()) as { events?: Array<{ title?: string; when?: string; currency?: string; impact?: string }> };
+        if (!r.ok || !d.events?.length) return;
+        for (const e of d.events) {
+          const key = `${e.title}-${e.when}`;
+          if (notifiedEventsRef.current.has(key)) continue;
+          notifiedEventsRef.current.add(key);
+          void notify(
+            `Evento econômico ${e.currency ?? ''} (${e.impact ?? 'alto'})`,
+            `${e.title ?? 'Evento'} às ${e.when ?? 'agora'}`,
+          );
+        }
+      } catch {
+        // Gateway offline: sem alerta, sem erro na UI.
+      }
+    };
+    void check();
+    const t = window.setInterval(check, 60000);
+    return () => window.clearInterval(t);
+  }, []);
 
   return {
     alerts,

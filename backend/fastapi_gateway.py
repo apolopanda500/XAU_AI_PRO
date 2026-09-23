@@ -502,6 +502,22 @@ async def risk_state_route() -> JSONResponse:
         return _send({"ok": False, "error": str(exc)}, 503)
 
 
+@app.get("/api/economic/alerts")
+async def economic_alerts_route(hours: float = 6.0, tz: str = "BRT") -> JSONResponse:
+    """Proximos eventos de alto impacto dentro das proximas N horas.
+
+    Fonte: app/economic_calendar.alerts_within (mesma agenda local do
+    /api/economic/calendar). Serve de trigger para notificacao no app.
+    """
+    try:
+        events = gw._economic_alerts_within(hours=hours, tz=tz)
+        return _send({"ok": True, "events": events, "count": len(events),
+                      "hours": hours, "timezone": (tz or "BRT").upper(),
+                      "source": "app.economic_calendar.alerts_within"})
+    except Exception as exc:
+        return _send({"ok": False, "error": str(exc), "events": [], "count": 0}, 503)
+
+
 @app.get("/api/economic/calendar")
 async def economic_calendar_route(limit: int = 30, tz: str = "BRT", days: int = 14) -> JSONResponse:
     """Agenda economica real: tabela local de eventos recorrentes de alto impacto.
