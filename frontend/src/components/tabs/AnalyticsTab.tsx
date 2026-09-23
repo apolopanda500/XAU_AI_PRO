@@ -1,70 +1,124 @@
-// Tab de Analytics - XAU AI PRO
-import { useAppStore } from '../../hooks/useAppStore';
-import { fmtMoney, fmtPct, fmtNum, clsPnl } from '../../lib/format';
-import { calculateWinRate, calculateProfitFactor, calculatePerformanceBySymbol, type TradeResult } from '../../lib/performanceMetrics';
-import { useState, useMemo } from 'react';
+// Tab de Analytics — XAU AI PRO.
+// Fonte de verdade: deals reais de /api/universal/history (mt5/mexc/binance),
+// mesmos dados do HistoryTab. Sem mock: sem histórico = "Sem dados".
+import { fmtMoney, fmtPct, clsPnl } from '../../lib/format';
+import { apiBase } from '../../lib/api';
+import { calculateWinRate, calculateProfitFactor } from '../../lib/performanceMetrics';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 
-const generateMockTrades = (): TradeResult[] => {
-  const symbols = ['XAUUSD', 'BTCUSDT', 'EURUSD', 'GBPUSD', 'SOLUSDT'];
-  const trades: TradeResult[] = [];
-  for (let i = 0; i < 150; i++) {
-    const symbol = symbols[Math.floor(Math.random() * symbols.length)];
-    const side = Math.random() > 0.5 ? 'BUY' as const : 'SELL' as const;
-    const entryPrice = 95000 + Math.random() * 5000;
-    const exitPrice = entryPrice + (Math.random() - 0.45) * entryPrice * 0.02;
-    const pnl = (exitPrice - entryPrice) * (side === 'BUY' ? 1 : -1) * 0.1;
-    trades.push({
-      id: `trade-${i}`, ticket: 100000 + i, symbol, side,
-      volume: 0.1 + Math.random() * 0.5, entryPrice, exitPrice, pnl,
-      pnlPercent: (pnl / 10000) * 100, commission: Math.abs(pnl) * 0.02, swap: 0,
-      holdingTimeMinutes: Math.floor(Math.random() * 480),
-      timestamp: new Date(Date.now() - i * 3600000).toISOString(),
-    });
-  }
-  return trades;
+type Deal = {
+  id?: string | number; broker?: string; symbol?: string; side?: string;
+  quantity?: number | string; volume?: number; price?: number | string;
+  realizedPnl?: number | string; profit?: number;
+  executedAt?: string; close_time?: string;
 };
 
+const toNum = (v: unknown): number => {
+  if (typeof v === 'number') return v;
+  if (typeof v !== 'string' || !v.trim()) return NaN;
+  const c = v.replace(/\s/g, '');
+  return Number(c.includes(',') ? c.replace(/\./g, '').replace(',', '.') : c);
+};
+
+const API = `${apiBase()}`;
+
 export default function AnalyticsTab() {
-  const [trades] = useState(() => generateMockTrades());
+  const [deals, setDeals] = useState<Deal[]>([]);
+  const [status, setStatus] = useState('Carregando histórico real...');
   const [filterSymbol, setFilterSymbol] = useState('all');
   const [filterPeriod, setFilterPeriod] = useState<'all' | '30d' | '7d' | 'today'>('all');
-  
+
+  const load = useCallback(async () => {
+    setStatus('Carregando histórico real...');
+    const settled = await Promise.allSettled(
+      ['mt5'].map(async (b) => {
+        const params = new URLSearchParams({ broker: b, market: 'other', days: '90' });
+        const r = await fetch(`${API}/api/universal/history?${params}`, { signal: AbortSignal.timeout(15000) });
+        const d = (await r.json()) as { deals?: Deal[]; error?: string };
+        if (!r.ok) throw new Error(d.error || `${b} indisponível`);
+        return d.deals ?? [];
+      }),
+    );
+    const flat = settled.flatMap((s) => (s.status === 'fulfilled' ? s.value : []));
+    setDeals(flat);
+    setStatus(
+      settled.some((s) => s.status === 'rejected')
+        ? 'Gateway indisponível — conecte o MT5 para ver analytics reais.'
+        : flat.length
+          ? `${flat.length} deals reais (90 dias).`
+          : 'Sem deals no período — nenhum trade fechado.',
+    );
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const trades = useMemo(
+    () =>
+      deals.map((d, i) => ({
+        id: String(d.id ?? i),
+        symbol: d.symbol ?? '--',
+        pnl: Number.isFinite(toNum(d.realizedPnl)) ? toNum(d.realizedPnl) : (d.profit ?? 0),
+        timestamp: d.executedAt ?? d.close_time ?? '',
+      })),
+    [deals],
+  );
+
   const filteredTrades = useMemo(() => {
     let result = trades;
-    if (filterSymbol !== 'all') result = result.filter(t => t.symbol === filterSymbol);
+    if (filterSymbol !== 'all') result = result.filter((t) => t.symbol === filterSymbol);
     const now = Date.now();
-    if (filterPeriod === '30d') result = result.filter(t => new Date(t.timestamp).getTime() > now - 30 * 24 * 3600000);
-    else if (filterPeriod === '7d') result = result.filter(t => new Date(t.timestamp).getTime() > now - 7 * 24 * 3600000);
-    else if (filterPeriod === 'today') { const start = new Date(); start.setHours(0, 0, 0, 0); result = result.filter(t => new Date(t.timestamp).getTime() > start.getTime()); }
+    if (filterPeriod === '30d') result = result.filter((t) => new Date(t.timestamp).getTime() > now - 30 * 24 * 3600000);
+    else if (filterPeriod === '7d') result = result.filter((t) => new Date(t.timestamp).getTime() > now - 7 * 24 * 3600000);
+    else if (filterPeriod === 'today') { const start = new Date(); start.setHours(0, 0, 0, 0); result = result.filter((t) => new Date(t.timestamp).getTime() > start.getTime()); }
     return result;
   }, [trades, filterSymbol, filterPeriod]);
-  
+
   const metrics = useMemo(() => {
-    if (filteredTrades.length === 0) return { totalTrades: 0, winRate: 0, profitFactor: 0, expectancy: 0, totalPnl: 0, bySymbol: {} };
-    const wins = filteredTrades.filter(t => t.pnl > 0);
-    const losses = filteredTrades.filter(t => t.pnl < 0);
+    if (filteredTrades.length === 0) return { totalTrades: 0, winRate: 0, profitFactor: 0, expectancy: 0, totalPnl: 0, bySymbol: {} as Record<string, { totalTrades: number; winRate: number; totalPnl: number; averagePnl: number; profitFactor: number }> };
+    const asResults = filteredTrades.map((t) => ({ ...t, side: 'BUY' as const, volume: 0, entryPrice: 0, exitPrice: 0, pnlPercent: 0, commission: 0, swap: 0, holdingTimeMinutes: 0, ticket: 0 }));
+    const wins = filteredTrades.filter((t) => t.pnl > 0);
+    const losses = filteredTrades.filter((t) => t.pnl < 0);
     const totalPnl = filteredTrades.reduce((s, t) => s + t.pnl, 0);
+    const bySymbol: Record<string, { totalTrades: number; winRate: number; totalPnl: number; averagePnl: number; profitFactor: number }> = {};
+    const pnlsBySymbol: Record<string, number[]> = {};
+    for (const t of filteredTrades) {
+      const g = bySymbol[t.symbol] ?? { totalTrades: 0, winRate: 0, totalPnl: 0, averagePnl: 0, profitFactor: 0 };
+      g.totalTrades += 1;
+      g.totalPnl += t.pnl;
+      bySymbol[t.symbol] = g;
+      (pnlsBySymbol[t.symbol] ??= []).push(t.pnl);
+    }
+    for (const [sym, g] of Object.entries(bySymbol)) {
+      const pnls = pnlsBySymbol[sym] ?? [];
+      const w = pnls.filter((p) => p > 0).length;
+      const gp = pnls.filter((p) => p > 0).reduce((s, p) => s + p, 0);
+      const gl = Math.abs(pnls.filter((p) => p < 0).reduce((s, p) => s + p, 0));
+      g.winRate = pnls.length ? (w / pnls.length) * 100 : 0;
+      g.averagePnl = pnls.length ? g.totalPnl / pnls.length : 0;
+      g.profitFactor = gl === 0 ? (gp > 0 ? Infinity : 0) : gp / gl;
+    }
     return {
       totalTrades: filteredTrades.length,
-      winRate: calculateWinRate(filteredTrades),
-      profitFactor: calculateProfitFactor(filteredTrades),
+      winRate: calculateWinRate(asResults),
+      profitFactor: calculateProfitFactor(asResults),
       expectancy: wins.length > 0 && losses.length > 0 ? (wins.reduce((s, t) => s + t.pnl, 0) / wins.length * (wins.length / filteredTrades.length)) - (losses.reduce((s, t) => s + Math.abs(t.pnl), 0) / losses.length * (losses.length / filteredTrades.length)) : 0,
       totalPnl,
-      bySymbol: calculatePerformanceBySymbol(filteredTrades),
+      bySymbol,
     };
   }, [filteredTrades]);
-  
-  const recentTrades = useMemo(() => [...filteredTrades].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 20), [filteredTrades]);
-  const symbols = useMemo(() => ['all', ...new Set(trades.map(t => t.symbol))], [trades]);
+
+  const symbols = useMemo(() => ['all', ...new Set(trades.map((t) => t.symbol))], [trades]);
   const periodLabels = { all: 'Todos', '30d': '30 dias', '7d': '7 dias', today: 'Hoje' };
   
   if (metrics.totalTrades === 0) {
-    return <div className="analytics-page"><div className="page-head"><h1>📈 Performance & Analytics</h1></div><div className="placeholder">Sem dados</div></div>;
+    return <div className="analytics-page"><div className="page-head"><div><h1>📈 Performance & Analytics</h1><span className="muted">{status}</span></div><button className="btn ghost" onClick={() => void load()}>Atualizar</button></div><div className="placeholder">Sem dados reais — nenhum trade fechado ou gateway offline.</div></div>;
   }
-  
+
   return (
     <div className="analytics-page">
-      <div className="page-head"><h1>📈 Performance & Analytics</h1><span className="muted">{metrics.totalTrades} trades</span></div>
+      <div className="page-head"><div><h1>📈 Performance & Analytics</h1><span className="muted">{status}</span></div><button className="btn ghost" onClick={() => void load()}>Atualizar</button></div>
       <div className="metrics-grid">
         <div className="card kpi-card"><span className="kpi-label">Win Rate</span><span className="kpi-value">{fmtPct(metrics.winRate)}</span><span className="kpi-sub">{metrics.totalTrades} trades</span></div>
         <div className="card kpi-card"><span className="kpi-label">Profit Factor</span><span className="kpi-value">{metrics.profitFactor > 0 ? metrics.profitFactor.toFixed(2) : 'N/A'}</span></div>
