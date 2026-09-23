@@ -73,6 +73,28 @@ export default function DemoOrderPanel() {
   const canSend =
     !busy && fieldsValid && confirmed && mode === 'DEMO' && tradeAllowed;
 
+  // Comandos de gestão de posição (paridade TWS): trailing, break-even,
+  // parcial e aplicar/remover proteção. Todos exigem a mesma confirmação
+  // de 2 etapas e passam pelo gateway DEMO (nunca emite ordem REAL).
+  const sendCommand = async (path: string, extra: Record<string, unknown> = {}) => {
+    if (!confirmed || mode !== 'DEMO' || busy) return;
+    setBusy(true);
+    setResult(null);
+    try {
+      const r = await fetch(`${GATEWAY}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbol, confirm_demo: true, ...extra }),
+      });
+      const d = (await r.json()) as OrderResult & { command?: string };
+      setResult(d);
+    } catch (e) {
+      setResult({ ok: false, error: `Gateway indisponível: ${e instanceof Error ? e.message : 'erro'}` });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const send = async () => {
     if (!canSend) return;
     setBusy(true);
@@ -119,6 +141,17 @@ export default function DemoOrderPanel() {
       <div className="btn-row" style={{ marginTop: 12 }}>
         <button className="btn primary" type="button" onClick={() => void send()} disabled={!canSend} aria-label={`Enviar ordem demo ${side} ${symbol}`}>{busy ? 'Enviando...' : `Enviar DEMO ${side}`}</button>
       </div>
+
+      <div className="section-title" style={{ marginTop: 14, fontSize: 13 }}>Gestão da posição (paridade TWS)</div>
+      <div className="btn-row" style={{ marginTop: 0 }}>
+        <button className="btn ghost" type="button" disabled={!confirmed || mode !== 'DEMO' || busy} onClick={() => void sendCommand('/api/demo/trailing')} title="Trailing stop ativo na posição">Trailing</button>
+        <button className="btn ghost" type="button" disabled={!confirmed || mode !== 'DEMO' || busy} onClick={() => void sendCommand('/api/demo/breakeven')} title="Move o SL para o preço de entrada (break-even)">Break-even</button>
+        <button className="btn ghost" type="button" disabled={!confirmed || mode !== 'DEMO' || busy} onClick={() => void sendCommand('/api/demo/partial-close', { volume: Math.min(vol, MAX_VOLUME / 2) })} title="Fecha parcial da posição">Parcial</button>
+        <button className="btn ghost" type="button" disabled={!confirmed || mode !== 'DEMO' || busy} onClick={() => void sendCommand('/api/demo/set-protection', { sl: slNum, tp: tpNum })} title="Aplica SL/TP informados na posição">Proteção</button>
+        <button className="btn ghost" type="button" disabled={!confirmed || mode !== 'DEMO' || busy} onClick={() => void sendCommand('/api/demo/remove-protection')} title="Remove SL/TP da posição">Remover prot.</button>
+      </div>
+      <div className="hint" style={{ marginTop: 6 }}>Mesma confirmação de 2 etapas · gestão não abre posição nova · sempre via gateway DEMO.</div>
+
       <div className="hint" style={{ marginTop: 8 }}>{statusMsg} {!tradeAllowed && mode !== 'indisponível' && 'Negociação bloqueada no terminal. '}{mode === 'REAL' && 'Ordens demo recusadas em conta REAL. '}{!fieldsValid && 'Preencha volume ≤ 0.10, SL e TP. '}{fieldsValid && !confirmed && 'Confirme as 2 etapas para liberar. '}</div>
       {result && (
         <div className={`hint ${result.ok ? '' : 'neg'}`} role="status" style={{ marginTop: 8 }}>
