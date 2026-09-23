@@ -12,6 +12,7 @@ import UniversalLiveTerminal from './components/UniversalLiveTerminalLatest';
 import RobotTableCommands from './components/RobotAssetTableFixed';
 import RobotCommandActions from './components/RobotCommandActions';
 import GuardianManager from './components/GuardianManager';
+import DemoOrderPanel from './components/DemoOrderPanel';
 import MarketTab from './components/tabs/MarketTab';
 import RobotTab from './components/tabs/RobotWorkspaceTab';
 import HistoryTab from './components/tabs/HistoryTab';
@@ -32,7 +33,7 @@ import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 const TAB_COMPONENTS: Partial<Record<TabType, React.ReactNode>> = {
   portfolio: <PortfolioHomeClean />,
   market: <MarketTab />,
-  robot: <><RobotTableCommands /><RobotCommandActions /><GuardianManager /><UniversalLiveTerminal /></>,
+  robot: <><RobotTableCommands /><RobotCommandActions /><DemoOrderPanel /><GuardianManager /><UniversalLiveTerminal /></>,
   history: <HistoryTab />,
   system: <SystemMonitorUniversalTab />,
   settings: <><ConnectionManager /><ConnectedDevicesPanel /><SettingsTab /><ExitAppButton /></>,
