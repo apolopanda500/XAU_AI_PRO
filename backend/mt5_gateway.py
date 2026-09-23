@@ -617,6 +617,28 @@ def _history(days: int = 30, symbol: str = "") -> dict:
 _TIMEFRAME_MAP = {"M1": 1, "M5": 5, "M15": 15, "M30": 30, "H1": 16385, "H4": 16388, "D1": 16408}
 
 
+def _economic_calendar(limit: int = 30, tz: str = "BRT", days: int = 14) -> dict:
+    """Agenda economica real (tabela local recorrente) — nunca retorna mock.
+
+    Fonte unica: app/economic_calendar.py. Os horarios sao estimativas baseadas
+    em padroes de calendario; o payload marca isso explicitamente em 'disclaimer'.
+    """
+    from app.economic_calendar import upcoming_events
+
+    limit = max(1, min(int(limit), 200))
+    days = max(1, min(int(days), 60))
+    events = upcoming_events(limit=limit, days=days, tz=tz or "BRT", relevance="all")
+    return {
+        "ok": True,
+        "events": events,
+        "count": len(events),
+        "timezone": (tz or "BRT").upper(),
+        "days": days,
+        "source": "app.economic_calendar",
+        "disclaimer": "Horarios estimados por padrao de calendario; confirme na agenda oficial do broker antes de operar.",
+    }
+
+
 def _mt5_candles(symbol: str = "XAUUSD", timeframe: str = "M5", count: int = 300) -> dict:
     """Candles OHLC reais do terminal (copy_rates); nunca gera dados sinteticos."""
     mt5 = _mt5()

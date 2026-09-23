@@ -489,6 +489,20 @@ async def telemetry_history_route(limit: int = 120) -> dict:
         return _send({"ok": False, "error": str(exc), "snapshots": [], "count": 0}, 503)
 
 
+@app.get("/api/economic/calendar")
+async def economic_calendar_route(limit: int = 30, tz: str = "BRT", days: int = 14) -> JSONResponse:
+    """Agenda economica real: tabela local de eventos recorrentes de alto impacto.
+
+    Fonte: app/economic_calendar.py (sem rede, horarios UTC estimados por padrao
+    de calendario). Rotulado como estimativa: nao substitui a agenda oficial do
+    broker e nao alimenta decisao automatica de ordem.
+    """
+    try:
+        return _send(gw._economic_calendar(limit=limit, tz=tz, days=days))
+    except Exception as exc:
+        return _send({"ok": False, "error": str(exc), "events": [], "count": 0}, 503)
+
+
 @app.get("/api/boot")
 async def boot_route() -> dict:
     """Diagnostico do boot: reconciliacao + snapshot inicial (sem reexecutar loops)."""

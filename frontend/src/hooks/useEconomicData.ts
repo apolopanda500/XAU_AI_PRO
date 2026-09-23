@@ -1,9 +1,11 @@
 /**
- * Hook customizado para dados do calendário econômico
- * XAU AI PRO - Gerencia fetching, cache e filtros de eventos econômicos
+ * Hook de dados do calendário econômico — XAU AI PRO.
+ * Fonte de verdade: GET /api/economic/calendar (agenda real do app/economic_calendar.py).
+ * Sem mock: gateway offline = lista vazia + erro explícito.
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { apiBase } from '../lib/api';
 import {
   EconomicEvent,
   FiltroCalendario,
@@ -11,129 +13,81 @@ import {
 } from '../types';
 import type { ImpactLevel } from '../types';
 
+const API = `${apiBase()}`;
 /** Chave para cache no localStorage */
 const CACHE_KEY = 'xau_ai_pro_calendario_cache';
 /** Tempo de validade do cache: 5 minutos */
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
+type ApiEvent = {
+  title?: string; currency?: string; impact?: string;
+  note?: string; when_utc?: string; when?: string; gold_relevant?: boolean;
+};
+
+const CURRENCY_TO_COUNTRY: Record<string, { code: string; name: string; flag: string }> = {
+  USD: { code: 'US', name: 'Estados Unidos', flag: '🇺🇸' },
+  EUR: { code: 'EU', name: 'União Europeia', flag: '🇪🇺' },
+  GBP: { code: 'GB', name: 'Reino Unido', flag: '🇬🇧' },
+  JPY: { code: 'JP', name: 'Japão', flag: '🇯🇵' },
+  AUD: { code: 'AU', name: 'Austrália', flag: '🇦🇺' },
+  CAD: { code: 'CA', name: 'Canadá', flag: '🇨🇦' },
+  BRL: { code: 'BR', name: 'Brasil', flag: '🇧🇷' },
+  CNY: { code: 'CN', name: 'China', flag: '🇨🇳' },
+};
+
+function impactoDe(valor?: string): ImpactLevel {
+  const v = (valor ?? '').toLowerCase();
+  if (v === 'alto' || v === 'high') return 'alto';
+  if (v === 'baixo' || v === 'low') return 'baixo';
+  return 'medio';
+}
+
 /**
- * Gera mock realista de eventos econômicos para desenvolvimento
- * Quando a API indisponível, usa dados simulados críveis
+ * Converte o payload real do gateway em EconomicEvent[].
+ * `when_utc` é hora UTC real; `date` local é derivada dela.
  */
-function gerarMockEventos(): EconomicEvent[] {
+function processarEventosApi(itens: ApiEvent[]): EconomicEvent[] {
   const agora = new Date();
-  const hoje = new Date(agora);
-  hoje.setHours(0, 0, 0, 0);
-
-  const eventosBase: Array<Omit<EconomicEvent, 'id' | 'horario'> & { hora: number; minuto: number }> = [
-    { hora: 8, minuto: 30, codigoPais: 'US', nomePais: 'Estados Unidos', bandeira: '🇺🇸', impacto: 'medio', titulo: 'Pedidos Industriais (M/M)', anterior: '0.3%', consenso: '0.2%', real: null, divulgado: false },
-    { hora: 9, minuto: 0, codigoPais: 'US', nomePais: 'Estados Unidos', bandeira: '🇺🇸', impacto: 'baixo', titulo: 'Crédito ao Consumidor', anterior: '$12.5B', consenso: '$14.0B', real: null, divulgado: false },
-    { hora: 10, minuto: 0, codigoPais: 'US', nomePais: 'Estados Unidos', bandeira: '🇺🇸', impacto: 'alto', titulo: 'Decisão de Taxa de Juros FOMC', anterior: '5.50%', consenso: '5.50%', real: null, divulgado: false },
-    { hora: 10, minuto: 30, codigoPais: 'US', nomePais: 'Estados Unidos', bandeira: '🇺🇸', impacto: 'alto', titulo: 'Coletiva de Imprensa Powell', anterior: null, consenso: null, real: null, divulgado: false },
-    { hora: 14, minuto: 0, codigoPais: 'US', nomePais: 'Estados Unidos', bandeira: '🇺🇸', impacto: 'medio', titulo: 'Estoques de Petróleo Bruto', anterior: '-2.1M', consenso: '-1.5M', real: null, divulgado: false },
-    { hora: 5, minuto: 0, codigoPais: 'EU', nomePais: 'União Europeia', bandeira: '🇪🇺', impacto: 'alto', titulo: 'Decisão de Taxa BCE', anterior: '4.50%', consenso: '4.25%', real: null, divulgado: false },
-    { hora: 8, minuto: 30, codigoPais: 'GB', nomePais: 'Reino Unido', bandeira: '🇬🇧', impacto: 'alto', titulo: 'Taxa de Desemprego', anterior: '4.2%', consenso: '4.3%', real: null, divulgado: false },
-    { hora: 9, minuto: 0, codigoPais: 'EU', nomePais: 'União Europeia', bandeira: '🇪🇺', impacto: 'medio', titulo: 'Vendas no Varejo (M/M)', anterior: '-0.1%', consenso: '0.2%', real: null, divulgado: false },
-    { hora: 8, minuto: 30, codigoPais: 'US', nomePais: 'Estados Unidos', bandeira: '🇺🇸', impacto: 'alto', titulo: 'Payroll (Folha de Pagamento Não-Agrícola)', anterior: '+187K', consenso: '+175K', real: null, divulgado: false },
-    { hora: 8, minuto: 30, codigoPais: 'US', nomePais: 'Estados Unidos', bandeira: '🇺🇸', impacto: 'alto', titulo: 'Taxa de Desemprego', anterior: '3.8%', consenso: '3.8%', real: null, divulgado: false },
-    { hora: 10, minuto: 0, codigoPais: 'US', nomePais: 'Estados Unidos', bandeira: '🇺🇸', impacto: 'alto', titulo: 'IPC (Índice de Preços ao Consumidor) (M/M)', anterior: '0.2%', consenso: '0.3%', real: null, divulgado: false },
-    { hora: 10, minuto: 0, codigoPais: 'US', nomePais: 'Estados Unidos', bandeira: '🇺🇸', impacto: 'alto', titulo: 'IPC Core (Ano/Ano)', anterior: '3.7%', consenso: '3.6%', real: null, divulgado: false },
-    { hora: 9, minuto: 30, codigoPais: 'US', nomePais: 'Estados Unidos', bandeira: '🇺🇸', impacto: 'alto', titulo: 'PIB (Trimestralizado)', anterior: '2.1%', consenso: '2.4%', real: null, divulgado: false },
-    { hora: 8, minuto: 30, codigoPais: 'US', nomePais: 'Estados Unidos', bandeira: '🇺🇸', impacto: 'alto', titulo: 'Vendas no Varejo (M/M)', anterior: '0.7%', consenso: '0.4%', real: null, divulgado: false },
-    { hora: 0, minuto: 0, codigoPais: 'JP', nomePais: 'Japão', bandeira: '🇯🇵', impacto: 'alto', titulo: 'Decisão de Taxa BOJ', anterior: '0.0%', consenso: '0.1%', real: null, divulgado: false },
-    { hora: 1, minuto: 30, codigoPais: 'CN', nomePais: 'China', bandeira: '🇨🇳', impacto: 'alto', titulo: 'PIB (Ano/Ano)', anterior: '5.2%', consenso: '5.0%', real: null, divulgado: false },
-    { hora: 1, minuto: 30, codigoPais: 'CN', nomePais: 'China', bandeira: '🇨🇳', impacto: 'medio', titulo: 'Produção Industrial', anterior: '4.6%', consenso: '4.4%', real: null, divulgado: false },
-    { hora: 8, minuto: 0, codigoPais: 'BR', nomePais: 'Brasil', bandeira: '🇧🇷', impacto: 'alto', titulo: 'Decisão Copom (Selic)', anterior: '10.50%', consenso: '10.25%', real: null, divulgado: false },
-    { hora: 8, minuto: 30, codigoPais: 'BR', nomePais: 'Brasil', bandeira: '🇧🇷', impacto: 'medio', titulo: 'IPCA (Inflação)', anterior: '0.4%', consenso: '0.3%', real: null, divulgado: false },
-  ];
-
-  return eventosBase.map((evento, index) => {
-    const dataEvento = new Date(hoje);
-    dataEvento.setHours(evento.hora, evento.minuto, 0, 0);
-    const deslocamentoDias = Math.floor(index / 7);
-    dataEvento.setDate(dataEvento.getDate() + deslocamentoDias);
-    const jaDivulgado = dataEvento < agora;
+  return itens.map((item, i) => {
+    const utc = item.when_utc ? new Date(`${item.when_utc}Z`) : new Date();
+    const horario = Number.isNaN(utc.getTime()) ? new Date() : utc;
+    const pais = CURRENCY_TO_COUNTRY[(item.currency ?? '').toUpperCase()] ??
+      { code: item.currency ?? '--', name: item.currency ?? 'Desconhecido', flag: '🏳️' };
     return {
-      id: `evt-${index}-${evento.codigoPais}-${evento.hora}${evento.minuto}`,
-      horario: dataEvento,
-      codigoPais: evento.codigoPais,
-      nomePais: evento.nomePais,
-      bandeira: evento.bandeira,
-      impacto: evento.impacto,
-      titulo: evento.titulo,
-      anterior: evento.anterior,
-      consenso: evento.consenso,
-      real: jaDivulgado ? gerarValorReal(evento.consenso, evento.anterior) : null,
-      divulgado: jaDivulgado,
+      id: `${item.when_utc ?? agora.toISOString()}-${i}`,
+      horario,
+      codigoPais: pais.code,
+      nomePais: pais.name,
+      bandeira: pais.flag,
+      impacto: impactoDe(item.impact),
+      titulo: item.title ?? 'Evento',
+      anterior: null,
+      consenso: null,
+      real: null,
+      divulgado: horario.getTime() <= Date.now(),
     };
   });
 }
 
-function gerarValorReal(consenso: string | null, anterior: string | null): string | null {
-  if (!consenso) return null;
-  const match = consenso.match(/[+-]?\d+\.?\d*/);
-  if (!match) return consenso;
-  const valor = parseFloat(match[0]);
-  const variacao = (Math.random() - 0.5) * 0.2;
-  const novoValor = valor * (1 + variacao);
-  if (consenso.includes('K')) return `+${Math.round(novoValor)}K`;
-  if (consenso.includes('B')) return `$${novoValor.toFixed(1)}B`;
-  if (consenso.includes('M')) return `${novoValor > 0 ? '' : '-'}${Math.abs(novoValor).toFixed(1)}M`;
-  if (consenso.includes('%')) return `${novoValor.toFixed(2)}%`;
-  return `${novoValor.toFixed(2)}%`;
-}
-
+/** Cache local: aceita apenas eventos recentes do gateway. */
 function carregarDoCache(): EconomicEvent[] | null {
   try {
-    const cached = localStorage.getItem(CACHE_KEY);
-    if (!cached) return null;
-    const { timestamp, dados } = JSON.parse(cached);
-    const idade = Date.now() - timestamp;
-    if (idade > CACHE_TTL_MS) return null;
-    return dados.map((evt: EconomicEvent) => ({
-      ...evt,
-      horario: new Date(evt.horario),
-    }));
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const { ts, eventos } = JSON.parse(raw) as { ts: number; eventos: Array<Omit<EconomicEvent, 'horario'> & { horario: string }> };
+    if (Date.now() - ts > CACHE_TTL_MS) return null;
+    return eventos.map((e) => ({ ...e, horario: new Date(e.horario) }));
   } catch {
     return null;
   }
 }
 
-function salvarNoCache(dados: EconomicEvent[]): void {
+function salvarNoCache(eventos: EconomicEvent[]): void {
   try {
-    const paraSalvar = {
-      timestamp: Date.now(),
-      dados: dados.map((evt) => ({
-        ...evt,
-        horario: evt.horario.toISOString(),
-      })),
-    };
-    localStorage.setItem(CACHE_KEY, JSON.stringify(paraSalvar));
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), eventos }));
   } catch {
-    console.warn('[useEconomicData] Falha ao salvar cache');
+    // Cache é opcional; falha em silêncio.
   }
-}
-
-function processarDadosApi(_dados: unknown): EconomicEvent[] {
-  if (!Array.isArray(_dados)) return [];
-  return _dados.flatMap((raw, index) => {
-    if (!raw || typeof raw !== 'object') return [];
-    const item = raw as Record<string, unknown>;
-    const horario = new Date(String(item.horario ?? item.date ?? item.datetime ?? ''));
-    const titulo = String(item.titulo ?? item.title ?? item.event ?? '').trim();
-    if (!titulo || Number.isNaN(horario.getTime())) return [];
-    const impacto = item.impacto === 'alto' || item.impacto === 'medio' ? item.impacto : 'baixo';
-    const codigoPais = String(item.codigoPais ?? item.country ?? '').toUpperCase();
-    return [{
-      id: String(item.id ?? `calendar-${horario.toISOString()}-${index}`), horario,
-      codigoPais, nomePais: String(item.nomePais ?? item.countryName ?? codigoPais),
-      bandeira: String(item.bandeira ?? ''), impacto: impacto as ImpactLevel, titulo,
-      anterior: item.anterior == null ? null : String(item.anterior),
-      consenso: item.consenso == null ? null : String(item.consenso),
-      real: item.real == null ? null : String(item.real),
-      divulgado: Boolean(item.divulgado ?? horario.getTime() <= Date.now()),
-    }];
-  });
 }
 
 export function useEconomicData(
@@ -163,13 +117,13 @@ export function useEconomicData(
 
     try {
       const resposta = await fetch(
-        'https://api.forexfactory.com/calendar?week=this_week',
-        { method: 'GET', signal: AbortSignal.timeout(5000) }
+        `${API}/api/economic/calendar?limit=50&days=14&tz=BRT`,
+        { method: 'GET', signal: AbortSignal.timeout(8000) }
       );
+      const dadosApi = (await resposta.json()) as { events?: ApiEvent[]; error?: string };
 
-      if (resposta.ok) {
-        const dadosApi = await resposta.json();
-        const eventosProcessados = processarDadosApi(dadosApi);
+      if (resposta.ok && dadosApi.events?.length) {
+        const eventosProcessados = processarEventosApi(dadosApi.events);
         if (montadoRef.current) {
           salvarNoCache(eventosProcessados);
           setEstado({
@@ -181,17 +135,16 @@ export function useEconomicData(
         }
         return;
       }
-    } catch {
-      console.info('[useEconomicData] API indisponível, usando dados simulados');
-    }
-
-    if (montadoRef.current) {
-      setEstado({
-        dados: doCache ?? [],
-        carregando: false,
-        erro: 'Calendário econômico indisponível; dados simulados bloqueados.',
-        ultimaAtualizacao: new Date(),
-      });
+      throw new Error(dadosApi.error ?? 'Gateway sem eventos');
+    } catch (e) {
+      if (montadoRef.current) {
+        setEstado({
+          dados: doCache ?? [],
+          carregando: false,
+          erro: `Calendário indisponível: ${e instanceof Error ? e.message : 'gateway offline'}`,
+          ultimaAtualizacao: new Date(),
+        });
+      }
     }
   }, []);
 
