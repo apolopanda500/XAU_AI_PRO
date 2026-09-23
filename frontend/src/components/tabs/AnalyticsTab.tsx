@@ -5,6 +5,7 @@ import { fmtMoney, fmtPct, clsPnl } from '../../lib/format';
 import { apiBase } from '../../lib/api';
 import { calculateWinRate, calculateProfitFactor } from '../../lib/performanceMetrics';
 import { useState, useMemo, useEffect, useCallback } from 'react';
+import { notify } from '../../lib/notify';
 
 type Deal = {
   id?: string | number; broker?: string; symbol?: string; side?: string;
@@ -30,6 +31,7 @@ export default function AnalyticsTab() {
 
   const load = useCallback(async () => {
     setStatus('Carregando histórico real...');
+    await Promise.resolve();
     const settled = await Promise.allSettled(
       ['mt5'].map(async (b) => {
         const params = new URLSearchParams({ broker: b, market: 'other', days: '90' });
@@ -41,6 +43,10 @@ export default function AnalyticsTab() {
     );
     const flat = settled.flatMap((s) => (s.status === 'fulfilled' ? s.value : []));
     setDeals(flat);
+    const totalPnl = flat.reduce((s, d) => s + (Number.isFinite(toNum(d.realizedPnl)) ? toNum(d.realizedPnl) : (d.profit ?? 0)), 0);
+    if (flat.length) {
+      void notify('Analytics atualizado', `${flat.length} deals reais · PnL ${totalPnl.toFixed(2)}`);
+    }
     setStatus(
       settled.some((s) => s.status === 'rejected')
         ? 'Gateway indisponível — conecte o MT5 para ver analytics reais.'

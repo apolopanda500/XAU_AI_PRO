@@ -652,6 +652,27 @@ async def demo_close_symbol(payload: dict) -> JSONResponse:
     return _demo_post("close_symbol", gw._demo_close_symbol, payload)
 
 
+@app.post("/api/demo/pending")
+async def demo_pending_order(payload: dict) -> JSONResponse:
+    """Ordem pendente DEMO (limit/stop) com bracket OCO (SL+TP).
+
+    B melhor opcao para XAU AI PRO: cria entradas em preco alvo sem
+    risco de slippage e ja nasce com SL/TP. Paridade com o bracket do
+    IBKR TWS. Nao substitui /api/demo/order (mercado); e uma alternativa
+    de execucao com as MESMAS travas: XAU_ENABLE_DEMO_ORDERS=1,
+    confirm_demo=true, conta trade_mode==DEMO, risk_gate real (passo C),
+    order_check antes do order_send.
+    """
+    try:
+        return _send(gw._demo_pending_order(payload))
+    except PermissionError as exc:
+        return _send({"ok": False, "error": str(exc), "demo": True}, 403)
+    except (ValueError, LookupError) as exc:
+        return _send({"ok": False, "error": str(exc), "demo": True}, 400)
+    except Exception as exc:
+        return _send({"ok": False, "error": str(exc), "demo": True}, 503)
+
+
 @app.post("/api/demo/cancel-order")
 async def demo_cancel_order(payload: dict) -> JSONResponse:
     return _demo_post("cancel_order", gw._demo_cancel_orders, payload)

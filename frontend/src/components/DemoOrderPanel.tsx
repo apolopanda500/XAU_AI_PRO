@@ -13,6 +13,7 @@ type AccountMode = 'DEMO' | 'REAL' | 'UNKNOWN' | 'indisponível';
 type OrderResult = {
   ok: boolean; stage?: string; retcode?: number; comment?: string;
   order?: number; deal?: number; demo?: boolean; error?: string;
+  order_type?: string; price?: number; sl?: number; tp?: number; side?: string;
 };
 
 export default function DemoOrderPanel() {
@@ -25,6 +26,8 @@ export default function DemoOrderPanel() {
   const [tp, setTp] = useState('');
   const [understood, setUnderstood] = useState(false);
   const [confirmWord, setConfirmWord] = useState('');
+  const [kind, setKind] = useState<'market' | 'limit' | 'stop'>('market');
+  const [price, setPrice] = useState('');
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<OrderResult | null>(null);
   const [statusMsg, setStatusMsg] = useState('Aguardando gateway...');
@@ -67,8 +70,10 @@ export default function DemoOrderPanel() {
   const vol = num(volume);
   const slNum = num(sl);
   const tpNum = num(tp);
+  const priceNum = num(price);
   const fieldsValid =
-    Boolean(symbol) && vol > 0 && vol <= MAX_VOLUME && slNum > 0 && tpNum > 0;
+    Boolean(symbol) && vol > 0 && vol <= MAX_VOLUME && slNum > 0 && tpNum > 0 &&
+    (kind === 'market' || priceNum > 0);
   const confirmed = understood && confirmWord.trim().toUpperCase() === CONFIRM_WORD;
   const canSend =
     !busy && fieldsValid && confirmed && mode === 'DEMO' && tradeAllowed;
@@ -100,14 +105,16 @@ export default function DemoOrderPanel() {
     setBusy(true);
     setResult(null);
     try {
-      const r = await fetch(`${GATEWAY}/api/demo/order`, {
+      const path = kind === 'market' ? '/api/demo/order' : '/api/demo/pending';
+      const body: Record<string, unknown> = kind === 'market'
+        ? { symbol, side, volume: vol, sl: slNum, tp: tpNum, confirm_demo: true }
+        : { symbol, side, kind, price: priceNum, volume: vol, sl: slNum, tp: tpNum, confirm_demo: true };
+      const r = await fetch(`${GATEWAY}${path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          symbol, side, volume: vol, sl: slNum, tp: tpNum, confirm_demo: true,
-        }),
+        body: JSON.stringify(body),
       });
-      const d = (await r.json()) as OrderResult;
+      const d = (await r.json()) as OrderResult & { order_type?: string; price?: number; sl?: number; tp?: number };
       setResult(d);
     } catch (e) {
       setResult({
@@ -133,13 +140,23 @@ export default function DemoOrderPanel() {
         <div className="field"><label htmlFor="demo-volume">Volume (máx 0.10)</label><input id="demo-volume" type="number" min="0" max={MAX_VOLUME} step="any" value={volume} onChange={(e) => setVolume(e.target.value)} /></div>
         <div className="field"><label htmlFor="demo-sl">Stop Loss *</label><input id="demo-sl" type="number" step="any" value={sl} onChange={(e) => setSl(e.target.value)} /></div>
         <div className="field"><label htmlFor="demo-tp">Take Profit *</label><input id="demo-tp" type="number" step="any" value={tp} onChange={(e) => setTp(e.target.value)} /></div>
+        <div className="field"><label htmlFor="demo-kind">Execução</label>
+          <select id="demo-kind" value={kind} onChange={(e) => setKind(e.target.value as 'market' | 'limit' | 'stop')}>
+            <option value="market">Mercado (imediata)</option>
+            <option value="limit">Limit (pendente, preço alvo)</option>
+            <option value="stop">Stop (pendente, rompimento)</option>
+          </select>
+        </div>
+        {kind !== 'market' && (
+          <div className="field"><label htmlFor="demo-price">Preço alvo *</label><input id="demo-price" type="number" step="any" value={price} onChange={(e) => setPrice(e.target.value)} /></div>
+        )}
       </div>
       <div className="config-actions" style={{ marginTop: 12 }}>
         <label><input type="checkbox" checked={understood} onChange={(e) => setUnderstood(e.target.checked)} /><span>Entendo que esta ordem vai para conta DEMO (dinheiro fictício).</span></label>
         <div className="field" style={{ marginTop: 8 }}><label htmlFor="demo-confirm-word">Digite {CONFIRM_WORD} para liberar</label><input id="demo-confirm-word" type="text" value={confirmWord} onChange={(e) => setConfirmWord(e.target.value)} placeholder={CONFIRM_WORD} autoComplete="off" /></div>
       </div>
       <div className="btn-row" style={{ marginTop: 12 }}>
-        <button className="btn primary" type="button" onClick={() => void send()} disabled={!canSend} aria-label={`Enviar ordem demo ${side} ${symbol}`}>{busy ? 'Enviando...' : `Enviar DEMO ${side}`}</button>
+        <button className="btn primary" type="button" onClick={() => void send()} disabled={!canSend} aria-label={`Enviar ordem demo ${side} ${symbol}`}>{busy ? 'Enviando...' : `Enviar DEMO ${side} (${kind === 'market' ? 'mercado' : kind})`}</button>
       </div>
 
       <div className="section-title" style={{ marginTop: 14, fontSize: 13 }}>Gestão da posição (paridade TWS)</div>
@@ -150,13 +167,13 @@ export default function DemoOrderPanel() {
         <button className="btn ghost" type="button" disabled={!confirmed || mode !== 'DEMO' || busy} onClick={() => void sendCommand('/api/demo/set-protection', { sl: slNum, tp: tpNum })} title="Aplica SL/TP informados na posição">Proteção</button>
         <button className="btn ghost" type="button" disabled={!confirmed || mode !== 'DEMO' || busy} onClick={() => void sendCommand('/api/demo/remove-protection')} title="Remove SL/TP da posição">Remover prot.</button>
       </div>
-      <div className="hint" style={{ marginTop: 6 }}>Mesma confirmação de 2 etapas · gestão não abre posição nova · sempre via gateway DEMO.</div>
+      <div className="hint" style={{ marginTop: 6 }}>{kind === 'market' ? 'Mercado: envia imediata com SL/TP obrigatórios.' : `Pendente ${kind.toUpperCase()}: entra no preço alvo com bracket OCO (SL+TP). Paridade IBKR TWS.`} Mesma confirmação de 2 etapas · sempre via gateway DEMO.</div>
 
-      <div className="hint" style={{ marginTop: 8 }}>{statusMsg} {!tradeAllowed && mode !== 'indisponível' && 'Negociação bloqueada no terminal. '}{mode === 'REAL' && 'Ordens demo recusadas em conta REAL. '}{!fieldsValid && 'Preencha volume ≤ 0.10, SL e TP. '}{fieldsValid && !confirmed && 'Confirme as 2 etapas para liberar. '}</div>
+      <div className="hint" style={{ marginTop: 8 }}>{statusMsg} {!tradeAllowed && mode !== 'indisponível' && 'Negociação bloqueada no terminal. '}{mode === 'REAL' && 'Ordens demo recusadas em conta REAL. '}{!fieldsValid && 'Preencha volume ≤ 0.10, SL e TP.'}{kind !== 'market' && !priceNum && ' Preço alvo obrigatório.'}{fieldsValid && !confirmed && ' Confirme as 2 etapas para liberar. '}</div>
       {result && (
         <div className={`hint ${result.ok ? '' : 'neg'}`} role="status" style={{ marginTop: 8 }}>
           {result.ok
-            ? <span>Ordem aceita · stage {result.stage} · retcode {result.retcode} · ticket {result.order} · deal {result.deal}{result.comment ? ` · ${result.comment}` : ''}</span>
+            ? <span>Ordem aceita · stage {result.stage} · retcode {result.retcode} · ticket {result.order} · deal {result.deal}{result.order_type ? ` · ${result.order_type}` : ''}{result.price ? ` · @ ${result.price}` : ''}{result.comment ? ` · ${result.comment}` : ''}</span>
             : <span>Recusada{result.stage ? ` · stage ${result.stage}` : ''}{result.retcode !== undefined ? ` · retcode ${result.retcode}` : ''}{result.comment ? ` · ${result.comment}` : ''}{result.error ? ` · ${result.error}` : ''}</span>}
         </div>
       )}

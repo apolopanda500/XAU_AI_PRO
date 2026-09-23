@@ -830,6 +830,102 @@ def _real_order(payload: dict) -> dict:
     return {"ok": bool(result and getattr(result, "retcode", 0) == mt5.TRADE_RETCODE_DONE), "stage": "order_send", "retcode": int(getattr(result, "retcode", -1)), "comment": str(getattr(result, "comment", "")), "order": int(getattr(result, "order", 0)), "deal": int(getattr(result, "deal", 0)), "real": True}
 
 
+def _demo_pending_order(payload: dict) -> dict:
+    """Cria ordem pendente DEMO (BUY/SELL Limit ou Stop) com bracket OCO (SL+TP).
+
+    Paridade IBKR TWS (bracket): a pendente ja nasce com SL e TP do lado
+    oposto — quando uma perde, a outra e cancelada pelo proprio MT5 (OCO).
+
+    Travas herdadas (identicas a _demo_order):
+      - XAU_ENABLE_DEMO_ORDERS=1
+      - confirm_demo=true
+      - conta trade_mode == DEMO
+      - volume <= 0.10, sl > 0, tp > 0
+      - risk_gate.validate_trade com daily_loss/exposure REAIS (passo C)
+      - order_check antes de order_send
+    """
+    if os.getenv("XAU_ENABLE_DEMO_ORDERS", "0") != "1":
+        raise PermissionError("execucao demo desabilitada; defina XAU_ENABLE_DEMO_ORDERS=1")
+    if payload.get("confirm_demo") is not True:
+        raise PermissionError("confirm_demo=true obrigatorio")
+    mt5 = _mt5()
+    info = mt5.account_info()
+    if not info or getattr(info, "trade_mode", None) != getattr(mt5, "ACCOUNT_TRADE_MODE_DEMO", 0):
+        raise PermissionError("conta MT5 nao identificada como DEMO; ordem recusada")
+    if not bool(getattr(info, "trade_allowed", False)):
+        raise PermissionError("negociacao nao permitida pelo terminal MT5")
+
+    symbol = str(payload.get("symbol", "")).strip()
+    side = str(payload.get("side", "")).upper()
+    order_kind = str(payload.get("kind", "limit")).lower()
+    volume = float(payload.get("volume", 0) or 0)
+    price = float(payload.get("price", 0) or 0)
+    sl = float(payload.get("sl", 0) or 0)
+    tp = float(payload.get("tp", 0) or 0)
+
+    if not symbol or side not in {"BUY", "SELL"}:
+        raise ValueError("symbol e side (BUY/SELL) validos sao obrigatorios")
+    if order_kind not in {"limit", "stop"}:
+        raise ValueError("kind deve ser 'limit' ou 'stop'")
+    if volume <= 0 or volume > 0.10 or sl <= 0 or tp <= 0 or price <= 0:
+        raise ValueError("volume <= 0.10, sl/tp > 0 e price > 0 obrigatorios")
+
+    risk = _risk_state(mt5)
+    validate_trade(volume=volume, daily_loss_pct=risk["daily_loss_pct"],
+                   exposure_pct=risk["exposure_pct"], open_positions=risk["open_positions"])
+    if not mt5.symbol_select(symbol, True):
+        raise LookupError(f"simbolo indisponivel no MT5: {symbol}")
+    tick = mt5.symbol_info_tick(symbol)
+    if not tick:
+        raise LookupError(f"cotacao indisponivel no MT5: {symbol}")
+    info_sym = mt5.symbol_info(symbol)
+    digits = int(getattr(info_sym, "digits", 2) or 2)
+    price = round(price, digits)
+    sl = round(sl, digits)
+    tp = round(tp, digits)
+
+    bid = float(tick.bid or 0.0)
+    ask = float(tick.ask or 0.0)
+    # Sanidade: limit so entra em direcao favoravel; stop so rompe a favor.
+    if side == "BUY":
+        if order_kind == "limit" and price >= ask:
+            raise ValueError(f"BUY LIMIT deve ser abaixo do ask ({ask})")
+        if order_kind == "stop" and price <= ask:
+            raise ValueError(f"BUY STOP deve ser acima do ask ({ask})")
+        pending_type = (mt5.ORDER_TYPE_BUY_LIMIT if order_kind == "limit"
+                        else mt5.ORDER_TYPE_BUY_STOP)
+    else:
+        if order_kind == "limit" and price <= bid:
+            raise ValueError(f"SELL LIMIT deve ser acima do bid ({bid})")
+        if order_kind == "stop" and price >= bid:
+            raise ValueError(f"SELL STOP deve ser abaixo do bid ({bid})")
+        pending_type = (mt5.ORDER_TYPE_SELL_LIMIT if order_kind == "limit"
+                        else mt5.ORDER_TYPE_SELL_STOP)
+
+    request = {"action": mt5.TRADE_ACTION_PENDING, "symbol": symbol,
+               "volume": volume, "type": int(pending_type), "price": price,
+               "sl": sl, "tp": tp, "deviation": 20, "magic": 2026001,
+               "comment": "XAU_AI_PRO_DEMO_PEND",
+               "type_time": mt5.ORDER_TIME_GTC,
+               "type_filling": mt5.ORDER_FILLING_IOC}
+    check = mt5.order_check(request)
+    if not check or getattr(check, "retcode", 0) != 0:
+        return {"ok": False, "stage": "order_check",
+                "retcode": int(getattr(check, "retcode", -1)),
+                "comment": str(getattr(check, "comment", "check falhou")),
+                "demo": True}
+    result = mt5.order_send(request)
+    ok = bool(result and getattr(result, "retcode", 0) == mt5.TRADE_RETCODE_DONE)
+    return {"ok": ok, "stage": "order_send",
+            "retcode": int(getattr(result, "retcode", -1) if result else -1),
+            "comment": str(getattr(result, "comment", "") if result else ""),
+            "order": int(getattr(result, "order", 0) if result else 0),
+            "deal": 0,
+            "order_type": "PENDING_" + order_kind.upper(),
+            "side": side, "price": price, "sl": sl, "tp": tp,
+            "oco_bracket": True, "demo": True}
+
+
 def _demo_close(payload: dict) -> dict:
     """Fecha uma posição DEMO específica; nunca aceita conta real."""
     if os.getenv("XAU_ENABLE_DEMO_ORDERS", "0") != "1":
@@ -1355,7 +1451,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, _asset_toggle(payload, parsed.path != "/api/assets/disable")); return
         if parsed.path in {"/api/command/validate", "/api/command/cancel"}:
             length = int(self.headers.get("Content-Length", "0")); payload = json.loads(self.rfile.read(length) or b"{}")
-            allowed = {"/api/demo/order", "/api/demo/close", "/api/demo/close-all", "/api/demo/modify-position", "/api/demo/breakeven", "/api/demo/trailing", "/api/demo/partial-close", "/api/demo/set-protection", "/api/demo/remove-protection", "/api/demo/close-symbol", "/api/demo/cancel-order", "/api/demo/cancel-all-orders"}
+            allowed = {"/api/demo/order", "/api/demo/pending", "/api/demo/close", "/api/demo/close-all", "/api/demo/modify-position", "/api/demo/breakeven", "/api/demo/trailing", "/api/demo/partial-close", "/api/demo/set-protection", "/api/demo/remove-protection", "/api/demo/close-symbol", "/api/demo/cancel-order", "/api/demo/cancel-all-orders"}
             command = str(payload.get("command", "")); ok = command in allowed and payload.get("confirm_demo") is True
             self._send(200, {"ok": ok, "command": command, "valid": ok, "cancelled": parsed.path.endswith("/cancel") and ok, "reason": "comando DEMO reconhecido" if ok else "comando DEMO desconhecido ou confirmação ausente"}); return
         if parsed.path == "/api/config/reset":
@@ -1394,7 +1490,7 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 self._send(503, {"ok": False, "error": str(exc), "demo": True})
             return
-        if parsed.path not in {"/api/demo/order", "/api/demo/close", "/api/demo/close-all", "/api/demo/modify-position", "/api/demo/breakeven", "/api/demo/trailing", "/api/demo/partial-close", "/api/demo/set-protection", "/api/demo/remove-protection", "/api/demo/close-symbol", "/api/demo/cancel-order", "/api/demo/cancel-all-orders", "/api/real/order"}:
+        if parsed.path not in {"/api/demo/order", "/api/demo/pending", "/api/demo/close", "/api/demo/close-all", "/api/demo/modify-position", "/api/demo/breakeven", "/api/demo/trailing", "/api/demo/partial-close", "/api/demo/set-protection", "/api/demo/remove-protection", "/api/demo/close-symbol", "/api/demo/cancel-order", "/api/demo/cancel-all-orders", "/api/real/order"}:
             self._send(404, {"ok": False, "error": "not_found"})
             return
         try:
@@ -1404,7 +1500,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send(400, {"ok": False, "error": f"payload invalido: {exc}", "demo": True})
             return
         try:
-            actions = {"/api/demo/order": _demo_order, "/api/demo/close": _demo_close, "/api/demo/close-all": _demo_close_all, "/api/demo/modify-position": lambda p: _demo_manage(p, "modify"), "/api/demo/breakeven": lambda p: _demo_manage(p, "breakeven"), "/api/demo/trailing": lambda p: _demo_manage(p, "trailing"), "/api/demo/partial-close": _demo_partial_close, "/api/demo/set-protection": _demo_protection, "/api/demo/remove-protection": lambda p: _demo_protection(p, True), "/api/demo/close-symbol": _demo_close_symbol, "/api/demo/cancel-order": _demo_cancel_orders, "/api/demo/cancel-all-orders": lambda p: _demo_cancel_orders(p, True), "/api/real/order": _real_order}
+            actions = {"/api/demo/order": _demo_order, "/api/demo/pending": _demo_pending_order, "/api/demo/close": _demo_close, "/api/demo/close-all": _demo_close_all, "/api/demo/modify-position": lambda p: _demo_manage(p, "modify"), "/api/demo/breakeven": lambda p: _demo_manage(p, "breakeven"), "/api/demo/trailing": lambda p: _demo_manage(p, "trailing"), "/api/demo/partial-close": _demo_partial_close, "/api/demo/set-protection": _demo_protection, "/api/demo/remove-protection": lambda p: _demo_protection(p, True), "/api/demo/close-symbol": _demo_close_symbol, "/api/demo/cancel-order": _demo_cancel_orders, "/api/demo/cancel-all-orders": lambda p: _demo_cancel_orders(p, True), "/api/real/order": _real_order}
             action = actions[parsed.path]
             result = action(payload)
             LAST_COMMAND.update({"command": parsed.path, "status": "ok" if result.get("ok", False) else "rejected", "updated_at": datetime.now().isoformat()})
