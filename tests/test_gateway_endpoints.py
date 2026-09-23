@@ -135,6 +135,10 @@ def test_demo_bloqueado_sem_trava(gateway):
     status, data = _request(gateway, "POST", "/api/demo/order", payload)
     assert status in {403, 503}
     assert "demo" in json.dumps(data, ensure_ascii=False).lower()
+
+
+def test_demo_leituras_e_validate(gateway):
+    """GETs demo e validate espelham os mesmos limites do painel DemoOrderPanel."""
     for path in ("/api/demo/positions", "/api/demo/orders",
                  "/api/demo/execution-status", "/api/demo/last-command"):
         status, _ = _request(gateway, "GET", path)
@@ -142,6 +146,46 @@ def test_demo_bloqueado_sem_trava(gateway):
     status, data = _request(gateway, "POST", "/api/command/validate",
                             {"command": "/api/demo/close", "confirm_demo": True})
     assert status == 200 and data["valid"] is True
+
+
+def test_demo_rejeita_limites_do_painel(gateway, monkeypatch):
+    """Volume > 0.10, SL/TP ausentes e confirm ausente: 403/503 sem enfileirar.
+
+    Espelha as regras do DemoOrderPanel (fieldsValid) + _demo_order.
+    A trava XAU_ENABLE_DEMO_ORDERS fica LIGADA aqui para provar que a
+    rejeicao vem da validacao, nao da trava.
+    """
+    monkeypatch.setenv("XAU_ENABLE_DEMO_ORDERS", "1")
+    base = {"symbol": "XAUUSD", "side": "BUY", "confirm_demo": True}
+    casos = [
+        {**base, "volume": 0.11, "sl": 1.0, "tp": 2.0},   # acima do max
+        {**base, "volume": 0.01, "sl": 0, "tp": 2.0},     # SL ausente
+        {**base, "volume": 0.01, "sl": 1.0, "tp": 0},     # TP ausente
+        {**base, "volume": 0.01, "sl": 1.0, "tp": 2.0,
+         "confirm_demo": False},                           # sem confirmacao
+        {**base, "volume": 0, "sl": 1.0, "tp": 2.0},      # volume zero
+    ]
+    for payload in casos:
+        status, data = _request(gateway, "POST", "/api/demo/order", payload)
+        assert status in {403, 503}, payload
+        assert "demo" in json.dumps(data, ensure_ascii=False).lower()
+
+
+def test_demo_recusa_conta_real(gateway, monkeypatch):
+    """Conta REAL: ordem demo recusada mesmo com trava ligada e campos validos."""
+    monkeypatch.setenv("XAU_ENABLE_DEMO_ORDERS", "1")
+    import backend.mt5_gateway as gw
+
+    real = type("A", (), {"login": 999, "trade_mode": 1,
+                          "trade_allowed": True})()
+    monkeypatch.setattr(gw._mt5(), "account_info", lambda: real)
+    payload = {"symbol": "XAUUSD", "side": "SELL", "volume": 0.01,
+               "sl": 1.0, "tp": 2.0, "confirm_demo": True}
+    status, data = _request(gateway, "POST", "/api/demo/order", payload)
+    assert status in {403, 503}
+    texto = json.dumps(data, ensure_ascii=False).lower()
+    assert "demo" in texto or "real" in texto
+
 
 
 def test_universal_somente_leitura_e_previews(gateway, monkeypatch):
