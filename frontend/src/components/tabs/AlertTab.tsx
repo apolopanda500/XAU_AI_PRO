@@ -2,6 +2,7 @@
 import { useAlertManager } from '../../hooks/useAlertManager';
 import { useAppStore } from '../../hooks/useAppStore';
 import { fmtNum } from '../../lib/format';
+import { notify } from '../../lib/notify';
 import { useState } from 'react';
 import type { AlertType } from '../../hooks/useAlertManager';
 
@@ -37,7 +38,7 @@ export default function AlertTab() {
         <div><h1>🔔 Alertas de Mercado</h1><span className="muted">{activeAlerts.length} ativos · {alerts.length} total</span></div>
         <div className="btn-row">
           <button className={`btn ${showForm ? 'primary' : 'ghost'}`} onClick={() => setShowForm(!showForm)}>{showForm ? 'Cancelar' : '+ Novo Alerta'}</button>
-          <button className="btn ghost" onClick={() => window.alert('Notificação enviada!')}>🔔 Testar</button>
+          <button className="btn ghost" onClick={() => void notify('XAU AI PRO', 'Notificações ativas. Você será avisado ao atingir um alerta.')}>🔔 Testar</button>
         </div>
       </div>
       

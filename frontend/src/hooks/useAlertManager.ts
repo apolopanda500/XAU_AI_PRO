@@ -1,9 +1,10 @@
-// Hook de gerenciamento de alertas para XAU AI PRO
-// Alert management hook
-
-import { useState, useCallback, useEffect } from 'react';
+// Hook de gerenciamento de alertas para XAU AI PRO.
+// Persistência em localStorage + avaliação contra cotações reais do store
+// + notificação nativa via lib/notify (Tauri, com fallback silencioso web).
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useAppStore } from './useAppStore';
 import type { Quote } from './useAppStore';
+import { notify } from '../lib/notify';
 
 export type AlertType = 'price_above' | 'price_below' | 'spread_above' | 'time';
 
@@ -98,10 +99,42 @@ export function useAlertManager(): AlertManager {
   }, [quotes, selectedSymbol]);
   
   const activeAlerts = alerts.filter((a) => a.active);
-    const recentlyTriggered = alerts
+  const recentlyTriggered = alerts
     .filter((a) => a.triggeredAt)
     .sort((a, b) => (b.triggeredAt?.getTime() || 0) - (a.triggeredAt?.getTime() || 0))
     .slice(0, 10);
+
+  // Avaliação automática: a cada tick de cotação, verifica alertas ativos
+  // contra preço/spread reais e dispara notificação nativa (1x por ativação).
+  const quotesRef = useRef(quotes);
+  quotesRef.current = quotes;
+  useEffect(() => {
+    const check = (list: Alert[]) => {
+      const qs = quotesRef.current;
+      if (!qs.length) return;
+      let changed = false;
+      const next = list.map((a) => {
+        if (!a.active || a.notified) return a;
+        const q = qs.find((ql) => ql.symbol === a.symbol);
+        if (!q) return a;
+        const hit =
+          (a.type === 'price_above' && q.price >= a.value) ||
+          (a.type === 'price_below' && q.price <= a.value) ||
+          (a.type === 'spread_above' && q.spread >= a.value);
+        if (!hit) return a;
+        changed = true;
+        void notify(
+          `Alerta ${a.symbol}`,
+          `${a.type.replace('_', ' ')}: ${q.price} (alvo ${a.value})`,
+        );
+        return { ...a, triggeredAt: new Date(), timesTriggered: a.timesTriggered + 1, notified: true };
+      });
+      if (changed) saveAlerts(next);
+    };
+    check(alerts);
+    // Reavalia quando quotes mudam (ticks do Core via WebSocket).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quotes]);
 
   return {
     alerts,
