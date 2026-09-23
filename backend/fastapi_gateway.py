@@ -489,6 +489,19 @@ async def telemetry_history_route(limit: int = 120) -> dict:
         return _send({"ok": False, "error": str(exc), "snapshots": [], "count": 0}, 503)
 
 
+@app.get("/api/risk/state")
+async def risk_state_route() -> JSONResponse:
+    """Estado de risco real do dia (perda diaria, exposicao, posicoes, limites).
+
+    Fonte: MT5 (deals do dia + posicoes abertas). Usado pelo RiskTab e como
+    evidencia de que o risk_gate esta recebendo dado real, nao zero fixo.
+    """
+    try:
+        return _send(gw._risk_state(gw._mt5()))
+    except Exception as exc:
+        return _send({"ok": False, "error": str(exc)}, 503)
+
+
 @app.get("/api/economic/calendar")
 async def economic_calendar_route(limit: int = 30, tz: str = "BRT", days: int = 14) -> JSONResponse:
     """Agenda economica real: tabela local de eventos recorrentes de alto impacto.

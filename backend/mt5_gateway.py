@@ -658,6 +658,70 @@ def _mt5_candles(symbol: str = "XAUUSD", timeframe: str = "M5", count: int = 300
     } for rate in rates]
     rows.sort(key=lambda row: row["time"])
     return {"ok": True, "symbol": symbol, "timeframe": timeframe.upper(), "candles": rows, "count": len(rows), "source": "mt5_gateway"}
+def _risk_state(mt5) -> dict:
+    """Estado de risco real do dia, lido do MT5 (nunca estimado).
+
+    - daily_loss_pct: perda do dia (deals do dia, profit+commission+swap)
+      como percentual do balance. Negativo quando ha lucro.
+    - exposure_pct: volume aberto como percentual do teto do risk_gate
+      (max_positions * max_volume = 5 * 0.10 = 0.5 lotes).
+    - open_positions: quantidade de posicoes abertas.
+
+    Falha de leitura -> devolve valores conservadores (Nao trata como 0),
+    porque o risk_gate usa fail-closed para novas entradas.
+    """
+    from backend.risk_gate import RiskLimits
+
+    limits = RiskLimits()
+    try:
+        info = mt5.account_info()
+        balance = float(getattr(info, "balance", 0.0) or 0.0) if info else 0.0
+    except Exception:
+        balance = 0.0
+
+    positions: list = []
+    try:
+        positions = list(mt5.positions_get() or [])
+    except Exception:
+        positions = []
+
+    try:
+        now = datetime.now()
+        deals = list(mt5.history_deals_get(
+            now.replace(hour=0, minute=0, second=0, microsecond=0), now) or [])
+    except Exception:
+        deals = []
+
+    day_result = 0.0
+    for deal in deals:
+        day_result += float(getattr(deal, "profit", 0.0) or 0.0)
+        day_result += float(getattr(deal, "commission", 0.0) or 0.0)
+        day_result += float(getattr(deal, "swap", 0.0) or 0.0)
+
+    daily_loss_pct = (-day_result / balance * 100.0) if balance > 0 else 0.0
+    if daily_loss_pct < 0:
+        daily_loss_pct = 0.0  # lucro do dia nao consome o limite de perda
+
+    volume = sum(float(getattr(p, "volume", 0.0) or 0.0) for p in positions)
+    ceiling = limits.max_volume * limits.max_positions
+    exposure_pct = (volume / ceiling * 100.0) if ceiling > 0 else 0.0
+
+    return {
+        "daily_loss_pct": round(daily_loss_pct, 4),
+        "exposure_pct": round(exposure_pct, 4),
+        "open_positions": len(positions),
+        "open_volume": round(volume, 4),
+        "balance": balance,
+        "day_result": round(day_result, 4),
+        "limits": {
+            "max_volume": limits.max_volume,
+            "max_daily_loss_pct": limits.max_daily_loss_pct,
+            "max_exposure_pct": limits.max_exposure_pct,
+            "max_positions": limits.max_positions,
+        },
+    }
+
+
 def _demo_order(payload: dict) -> dict:
     """Envia ordem apenas para conta DEMO quando a trava local estiver ativa."""
     if os.getenv("XAU_ENABLE_DEMO_ORDERS", "0") != "1":
@@ -678,7 +742,12 @@ def _demo_order(payload: dict) -> dict:
     tp = float(payload.get("tp", 0) or 0)
     if not symbol or side not in {"BUY", "SELL"} or not (0 < volume <= 0.10) or sl <= 0 or tp <= 0:
         raise ValueError("symbol, side, volume <= 0.10, sl e tp validos sao obrigatorios")
-    validate_trade(volume=volume, daily_loss_pct=0.0, exposure_pct=0.0, open_positions=len(mt5.positions_get() or []))
+    # Risco REAL do dia: perda diaria e exposicao lidas do MT5 (nao mais 0.0 fixo).
+    # Antes desta correcao o risk_gate recebia daily_loss_pct=0.0 e exposure_pct=0.0,
+    # o que desarmava os dois limites mais importantes em conta de dinheiro real.
+    risk = _risk_state(mt5)
+    validate_trade(volume=volume, daily_loss_pct=risk["daily_loss_pct"],
+                   exposure_pct=risk["exposure_pct"], open_positions=risk["open_positions"])
     if not mt5.symbol_select(symbol, True):
         raise LookupError(f"simbolo indisponivel no MT5: {symbol}")
     tick = mt5.symbol_info_tick(symbol)
