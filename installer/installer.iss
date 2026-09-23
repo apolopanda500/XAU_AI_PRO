@@ -42,13 +42,18 @@ AllowNoIcons=yes
 OutputDir={#MyRoot}\dist
 OutputBaseFilename=XAU_AI_PRO_Setup_{#MyAppVersion}
 ; Compressao normal: lzma2/ultra64 no EXE de ~175MB levaria ~7h de build.
-; lzma2/normal leva poucos minutos (o EXE ja vem compactado pelo PyInstaller/UPX).
+; lzma2/normal leva poucos minutos. NOTA: o EXE onedir NAO usa UPX
+; (upx=False no spec); o Setup apenas comprime para distribuicao.
 Compression=lzma2/normal
 SolidCompression=yes
 WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 ; Nao exige admin: instala em APPDATA (sem UAC), como o MT5 padrao.
+; NOTA (ciclo 2026-09-23): PrivilegesRequired=lowest + VBS + autostart e o
+; "DNA" de PUP para heuristicas. Mantido por ser instalacao por usuario,
+; mas a task autostart abaixo fica DESMARCADA por padrao e o VBS apenas
+; executa o EXE instalado (sem download, sem rede, sem escalacao).
 PrivilegesRequired=lowest
 SetupIconFile={#MyRoot}\app\assets\icon.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
@@ -86,9 +91,12 @@ Type: files; Name: "{app}\app\components\charts.py"
 
 [Files]
 ; ============================================================
-; 1) EXE principal (CLI launcher one-file)
+; 1) App principal (ONEDIR, ciclo 2026-09-23): pasta dist\XAU_AI_PRO\
+;    com EXE + DLLs lado a lado, sem auto-extracao em %TEMP%\_MEI*.
+;    O EXE onefile legado (dist\XAU_AI_PRO.exe) nao e mais gerado.
 ; ============================================================
-Source: "{#MyRoot}\dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#MyRoot}\dist\XAU_AI_PRO\XAU_AI_PRO.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#MyRoot}\dist\XAU_AI_PRO\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "XAU_AI_PRO.exe"
 
 ; ============================================================
 ; 2) Codigo Python (modulos carregados do disco). Excluimos

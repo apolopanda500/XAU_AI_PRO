@@ -3,9 +3,9 @@ rem =====================================================================
 rem build_installer.cmd - Full build of XAU_AI_PRO (Windows)
 rem ---------------------------------------------------------------------
 rem Flow:
-rem   1) EXE one-file (PyInstaller)   -> dist\XAU_AI_PRO.exe
-rem   2) Installer (Inno Setup)       -> installer\XAU_AI_PRO_Setup.exe
-rem   3) Signing (optional)           -> installer\sign.cmd
+rem   1) App ONEDIR (PyInstaller + COLLECT) -> dist\XAU_AI_PRO\XAU_AI_PRO.exe
+rem   2) Installer (Inno Setup)             -> dist\XAU_AI_PRO_Setup_<ver>.exe
+rem   3) Signing (optional)                 -> installer\sign.cmd
 rem
 rem USAGE:
 rem    build_installer.cmd                  (no signing)
@@ -33,14 +33,17 @@ echo == [1/4] Testes automatizados ==
 "%PY%" -m pytest -q tests
 if errorlevel 1 goto :fail
 
-rem ---- 2) EXE (PyInstaller) -------------------------------------------
+rem ---- 2) App ONEDIR (PyInstaller + COLLECT) ---------------------------
+rem SEM --clean: em 2026-09-11 um build com --clean VAZIOU o arvore fonte
+rem (FileNotFoundError app\ai_client.py). O release_production.cmd ja faz
+rem backup pre-build + build incremental; este script segue o mesmo padrao.
 echo.
-echo == [2/4] PyInstaller: dist\XAU_AI_PRO.exe ==
-"%PY%" -m PyInstaller --noconfirm --clean launcher.spec
+echo == [2/4] PyInstaller ONEDIR: dist\XAU_AI_PRO\XAU_AI_PRO.exe ==
+"%PY%" -m PyInstaller --noconfirm launcher.spec
 if errorlevel 1 goto :fail
 
 echo.== Smoke test: XAU_AI_PRO.exe versao ==
-"%ROOT%\dist\XAU_AI_PRO.exe" versao
+"%ROOT%\dist\XAU_AI_PRO\XAU_AI_PRO.exe" versao
 if errorlevel 1 echo [AVISO] smoke test de versao falhou
 
 rem ---- 3) Installer (Inno Setup) ---------------------------------------
@@ -58,9 +61,9 @@ if errorlevel 1 goto :fail
 
 :done
 echo.
-echo Build concluido:
-echo   EXE       : %ROOT%\dist\XAU_AI_PRO.exe
-echo   Instalador: %ROOT%\installer\XAU_AI_PRO_Setup.exe
+echo Build concluido (ONEDIR):
+echo   App       : %ROOT%\dist\XAU_AI_PRO\XAU_AI_PRO.exe
+echo   Instalador: %ROOT%\dist\XAU_AI_PRO_Setup_*.exe
 endlocal
 exit /b 0
 

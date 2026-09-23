@@ -91,16 +91,14 @@ pyz = PYZ(a.pure, a.zipped_data)
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
     [],
+    exclude_binaries=True,
     name='XAU_AI_PRO',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     # ------------------------------------------------------------------
-    # ANTI-FALSO-POSITIVO (auditoria 2026-09-22)
+    # ANTI-FALSO-POSITIVO (auditoria 2026-09-22 + ciclo onedir 2026-09-23)
     # ------------------------------------------------------------------
     # upx=False: o UPX e o packer mais usado por malware e o Microsoft
     # Defender marca QUALQUER binario compactado com UPX como suspeito.
@@ -110,8 +108,6 @@ exe = EXE(
     # O ganho de tamanho do UPX nao compensa a perda de reputacao do
     # binario em ambiente de dinheiro real. NAO reativar sem assinatura EV.
     upx=False,
-    upx_exclude=[],
-    runtime_tmpdir=None,
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
@@ -119,4 +115,20 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=_ICON,
+)
+# ----------------------------------------------------------------------
+# MODO ONEDIR (ciclo 2026-09-23): elimina a auto-extracao em %TEMP%\_MEI*
+# que caracteriza o modo onefile como dropper para a heuristica !ml.
+# O EXE acima exclui binarios (exclude_binaries=True); o COLLECT abaixo
+# monta a pasta dist\XAU_AI_PRO\ com EXE + DLLs lado a lado.
+# Ver mt5-gateway.spec (mesmo padrao, nunca detectado).
+# ----------------------------------------------------------------------
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.datas,
+    strip=False,
+    upx=False,
+    upx_exclude=[],
+    name='XAU_AI_PRO',
 )

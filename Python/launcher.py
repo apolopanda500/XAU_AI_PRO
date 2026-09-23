@@ -66,7 +66,10 @@ def _resolve_project_root() -> Path:
     if env_root:
         candidates.append(Path(env_root))
 
-        # sys.executable: python.exe (fonte) ou XAU_AI_PRO.exe (empacotado)
+    # sys.executable: python.exe (fonte) ou XAU_AI_PRO.exe (empacotado).
+    # Modo ONEDIR (ciclo 2026-09-23): o EXE roda de dist\XAU_AI_PRO\ com as
+    # DLLs lado a lado, sem auto-extracao. O diretorio do executavel e a
+    # primeira opcao (nao ha _MEIPASS no onedir).
     exe_dir = Path(sys.executable).resolve().parent
     candidates.append(exe_dir)
     candidates.append(exe_dir.parent)
@@ -74,9 +77,10 @@ def _resolve_project_root() -> Path:
     # IMPORTANTE: quando rodado de Python/ via source (venv), o cwd e` Python/
     # e o root e` o diretorio pai. Sem isso o app/ nunca e encontrado.
     candidates.append(Path.cwd().parent)
-    # No modo EXE onefile, o root e` o diretorio onde o executavel foi extraido
-    # (sys._MEIPASS). Adiciona como candidato de ultimo recurso.
-    mei = os.environ.get("_MEIPASS", "")
+    # Compatibilidade ONEDIR->ONEFILE legado: no modo onefile antigo o root
+    # era o diretorio de extracao (sys._MEIPASS). Mantido como ultimo recurso
+    # para instalacoes antigas ainda em campo.
+    mei = os.environ.get("_MEIPASS", "") or getattr(sys, "_MEIPASS", "")
     if mei:
         candidates.append(Path(mei))
 
