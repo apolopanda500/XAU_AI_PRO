@@ -32,8 +32,8 @@ export interface RiskConfig {
 }
 
 export const DEFAULT_RISK_CONFIG: RiskConfig = {
-  maxDailyDrawdown: 5,          // 5% máximo por dia
-  maxTotalDrawdown: 20,         // 20% máximo total
+  maxDailyDrawdown: 2,          // 2% — igual ao risk_gate backend
+  maxTotalDrawdown: 5,          // 5% — igual à exposição máxima backend
   maxRiskPerTrade: 1,           // 1% risco por trade
   marginAlertLevel: 80,         // Alertar quando margem > 80%
   autoStopOnDrawdown: false,    // Não parar automaticamente
