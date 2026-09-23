@@ -13,6 +13,7 @@ export type TabType =
   | 'risk'
   | 'alert'
     | 'analytics'
+  | 'calendar'
   | 'ai';
 
 export type ThemeName = 'dark' | 'xau_dark' | 'btc_dark' | 'light' | 'ocean_dark' | 'emerald_dark' | 'rose_dark' | 'violet_dark';

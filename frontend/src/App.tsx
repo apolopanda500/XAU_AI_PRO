@@ -28,6 +28,7 @@ import RiskTab from './components/tabs/RiskTab';
 import AlertTab from './components/tabs/AlertTab';
 import AIControlTab from './components/tabs/AIControlTab';
 import AnalyticsTab from './components/tabs/AnalyticsTab';
+import EconomicCalendarTab from './components/tabs/EconomicCalendarTab';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 
 const TAB_COMPONENTS: Partial<Record<TabType, React.ReactNode>> = {
@@ -41,6 +42,7 @@ const TAB_COMPONENTS: Partial<Record<TabType, React.ReactNode>> = {
   risk: <RiskTab />,
   alert: <AlertTab />,
     analytics: <AnalyticsTab />,
+  calendar: <EconomicCalendarTab />,
   ai: <AIControlTab />,
 };
 
