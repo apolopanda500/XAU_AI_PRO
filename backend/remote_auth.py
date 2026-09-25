@@ -32,7 +32,7 @@ def _password_hash(password: str, salt: bytes | None = None) -> str:
 def _password_ok(password: str, encoded: str) -> bool:
     try:
         _, salt_hex, digest_hex = encoded.split("$")
-        candidate = _password_hash(password, bytes.fromhex(salt_hex)).split("$")[-1]
+        candidate = _password_hash(password, bytes.fromhex(salt_hex)).rsplit("$", maxsplit=1)[-1]
         return hmac.compare_digest(candidate, digest_hex)
     except (ValueError, TypeError):
         return False

@@ -123,6 +123,11 @@ frontend/.vite/
 *.db-wal
 *.db-shm
 *.sqlite
+# o padrao de backend/remote_auth.py e auth.sqlite3 e contem hashes de senha
+# e tokens de sessao. *.sqlite sozinho nao cobre .sqlite3.
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
 
 
 # Gitleaks config pode ser versionado (documentacao)
