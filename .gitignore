@@ -5,6 +5,7 @@ backend/node_modules/
 
 # Build outputs
 frontend/dist/
+release/
 *.exe
 
 # Logs
@@ -119,6 +120,8 @@ frontend/.vite/
 
 # Database
 *.db
+*.db-wal
+*.db-shm
 *.sqlite
 
 
@@ -137,6 +140,9 @@ Docs/branding/*.png
 # Ciclo limpo v1.2.3 - nunca versionar binarios/artefatos de build
 frontend/src-tauri/bridge/
 frontend/src-tauri/gen/
+frontend/src-tauri/gen/android/keystore.properties
+frontend/src-tauri/gen/android/**/*.jks
+frontend/src-tauri/gen/android/**/*.keystore
 frontend/src-tauri/target/
 frontend/src-tauri/*.log
 frontend/src-tauri/*.flag

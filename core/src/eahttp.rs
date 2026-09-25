@@ -5,6 +5,8 @@
 use std::sync::Arc;
 
 use axum::extract::State;
+use axum::http::{HeaderMap, StatusCode};
+use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
@@ -20,6 +22,7 @@ struct EaState {
     mt5: Arc<Mt5SessionManager>,
     market: Arc<MarketDataService>,
     risk: Arc<RiskEngine>,
+    health_token: Option<String>,
 }
 
 /// Sobe o HTTP do EA na porta configurada (padrão 9003).
@@ -31,7 +34,16 @@ pub async fn serve(
 ) -> anyhow::Result<()> {
     let addr = format!("{}:{}", config.bind_address, config.port);
     info!("HTTP do EA em {}", addr);
-    let state = EaState { mt5, market, risk };
+    let health_token = std::env::var("XAU_CORE_HEALTH_TOKEN")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    let state = EaState {
+        mt5,
+        market,
+        risk,
+        health_token,
+    };
     let app = Router::new()
         .route("/api/ea/hello", post(route_hello))
         .route("/api/ea/heartbeat", post(route_heartbeat))
@@ -117,8 +129,26 @@ async fn route_reconcile(State(s): State<EaState>) -> Json<ReconcileOut> {
     })
 }
 
-async fn route_health() -> Json<serde_json::Value> {
-    Json(serde_json::json!({"ok": true, "service": "xau-ai-pro-core"}))
+async fn route_health(State(state): State<EaState>, headers: HeaderMap) -> Response {
+    if let Some(expected) = state.health_token.as_deref() {
+        let authorized = headers
+            .get("authorization")
+            .and_then(|value| value.to_str().ok())
+            .is_some_and(|value| value == format!("Bearer {}", expected));
+        if !authorized {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({"ok": false, "error": "unauthorized"})),
+            )
+                .into_response();
+        }
+    }
+    Json(serde_json::json!({
+        "ok": true,
+        "service": "xau-ai-pro-core",
+        "core_version": xau_ai_pro_core::VERSION
+    }))
+    .into_response()
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -132,6 +132,8 @@ def tool_call(name, args):
     if name == "emergency_stop":
         return _http("/api/universal/emergency-stop", {})
     if name == "emergency_resume":
+        if not TRADING_HABILITADO or os.getenv("XAU_ENABLE_EMERGENCY_RESUME", "0") != "1":
+            return {"bloqueado": True, "motivo": "retomada exige XAU_MCP_TRADING=1 e XAU_ENABLE_EMERGENCY_RESUME=1"}
         return _http("/api/universal/emergency-resume", {})
     if name == "journal_tail":
         return _http(f"/api/journal?limit={int(args.get('limit', 20))}")

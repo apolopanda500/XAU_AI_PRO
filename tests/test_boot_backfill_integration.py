@@ -81,6 +81,9 @@ def _assert_boot_route_fastapi_sem_mt5(watchdog, intent_log, fastapi) -> None:
     out = asyncio.run(fastapi.boot_route())
     data = json.loads(bytes(out.body).decode("utf-8")) if isinstance(out, JSONResponse) else out
     assert data.get("ok") is True, data
+    assert data.get("source") == "boot_status", data
+    hist = watchdog.history(10)
+    assert hist.get("count", 0) == 0, hist
     if isinstance(out, JSONResponse):
         assert out.status_code == 200, data
 

@@ -3,7 +3,7 @@ from backend.reconciliation import reconcile_order
 from backend.universal_router import UniversalRouter, UniversalRouterError
 
 def payload():
-    return {"broker":"mexc","market":"spot","symbol":"BTCUSDT","side":"buy","order_type":"market","quantity":0.001,"request_id":"test-001","confirm":True}
+    return {"broker":"mexc","market":"spot","symbol":"BTCUSDT","side":"buy","order_type":"market","quantity":0.001,"account_id":"mexc-account","request_id":"test-001","confirm":True}
 
 def test_router_prepares_mexc_order_without_sending(monkeypatch):
     monkeypatch.setenv("XAU_ENABLE_MEXC_EXECUTION", "0")

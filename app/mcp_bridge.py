@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
-"""MCP Bridge - funcoes reais ENTRE servidores MCP.
+"""Bridge de pipelines entre conectores MCP aprovados.
 
-Orquestra varios MCPs encadeando dados: ex. Sequential Thinking -> MT5
-Gateway -> Postgres/SQLite -> memoria. Permite pipelines de analise
-multi-camada usando as ferramentas ja registradas em mcp_tools.
+Pipelines nunca inventam fallback: servidores ausentes são reportados como
+indisponíveis e a memória é usada apenas com dados recebidos de fontes reais.
 """
 from __future__ import annotations
 
@@ -18,33 +17,27 @@ def _call(server_id: str, action: str = "quote", **kw: Any) -> dict[str, Any]:
 
 
 def bridge_sequential_to_db(thought: str, query: str | None = None) -> dict[str, Any]:
-    """Pipeline: Sequential Thinking -> Postgres/SQLite (consulta) -> memoria."""
+    """Pipeline opcional; servidores ausentes são reportados sem fallback falso."""
+    from app.mcp_tools import enabled_tools
+
+    enabled = set(enabled_tools())
     steps: list[dict[str, Any]] = []
+    if "sequential_thinking" in enabled:
+        r_seq = _call("sequential_thinking", thought=thought, thoughtNumber=1, totalThoughts=5)
+        steps.append({"server": "sequential_thinking", "ok": r_seq.get("ok"), "result": r_seq.get("result", r_seq.get("error", ""))})
+    else:
+        steps.append({"server": "sequential_thinking", "ok": False, "error": "servidor não habilitado"})
 
-    # 1) Raciocinio estruturado
-    r_seq = _call("sequential_thinking", thought=thought,
-                  thoughtNumber=1, totalThoughts=5)
-    steps.append({"server": "sequential_thinking", "ok": r_seq.get("ok"),
-                  "result": r_seq.get("result", r_seq.get("error", ""))})
+    if "postgres_sqlite" in enabled:
+        try:
+            r_db = _call("postgres_sqlite", "query", query=query or "SELECT name FROM sqlite_master WHERE type='table' LIMIT 10")
+            steps.append({"server": "postgres_sqlite", "ok": r_db.get("ok"), "result": r_db.get("result", r_db.get("error", ""))})
+        except Exception as exc:
+            steps.append({"server": "postgres_sqlite", "ok": False, "error": str(exc)})
+    else:
+        steps.append({"server": "postgres_sqlite", "ok": False, "error": "servidor não habilitado"})
 
-    # 2) Consulta no banco (se habilitado)
-    r_db = {"ok": False, "result": "", "error": "postgres_sqlite desativado"}
-    try:
-        r_db = _call("postgres_sqlite", "query",
-                     query=query or "SELECT name FROM sqlite_master WHERE type='table' LIMIT 10")
-        steps.append({"server": "postgres_sqlite", "ok": r_db.get("ok"),
-                      "result": r_db.get("result", r_db.get("error", ""))})
-    except Exception as exc:
-        steps.append({"server": "postgres_sqlite", "ok": False, "error": str(exc)})
-
-    # 3) Grava na memoria
-    try:
-        from app.ai_memory import remember
-        remember("thought", thought, {"bridge": "sequential->db"})
-    except Exception:
-        pass
-
-    return {"ok": r_seq.get("ok", False), "steps": steps, "ts": time.time()}
+    return {"ok": bool(steps) and all(step.get("ok") for step in steps), "steps": steps, "ts": time.time()}
 
 
 def bridge_market_to_memory(symbol: str = "XAUUSD") -> dict[str, Any]:
@@ -93,15 +86,7 @@ def bridge_market_to_memory(symbol: str = "XAUUSD") -> dict[str, Any]:
 
 def bridge_analysis_pipeline(thought: str, symbol: str = "XAUUSD") -> dict[str, Any]:
     """Pipeline completa: pensamento + cotacao + sincronizacao MT5 + memoria."""
-    steps: list[dict[str, Any]] = []
-
-    # 1) Pensamento estruturado
-    r_seq = _call("sequential_thinking", thought=thought,
-                  thoughtNumber=1, totalThoughts=5)
-    steps.append({"server": "sequential_thinking", "ok": r_seq.get("ok"),
-                  "result": r_seq.get("result", r_seq.get("error", ""))})
-
-    # 2) Cotacao
+    steps: list[dict[str, Any]] = [{"server": "agent_reasoning", "ok": True, "result": thought}]
     r_mkt = bridge_market_to_memory(symbol)
     steps.append({"server": "market", "ok": r_mkt.get("ok"), "result": r_mkt.get("quote")})
 
@@ -123,7 +108,7 @@ def bridge_analysis_pipeline(thought: str, symbol: str = "XAUUSD") -> dict[str, 
     except Exception:
         pass
 
-    return {"ok": True, "steps": steps, "symbol": symbol, "ts": time.time()}
+    return {"ok": bool(r_mkt.get("ok")), "steps": steps, "symbol": symbol, "ts": time.time()}
 
 
 def cross_mcp_search(query: str) -> dict[str, Any]:
@@ -165,9 +150,8 @@ def pipeline_summary() -> dict[str, Any]:
         "enabled": enabled,
         "count": len(enabled),
         "pipelines": {
-            "sequential_to_db": "sequential_thinking -> postgres_sqlite",
-            "market_to_memory": "tradingview/alpha_vantage/mt5 -> memoria",
-            "analysis": "sequential_thinking + market + mt5_sync + memoria",
+            "market_to_memory": "tradingview/mt5 -> memoria",
+            "analysis": "agent_reasoning + market + mt5_sync + memoria",
             "cross_search": "busca multi-servidor",
         },
     }

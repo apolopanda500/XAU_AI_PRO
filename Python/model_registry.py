@@ -10,6 +10,7 @@ Nenhum modelo inexistente pode ser interpretado como valido.
 from __future__ import annotations
 
 import os
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -125,6 +126,51 @@ def list_models() -> list[dict[str, Any]]:
         sym, tf = parts
         out.append(model_status(sym, tf))
     return out
+
+
+def model_catalog() -> list[dict[str, Any]]:
+    """Inventário somente leitura; não desserializa modelos nem presume treino pelo nome."""
+    catalog = []
+    for item in list_models():
+        path = Path(item["path"])
+        meta_path = path.with_suffix(".meta.json")
+        entry: dict[str, Any] = {
+            "artifact": path.name,
+            "status": item["status"],
+            "training_verified": False,
+            "training_metadata_status": "missing",
+            "trained_symbol": None,
+            "trained_timeframe": None,
+            "train_date": None,
+            "algorithm": None,
+            "model_version": None,
+            "dataset_version": None,
+            "feature_count": None,
+        }
+        if meta_path.is_file():
+            try:
+                meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                if not isinstance(meta, dict):
+                    raise ValueError("metadados não são um objeto")
+                symbol = meta.get("symbol")
+                timeframe = meta.get("timeframe")
+                if symbol != item["symbol"] or timeframe != item["timeframe"]:
+                    entry["training_metadata_status"] = "mismatch"
+                else:
+                    entry.update({
+                        "trained_symbol": symbol,
+                        "trained_timeframe": timeframe,
+                        "train_date": meta.get("train_date"),
+                        "algorithm": meta.get("algorithm"),
+                        "model_version": meta.get("model_version"),
+                        "dataset_version": meta.get("dataset_version"),
+                        "feature_count": meta.get("feature_count"),
+                    })
+                    entry["training_metadata_status"] = "present"
+            except (OSError, ValueError, UnicodeError):
+                entry["training_metadata_status"] = "invalid"
+        catalog.append(entry)
+    return catalog
 
 
 # conveniencia para CLI

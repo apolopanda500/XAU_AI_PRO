@@ -1,5 +1,5 @@
-﻿import React, { useEffect, useLayoutEffect, useRef } from 'react';
-import { useAppStore, TabType } from './hooks/useAppStore';
+﻿import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
+import { useAppStore, type TabType } from './hooks/useAppStore';
 import { useTheme } from './hooks/useTheme';
 import { useCoreBootstrap } from './hooks/useCoreBootstrap';
 import { useMarketWebSocket } from './hooks/useMarketWebSocket';
@@ -8,19 +8,18 @@ import QuantumBackground from './components/QuantumBackground';
 import Sidebar from './components/Sidebar';
 import TopNav from './components/TopNav';
 import PortfolioHomeClean from './components/tabs/PortfolioHomeSafe';
-import UniversalLiveTerminal from './components/UniversalLiveTerminalLatest';
+import MarketTab from './components/tabs/MarketTab';
 import RobotTableCommands from './components/RobotAssetTableFixed';
 import RobotCommandActions from './components/RobotCommandActions';
 import GuardianManager from './components/GuardianManager';
 import DemoOrderPanel from './components/DemoOrderPanel';
-import MarketTab from './components/tabs/MarketTab';
-import RobotTab from './components/tabs/RobotWorkspaceTab';
+import UniversalLiveTerminal from './components/UniversalLiveTerminalLatest';
 import HistoryTab from './components/tabs/HistoryTab';
 import SystemMonitorUniversalTab from './components/SystemHealthOnly';
 import SettingsTab from './components/SettingsCoreSimple';
+import SubscriptionPanel from './components/SubscriptionPanel';
 import ExitAppButton from './components/ExitAppButton';
 import ConnectedDevicesPanel from './components/ConnectedDevicesPanel';
-import AppIdentity from './components/AppIdentity';
 import SystemStartupSync from './components/SystemStartupSync';
 import ConnectionManager from './components/ConnectionSettings';
 import StrategyTesterTab from './components/tabs/StrategyTesterTab';
@@ -31,58 +30,58 @@ import AnalyticsTab from './components/tabs/AnalyticsTab';
 import EconomicCalendarTab from './components/tabs/EconomicCalendarTab';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 
-const TAB_COMPONENTS: Partial<Record<TabType, React.ReactNode>> = {
-  portfolio: <PortfolioHomeClean />,
-  market: <MarketTab />,
-  robot: <><RobotTableCommands /><RobotCommandActions /><DemoOrderPanel /><GuardianManager /><UniversalLiveTerminal /></>,
-  history: <HistoryTab />,
-  system: <SystemMonitorUniversalTab />,
-  settings: <><ConnectionManager /><ConnectedDevicesPanel /><SettingsTab /><ExitAppButton /></>,
-  'strategy-tester': <StrategyTesterTab />,
-  risk: <RiskTab />,
-  alert: <AlertTab />,
-    analytics: <AnalyticsTab />,
-  calendar: <EconomicCalendarTab />,
-  ai: <AIControlTab />,
-};
+function renderActiveTab(tab: TabType): ReactNode {
+  switch (tab) {
+    case 'portfolio': return <PortfolioHomeClean />;
+    case 'market': return <MarketTab />;
+    case 'robot': return <><RobotTableCommands /><RobotCommandActions /><DemoOrderPanel /><GuardianManager /><UniversalLiveTerminal /></>;
+    case 'history': return <HistoryTab />;
+    case 'system': return <SystemMonitorUniversalTab />;
+    case 'settings': return <><ConnectionManager /><ConnectedDevicesPanel /><SubscriptionPanel /><SettingsTab /><ExitAppButton /></>;
+    case 'strategy-tester': return <StrategyTesterTab />;
+    case 'risk': return <RiskTab />;
+    case 'alert': return <AlertTab />;
+    case 'analytics': return <AnalyticsTab />;
+    case 'calendar': return <EconomicCalendarTab />;
+    case 'ai': return <AIControlTab />;
+    default: return null;
+  }
+}
 
 export default function App() {
-  const activeTab = useAppStore((s) => s.activeTab === 'dashboard' ? 'portfolio' : s.activeTab);
-  const setActiveTab = useAppStore((s) => s.setActiveTab);
+  const activeTab = useAppStore((state) => state.activeTab === 'dashboard' ? 'portfolio' : state.activeTab);
+  const setActiveTab = useAppStore((state) => state.setActiveTab);
   const contentRef = useRef<HTMLElement | null>(null);
   const scrollByTab = useRef<Record<string, number>>({});
   useTheme();
   useCoreBootstrap();
   const { applySubscriptions } = useMarketWebSocket();
-  const subscribeSymbols = useAppStore((s) => s.subscribeSymbols);
-  // Mantem as subscriptions do Core alinhadas a watchlist exibida.
+  const subscribeSymbols = useAppStore((state) => state.subscribeSymbols);
   useEffect(() => { applySubscriptions(subscribeSymbols); }, [applySubscriptions, subscribeSymbols]);
   useKeyboardShortcuts(setActiveTab);
 
   useLayoutEffect(() => {
     const content = contentRef.current;
-    if (!content) return;
+    if (!content) return undefined;
+    content.scrollTop = scrollByTab.current[activeTab] ?? 0;
     const remember = () => { scrollByTab.current[activeTab] = content.scrollTop; };
     content.addEventListener('scroll', remember, { passive: true });
     return () => content.removeEventListener('scroll', remember);
   }, [activeTab]);
 
-  return (
-    <>
-      {/* Camada de fundo quÃ¢ntico com partÃ­culas e linhas de energia */}
-      <QuantumBackground density={60} speed={1} />
-      <SystemStartupSync />
-      <AuthGate>
-        <div className="app-shell">
-          <Sidebar />
-          <main className="main">
-            <TopNav />
-            <section ref={contentRef} className="content">
-              {Object.entries(TAB_COMPONENTS).map(([tab, content]) => <div key={tab} style={{ display: activeTab === tab ? 'block' : 'none' }}>{content}</div>)}
-            </section>
-          </main>
-        </div>
-      </AuthGate>
-    </>
-  );
+  return <>
+    <QuantumBackground density={60} speed={1} />
+    <SystemStartupSync />
+    <AuthGate>
+      <div className="app-shell">
+        <Sidebar />
+        <main className="main">
+          <TopNav />
+          <section ref={contentRef} className="content">
+            {renderActiveTab(activeTab)}
+          </section>
+        </main>
+      </div>
+    </AuthGate>
+  </>;
 }

@@ -1,12 +1,12 @@
 ﻿name: Security Checks
 
-# Security workflow that runs on every PR and push to main.
-# Runs: dependency audit, secret scanning, env check, and code pattern checks.
+# Auditoria em todas as branches usadas para release e desenvolvimento.
+# Inclui dependencias da interface desktop efetivamente distribuida.
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "develop"]
   pull_request:
-    branches: ["main"]
+    branches: ["main", "develop"]
   schedule:
     - cron: "0 7 * * 1"
   workflow_dispatch:
@@ -55,8 +55,16 @@ jobs:
           cache: "npm"
           cache-dependency-path: backend/package-lock.json
 
-      - name: "Audit Node.js dependencies"
+      - name: "Audit Node.js dependencies do backend"
         working-directory: backend
+        run: npm audit --audit-level=high
+
+      - name: "Auditar dependencias distribuidas do frontend"
+        working-directory: frontend
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: "Auditar ferramentas de build e desenvolvimento do frontend"
+        working-directory: frontend
         run: npm audit --audit-level=high
 
   # 2. Secret scanning

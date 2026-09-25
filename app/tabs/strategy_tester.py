@@ -97,6 +97,7 @@ class StrategyTester(tk.Frame):
         btn_card.pack(fill="x", padx=8, pady=4)
         PrimaryButton(btn_card.body, text="Carregar Dados", command=self._load_data).pack(fill="x", pady=2)
         AccentButton(btn_card.body, text="Gerar Sinais", command=self._generate_signals).pack(fill="x", pady=2)
+        AccentButton(btn_card.body, text="Backtest paper", command=self._run_backtest).pack(fill="x", pady=2)
         SecondaryButton(btn_card.body, text="Limpar", command=self._clear).pack(fill="x", pady=2)
 
     def _build_chart(self, parent, row, col):
@@ -215,6 +216,23 @@ class StrategyTester(tk.Frame):
         self._update_stats()
         self._draw_chart()
         self.on_status(f"{len(self._signals)} sinais gerados")
+
+    def _run_backtest(self):
+        if not self._candles:
+            self.on_status("Carregue dados antes do backtest")
+            return
+        self.status_label.configure(text="Executando backtest paper...", fg=Theme.WARNING)
+        try:
+            from backend.backtest import run_backtest
+            result = run_backtest(self._candles)
+        except (TypeError, ValueError) as exc:
+            self.status_label.configure(text=f"Backtest inválido: {exc}", fg=Theme.DANGER)
+            self.on_status("Backtest paper rejeitado")
+            return
+        self.stats_labels["Win Rate"].configure(text=f"{result['win_rate_pct']:.1f}%")
+        self.stats_labels["Profit"].configure(text=f"{result['net_profit']:.2f}")
+        self.status_label.configure(text="Backtest paper concluído", fg=Theme.SUCCESS)
+        self.on_status(f"Backtest paper: {result['trade_count']} trades · DD {result['max_drawdown_pct']:.2f}%")
 
     def _update_stats(self):
         """Atualiza estatisticas dos sinais."""

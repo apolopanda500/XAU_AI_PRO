@@ -94,6 +94,15 @@ def test_salva_e_testa_leitura_com_stub(gateway):
     assert all("api_key" not in item and "api_secret" not in item for item in data["connections"])
 
 
+def test_leitura_de_conexoes_nao_cria_diretorio(gateway, tmp_path, monkeypatch):
+    missing = tmp_path / "missing-appdata"
+    monkeypatch.setenv("APPDATA", str(missing))
+    status, data = _request(gateway, "GET", "/api/connections")
+    assert status == 200
+    assert data["connections"] == []
+    assert not missing.exists()
+
+
 def test_falha_de_validacao_retorna_502_sem_segredos(gateway):
     payload = {"id": "binance:crypto-spot:demo", "broker": "binance", "market": "crypto-spot", "api_key": "KEY", "api_secret": "SECRET"}
 

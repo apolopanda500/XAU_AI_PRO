@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import sys
 import time
+import os
+import copy
 from pathlib import Path
 from typing import Any
 import asyncio
@@ -22,6 +24,11 @@ import backend.mt5_gateway as gw
 from backend import intent_log
 from backend import persistent_queue
 from backend import watchdog
+from backend.backtest import run_backtest
+from backend.third_party_ea import evaluate_all as evaluate_third_party_ea
+from Python.model_registry import model_catalog
+from app.social_paper import follow_strategy, following_strategies, list_strategies, unfollow_strategy
+from app.subscriptions import activate_local_plan, get_subscription, list_plans
 
 API_TOKEN = gw.API_TOKEN
 RATE_LIMIT_MAX = gw.RATE_LIMIT_MAX
@@ -44,20 +51,22 @@ async def _auth_rate_limit(request, call_next):  # type: ignore[no-untyped-def]
     """Paridade com mt5_gateway: token opcional + rate limit por categoria.
 
     GET = leitura (polling), demais verbos = comando. Rotas de documentacao
-    (/api/docs, /api/redoc, /api/openapi.json) e /api/health ficam isentas.
+    (/api/docs, /api/redoc, /api/openapi.json) ficam isentas.
     """
     path = request.url.path
-    if path in {"/api/health", "/api/docs", "/api/redoc", "/api/openapi.json"} \
+    if path in {"/api/docs", "/api/redoc", "/api/openapi.json"} \
             or path.startswith(("/docs", "/redoc", "/openapi.json")):
         return await call_next(request)
     if API_TOKEN:
         auth = request.headers.get("authorization", "")
         if auth != f"Bearer {API_TOKEN}":
             return _send({"ok": False, "error": "token invalido"}, 401)
-    if RATE_LIMIT_MAX <= 0 and RATE_LIMIT_CMD_MAX <= 0:
+    if gw.THIRD_PARTY_READ_ONLY and request.method.upper() not in {"GET", "HEAD", "OPTIONS"} and path != "/api/universal/emergency-stop":
+        return _send({"ok": False, "status": "blocked", "error": "perfil de compatibilidade somente leitura", "commands_enabled": False, "execution_enabled": False, "withdrawals_enabled": False}, 403)
+    if gw.RATE_LIMIT_MAX <= 0 and gw.RATE_LIMIT_CMD_MAX <= 0:
         return await call_next(request)
     is_command = request.method.upper() != "GET"
-    limit = RATE_LIMIT_CMD_MAX if is_command else RATE_LIMIT_MAX
+    limit = gw.RATE_LIMIT_CMD_MAX if is_command and gw.RATE_LIMIT_CMD_MAX > 0 else gw.RATE_LIMIT_MAX
     if limit > 0:
         state = _RATE_STATE_CMD if is_command else _RATE_STATE
         agora = time.time()
@@ -72,14 +81,22 @@ async def _auth_rate_limit(request, call_next):  # type: ignore[no-untyped-def]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=sorted(gw.CORS_ORIGINS),
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 
 def _send(obj: dict, code: int = 200) -> JSONResponse:
         return JSONResponse(status_code=code, content=obj)
+
+
+async def _read_call(function, *args, timeout: float = 12.0):
+    return await asyncio.wait_for(asyncio.to_thread(function, *args), timeout=timeout)
+
+
+def _read_error_status(exc: Exception) -> int:
+    return 422 if isinstance(exc, ValueError) else 503
 
 
 @app.get("/api/health")
@@ -88,20 +105,68 @@ async def health() -> dict:
             "source": "mt5_gateway", "gateway_build": gw.GATEWAY_BUILD}
 
 
+@app.get("/api/ai/models")
+async def ai_models() -> dict:
+    return {"ok": True, "models": model_catalog(), "source": "local_model_artifacts"}
+
+
 @app.get("/api/universal/overview")
 async def universal_overview() -> dict:
-    """Snapshot universal; MT5 offline não bloqueia outras corretoras."""
-    return gw._universal_overview()
+    return await _read_call(gw._universal_overview, timeout=30.0)
 
 
 @app.get("/api/status")
 async def status() -> dict:
-    payload = gw._payload()
-    return {"ok": True, "gateway": "online",
-            "mt5_connected": bool(payload.get("account")),
-            "ea_heartbeat": payload.get("ea_heartbeat"),
-            "positions": len(payload.get("positions", [])),
-            "source": "mt5_gateway"}
+    return gw._status_snapshot()
+
+
+@app.get("/api/ea-compatibility")
+async def ea_compatibility() -> dict:
+    return await _read_call(evaluate_third_party_ea, gw._mt5(), timeout=12.0)
+
+
+@app.get("/api/subscriptions/plans")
+async def subscription_plans() -> dict:
+    return {"ok": True, "plans": list_plans(), "billing": "not_configured", "live_execution": False}
+
+
+@app.get("/api/subscriptions/me")
+async def subscription_me() -> dict:
+    return {"ok": True, "subscription": get_subscription()}
+
+
+@app.post("/api/subscriptions/activate")
+async def subscription_activate(payload: dict) -> JSONResponse:
+    try:
+        subscription = activate_local_plan(str(payload.get("plan_id", "")))
+    except ValueError as exc:
+        return _send({"ok": False, "error": str(exc), "billing": "not_configured"}, 422)
+    return _send({"ok": True, "subscription": subscription, "billing": "not_configured", "live_execution": False})
+
+
+@app.get("/api/social/strategies")
+async def social_strategies() -> dict:
+    return {"ok": True, "strategies": list_strategies(), "mode": "paper_demo", "live_execution": False}
+
+
+@app.get("/api/social/following")
+async def social_following() -> dict:
+    return {"ok": True, "strategies": following_strategies(), "mode": "paper_demo", "live_execution": False}
+
+
+@app.post("/api/social/follow")
+async def social_follow(payload: dict) -> JSONResponse:
+    try:
+        return _send({"ok": True, "strategy": follow_strategy(str(payload.get("strategy_id", "")))})
+    except PermissionError as exc:
+        return _send({"ok": False, "error": str(exc), "mode": "paper_demo"}, 403)
+    except LookupError as exc:
+        return _send({"ok": False, "error": str(exc), "mode": "paper_demo"}, 404)
+
+
+@app.delete("/api/social/follow/{strategy_id}")
+async def social_unfollow(strategy_id: str) -> dict:
+    return {"ok": True, **unfollow_strategy(strategy_id), "mode": "paper_demo", "live_execution": False}
 
 
 @app.get("/api/inventory")
@@ -111,12 +176,7 @@ async def inventory() -> dict:
 
 @app.get("/api/sync/status")
 async def sync_status() -> dict:
-    payload = gw._payload()
-    return {"ok": True, "gateway": "online",
-            "mt5_connected": bool(payload.get("account")),
-            "ea_heartbeat": payload.get("ea_heartbeat"),
-            "positions": len(payload.get("positions", [])),
-            "source": "mt5_gateway"}
+    return gw._status_snapshot()
 
 
 @app.get("/api/stream/status")
@@ -158,15 +218,9 @@ async def config_reset() -> dict:
 
 
 @app.get("/api/market/ticker")
-async def ticker(symbol: str) -> dict:
-    q = gw._market_ticker(symbol)
-    if q is None:
-        raise HTTPException(404, "tick indisponivel")
-    return {"ok": True, "ticker": q, "source": "mt5_gateway"}
-
-
-
-
+async def ticker(symbol: str, broker: str = Query(default="mt5"), market: str = Query(default="forex")) -> JSONResponse:
+    result = await _read_call(gw._universal_quote, broker.lower(), market.lower(), symbol)
+    return _send(result, gw._response_status(result))
 
 
 # ---------------------------------------------------------------------------
@@ -174,25 +228,24 @@ async def ticker(symbol: str) -> dict:
 # ---------------------------------------------------------------------------
 
 @app.get("/api/market/symbols")
-async def market_symbols(exchange: str | None = None) -> dict:
-    return {"ok": True, "symbols": gw._market_symbols(exchange), "source": "mt5_gateway"}
+async def market_symbols(exchange: str | None = None, broker: str | None = None, market: str | None = None) -> JSONResponse:
+    selected_broker = (broker or exchange or "mt5").lower()
+    selected_market = (market or ("forex" if selected_broker == "mt5" else "crypto-spot")).lower()
+    result = await _read_call(gw._universal_assets, selected_broker, selected_market, timeout=30.0)
+    return _send(result, gw._response_status(result))
 
 
 @app.get("/api/market/quotes")
-async def market_quotes(symbols: str = Query(..., min_length=1)) -> dict:
+async def market_quotes(symbols: str = Query(..., min_length=1), broker: str = Query(default="mt5"), market: str = Query(default="forex")) -> JSONResponse:
     symbol_list = [s.strip().upper() for s in symbols.split(",") if s.strip()]
-    if not symbol_list:
-        raise HTTPException(400, "symbols obrigatorio")
-    quotes = gw._market_quotes(symbol_list)
-    return {"ok": True, "quotes": quotes, "source": "mt5_gateway"}
+    result = await _read_call(gw._universal_quotes, broker.lower(), market.lower(), symbol_list)
+    return _send(result, gw._response_status(result))
 
 
 @app.get("/api/assets/{symbol}/quote")
 async def asset_quote(symbol: str) -> dict:
-    q = gw._asset_quote(symbol)
-    if q is None:
-        raise HTTPException(404, "cotacao indisponivel")
-    return {"ok": True, "quote": q, "source": "mt5_gateway"}
+    result = await _read_call(gw._quote, symbol)
+    return result
 
 # ---------------------------------------------------------------------------
 # 3. MT5 data — positions, orders, journal, quotes, symbols
@@ -206,15 +259,15 @@ async def account() -> dict:
 
 @app.get("/api/account/balance")
 async def balance() -> dict:
-    account = gw._account()
+    account = gw._payload().get("account") or {}
     return {
         "ok": True,
-        "currency": account.get("currency", ""),
-        "balance": account.get("balance", 0.0),
-        "equity": account.get("equity", 0.0),
-        "margin": account.get("margin", 0.0),
-        "margin_free": account.get("margin_free", 0.0),
-        "leverage": account.get("leverage", 0),
+        "currency": account.get("currency"),
+        "balance": account.get("balance"),
+        "equity": account.get("equity"),
+        "margin": account.get("margin"),
+        "margin_free": account.get("margin_free"),
+        "leverage": account.get("leverage"),
         "source": "mt5_gateway",
     }
 
@@ -222,9 +275,7 @@ async def balance() -> dict:
 
 @app.get("/api/system")
 async def system_info() -> dict:
-    payload = gw._payload()
-    return {"ok": True, "terminal_connected": payload.get("terminal_connected", False),
-            "account": payload.get("account"), "source": "mt5_gateway"}
+    return gw._status_snapshot()
 
 
 @app.get("/api/positions")
@@ -334,6 +385,36 @@ async def mt5_candles(symbol: str = Query(default="XAUUSD"),
 # ---------------------------------------------------------------------------
 # 4. History
 # ---------------------------------------------------------------------------
+@app.post("/api/backtest/run")
+async def backtest_run(payload: dict) -> JSONResponse:
+    symbol = str(payload.get("symbol", "XAUUSD")).strip().upper()
+    timeframe = str(payload.get("timeframe", "M15")).strip().upper()
+    try:
+        count = max(30, min(int(payload.get("count", 500)), 2000))
+        candle_data = await asyncio.wait_for(asyncio.to_thread(gw._mt5_candles, symbol, timeframe, count), timeout=15.0)
+        if not candle_data.get("ok"):
+            return _send({"ok": False, "error": candle_data.get("error", "candles reais indisponíveis"), "candles": []}, 503)
+        result = run_backtest(
+            candle_data["candles"],
+            initial_balance=float(payload.get("initial_balance", 10000.0)),
+            risk_pct=float(payload.get("risk_pct", 1.0)),
+            stop_loss_points=float(payload.get("stop_loss_points", 300.0)),
+            take_profit_points=float(payload.get("take_profit_points", 600.0)),
+            point=float(payload.get("point", 0.01)),
+            contract_size=float(payload.get("contract_size", 100.0)),
+            spread_points=float(payload.get("spread_points", 0.0)),
+            max_volume=float(payload.get("max_volume", 0.10)),
+        )
+        result.update({"symbol": symbol, "timeframe": timeframe, "source": candle_data.get("source", "mt5_gateway")})
+        return _send(result)
+    except asyncio.TimeoutError:
+        return _send({"ok": False, "error": "backtest excedeu o tempo limite", "live_execution": False}, 504)
+    except (TypeError, ValueError) as exc:
+        return _send({"ok": False, "error": str(exc), "live_execution": False}, 422)
+    except Exception:
+        return _send({"ok": False, "error": "falha ao executar backtest", "live_execution": False}, 503)
+
+
 @app.get("/api/history")
 async def history(days: int = Query(default=30), symbol: str = Query(default="")) -> dict:
     return gw._history(days, symbol)
@@ -342,19 +423,6 @@ async def history(days: int = Query(default=30), symbol: str = Query(default="")
 @app.get("/api/execution/history")
 async def execution_history() -> dict:
         return gw._history(30, "")
-
-@app.post("/api/history/realtime")
-async def history_realtime(
-    payload: dict,
-    *,
-    confirm_demo: bool = Query(False),
-) -> dict:
-    if not confirm_demo:
-        raise HTTPException(400, "confirm_demo=true obrigatorio")
-    if not payload:
-        raise HTTPException(400, "payload vazio")
-    return {"ok": True, "entry": gw._history_realtime(payload), "source": "mt5_gateway"}
-
 
 
 # ---------------------------------------------------------------------------
@@ -370,31 +438,20 @@ _EA_COMMANDS = {"start", "stop", "pause", "resume", "set-symbol", "set-mode",
 
 
 @app.post("/api/ea/{command}")
-async def ea_command(command: str, payload: dict) -> dict:
+async def ea_command(command: str, payload: dict) -> JSONResponse:
     if command not in _EA_COMMANDS:
         raise HTTPException(404, "not_found")
     try:
-        return gw._ea_command(payload, command)
+        return _send(gw._ea_command(payload, command))
+    except (PermissionError, ValueError, LookupError) as exc:
+        return _send({"ok": False, "error": str(exc), "command": command, "account_mode": "REAL_OR_UNKNOWN_BLOCKED"}, 403)
     except Exception as exc:
-        raise HTTPException(503, str(exc))
+        return _send({"ok": False, "error": str(exc), "command": command}, 503)
 
 
 @app.get("/api/capabilities")
 async def capabilities() -> dict:
-    """Expõe capacidades auditáveis mantendo a execução REAL bloqueada."""
-    return {
-        "ok": True,
-        "source": "fastapi_gateway",
-        "withdrawals_enabled": False,
-        "generic_commands": False,
-        "real_orders_enabled": False,
-        "ea_commands": sorted(f"ea/{item}" for item in _EA_COMMANDS),
-        "brokers": {
-            "mt5": {"markets": ["forex", "metals", "indices"], "execution": ["ea/close", "ea/close-all", "ea/pause", "ea/resume"]},
-            "binance": {"markets": ["crypto-spot", "crypto-futures"], "execution": ["order"]},
-            "mexc": {"markets": ["crypto-spot", "crypto-futures"], "execution": ["order"]},
-        },
-    }
+    return gw.capabilities_contract()
 
 
 # ---------------------------------------------------------------------------
@@ -497,7 +554,7 @@ async def risk_state_route() -> JSONResponse:
     evidencia de que o risk_gate esta recebendo dado real, nao zero fixo.
     """
     try:
-        return _send(gw._risk_state(gw._mt5()))
+        return _send(await _read_call(gw._risk_state, gw._mt5()))
     except Exception as exc:
         return _send({"ok": False, "error": str(exc)}, 503)
 
@@ -534,11 +591,7 @@ async def economic_calendar_route(limit: int = 30, tz: str = "BRT", days: int = 
 
 @app.get("/api/boot")
 async def boot_route() -> dict:
-    """Diagnostico do boot: reconciliacao + snapshot inicial (sem reexecutar loops)."""
-    try:
-        return boot_report()
-    except Exception as exc:
-        return _send({"ok": False, "error": str(exc), "source": "boot_report"}, 503)
+    return boot_status()
 
 
 @app.post("/api/watchdog/recovery")
@@ -654,12 +707,11 @@ async def demo_close_symbol(payload: dict) -> JSONResponse:
 
 @app.post("/api/demo/pending")
 async def demo_pending_order(payload: dict) -> JSONResponse:
-    """Ordem pendente DEMO (limit/stop) com bracket OCO (SL+TP).
+    """Ordem pendente DEMO (limit/stop) com SL/TP solicitados ao MT5.
 
-    B melhor opcao para XAU AI PRO: cria entradas em preco alvo sem
-    risco de slippage e ja nasce com SL/TP. Paridade com o bracket do
-    IBKR TWS. Nao substitui /api/demo/order (mercado); e uma alternativa
-    de execucao com as MESMAS travas: XAU_ENABLE_DEMO_ORDERS=1,
+    O envio nao garante preenchimento, ausencia de slippage, OCO ou paridade
+    com outras plataformas. Nao substitui /api/demo/order (mercado); usa
+    as mesmas travas: XAU_ENABLE_DEMO_ORDERS=1,
     confirm_demo=true, conta trade_mode==DEMO, risk_gate real (passo C),
     order_check antes do order_send.
     """
@@ -687,122 +739,143 @@ async def demo_cancel_all_orders(payload: dict) -> JSONResponse:
 # 8. Universal (read-only + preview)
 # ---------------------------------------------------------------------------
 @app.get("/api/universal/history")
-async def universal_history(broker: str, market: str, symbol: str = "", days: int = 0) -> JSONResponse:
+async def universal_history(broker: str, market: str, symbol: str = "", days: int = 0, account_id: str = "") -> JSONResponse:
     try:
-        # Clientes de corretora sao sincronos; nunca bloqueie o event loop nem as outras abas.
-        data = await asyncio.wait_for(
-            asyncio.to_thread(gw._universal_history, broker.lower(), market.lower(), symbol, days),
-            timeout=12.0,
-        )
-        return _send(data)
-    except asyncio.TimeoutError:
-        return _send({"ok": False, "error": f"historico {broker} excedeu o tempo limite", "deals": [], "count": 0, "source": broker.lower()}, 504)
-    except (gw.MexcError, gw.BinanceError, LookupError, ValueError) as exc:
-        return _send({"ok": False, "error": str(exc), "deals": [], "count": 0}, 503)
+        result = await _read_call(gw._universal_history, broker.lower(), market.lower(), symbol, days, account_id)
+        return _send(result, gw._response_status(result))
     except Exception as exc:
-        return _send({"ok": False, "error": f"falha no historico universal: {exc}",
-                      "deals": [], "count": 0}, 503)
+        result = gw._read_exception_response(broker, market, exc, "history", deals=[], count=0)
+        return _send(result, _read_error_status(exc))
 
 
 @app.get("/api/universal/account")
-async def universal_account(broker: str, market: str) -> JSONResponse:
+async def universal_account(broker: str, market: str, account_id: str = "") -> JSONResponse:
     try:
-        data = await asyncio.wait_for(
-            asyncio.to_thread(gw._universal_account, broker.lower(), market.lower()),
-            timeout=10.0,
-        )
-        return _send(data)
-    except asyncio.TimeoutError:
-        return _send({"ok": False, "error": f"conta {broker} excedeu o tempo limite", "withdrawals_enabled": False}, 504)
-    except (gw.MexcError, gw.BinanceError, LookupError, ValueError) as exc:
-        return _send({"ok": False, "error": str(exc), "withdrawals_enabled": False}, 503)
+        result = await _read_call(gw._universal_account, broker.lower(), market.lower(), account_id)
+        return _send(result, gw._response_status(result))
+    except Exception as exc:
+        result = gw._read_exception_response(broker, market, exc, "account", account=None, withdrawals_enabled=False)
+        return _send(result, _read_error_status(exc))
 
 
 @app.get("/api/universal/positions")
-async def universal_positions(broker: str = Query(default="mt5"),
-                              market: str = Query(default="")) -> JSONResponse:
+async def universal_positions(broker: str = Query(default="mt5"), market: str = Query(default=""), account_id: str = Query(default="")) -> JSONResponse:
     try:
-        return _send(gw._universal_positions(broker.lower(), market.lower()))
-    except (gw.MexcError, gw.BinanceError, LookupError, ValueError) as exc:
-        return _send({"ok": False, "error": str(exc), "positions": []}, 503)
+        result = await _read_call(gw._universal_positions, broker.lower(), market.lower(), account_id)
+        return _send(result, gw._response_status(result))
+    except Exception as exc:
+        result = gw._read_exception_response(broker, market, exc, "positions", positions=[], pnl={"value": None, "available": False})
+        return _send(result, _read_error_status(exc))
 
 
 @app.get("/api/universal/quote")
 async def universal_quote(broker: str, market: str, symbol: str) -> JSONResponse:
     try:
-        return _send(gw._universal_quote(broker.lower(), market.lower(), symbol))
+        result = await _read_call(gw._universal_quote, broker.lower(), market.lower(), symbol)
+        return _send(result, gw._response_status(result))
     except Exception as exc:
-        return _send({"ok": False, "error": str(exc)}, 503)
+        result = gw._read_exception_response(broker, market, exc, "ticker", symbol=symbol, bid=None, ask=None, last=None, price=None, spread=None)
+        return _send(result, _read_error_status(exc))
 
 
 @app.get("/api/universal/quotes")
-async def universal_quotes(broker: str = Query(default="mt5"),
-                           market: str = Query(default="crypto-spot"),
-                           symbols: str = Query(default="")) -> JSONResponse:
+async def universal_quotes(broker: str = Query(default="mt5"), market: str = Query(default="crypto-spot"), symbols: str = Query(default="")) -> JSONResponse:
     try:
         items = [item.strip() for item in symbols.split(",") if item.strip()]
-        if not items:
-            raise ValueError("symbols obrigatório (lista separada por vírgula)")
-        return _send(gw._universal_quotes(broker.lower(), market.lower(), items))
+        result = await _read_call(gw._universal_quotes, broker.lower(), market.lower(), items)
+        return _send(result, gw._response_status(result))
     except Exception as exc:
-        return _send({"ok": False, "error": str(exc), "quotes": [], "errors": []}, 503)
+        result = gw._read_exception_response(broker, market, exc, "ticker_batch", quotes=[], errors=[])
+        return _send(result, _read_error_status(exc))
 
+
+@app.get("/api/universal/assets")
+async def universal_assets(broker: str = Query(default="mt5"), market: str = Query(default="other")) -> JSONResponse:
+    try:
+        result = await _read_call(gw._universal_assets, broker.lower(), market.lower())
+        return _send(result, gw._response_status(result))
+    except Exception as exc:
+        result = gw._read_exception_response(broker, market, exc, "assets", assets=[], symbols=[], count=0)
+        return _send(result, _read_error_status(exc))
+
+
+@app.get("/api/universal/capabilities")
+async def universal_capabilities(broker: str = Query(default="mt5"), market: str = Query(default="other"), symbol: str = Query(default="")) -> JSONResponse:
+    try:
+        result = await _read_call(gw._universal_asset_capabilities, broker.lower(), market.lower(), symbol)
+        return _send(result, gw._response_status(result))
+    except Exception as exc:
+        result = gw._read_exception_response(broker, market, exc, "asset_capabilities", matrix=[], count=0)
+        return _send(result, _read_error_status(exc))
+
+
+@app.get("/api/universal/candles")
+async def universal_candles(broker: str = Query(default="mt5"), market: str = Query(default="other"), symbol: str = Query(default="XAUUSD"), timeframe: str = Query(default="M5"), interval: str | None = None, limit: int = Query(default=500, ge=1, le=2000)) -> JSONResponse:
+    try:
+        result = await _read_call(gw._universal_candles, broker.lower(), market.lower(), symbol, interval or timeframe, limit)
+        return _send(result, gw._response_status(result))
+    except Exception as exc:
+        result = gw._read_exception_response(broker, market, exc, "candles", symbol=symbol, candles=[], count=0)
+        return _send(result, _read_error_status(exc))
 
 
 @app.get("/api/universal/depth")
-async def universal_depth(broker: str = Query(default="binance"),
-                          market: str = Query(default="crypto-spot"),
-                          symbol: str = Query(default="")) -> JSONResponse:
+async def universal_depth(broker: str = Query(default="binance"), market: str = Query(default="crypto-spot"), symbol: str = Query(default=""), limit: int = Query(default=20, ge=1, le=100)) -> JSONResponse:
     try:
-        if not symbol:
-            raise ValueError("symbol obrigatorio")
-        return _send(gw._universal_depth(broker.lower(), market.lower(), symbol))
-    except (gw.MexcError, gw.BinanceError, LookupError, ValueError) as exc:
-        return _send({"ok": False, "error": str(exc), "bids": [], "asks": []}, 503)
+        result = await _read_call(gw._universal_depth, broker.lower(), market.lower(), symbol, limit)
+        return _send(result, gw._response_status(result))
+    except Exception as exc:
+        result = gw._read_exception_response(broker, market, exc, "depth", symbol=symbol, bids=None, asks=None)
+        return _send(result, _read_error_status(exc))
 
 
 @app.get("/api/universal/trades")
-async def universal_trades(broker: str = Query(default="binance"),
-                           market: str = Query(default="crypto-spot"),
-                           symbol: str = Query(default="")) -> JSONResponse:
+async def universal_trades(broker: str = Query(default="binance"), market: str = Query(default="crypto-spot"), symbol: str = Query(default=""), limit: int = Query(default=20, ge=1, le=100)) -> JSONResponse:
     try:
-        if not symbol:
-            raise ValueError("symbol obrigatorio")
-        return _send(gw._universal_trades(broker.lower(), market.lower(), symbol))
-    except (gw.MexcError, gw.BinanceError, LookupError, ValueError) as exc:
-        return _send({"ok": False, "error": str(exc), "trades": []}, 503)
+        result = await _read_call(gw._universal_trades, broker.lower(), market.lower(), symbol, limit)
+        return _send(result, gw._response_status(result))
+    except Exception as exc:
+        result = gw._read_exception_response(broker, market, exc, "trades", symbol=symbol, trades=[], count=0)
+        return _send(result, _read_error_status(exc))
+
+
+@app.get("/api/universal/stats24h")
+@app.get("/api/universal/stats_24h")
+async def universal_stats24h(broker: str = Query(default="binance"), market: str = Query(default="crypto-spot"), symbol: str = Query(default="")) -> JSONResponse:
+    try:
+        result = await _read_call(gw._universal_stats24h, broker.lower(), market.lower(), symbol)
+        return _send(result, gw._response_status(result))
+    except Exception as exc:
+        result = gw._read_exception_response(broker, market, exc, "stats24h", symbol=symbol)
+        return _send(result, _read_error_status(exc))
 
 
 @app.post("/api/universal/order")
 async def universal_order(payload: dict) -> JSONResponse:
     if payload.get("execute") is True:
-        if payload.get("authorize_execution") is not True or payload.get("confirm_live") is not True:
-            return _send({"ok": False, "status": "rejected", "error": "authorize_execution=true e confirm_live=true obrigatorios", "withdrawals_enabled": False}, 403)
-        if gw.REAL_EMERGENCY_STOP.exists():
-            return _send({"ok": False, "status": "rejected", "error": "parada de emergencia ativa", "withdrawals_enabled": False}, 403)
-        try:
-            from backend.universal_router import UniversalRouter
-            result = UniversalRouter().execute(payload, explicit_authorization=True)
-            result["withdrawals_enabled"] = False
-            return _send(result, 200 if result.get("ok") else 403)
-        except Exception as exc:
-            return _send({"ok": False, "status": "rejected", "error": str(exc), "withdrawals_enabled": False}, 403)
+        return _send({"ok": False, "status": "blocked", "error": "execução universal indisponível nesta versão; somente prévia", "execution_enabled": False, "withdrawals_enabled": False}, 403)
     return _send(gw._universal_execution_preview(payload, "order"))
 
 
 @app.post("/api/universal/close")
 async def universal_close(payload: dict) -> JSONResponse:
+    if payload.get("execute") is True:
+        return _send({"ok": False, "status": "blocked", "error": "execução universal indisponível nesta versão; somente prévia", "execution_enabled": False, "withdrawals_enabled": False}, 403)
     return _send(gw._universal_execution_preview(payload, "close"))
 
 
 @app.post("/api/universal/modify")
 async def universal_modify(payload: dict) -> JSONResponse:
+    if payload.get("execute") is True:
+        return _send({"ok": False, "status": "blocked", "error": "execução universal indisponível nesta versão; somente prévia", "execution_enabled": False, "withdrawals_enabled": False}, 403)
     return _send(gw._universal_execution_preview(payload, "modify"))
 
 
 @app.post("/api/universal/cancel")
 async def universal_cancel(payload: dict) -> JSONResponse:
-        return _send(gw._universal_execution_preview(payload, "cancel"))
+    if payload.get("execute") is True:
+        return _send({"ok": False, "status": "blocked", "error": "execução universal indisponível nesta versão; somente prévia", "execution_enabled": False, "withdrawals_enabled": False}, 403)
+    return _send(gw._universal_execution_preview(payload, "cancel"))
 
 
 # ---------------------------------------------------------------------------
@@ -827,6 +900,9 @@ async def universal_emergency_resume(payload: dict) -> JSONResponse:
     if payload.get("confirm") is not True:
         return _send({"ok": False, "error": "confirmacao explicita obrigatoria",
                        "emergency_stop": gw.REAL_EMERGENCY_STOP.exists()}, 422)
+    if os.getenv("XAU_ENABLE_EMERGENCY_RESUME", "0") != "1":
+        return _send({"ok": False, "error": "retomada bloqueada; requer XAU_ENABLE_EMERGENCY_RESUME=1",
+                       "emergency_stop": gw.REAL_EMERGENCY_STOP.exists()}, 403)
     gw.REAL_EMERGENCY_STOP.unlink(missing_ok=True)
     from datetime import datetime
     gw.LAST_COMMAND.update({"command": "/api/universal/emergency-resume",
@@ -852,6 +928,13 @@ async def real_request(payload: dict) -> JSONResponse:
         return _send({"ok": False,
                        "error": "request_id, account_id, broker e market sao obrigatorios",
                        "execution_enabled": False, "withdrawals_enabled": False}, 422)
+    try:
+        scope = gw._universal_scope(str(payload.get("broker", "")), str(payload.get("market", "")))
+        if scope["broker"] != "mt5":
+            gw.resolve_connection(str(payload.get("account_id", "")), scope["broker"], scope["market"])
+    except (LookupError, ValueError) as exc:
+        return _send({"ok": False, "error": str(exc),
+                      "execution_enabled": False, "withdrawals_enabled": False}, 422)
     from datetime import datetime
     gw.LAST_COMMAND.update({"command": "/api/real/request",
                             "status": "pending_manual_review",
@@ -886,16 +969,6 @@ async def test_connection(connection_id: str) -> dict:
     return {"ok": True,
             "configured": any(x["id"] == connection_id for x in gw.list_connections()),
             "credentials_exposed": False}
-
-
-@app.get("/api/connections/{connection_id}/activate")
-async def activate_connection(connection_id: str) -> dict:
-    return {"ok": gw.set_connection_active(connection_id, True), "active": True}
-
-
-@app.get("/api/connections/{connection_id}/deactivate")
-async def deactivate_connection(connection_id: str) -> dict:
-    return {"ok": gw.set_connection_active(connection_id, False), "active": False}
 
 
 @app.post("/api/connections")
@@ -952,12 +1025,29 @@ async def _unhandled(request: Any, exc: Exception) -> JSONResponse:
     return _send({"ok": False, "error": "internal_error"}, 500)
 
 
+_BOOT_REPORT: dict[str, Any] = {
+    "ok": True,
+    "mt5_ready": False,
+    "error": "boot nao inicializado",
+    "snapshot": {},
+    "snapshot_error": "",
+    "source": "boot_report",
+}
+
+
+def boot_status() -> dict[str, Any]:
+    result = copy.deepcopy(_BOOT_REPORT)
+    result["source"] = "boot_status"
+    return result
+
+
 def boot_report() -> dict:
     """Backfill de boot: reconciliacao de intents + snapshot inicial de telemetria.
 
     Espelha o boot do gateway stdlib (gw._ensure_mt5 ja grava ambos) sem
     bloquear: falhas de MT5 viram campos None/reporte parcial, nunca excecao.
     """
+    global _BOOT_REPORT
     ready, err = False, ""
     try:
         ready = bool(gw._ensure_mt5())
@@ -973,16 +1063,20 @@ def boot_report() -> dict:
         snap_err = str(exc)[:200]
     out = {"ok": True, "mt5_ready": ready, "error": err, "snapshot": snap,
            "snapshot_error": snap_err, "source": "boot_report"}
+    _BOOT_REPORT = copy.deepcopy(out)
     print(f"[gateway] boot: {out}")
     return out
 
 
 def main() -> None:
     import uvicorn
-    print(f"[gateway] boot: {boot_report()}")
-    gw.start_guardian_loop()
-    persistent_queue.start_queue_loop()
-    gw.watchdog.start_telemetry_loop()
+    if gw.THIRD_PARTY_READ_ONLY:
+        print("[gateway] perfil de compatibilidade somente leitura ativo")
+    else:
+        print(f"[gateway] boot: {boot_report()}")
+        gw.start_guardian_loop()
+        persistent_queue.start_queue_loop()
+        gw.watchdog.start_telemetry_loop()
     print(f"[gateway] FastAPI Universal Gateway v1.2.3 rodando em http://127.0.0.1:9001")
     uvicorn.run(app, host="127.0.0.1", port=9001, log_level="info")
 

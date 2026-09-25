@@ -14,6 +14,7 @@ from app.components.cards import Card, PrimaryButton, SecondaryButton, AccentBut
 from app.config_manager import get_config
 from app.market_data import MarketData
 from app.mt5_robot import MT5Robot
+from app.subscriptions import activate_local_plan, get_subscription, list_plans
 from app.theme.mexc import Theme
 
 
@@ -35,6 +36,17 @@ class SettingsTab:
         header.pack(fill="x", padx=24, pady=(20, 10))
         tk.Label(header, text="Configuracoes", bg=Theme.BG, fg=Theme.TEXT,
                  font=(Theme.FONT_FAMILY, 20, "bold")).pack(side="left")
+
+        subscription = get_subscription()
+        subscription_card = Card(self.frame, title="Planos locais")
+        subscription_card.pack(fill="x", padx=24, pady=10)
+        subscription_row = tk.Frame(subscription_card.body, bg=Theme.CARD)
+        subscription_row.pack(fill="x", padx=8, pady=8)
+        self.subscription_label = tk.Label(subscription_row, text=f"Plano: {subscription['plan']['name']} | paper/demo | sem cobrança", bg=Theme.CARD, fg=Theme.TEXT_SECONDARY)
+        self.subscription_label.pack(side="left", padx=4)
+        for plan in list_plans():
+            AccentButton(subscription_row, text=plan["name"], command=lambda value=plan["id"]: self._activate_plan(value), width=10).pack(side="left", padx=3)
+        tk.Label(subscription_card.body, text="Ativação local para organizar recursos; não habilita execução real.", bg=Theme.CARD, fg=Theme.TEXT_MUTED, font=(Theme.FONT_FAMILY, 8)).pack(anchor="w", padx=12, pady=(0, 8))
 
         # MT5
         mt5_card = Card(self.frame, title="MetaTrader 5")
@@ -210,6 +222,15 @@ class SettingsTab:
         btn_row.pack(fill="x", padx=24, pady=20)
         PrimaryButton(btn_row, text="Salvar Configuracoes", command=self.save, width=22).pack(side="left", padx=4)
         AccentButton(btn_row, text="Testar Conexao MT5", command=self.test_mt5, width=20).pack(side="left", padx=8)
+
+    def _activate_plan(self, plan_id: str) -> None:
+        try:
+            subscription = activate_local_plan(plan_id)
+        except ValueError as exc:
+            self.on_status(str(exc))
+            return
+        self.subscription_label.configure(text=f"Plano: {subscription['plan']['name']} | paper/demo | sem cobrança")
+        self.on_status(f"Plano {subscription['plan']['name']} ativado localmente")
 
     def browse_terminal(self) -> None:
         fd = getattr(tk, "filedialog", None)

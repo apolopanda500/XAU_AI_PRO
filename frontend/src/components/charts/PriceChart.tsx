@@ -1,26 +1,46 @@
-// Gráfico de candles OHLC reais do MT5 (lightweight-charts v4).
-// Dados exclusivamente do gateway (/api/mt5/candles via copy_rates) — sem dado simulado.
 import { useEffect, useRef, useState } from 'react';
-import { createChart, type CandlestickSeriesOptions, type IChartApi, type ISeriesApi, type CandlestickData, type UTCTimestamp, ColorType, CrosshairMode } from 'lightweight-charts';
-import { apiBase } from '../../lib/api';
+import { createChart, type IChartApi, type ISeriesApi, type CandlestickData, type UTCTimestamp, ColorType, CrosshairMode } from 'lightweight-charts';
+import { getCandles, type MarketBroker, type MarketCandle, type MarketKind } from '../../lib/marketApi';
 
-const TIMEFRAMES = ['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1'] as const;
-type Timeframe = (typeof TIMEFRAMES)[number];
+export const TIMEFRAMES = ['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1'] as const;
+export type ChartTimeframe = (typeof TIMEFRAMES)[number];
 
-type Candle = { time: number; open: number; high: number; low: number; close: number; volume: number };
+type PriceChartProps = {
+  symbol?: string;
+  broker?: MarketBroker;
+  market?: MarketKind;
+  height?: number;
+  candles?: MarketCandle[];
+  timeframe?: ChartTimeframe;
+  onTimeframeChange?: (timeframe: ChartTimeframe) => void;
+  loading?: boolean;
+  error?: string;
+  sourceLabel?: string;
+};
 
-export default function PriceChart({ symbol = 'XAUUSD', height = 360 }: { symbol?: string; height?: number }) {
+function defaultMarket(broker: MarketBroker): MarketKind {
+  return broker === 'mt5' ? 'forex' : 'crypto-spot';
+}
+
+export default function PriceChart({ symbol = '', broker = 'mt5', market, height = 360, candles, timeframe, onTimeframeChange, loading = false, error = '', sourceLabel }: PriceChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<IChartApi | null>(null);
-  const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
-  const [timeframe, setTimeframe] = useState<Timeframe>('M5');
-  const [candles, setCandles] = useState<Candle[]>([]);
-  const [erro, setErro] = useState('');
-  const [carregando, setCarregando] = useState(true);
+  const chartRef = useRef<IChartApi>(null);
+  const seriesRef = useRef<ISeriesApi<'Candlestick'>>(null);
+  const [chartReady, setChartReady] = useState(false);
+  const [internalTimeframe, setInternalTimeframe] = useState<ChartTimeframe>('M5');
+  const [loadedCandles, setLoadedCandles] = useState<MarketCandle[]>([]);
+  const [loadedError, setLoadedError] = useState('');
+  const activeTimeframe = timeframe ?? internalTimeframe;
+  const activeMarket = market ?? defaultMarket(broker);
+  const displayCandles = candles ?? loadedCandles;
+  const displayError = error || loadedError;
+  const latestCandle = displayCandles[displayCandles.length - 1] ?? null;
+  const chartSummary = latestCandle
+    ? `${symbol || 'Ativo'}: ${displayCandles.length} candles no timeframe ${activeTimeframe}. Último fechamento ${latestCandle.close}, abertura ${latestCandle.open}, máxima ${latestCandle.high} e mínima ${latestCandle.low}.`
+    : `${symbol || 'Ativo'} sem candles reais para ${activeTimeframe}.`;
 
-  // Criação única do gráfico + série
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (!containerRef.current) return undefined;
     const chart = createChart(containerRef.current, {
       height,
       layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: '#8b93a7' },
@@ -29,71 +49,85 @@ export default function PriceChart({ symbol = 'XAUUSD', height = 360 }: { symbol
       rightPriceScale: { borderColor: 'rgba(139,147,167,.2)' },
       crosshair: { mode: CrosshairMode.Magnet },
     });
-    const serie = chart.addCandlestickSeries({
+    const series = chart.addCandlestickSeries({
       upColor: '#2ecc71', downColor: '#e74c3c', borderUpColor: '#2ecc71', borderDownColor: '#e74c3c',
       wickUpColor: '#2ecc71', wickDownColor: '#e74c3c',
-    } as CandlestickSeriesOptions);
+    });
     chartRef.current = chart;
-    seriesRef.current = serie;
-    const obs = new ResizeObserver(() => chart.applyOptions({ width: containerRef.current?.clientWidth ?? 0 }));
-    obs.observe(containerRef.current);
-    return () => { obs.disconnect(); chart.remove(); chartRef.current = null; seriesRef.current = null; };
+    seriesRef.current = series;
+    setChartReady(true);
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => chart.applyOptions({ width: containerRef.current?.clientWidth ?? 0 })) : null;
+    observer?.observe(containerRef.current);
+    return () => {
+      observer?.disconnect();
+      chart.remove();
+      chartRef.current = null;
+      seriesRef.current = null;
+    };
   }, [height]);
 
-  // Busca dos candles no gateway (http-polling; refetch ao trocar timeframe)
   useEffect(() => {
-    let ativo = true;
-    const carregar = async () => {
-      setCarregando(true);
+    if (candles !== undefined || !symbol) return undefined;
+    const controller = new AbortController();
+    let active = true;
+    const load = async () => {
       try {
-        const r = await fetch(`${apiBase()}/api/mt5/candles?symbol=${encodeURIComponent(symbol)}&timeframe=${timeframe}&count=300`, { signal: AbortSignal.timeout(10000) });
-        const d = await r.json() as { ok?: boolean; candles?: Candle[]; error?: string };
-        if (!ativo) return;
-        if (r.ok && d.ok && Array.isArray(d.candles) && d.candles.length) {
-          setCandles(d.candles);
-          setErro('');
-        } else {
-          setErro(d.error || `sem candles (${r.status})`);
+        const result = await getCandles({ broker, market: activeMarket, symbol: symbol.toUpperCase() }, activeTimeframe, 300, { signal: controller.signal });
+        if (active) {
+          setLoadedCandles(result.candles);
+          setLoadedError('');
         }
-      } catch {
-        if (ativo) setErro('gateway indisponível');
-      } finally {
-        if (ativo) setCarregando(false);
+      } catch (reason) {
+        if (active && !(reason instanceof Error && reason.name === 'MarketApiError' && reason.message === 'Requisição cancelada.')) setLoadedError(reason instanceof Error ? reason.message : 'Candles indisponíveis para esta fonte.');
       }
     };
-    void carregar();
-    const timer = window.setInterval(carregar, 30_000); // atualização de fundo a cada 30s
-    return () => { ativo = false; window.clearInterval(timer); };
-  }, [symbol, timeframe]);
+    void load();
+    const timer = window.setInterval(load, 30_000);
+    return () => {
+      active = false;
+      controller.abort();
+      window.clearInterval(timer);
+    };
+  }, [activeMarket, activeTimeframe, broker, candles, symbol]);
 
-  // Aplica os dados na série
   useEffect(() => {
-    const serie = seriesRef.current;
-    if (!serie || !candles.length) return;
-    const dados: CandlestickData[] = candles.map((c) => ({
-      time: c.time as UTCTimestamp,
-      open: c.open, high: c.high, low: c.low, close: c.close,
+    const series = seriesRef.current;
+    if (!series || !chartReady) return;
+    const data: CandlestickData[] = displayCandles.map((candle) => ({
+      time: candle.time as UTCTimestamp,
+      open: candle.open,
+      high: candle.high,
+      low: candle.low,
+      close: candle.close,
     }));
-    serie.setData(dados);
-    chartRef.current?.timeScale().fitContent();
-  }, [candles]);
+    series.setData(data);
+    if (data.length) chartRef.current?.timeScale().fitContent();
+  }, [chartReady, displayCandles]);
+
+  const changeTimeframe = (next: ChartTimeframe) => {
+    if (onTimeframeChange) onTimeframeChange(next);
+    else setInternalTimeframe(next);
+  };
 
   return (
-    <div className="card compact-card price-chart">
+    <div className="card compact-card price-chart" aria-busy={loading}>
       <div className="section-head">
         <div>
-          <h2>{symbol}</h2>
-          <span className="muted">Candles OHLC reais · atualização a cada 30s · gateway MT5</span>
+          <h2>{symbol || 'Selecione um ativo'}</h2>
+          <span className="muted">Candles OHLC reais · {sourceLabel ?? `${broker.toUpperCase()} · ${activeMarket}`}</span>
         </div>
-        <div className="btn-row" role="group" aria-label="Timeframe">
-          {TIMEFRAMES.map((tf) => (
-            <button key={tf} type="button" className={`btn sm ${tf === timeframe ? 'primary' : ''}`} onClick={() => setTimeframe(tf)}>{tf}</button>
+        <div className="btn-row" role="group" aria-label="Timeframe do gráfico">
+          {TIMEFRAMES.map((value) => (
+            <button key={value} type="button" className={`btn sm ${value === activeTimeframe ? 'primary' : 'ghost'}`} aria-pressed={value === activeTimeframe} onClick={() => changeTimeframe(value)}>{value}</button>
           ))}
         </div>
       </div>
-      {erro && <div className="hint" role="alert">Gráfico indisponível: {erro}</div>}
-      {carregando && !candles.length && <div className="hint">Carregando candles…</div>}
-      <div ref={containerRef} style={{ width: '100%', height }} />
+      {displayError && <div className="hint" role="alert">Gráfico indisponível: {displayError}</div>}
+      {loading && !displayCandles.length && <div className="hint" role="status">Carregando candles…</div>}
+      {!displayCandles.length && !loading && !displayError && <div className="hint" role="status">Candles reais indisponíveis para esta fonte.</div>}
+      <p id="price-chart-summary" className="sr-only">{chartSummary}</p>
+      <div ref={containerRef} className="market-chart-canvas" style={{ height }} aria-label={`Gráfico de candles de ${symbol || 'ativo'}`} aria-describedby="price-chart-summary" role="img" tabIndex={0} />
+      {displayCandles.length > 0 && <details className="market-chart-data"><summary>Ver dados em tabela</summary><div className="table-scroll market-focus-scroll" role="region" aria-label="Candles em formato tabular" tabIndex={0}><table className="tbl"><caption className="sr-only">Últimos candles reais em formato tabular</caption><thead><tr><th scope="col">Data</th><th scope="col">Abertura</th><th scope="col">Máxima</th><th scope="col">Mínima</th><th scope="col">Fechamento</th><th scope="col">Volume</th></tr></thead><tbody>{displayCandles.slice(-20).reverse().map((candle) => <tr key={candle.time}><td>{new Date(candle.time * 1000).toLocaleString('pt-BR')}</td><td>{candle.open}</td><td>{candle.high}</td><td>{candle.low}</td><td>{candle.close}</td><td>{candle.volume ?? '—'}</td></tr>)}</tbody></table></div></details>}
     </div>
   );
 }

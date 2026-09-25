@@ -36,13 +36,14 @@ def test_preflight_options_204(gw):
     handler.end_headers = lambda: None  # type: ignore[method-assign]
     sent: dict[str, str] = {}
     handler.send_header = lambda name, value: sent.__setitem__(name, value)  # type: ignore[method-assign]
+    handler.headers = {}  # type: ignore[attr-defined]
 
     Handler.do_OPTIONS(handler)  # type: ignore[arg-type]
 
     assert status == [204]
     assert sent.get("Access-Control-Allow-Origin") == "*"
-    assert sent.get("Access-Control-Allow-Methods") == "GET, POST, OPTIONS"
-    assert sent.get("Access-Control-Allow-Headers") == "Content-Type"
+    assert sent.get("Access-Control-Allow-Methods") == "GET, POST, PUT, DELETE, OPTIONS"
+    assert sent.get("Access-Control-Allow-Headers") == "Content-Type, Authorization"
 
 
 def test_respostas_incluem_allow_origin(gw):
@@ -51,3 +52,23 @@ def test_respostas_incluem_allow_origin(gw):
 
     src = Path(gw.__file__).read_text(encoding="utf-8", errors="ignore")
     assert '"Access-Control-Allow-Origin"' in src, "gateway sem header CORS"
+
+
+def test_fastapi_health_exige_token_quando_configurado(monkeypatch):
+    import asyncio
+    import httpx
+    from backend import fastapi_gateway
+
+    async def exercise():
+        transport = httpx.ASGITransport(app=fastapi_gateway.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            assert (await client.get("/api/health")).status_code == 401
+            response = await client.get(
+                "/api/health",
+                headers={"Authorization": "Bearer segredo-local"},
+            )
+            assert response.status_code == 200
+            assert response.json()["gateway_build"].startswith("xau-ai-pro-")
+
+    monkeypatch.setattr(fastapi_gateway, "API_TOKEN", "segredo-local")
+    asyncio.run(exercise())

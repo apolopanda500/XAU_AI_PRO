@@ -78,7 +78,7 @@ export default function DemoOrderPanel() {
   const canSend =
     !busy && fieldsValid && confirmed && mode === 'DEMO' && tradeAllowed;
 
-  // Comandos de gestão de posição (paridade TWS): trailing, break-even,
+  // Comandos de gestão de posição: trailing, break-even,
   // parcial e aplicar/remover proteção. Todos exigem a mesma confirmação
   // de 2 etapas e passam pelo gateway DEMO (nunca emite ordem REAL).
   const sendCommand = async (path: string, extra: Record<string, unknown> = {}) => {
@@ -159,7 +159,7 @@ export default function DemoOrderPanel() {
         <button className="btn primary" type="button" onClick={() => void send()} disabled={!canSend} aria-label={`Enviar ordem demo ${side} ${symbol}`}>{busy ? 'Enviando...' : `Enviar DEMO ${side} (${kind === 'market' ? 'mercado' : kind})`}</button>
       </div>
 
-      <div className="section-title" style={{ marginTop: 14, fontSize: 13 }}>Gestão da posição (paridade TWS)</div>
+      <div className="section-title" style={{ marginTop: 14, fontSize: 13 }}>Gestão da posição DEMO</div>
       <div className="btn-row" style={{ marginTop: 0 }}>
         <button className="btn ghost" type="button" disabled={!confirmed || mode !== 'DEMO' || busy} onClick={() => void sendCommand('/api/demo/trailing')} title="Trailing stop ativo na posição">Trailing</button>
         <button className="btn ghost" type="button" disabled={!confirmed || mode !== 'DEMO' || busy} onClick={() => void sendCommand('/api/demo/breakeven')} title="Move o SL para o preço de entrada (break-even)">Break-even</button>
@@ -167,7 +167,7 @@ export default function DemoOrderPanel() {
         <button className="btn ghost" type="button" disabled={!confirmed || mode !== 'DEMO' || busy} onClick={() => void sendCommand('/api/demo/set-protection', { sl: slNum, tp: tpNum })} title="Aplica SL/TP informados na posição">Proteção</button>
         <button className="btn ghost" type="button" disabled={!confirmed || mode !== 'DEMO' || busy} onClick={() => void sendCommand('/api/demo/remove-protection')} title="Remove SL/TP da posição">Remover prot.</button>
       </div>
-      <div className="hint" style={{ marginTop: 6 }}>{kind === 'market' ? 'Mercado: envia imediata com SL/TP obrigatórios.' : `Pendente ${kind.toUpperCase()}: entra no preço alvo com bracket OCO (SL+TP). Paridade IBKR TWS.`} Mesma confirmação de 2 etapas · sempre via gateway DEMO.</div>
+      <div className="hint" style={{ marginTop: 6 }}>{kind === 'market' ? 'Mercado: solicita execução com SL/TP obrigatórios; confirme o resultado no MT5.' : `Pendente ${kind.toUpperCase()}: solicita entrada no preço alvo com SL/TP. O preenchimento e a proteção dependem da corretora; não há garantia de OCO.`} Mesma confirmação de 2 etapas · sempre via gateway DEMO.</div>
 
       <div className="hint" style={{ marginTop: 8 }}>{statusMsg} {!tradeAllowed && mode !== 'indisponível' && 'Negociação bloqueada no terminal. '}{mode === 'REAL' && 'Ordens demo recusadas em conta REAL. '}{!fieldsValid && 'Preencha volume ≤ 0.10, SL e TP.'}{kind !== 'market' && !priceNum && ' Preço alvo obrigatório.'}{fieldsValid && !confirmed && ' Confirme as 2 etapas para liberar. '}</div>
       {result && (

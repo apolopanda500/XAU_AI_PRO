@@ -1,11 +1,11 @@
 ; ============================================================
 ; XAU_AI_PRO - Instalador profissional (Inno Setup 6)
 ; ------------------------------------------------------------
-; Instala DENTRO da pasta de dados do MetaTrader 5:
-;   {userappdata}\MetaQuotes\Terminal\{ID_DO_TERMINAL}\MQL5\Files\XAU_AI_PRO
+; Instala o aplicativo principal em um caminho padrao por usuario:
+;   {localappdata}\Programs\XAU AI PRO
 ;
-; O ID do terminal e DETECTADO DINAMICAMENTE no [Code] (varre APPDATA),
-; pois cada instalacao do MT5 gera um ID de 32 caracteres diferente.
+; O MetaTrader 5 continua sendo detectado dinamicamente para futuras rotinas
+; de integracao/copia do EA, mas nao e mais usado como pasta principal do app.
 ;
 ; Modelos de IA (Python/models, ~2,3 GB) NAO sao embutidos:
 ; o app baixa sob demanda na 1a execucao (botao "Baixar modelos"
@@ -32,12 +32,11 @@ AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher={#MyAppPublisher}
-; O destino final e resolvido por GetDefaultDirName antes da tela do wizard.
-; Detecta a pasta de dados do MT5 (instala dentro dela, junto do EA);
-; sem MT5 detectado, usa o fallback em APPDATA.
+; Caminho principal fora do workspace/MetaTrader, sem exigir administrador.
 DefaultDirName={code:GetDefaultDirName}
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
+UsePreviousAppDir=no
 
 OutputDir={#MyRoot}\dist
 OutputBaseFilename=XAU_AI_PRO_Setup_{#MyAppVersion}
@@ -49,7 +48,7 @@ SolidCompression=yes
 WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-; Nao exige admin: instala em APPDATA (sem UAC), como o MT5 padrao.
+; Nao exige admin: instala em LOCALAPPDATA (sem UAC), como app por usuario.
 ; NOTA (ciclo 2026-09-23): PrivilegesRequired=lowest + VBS + autostart e o
 ; "DNA" de PUP para heuristicas. Mantido por ser instalacao por usuario,
 ; mas a task autostart abaixo fica DESMARCADA por padrao e o VBS apenas
@@ -97,6 +96,7 @@ Type: files; Name: "{app}\app\components\charts.py"
 ; ============================================================
 Source: "{#MyRoot}\dist\XAU_AI_PRO\XAU_AI_PRO.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#MyRoot}\dist\XAU_AI_PRO\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "XAU_AI_PRO.exe"
+Source: "{#MyRoot}\VERSION"; DestDir: "{app}"; Flags: ignoreversion
 
 ; ============================================================
 ; 2) Codigo Python (modulos carregados do disco). Excluimos
@@ -220,10 +220,7 @@ end;
 function GetDefaultDirName(Param: String): String;
 begin
   DetectedMT5 := FindTerminalDataPath();
-  if DetectedMT5 <> '' then
-    Result := DetectedMT5 + '\MQL5\Files\XAU_AI_PRO'
-  else
-    Result := ExpandConstant('{userappdata}\XAU_AI_PRO');
+  Result := ExpandConstant('{localappdata}\Programs\XAU AI PRO');
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);

@@ -1,0 +1,48 @@
+# Todos
+[✓] Auditar estado Git, arquitetura atual, pendências documentadas e processos/builds existentes
+[✓] Pesquisar referências oficiais atuais para MT5, brokers, Tauri/Android, segurança e distribuição
+[✓] Definir arquitetura universal multiativo/multicorretora e contratos GET-only para Mercado real
+[✓] Implementar e testar backend universal de catálogo, quotes, candles, depth e trades reais
+[✓] Reconstruir a experiência Mercado 10/10 no frontend Tauri, sem ações de trading
+[✓] Validar compatibilidade somente leitura com EAs de terceiros sem modificar MQL5/Experts
+[✓] Consolidar assinaturas locais e matriz de capacidades por corretora/ativo
+[✓] Executar ciclo limpo de build: testes, lint, typecheck, Rust, gateway, Tauri e instaladores
+[•] Validar bundles/EXEs em instalação limpa e confirmar zero regressões, erros e avisos
+[✓] Revisar diff e provar que nenhum arquivo MQL5/Experts foi alterado
+[✓] Instalar e validar Android SDK/API 36, Build Tools 36 e NDK 28.2
+[✓] Adaptar bootstrap Tauri desktop/mobile e validar 35 testes frontend
+[✓] Gerar APK aarch64; bloqueado por Java 25 incompatível com Gradle 8.14.3 [RESOLVIDO 25/09/2026]
+[•] Reconstruir e assinar os artefatos Windows finais após a limpeza
+[•] Assinar, instalar e executar o app final pelo atalho
+[•] Finalizar benchmark 2026, relatório de UI/UX e notas de produto
+[•] Revisar staging, criar commit e fazer push sem segredos/artefatos
+
+## Registro 2026-09-25 (tarde) - APK Android gerado e assinado
+[✓] Instalar Temurin JDK 21.0.12.1 LTS (path sem '+') e usar so na sessao do build
+[✓] Liberar espaco: remover release/ (0.48 GB, stale) e src-tauri/target/release (0.76 GB, regeneravel)
+[✓] Preservado frontend/src-tauri/target/aarch64-linux-android (0.70 GB) - Rust reaproveitado
+[✓] Build: npm run tauri -- android build --ci --target aarch64 --apk => exit 0 em 14m43s
+[✓] APK assinado (v2+v3) e verificado; zipalign 4 + page-align 16KB OK
+[✓] MQL5/Experts intacto: 184 arquivos EA, git diff vazio
+[•] APK ainda NAO operacional em aparelho: falta VITE_API_BASE/VITE_WS_URL (gateway remoto + TLS)
+[•] APK ainda nao testado em dispositivo fisico nem emulador
+[•] Keystore de TESTE LOCAL gerado; nao serve para Google Play (assinatura publica pendente)
+
+## Registro 2026-09-25 18:07 - Ciclo de validacao completo, 0 erros
+[✓] Ambiente pronto: Python 3.11.15, pytest 8.4.2, node 26.3.0, cargo 1.98.1, node_modules intactos
+[✓] Python: 267 passed em 49,58s (exit 0)
+[✓] Frontend: vitest 35 passed em 5 arquivos (exit 0)
+[✓] Frontend: npx tsc --noEmit sem erros (exit 0)
+[✓] Frontend: vite build 204 modulos em 2,71s (exit 0)
+[✓] Backend: eslint . sem erros (exit 0)
+[✓] Backend: build Nitro 4,57 MB / 1,1 MB gzip (exit 0)
+[✓] Core: cargo fmt --check, cargo check --locked (1m13s), cargo test --locked 38 passed (exit 0)
+[✓] Tauri: cargo fmt --check, cargo check --locked (2m34s), cargo test --locked exit 0 (0 testes no crate)
+[✓] Pylint direcionado (11 arquivos backend): 10.00/10
+[✓] git diff --check sem erros de whitespace
+[✓] Guarda MQL5: MQL5/Experts intacto, 184 arquivos EA, diff vazio
+[✓] Varredura de segredos: nenhum .env/keystore/.pem/.jks rastreado ou untracked
+[✓] Espaco final: 6,22 GB -> 3,47 GB apos builds Rust
+[•] Achado: app/data/marketdata.db (2,9 MB) segue RASTREADO apesar de .gitignore ter *.db
+[•] Achado: 23.820 ticks no DB com fontes MT5/HTTP/Binance/Yahoo - confirmar data de origem
+[•] Artefatos Windows (gateway, launcher, MSI, NSIS) ainda nao reconstruidos

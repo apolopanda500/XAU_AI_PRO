@@ -55,7 +55,7 @@ jobs:
           npx tsc --noEmit
           npm run build
       - name: Empacotar gateway
-        run: python -m PyInstaller --clean --noconfirm mt5-gateway.spec
+        run: python -m PyInstaller --noconfirm mt5-gateway.spec
       - name: Verificar artefato do gateway
         shell: pwsh
         run: if (!(Test-Path 'dist/mt5-gateway/mt5-gateway.exe')) { throw 'Gateway não foi gerado' }

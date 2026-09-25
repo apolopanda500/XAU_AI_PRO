@@ -12,6 +12,20 @@ import { rsi as calcRsi, macd as calcMacd, type Candle } from '../../lib/technic
 const API = `${apiBase()}`;
 const TF_BY_MODEL: Record<string, string> = { M1: 'M1', M5: 'M5', M15: 'M15', H1: 'H1', H4: 'H4', D1: 'D1' };
 
+type TrainedArtifact = {
+  artifact: string;
+  status: string;
+  training_verified: boolean;
+  training_metadata_status: string;
+  trained_symbol: string | null;
+  trained_timeframe: string | null;
+  train_date: string | null;
+  algorithm: string | null;
+  model_version: string | null;
+  dataset_version: string | null;
+  feature_count: number | null;
+};
+
 export default function AIPanel() {
   const quotes = useAppStore((s) => s.quotes);
   const selectedSymbol = useAppStore((s) => s.selectedSymbol);
@@ -23,6 +37,26 @@ export default function AIPanel() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [recentSignals, setRecentSignals] = useState<AISignal[]>([]);
   const [indicatorStatus, setIndicatorStatus] = useState('Aguardando candles do MT5...');
+  const [trainedModels, setTrainedModels] = useState<TrainedArtifact[]>([]);
+  const [catalogStatus, setCatalogStatus] = useState('Carregando catálogo local...');
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const loadCatalog = async () => {
+      try {
+        const response = await fetch(`${API}/api/ai/models`, { signal: controller.signal });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json() as { models?: TrainedArtifact[] };
+        if (!Array.isArray(data.models)) throw new Error('Resposta inválida');
+        setTrainedModels(data.models);
+        setCatalogStatus(data.models.length ? '' : 'Nenhum artefato de modelo instalado.');
+      } catch (error) {
+        if (!controller.signal.aborted) setCatalogStatus(`Catálogo indisponível: ${error instanceof Error ? error.message : 'erro desconhecido'}`);
+      }
+    };
+    void loadCatalog();
+    return () => controller.abort();
+  }, []);
 
   const currentQuote = useMemo(() => quotes.find(q => q.symbol === selectedSymbol), [quotes, selectedSymbol]);
   const activeModel = getModel();
@@ -83,6 +117,25 @@ export default function AIPanel() {
   const availableModels = getAvailableModels();
   const signalClass = currentSignal?.direction === 'BUY' ? 'pos' : currentSignal?.direction === 'SELL' ? 'neg' : '';
 
+  const catalog = (
+    <section className="ai-info-section" aria-label="Modelos treinados instalados">
+      <h4>Artefatos de modelos instalados</h4>
+      <p className="muted">Inventário local somente leitura. Metadados declarados não comprovam integridade do arquivo, desempenho nem vínculo com operações.</p>
+      {catalogStatus && <p className="muted">{catalogStatus}</p>}
+      {trainedModels.map(item => (
+        <div className="ai-model-card" key={item.artifact}>
+          <div className="ai-model-info">
+            <strong>{item.artifact}</strong>
+            <span>Treinado para: {item.trained_symbol ?? 'não informado'} · Timeframe: {item.trained_timeframe ?? 'não informado'}</span>
+            <span>Treino: {item.train_date ?? 'não informado'} · Algoritmo: {item.algorithm ?? 'não informado'}</span>
+            <span>Versão declarada: {item.model_version ?? 'não informada'} · Dataset: {item.dataset_version ?? 'não informado'} · Features: {item.feature_count ?? 'não informado'}</span>
+            <span>Estado do arquivo: {item.status} (idade do arquivo; não é validação do treino) · Metadados: {item.training_metadata_status === 'present' ? 'presentes (não verificados)' : item.training_metadata_status === 'mismatch' ? 'divergentes do nome do arquivo' : item.training_metadata_status === 'invalid' ? 'inválidos' : 'ausentes'}</span>
+          </div>
+        </div>
+      ))}
+    </section>
+  );
+
   if (!isEnabled) {
     return (
       <div className="ai-panel disabled">
@@ -95,6 +148,7 @@ export default function AIPanel() {
             <span>IA desativada.</span>
           </HelpTooltip>
         </div>
+        {catalog}
       </div>
     );
   }
@@ -105,6 +159,7 @@ export default function AIPanel() {
         <h3>Inteligencia Artificial</h3>
         <span className="muted">{aiStatus}</span>
       </div>
+      <p className="muted">Os perfis abaixo analisam indicadores localmente; não são os artefatos treinados listados no catálogo.</p>
       <div className="hint" style={{ marginBottom: 8 }}>{indicatorStatus}</div>
       <div className="ai-model-card">
         <div className="ai-model-info">
@@ -117,7 +172,7 @@ export default function AIPanel() {
           </div>
         </div>
         <div className="ai-model-selector">
-          <label>Modelo:</label>
+          <label>Perfil de indicadores:</label>
           <select value={selectedModel} onChange={(e) => handleModelChange(e.target.value)}>
             {availableModels.map(m => (
               <option key={m.id} value={m.id}>
@@ -127,6 +182,7 @@ export default function AIPanel() {
           </select>
         </div>
       </div>
+      {catalog}
 
       {currentSignal && (
         <div className={`ai-signal-card ${signalClass}`}>

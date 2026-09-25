@@ -5,6 +5,9 @@
   "windows": [
     "main"
   ],
+  "android": [
+    "main"
+  ],
   "permissions": [
     "core:default",
     "notification:default"

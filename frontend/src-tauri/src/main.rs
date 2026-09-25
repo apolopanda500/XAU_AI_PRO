@@ -12,6 +12,29 @@ use tauri::path::BaseDirectory;
 use tauri::Manager;
 
 static OWNED_CHILDREN: OnceLock<Mutex<Vec<Child>>> = OnceLock::new();
+static GATEWAY_TOKEN: OnceLock<String> = OnceLock::new();
+
+const EXPECTED_GATEWAY_BUILD: &str = "xau-ai-pro-1.2.3-universal-20260918";
+
+fn gateway_token() -> Result<String, String> {
+    if let Some(token) = GATEWAY_TOKEN.get() {
+        return Ok(token.clone());
+    }
+    let mut bytes = [0_u8; 32];
+    getrandom::fill(&mut bytes)
+        .map_err(|err| format!("falha ao gerar token da sessao: {}", err))?;
+    let token = bytes
+        .iter()
+        .map(|byte| format!("{:02x}", byte))
+        .collect::<String>();
+    let _ = GATEWAY_TOKEN.set(token.clone());
+    Ok(token)
+}
+
+#[tauri::command]
+fn gateway_token_command() -> Result<String, String> {
+    gateway_token()
+}
 
 fn register_child(child: Child) {
     OWNED_CHILDREN
@@ -270,62 +293,87 @@ fn remove_auth() -> Result<(), String> {
     Ok(())
 }
 
-/// Localiza o executavel do core: primeiro como resource empacotado,
-/// depois como pasta "core" ao lado do executavel principal.
 fn localizar_core(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    if let Ok(p) = app
+    let path = app
         .path()
         .resolve("core/xau-ai-pro-core.exe", BaseDirectory::Resource)
-    {
-        if p.exists() {
-            return Ok(p);
-        }
+        .map_err(|err| format!("core nao encontrado nos resources: {}", err))?;
+    if path.is_file() {
+        Ok(path)
+    } else {
+        Err("core invalido nos resources".to_string())
     }
-    let cand = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|d| d.to_path_buf()))
-        .map(|d| d.join("core").join("xau-ai-pro-core.exe"))
-        .filter(|c| c.exists());
-    cand.ok_or_else(|| "core nao encontrado (resource e exe_dir)".to_string())
 }
 
 fn localizar_bridge(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    if let Ok(p) = app
+    let path = app
         .path()
         .resolve("bridge/mt5-gateway.exe", BaseDirectory::Resource)
-    {
-        if p.exists() {
-            return Ok(p);
-        }
+        .map_err(|err| format!("bridge MT5 nao encontrado nos resources: {}", err))?;
+    if path.is_file() {
+        Ok(path)
+    } else {
+        Err("bridge MT5 invalido nos resources".to_string())
     }
-    let cand = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|d| d.to_path_buf()))
-        .map(|d| d.join("bridge").join("mt5-gateway.exe"))
-        .filter(|c| c.exists());
-    cand.ok_or_else(|| "bridge MT5 nao encontrado".to_string())
+}
+
+fn request_json(port: u16, path: &str, token: &str) -> Result<serde_json::Value, String> {
+    let address = format!("127.0.0.1:{}", port);
+    let mut stream =
+        TcpStream::connect_timeout(&address.parse().unwrap(), Duration::from_millis(300))
+            .map_err(|err| err.to_string())?;
+    let _ = stream.set_read_timeout(Some(Duration::from_millis(500)));
+    let _ = stream.set_write_timeout(Some(Duration::from_millis(300)));
+    let request = format!(
+        "GET {} HTTP/1.1\r\nHost: 127.0.0.1:{}\r\nAuthorization: Bearer {}\r\nConnection: close\r\n\r\n",
+        path, port, token
+    );
+    stream
+        .write_all(request.as_bytes())
+        .map_err(|err| err.to_string())?;
+    let mut response = String::new();
+    stream
+        .take(128 * 1024)
+        .read_to_string(&mut response)
+        .map_err(|err| err.to_string())?;
+    if !response.starts_with("HTTP/1.1 200") && !response.starts_with("HTTP/1.0 200") {
+        return Err("healthcheck sem HTTP 200".to_string());
+    }
+    let body = response
+        .split_once("\r\n\r\n")
+        .map(|(_, body)| body)
+        .ok_or_else(|| "healthcheck sem corpo".to_string())?;
+    serde_json::from_str(body).map_err(|err| err.to_string())
 }
 
 fn bridge_atual_ativo() -> bool {
-    let Ok(mut stream) = TcpStream::connect_timeout(
-        &"127.0.0.1:9001".parse().unwrap(),
-        Duration::from_millis(300),
-    ) else {
+    let Ok(token) = gateway_token() else {
         return false;
     };
-    let _ = stream.set_read_timeout(Some(Duration::from_millis(500)));
-    let _ = stream.set_write_timeout(Some(Duration::from_millis(300)));
-    let request = b"GET /api/health HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
-    if stream.write_all(request).is_err() {
+    let Ok(payload) = request_json(9001, "/api/health", &token) else {
         return false;
-    }
-    let mut response = String::new();
-    let _ = stream.read_to_string(&mut response);
-    // O build muda a cada ciclo; basta validar que a resposta é um healthcheck
-    // do gateway XAU AI PRO, sem prender a inicialização a uma versão antiga.
-    // Aceita a serializacao JSON com ou sem espaco apos os dois pontos.
-    (response.contains("\"ok\":true") || response.contains("\"ok\": true"))
-        && response.contains("gateway_build")
+    };
+    payload.get("ok").and_then(serde_json::Value::as_bool) == Some(true)
+        && payload.get("source").and_then(serde_json::Value::as_str) == Some("mt5_gateway")
+        && payload
+            .get("gateway_build")
+            .and_then(serde_json::Value::as_str)
+            == Some(EXPECTED_GATEWAY_BUILD)
+}
+
+fn core_atual_ativo() -> bool {
+    let Ok(token) = gateway_token() else {
+        return false;
+    };
+    let Ok(payload) = request_json(9003, "/health", &token) else {
+        return false;
+    };
+    payload.get("ok").and_then(serde_json::Value::as_bool) == Some(true)
+        && payload.get("service").and_then(serde_json::Value::as_str) == Some("xau-ai-pro-core")
+        && payload
+            .get("core_version")
+            .and_then(serde_json::Value::as_str)
+            == Some(env!("CARGO_PKG_VERSION"))
 }
 
 fn spawn_bridge(app: &tauri::AppHandle) -> Result<(), String> {
@@ -333,10 +381,13 @@ fn spawn_bridge(app: &tauri::AppHandle) -> Result<(), String> {
         return Ok(());
     }
     let path = localizar_bridge(app)?;
+    let token = gateway_token()?;
     let mut command = Command::new(&path);
     ocultar_console(&mut command);
     command
         .current_dir(path.parent().unwrap())
+        .env("XAU_GATEWAY_TOKEN", token)
+        .env("XAU_EXPECTED_GATEWAY_BUILD", EXPECTED_GATEWAY_BUILD)
         .env("XAU_ENABLE_DEMO_ORDERS", "1")
         .env("XAU_ENABLE_REAL_ORDERS", "0")
         .spawn()
@@ -347,39 +398,26 @@ fn spawn_bridge(app: &tauri::AppHandle) -> Result<(), String> {
         .map_err(|e| format!("falha ao iniciar bridge MT5: {}", e))
 }
 
-fn aguardar_bridge() {
-    // FastAPI pode levar alguns segundos para carregar dependencias no primeiro inicio.
-    // Aguarde ate 30s antes de iniciar o Core em modo degradado.
+fn aguardar_bridge() -> bool {
     for _ in 0..60 {
-        if TcpStream::connect_timeout(
-            &"127.0.0.1:9001".parse().unwrap(),
-            Duration::from_millis(300),
-        )
-        .is_ok()
-        {
-            log_core("bridge MT5 pronto antes do Core");
-            return;
+        if bridge_atual_ativo() {
+            log_core("bridge MT5 autenticado e pronto antes do Core");
+            return true;
         }
         std::thread::sleep(Duration::from_millis(500));
     }
-    log_core("bridge MT5 nao respondeu no prazo; Core sera iniciado em modo sem MT5");
+    log_core("bridge MT5 nao respondeu com identidade esperada");
+    false
 }
 
 /// Inicia o core em processo separado (idempotente: ignora se ja houver um).
 fn spawn_core(app: &tauri::AppHandle) -> Result<(), String> {
-    // O Core sobrevive ao fechamento da UI; nunca iniciar uma segunda cópia.
-    for port in [9002_u16, 9003_u16] {
-        if TcpStream::connect_timeout(
-            &format!("127.0.0.1:{port}").parse().unwrap(),
-            Duration::from_millis(300),
-        )
-        .is_ok()
-        {
-            log_core("core ja esta ativo; spawn ignorado");
-            return Ok(());
-        }
+    if core_atual_ativo() {
+        log_core("core autenticado ja esta ativo; spawn ignorado");
+        return Ok(());
     }
     let path = localizar_core(app)?;
+    let token = gateway_token()?;
     log_core(&format!("iniciando core: {}", path.display()));
     let working_dir = path
         .parent()
@@ -390,6 +428,7 @@ fn spawn_core(app: &tauri::AppHandle) -> Result<(), String> {
     let mut command = Command::new(&path);
     ocultar_console(&mut command);
     command.current_dir(working_dir);
+    command.env("XAU_CORE_HEALTH_TOKEN", token);
     if let Some(config) = config_path {
         command.env("XAU_AI_PRO_CONFIG", config);
     }
@@ -427,7 +466,9 @@ fn main() {
                 if let Err(e) = spawn_bridge(&handle) {
                     log_core(&format!("setup bridge: {}", e));
                 }
-                aguardar_bridge();
+                if !aguardar_bridge() {
+                    return;
+                }
                 if let Err(e) = spawn_core(&handle) {
                     log_core(&format!("setup: {}", e));
                 }
@@ -436,6 +477,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             start_core,
+            gateway_token_command,
             ensure_config,
             get_app_dirs,
             save_auth,

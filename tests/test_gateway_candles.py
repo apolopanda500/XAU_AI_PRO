@@ -6,7 +6,10 @@ import sys
 from pathlib import Path
 from types import ModuleType
 
+import numpy as np
 import pytest
+
+from backend.universal_contracts import timestamp_iso
 
 ROOT = str(Path(__file__).resolve().parent.parent)
 if ROOT not in sys.path:
@@ -80,8 +83,8 @@ def test_candles_clamp_count(gw, fake_mt5_candles):
 def test_candles_timeframe_valido(gw, fake_mt5_candles):
     gw._mt5_candles("XAUUSD", "H1", 100)
     assert fake_mt5_candles["last"]["timeframe"] == 16385  # código MT5 de H1
-    gw._mt5_candles("XAUUSD", "timeframe-estranho", 100)
-    assert fake_mt5_candles["last"]["timeframe"] == 5  # fallback M5
+    with pytest.raises(ValueError, match="timeframe MT5 inválido"):
+        gw._mt5_candles("XAUUSD", "timeframe-estranho", 100)
 
 
 def test_candles_sem_dados_nao_inventa(gw, fake_mt5_candles, monkeypatch):
@@ -89,3 +92,25 @@ def test_candles_sem_dados_nao_inventa(gw, fake_mt5_candles, monkeypatch):
     out = gw._mt5_candles("XAUUSD", "M5", 50)
     assert out["ok"] is False
     assert out["candles"] == [] and out["count"] == 0
+
+
+def test_candle_parser_accepts_numpy_structured_rows(gw):
+    dtype = np.dtype([
+        ("time", "int64"), ("open", "float64"), ("high", "float64"),
+        ("low", "float64"), ("close", "float64"), ("tick_volume", "int64"),
+    ])
+    rates = np.array([(1700000000, 100.0, 102.0, 99.0, 101.0, 10)], dtype=dtype)
+    monkeypatch = type("M", (), {"copy_rates_from_pos": staticmethod(lambda *args: rates)})
+    original = gw._mt5
+    gw._mt5 = lambda: monkeypatch
+    try:
+        result = gw._mt5_candles("XAUUSD", "M5", 10)
+    finally:
+        gw._mt5 = original
+    assert result["count"] == 1
+    assert result["candles"][0]["close"] == 101.0
+    assert result["candles"][0]["volume"] == 10
+
+
+def test_timestamp_aceita_escalar_numpy():
+    assert timestamp_iso(np.int64(1_700_000_000)) == "2023-11-14T22:13:20.000Z"

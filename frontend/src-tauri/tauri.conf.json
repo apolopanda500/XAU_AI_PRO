@@ -11,6 +11,9 @@
       "msi",
       "nsis"
     ],
+    "android": {
+      "minSdkVersion": 24
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -30,11 +33,11 @@
   "productName": "XAU AI PRO",
   "mainBinaryName": "XAU AI PRO",
   "version": "1.2.3",
-  "identifier": "com.xau-ai-pro.app",
+  "identifier": "com.xau-ai-pro.desktop",
   "plugins": {},
   "app": {
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:9001 http://localhost:9001 ws://127.0.0.1:9002 https:; img-src 'self' data:; style-src 'self' 'unsafe-inline'"
+      "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:9001 http://localhost:9001 ws://127.0.0.1:9002 wss: https:; img-src 'self' data:; style-src 'self' 'unsafe-inline'"
     },
     "windows": [
       {

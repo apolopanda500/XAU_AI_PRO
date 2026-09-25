@@ -1,7 +1,9 @@
 export const marketsByBroker: Record<string, string[]> = {
-  mt5: ['forex', 'metals', 'indices'],
+  mt5: ['forex', 'metals', 'indices', 'stocks', 'commodities', 'bonds', 'crypto-spot', 'other'],
   mexc: ['crypto-spot', 'crypto-futures'],
-  binance: ['crypto-spot', 'crypto-futures'],
+  binance: ['crypto-spot', 'crypto-futures', 'stocks'],
+  bybit: ['crypto-spot', 'crypto-futures', 'options'],
+  okx: ['crypto-spot', 'crypto-futures', 'stocks', 'commodities', 'bonds'],
 };
 
 export function compatibleMarket(broker: string, current: string): string {

@@ -40,7 +40,7 @@ if not exist "%ISCC%" (
 rem ---- 1) EXE (PyInstaller) --------------------------------------------
 echo.
 echo == [1/4] PyInstaller: dist\XAU_AI_PRO.exe ==
-"%PY%" -m PyInstaller --noconfirm --clean launcher.spec
+"%PY%" -m PyInstaller --noconfirm launcher.spec
 if errorlevel 1 goto :fail
 
 rem ---- 2) Smoke test ---------------------------------------------------

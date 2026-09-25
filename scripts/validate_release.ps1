@@ -19,7 +19,7 @@ function Invoke-ReleaseCheck {
     Write-Host "`n=== $Name ===" -ForegroundColor Cyan
     try {
         & $Command
-        if ($LASTEXITCODE -ne 0) {
+        if ($null -ne $LASTEXITCODE -and $LASTEXITCODE -ne 0) {
             throw "Comando finalizou com código $LASTEXITCODE."
         }
         Write-Host "OK: $Name" -ForegroundColor Green

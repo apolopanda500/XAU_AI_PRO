@@ -1,0 +1,99 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["AGENTS.md"],
+  "share": "disabled",
+  "watcher": {
+    "ignore": [
+      ".git/**",
+      ".venv/**",
+      "**/node_modules/**",
+      "**/__pycache__/**",
+      "**/dist/**",
+      "**/build/**",
+      "**/target/**",
+      "**/release/**",
+      "experiments/**",
+      "**/.env",
+      "**/.env.*",
+      "**/*.mq4",
+      "**/*.mq5",
+      "**/*.mqh",
+      "**/*.set",
+      "**/MQL5/Experts/**"
+    ]
+  },
+  "permission": {
+    "edit": {
+      "*": "allow",
+      "**/*.mq4": "deny",
+      "**/*.mq5": "deny",
+      "**/*.mqh": "deny",
+      "**/*.set": "deny",
+      "**/MQL5/Experts/**": "deny"
+    },
+    "external_directory": {
+      "*": "allow",
+      "**/.env": "deny",
+      "**/.env.*": "deny",
+      "**/*.dpapi.json": "deny",
+      "~/.ssh/**": "deny",
+      "~/.config/opencode/auth.json": "deny"
+    },
+    "bash": {
+      "*": "ask"
+    }
+  },
+  "mcp": {
+    "xau-trading": {
+      "type": "local",
+      "command": [".venv/Scripts/python.exe", "-m", "backend.trading_mcp"],
+      "cwd": ".",
+      "environment": {
+        "XAU_MCP_GATEWAY": "http://127.0.0.1:9001",
+        "XAU_MCP_TRADING": "0"
+      },
+      "enabled": true,
+      "timeout": 15000
+    },
+    "github": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-github"],
+      "cwd": ".",
+      "environment": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "{env:GITHUB_PERSONAL_ACCESS_TOKEN}"
+      },
+      "enabled": false,
+      "timeout": 30000
+    },
+    "playwright": {
+      "type": "local",
+      "command": ["npx", "-y", "@playwright/mcp@latest"],
+      "cwd": ".",
+      "enabled": false,
+      "timeout": 30000
+    },
+    "context7": {
+      "type": "local",
+      "command": ["npx", "-y", "@upstash/context7-mcp@latest"],
+      "cwd": ".",
+      "environment": {
+        "CONTEXT7_API_KEY": "{env:CONTEXT7_API_KEY}"
+      },
+      "enabled": false,
+      "timeout": 30000
+    },
+    "netdata": {
+      "type": "local",
+      "command": ["npx", "-y", "@netdata/netdata-mcp"],
+      "cwd": ".",
+      "environment": {
+        "NETDATA_URL": "{env:NETDATA_URL}"
+      },
+      "enabled": false,
+      "timeout": 30000
+    }
+  },
+  "experimental": {
+    "mcp_timeout": 30000
+  }
+}

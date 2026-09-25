@@ -1,4 +1,4 @@
-# XAU AI PRO v1.2.0
+# XAU AI PRO v1.2.3
 
 Plataforma desktop para acompanhamento do MetaTrader 5, análise de mercado e treinamento local de modelos. A interface atual usa **Python/Tkinter** e o robô opera no **MetaTrader 5** por meio do EA MQL5 distribuído com o projeto.
 
@@ -11,6 +11,8 @@ Plataforma desktop para acompanhamento do MetaTrader 5, análise de mercado e tr
 - EA MQL5, arquivos `.mq5`, `.mqh` e presets `.set` incluídos no instalador.
 - Subgraph de mercado: indicadores, correlação de retornos e classificação de regime.
 - Integrações configuráveis: GitHub, Sentry, Slack, CDN de modelos e MCP.
+- Planos locais Free, Pro e Business com entitlements e ativação sem cobrança.
+- Social Paper para compartilhar estratégias somente em paper/demo.
 - Atualizações via GitHub Releases e instalador Inno Setup.
 
 ## Desenvolvimento local
@@ -36,9 +38,7 @@ redeploying, use the following URLs in AMP or another A2A client:
 - Agent Card: `https://<deployment-host>/.well-known/agent-card.json`
 - JSON-RPC endpoint: `https://<deployment-host>/a2a`
 
-The A2A extra is locked in `uv.lock` and `poetry.lock`. Redeploy from the
-repository (for example, `crewai deploy push`) and configure the deployment
-environment variables in AMP; do not commit provider keys or tokens.
+The reproducible Python environment is defined by `requirements-lock.txt`; redeploy from the repository and configure deployment environment variables in the host platform. Do not commit provider keys or tokens.
 
 ## Instalador
 
@@ -49,7 +49,15 @@ Set-Location "C:\caminho\para\XAU_AI_PRO\installer"
 .\build_installer.cmd
 ```
 
-O resultado é `installer\XAU_AI_PRO_Setup.exe`.
+O resultado do fluxo PyInstaller/Inno é `dist\XAU_AI_PRO_Setup_<versao>.exe`.
+
+> Para builds atuais, o spec `launcher.spec` usa **onedir**: o executavel fica em
+> `dist\XAU_AI_PRO\XAU_AI_PRO.exe`, com dependencias na mesma pasta. O Inno
+> produz `dist\XAU_AI_PRO_Setup_<versao>.exe`. O instalador Tauri (NSIS/MSI)
+> e um fluxo separado, com gateway Python e Core Rust; nao confundir os dois
+> artefatos nem concluir que um scan do primeiro valida o segundo.
+> Nenhum build esta aprovado para operar dinheiro real ou para distribuicao
+> publica sem testes DEMO, verificacao de assinatura, hashes e scan por artefato.
 
 ## Segurança operacional
 

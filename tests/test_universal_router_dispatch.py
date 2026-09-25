@@ -5,14 +5,14 @@ from backend.universal_router import UniversalRouter, UniversalRouterError
 
 
 def test_normalize_market_accepts_app_aliases():
-    assert normalize_market("crypto-spot") == "spot"
-    assert normalize_market("crypto-futures") == "futures"
+    assert normalize_market("crypto-spot") == "crypto-spot"
+    assert normalize_market("crypto-futures") == "crypto-futures"
     assert normalize_market("forex") == "forex"
 
 
 def test_router_accepts_crypto_spot_alias():
-    result = UniversalRouter().prepare_order({"broker": "mexc", "market": "crypto-spot", "symbol": "BTCUSDT", "side": "buy", "order_type": "market", "quantity": 1, "request_id": "req-alias", "confirm": True})
-    assert result["market"] == "spot"
+    result = UniversalRouter().prepare_order({"broker": "mexc", "market": "crypto-spot", "symbol": "BTCUSDT", "side": "buy", "order_type": "market", "quantity": 1, "account_id": "mexc-account", "request_id": "req-alias", "confirm": True})
+    assert result["market"] == "crypto-spot"
     assert result["status"] == "pending_manual_review"
 
 
@@ -37,14 +37,14 @@ def test_universal_positions_and_quotes_helpers_exist():
 ])
 def test_router_prepares_one_independent_adapter(broker, market, symbol):
     router = UniversalRouter()
-    result = router.prepare_order({"broker": broker, "market": market, "symbol": symbol, "side": "buy", "order_type": "market", "quantity": 1, "request_id": f"req-{broker}", "confirm": True})
+    result = router.prepare_order({"broker": broker, "market": market, "symbol": symbol, "side": "buy", "order_type": "market", "quantity": 1, "account_id": f"account-{broker}", "request_id": f"req-{broker}", "confirm": True})
     assert result["status"] == "pending_manual_review"
     assert result["adapter_payload"]["symbol"] == symbol
 
 
 def test_router_rejects_duplicate_request_id():
     router = UniversalRouter()
-    payload = {"broker": "mexc", "market": "spot", "symbol": "BTCUSDT", "side": "buy", "order_type": "market", "quantity": 1, "request_id": "same-request", "confirm": True}
+    payload = {"broker": "mexc", "market": "spot", "symbol": "BTCUSDT", "side": "buy", "order_type": "market", "quantity": 1, "account_id": "mexc-account", "request_id": "same-request", "confirm": True}
     router.prepare_order(payload)
     with pytest.raises(UniversalRouterError, match="request_id"):
         router.prepare_order(payload)
@@ -53,7 +53,7 @@ def test_router_rejects_duplicate_request_id():
 @pytest.mark.parametrize("broker,market,symbol", [("mexc", "spot", "BTCUSDT"), ("binance", "spot", "BTCUSDT"), ("mt5", "forex", "EURUSD")])
 def test_router_execution_is_blocked_without_enable_flag(broker, market, symbol):
     router = UniversalRouter()
-    payload = {"broker": broker, "market": market, "symbol": symbol, "side": "buy", "order_type": "market", "quantity": 1, "request_id": f"safe-{broker}", "confirm": True}
+    payload = {"broker": broker, "market": market, "symbol": symbol, "side": "buy", "order_type": "market", "quantity": 1, "account_id": f"account-{broker}", "request_id": f"safe-{broker}", "confirm": True}
     result = router.execute(payload, explicit_authorization=True)
     assert result["ok"] is False
     assert result["status"] == "blocked"

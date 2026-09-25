@@ -44,12 +44,12 @@ if errorlevel 1 goto :fail
 
 echo.== Smoke test: XAU_AI_PRO.exe versao ==
 "%ROOT%\dist\XAU_AI_PRO\XAU_AI_PRO.exe" versao
-if errorlevel 1 echo [AVISO] smoke test de versao falhou
+if errorlevel 1 goto :fail
 
 rem ---- 3) Installer (Inno Setup) ---------------------------------------
 echo.
-echo == [3/4] Inno Setup: installer\XAU_AI_PRO_Setup.exe ==
-"%ISCC%" "%ROOT%\installer\installer.iss" /Qp
+echo == [3/4] Inno Setup: dist\XAU_AI_PRO_Setup_versao.exe ==
+"%ISCC%" /DMyRoot="%ROOT%" "%ROOT%\installer\installer.iss" /Qp
 if errorlevel 1 goto :fail
 
 rem ---- 4) Signing (optional) -------------------------------------------

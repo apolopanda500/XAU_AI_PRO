@@ -40,7 +40,8 @@ REM Compilar o gateway a partir do fonte atual para evitar bridge defasado
 echo [4/6] Compilando gateway Python...
 cd /d "%ROOT%"
 if not exist "%ROOT%\build\mt5-gateway" mkdir "%ROOT%\build\mt5-gateway"
-"%ROOT%\.venv\Scripts\python.exe" -m PyInstaller --noconfirm --clean mt5-gateway.spec
+"%ROOT%\.venv\Scripts\python.exe" -m PyInstaller --noconfirm mt5-gateway.spec
+
 if %ERRORLEVEL% neq 0 (
     echo ERRO: Build do gateway falhou
     exit /b 1

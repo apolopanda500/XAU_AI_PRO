@@ -12,12 +12,52 @@ version = "1.2.3"
 description = "XAU AI PRO - trading assistant for MetaTrader 5 with AI integration and management dashboard."
 requires-python = ">=3.11,<3.13"
 dependencies = [
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "pydantic>=2.0",
+    "pandas>=2.0",
+    "numpy>=1.26",
+    "scikit-learn>=1.4",
+    "scipy>=1.11",
+    "xgboost>=2.0",
+    "lightgbm>=4.0",
+    "catboost>=1.2",
+    "matplotlib>=3.8",
+    "plotly>=5.20",
+    "streamlit>=1.30",
+    "litellm>=1.0",
+    "openai>=1.0",
+    "sentry-sdk>=2.0",
+    "MetaTrader5>=5.0.45",
+    "python-dateutil>=2.8",
+    "six>=1.16",
     "python-dotenv>=1.0",
+    "mcp>=1.0",
 ]
 
 [tool.poetry.dependencies]
 python = ">=3.11,<3.13"
+fastapi = ">=0.115"
+uvicorn = ">=0.30"
+pydantic = ">=2.0"
+pandas = ">=2.0"
+numpy = ">=1.26"
+scikit-learn = ">=1.4"
+scipy = ">=1.11"
+xgboost = ">=2.0"
+lightgbm = ">=4.0"
+catboost = ">=1.2"
+matplotlib = ">=3.8"
+plotly = ">=5.20"
+streamlit = ">=1.30"
+litellm = ">=1.0"
+openai = ">=1.0"
+sentry-sdk = ">=2.0"
+MetaTrader5 = ">=5.0.45"
+python-dateutil = ">=2.8"
+six = ">=1.16"
 python-dotenv = ">=1.0"
+mcp = ">=1.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = ">=8.0"

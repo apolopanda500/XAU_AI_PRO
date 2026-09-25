@@ -33,10 +33,10 @@ jobs:
         run: python Python\launcher.py versao
 
       - name: Build do EXE (PyInstaller)
-        run: python -m PyInstaller --noconfirm --clean launcher.spec
+        run: python -m PyInstaller --noconfirm launcher.spec
 
       - name: Smoke test do EXE
-        run: .\dist\XAU_AI_PRO.exe versao
+        run: .\dist\XAU_AI_PRO\XAU_AI_PRO.exe versao
 
       - name: Instalar Inno Setup 6
         run: choco install innosetup -y --no-progress
@@ -45,11 +45,25 @@ jobs:
         shell: cmd
         run: '"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyRoot="%CD%" installer\installer.iss'
 
+      - name: Verificar e registrar hashes dos artefatos
+        shell: pwsh
+        run: |
+          $version = (Get-Content VERSION -Raw).Trim()
+          if (!(Test-Path "dist/XAU_AI_PRO_Setup_$version.exe")) { throw 'Instalador da versao nao encontrado' }
+          $artifacts = @(
+            'dist/XAU_AI_PRO/XAU_AI_PRO.exe',
+            "dist/XAU_AI_PRO_Setup_$version.exe"
+          )
+          foreach ($artifact in $artifacts) {
+            if (!(Test-Path $artifact)) { throw "Artefato ausente: $artifact" }
+            Get-FileHash $artifact -Algorithm SHA256 | Format-List
+          }
+
       - name: Publicar artefato (todas as execucoes)
         uses: actions/upload-artifact@v4
         with:
           name: XAU_AI_PRO_Setup
-          path: installer\XAU_AI_PRO_Setup.exe
+          path: dist/XAU_AI_PRO_Setup_*.exe
           retention-days: 30
 
       - name: Anexar ao release (somente tags)
@@ -63,5 +77,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             gh release create $tag --title "XAU AI PRO $tag" --generate-notes
           }
-          gh release upload $tag installer\XAU_AI_PRO_Setup.exe --clobber
+          $version = (Get-Content VERSION -Raw).Trim()
+          $setup = "dist/XAU_AI_PRO_Setup_$version.exe"
+          if (!(Test-Path $setup)) { throw "Instalador nao encontrado: $setup" }
+          gh release upload $tag $setup --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Falha ao publicar release' }
           Write-Host "Setup anexado ao release $tag"

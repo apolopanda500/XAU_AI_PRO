@@ -1,14 +1,10 @@
 # -*- coding: utf-8 -*-
 """Fila persistente de comandos (Fase 4 do gap analysis).
 
-Quando o terminal MT5 esta indisponivel, comandos DEMO (fechar/gerenciar)
-sao persistidos em command_queue.json e reexecutados automaticamente quando
-o terminal volta. Regras de seguranca:
-  - Ordem nova ("order") NUNCA executa sozinha da fila: fica "skipped" para
-    revisao manual (evita posicao duplicada apos restart).
-  - Comandos com resultado definitivo (posicao nao encontrada etc.) viram
-    "failed" imediatamente — nao ha reenvio cego.
-  - Falhas de infraestrutura sofrem ate XAU_QUEUE_MAX_ATTEMPTS tentativas.
+Quando o terminal MT5 esta indisponivel, comandos DEMO sao registrados
+para revisao manual. Nenhum item e reexecutado automaticamente.
+  - Itens legados "pending" sao imobilizados, inclusive apos restart.
+  - Resultado incerto nunca e tratado como permissao para retry.
   - A parada de emergencia (REAL_EMERGENCY_STOP) pausa o processamento.
   - Recomendado rodar um unico gateway por vez (fila em arquivo compartilhado).
 
@@ -114,9 +110,8 @@ def _is_fatal(error: str) -> bool:
 
 
 def process_one(mt5=None) -> dict:
-    """Executa o proximo item pendente da fila. Retorna o relatorio do item."""
+    """Imobiliza o proximo item legado; jamais despacha uma ordem ao MT5."""
     from backend import mt5_gateway as gw
-    from backend import intent_log
     if gw.REAL_EMERGENCY_STOP.exists():
         return {"ok": False, "paused": "emergency_stop"}
     with _LOCK:
@@ -124,43 +119,9 @@ def process_one(mt5=None) -> dict:
         item = next((x for x in _ITEMS if x.get("status") == "pending"), None)
     if not item:
         return {"ok": True, "empty": True}
-    kind = str(item.get("kind", ""))
-    if kind == "order":
-        # Ordem nova nunca executa sozinha apos restart (risco de duplicar posicao).
-        _mark(item["queue_id"], "skipped",
-              error="ordem exige execucao manual (anti-duplicacao)")
-        intent_log.record_intent("queue_skipped",
-                                 {"route": item.get("route", ""),
-                                  "queue_id": item["queue_id"]}, status="failed")
-        return {"ok": False, "queue_id": item["queue_id"], "skipped": True}
-    runner = _RUNNERS.get(kind)
-    if runner is None:
-        _mark(item["queue_id"], "failed", error=f"sem runner para {kind}")
-        return {"ok": False, "queue_id": item["queue_id"], "error": "sem runner"}
-    payload = dict(item.get("payload") or {})
-    kwargs = dict(item.get("kwargs") or {})
-    try:
-        result = runner(payload, **kwargs)
-    except Exception as exc:
-        error = str(exc)
-        if _is_fatal(error):
-            _mark(item["queue_id"], "failed", error=error)
-            return {"ok": False, "queue_id": item["queue_id"], "error": error}
-        attempts = int(item.get("attempts", 0) or 0) + 1
-        if attempts >= int(item.get("max_attempts", MAX_ATTEMPTS)):
-            _mark(item["queue_id"], "failed", error=error, bump_attempt=True)
-        else:
-            _mark(item["queue_id"], "pending", error=error, bump_attempt=True)
-        return {"ok": False, "queue_id": item["queue_id"], "retry": True, "error": error}
-    sent = bool(result.get("ok"))
-    _mark(item["queue_id"], "sent" if sent else "failed",
-          error=None if sent else str(result.get("error") or result.get("comment") or "resultado negativo"))
-    intent_log.record_intent(f"queue_{kind}",
-                             {"route": item.get("route", ""),
-                              "queue_id": item["queue_id"], "payload": item.get("payload")},
-                             status="sent" if sent else "failed",
-                             extra={"retcode": result.get("retcode")})
-    return {"ok": sent, "queue_id": item["queue_id"], "retcode": result.get("retcode")}
+    _mark(item["queue_id"], "manual_review",
+          error="resultado incerto; conciliar com a conta antes de nova acao")
+    return {"ok": False, "queue_id": item["queue_id"], "manual_review": True}
 
 
 def _runners_default() -> None:
@@ -197,7 +158,7 @@ _KIND_BY_ROUTE = {
 
 
 def offline_fallback_kind(kind: str, payload: dict, exc: Exception) -> dict | None:
-    """Com terminal MT5 offline, persiste o comando DEMO para reenvio automatico.
+    """Registra comando offline sem programar execucao automatica.
 
     Retorna None quando: kind vazio/ordem (nunca enfileira), env DEMO off ou
     terminal ONLINE (nesse caso o erro tem outra causa e segue o fluxo normal).
@@ -216,8 +177,10 @@ def offline_fallback_kind(kind: str, payload: dict, exc: Exception) -> dict | No
     if connected:
         return None  # terminal online: o erro e outro; trata normal
     queue_id = enqueue(kind, payload, route=str(kind))
+    _mark(queue_id, "manual_review", error="terminal offline; resultado incerto")
     return {"ok": False, "queued": True, "queue_id": queue_id,
-            "error": "terminal MT5 offline; comando na fila para reenvio automatico"}
+            "manual_review": True,
+            "error": "terminal MT5 offline; solicitacao registrada sem reenvio automatico"}
 
 
 def _loop() -> None:
@@ -250,11 +213,13 @@ def queue_status() -> dict:
     sent = sum(1 for x in items if x.get("status") == "sent")
     failed = sum(1 for x in items if x.get("status") == "failed")
     skipped = sum(1 for x in items if x.get("status") == "skipped")
+    manual_review = sum(1 for x in items if x.get("status") == "manual_review")
     recent = [{"queue_id": x.get("queue_id"), "kind": x.get("kind"),
                "status": x.get("status"), "attempts": x.get("attempts"),
                "last_error": x.get("last_error"), "created_at": x.get("created_at"),
                "updated_at": x.get("updated_at")} for x in reversed(items[-10:])]
     report = dict(_LAST_RUN)
     return {"ok": True, "count": len(items), "pending": pending, "sent": sent,
-            "failed": failed, "skipped": skipped, "recent": recent, "last_run": report,
+             "failed": failed, "skipped": skipped, "manual_review": manual_review,
+             "recent": recent, "last_run": report,
             "file": str(QUEUE_FILE), "source": "persistent_queue"}

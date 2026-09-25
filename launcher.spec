@@ -5,21 +5,20 @@ Spec ENXUTA GUI-ONLY do EXE do XAU_AI_PRO v1.3.2+ (build 2026).
 Entry point: Python/launcher.py (GUI nativa Tkinter + comandos CLI simples).
 
 --------------------------------------------------------------------------
-REQUISITO DE SEGURANCA: ZERO FALSO POSITIVO EM AMBIENTE DE DINHEIRO REAL
+REQUISITO DE SEGURANCA: VALIDAR O ARTEFATO ANTES DE DISTRIBUIR
 --------------------------------------------------------------------------
-Este spec alimenta um produto que opera capital real. O binario gerado
-NAO pode disparar heuristica de antivirus. Regras obrigatorias:
+Este spec nao garante ausencia de deteccoes nem autoriza operar capital real.
+Validar cada artefato em ambiente limpo antes de distribuir. Diretrizes:
 
-  1) upx=False            -> UPX e assinatura de malware; nao usar.
+  1) upx=False            -> evitar compactacao adicional; nao garante
+                              resultado de antivirus.
   2) console=False        -> manter (GUI), mas exige assinatura de codigo.
-  3) codesign_identity    -> OBRIGATORIO preencher com certificado EV antes
-                             de qualquer distribuicao a terceiros.
-  4) Preferir --onedir    -> onefile auto-extrai em %TEMP%\\_MEI* e e
-                             classificado como dropper por heuristica.
+  3) codesign_identity    -> esta opcao e de assinatura macOS; assinatura
+                              Authenticode Windows ocorre apos o build.
+  4) Preferir onedir      -> evita autoextracao onefile; nao impede alertas.
 
-Historico: a deteccao falsa Trojan:Win32/Bearfoos.A!ml (21/09/2026) neste
-ambiente teve como causa raiz upx=True + binario sem assinatura. Ver
-RELATORIO_AUDITORIA_SEGURANCA.md (raiz do projeto).
+Historico: houve deteccao do executavel instalado em fluxo Tauri/NSIS
+(21/09/2026). A causa nao foi comprovada; nao atribuir a UPX ou PyInstaller.
 --------------------------------------------------------------------------
 
 Estrategia GUI-ONLY (objetivo 40-60 MB):
@@ -37,30 +36,37 @@ from PyInstaller.building.build_main import Analysis, PYZ, EXE
 from PyInstaller.utils.hooks import collect_submodules
 
 import os
+from pathlib import Path
 
 # Raiz do projeto = pasta onde este .spec esta (portavel: local e CI).
 # SPECPATH e fornecido pelo PyInstaller apontando para o diretorio do spec.
 _ROOT = SPECPATH
 _ICON = os.path.join(_ROOT, 'app', 'assets', 'icon.ico')
 
-# INTERFACE NATIVA (Tkinter): embute o diretorio inteiro app/ (core.py, tabs/,
-# banners, assets, etc.) para que o EXE funcione sem depender do disco.
-# IMPORTANTE: app/ nao e um pacote Python (sem __init__.py), entao usamos
-# Tree manualmente em vez de collect_data_files (que pula diretorios nao-pacote).
-from PyInstaller.building.datastruct import Tree as _Tree
-_raw_app = _Tree(os.path.join(_ROOT, 'app'), prefix='app')
-# PyInstaller 6.x Tree retorna tuplas (dest_abs, src, type); Analysis espera (dest_rel_dir, src)
-_APP_DATAS = []
-for dest_abs, src, _ in _raw_app:
-    rel = os.path.relpath(dest_abs, _ROOT).replace(os.sep, '/')
-    dest_dir = os.path.dirname(rel) or '.'
-    _APP_DATAS.append((src, dest_dir))
+_EXCLUDED_DIRS = {'__pycache__', 'node_modules', '.output', '.swc', '.vercel', '.claude', '.agents'}
+
+
+def _source_datas(directory, suffixes):
+    rows = []
+    for base, dirs, files in os.walk(directory):
+        dirs[:] = [name for name in dirs if name not in _EXCLUDED_DIRS and not name.startswith('.')]
+        for name in files:
+            if Path(name).suffix.lower() not in suffixes:
+                continue
+            source = os.path.join(base, name)
+            relative = os.path.relpath(source, _ROOT).replace(os.sep, '/')
+            rows.append((source, os.path.dirname(relative) or '.'))
+    return rows
+
+
+_APP_DATAS = _source_datas(os.path.join(_ROOT, 'app'), {'.py', '.png', '.ico', '.jpg', '.jpeg', '.svg'})
+_BACKEND_DATAS = _source_datas(os.path.join(_ROOT, 'backend'), {'.py'})
 
 a = Analysis(
     [os.path.join(_ROOT, 'Python', 'launcher.py')],
     pathex=[_ROOT, os.path.join(_ROOT, 'Python')],
     binaries=[],
-    datas=_APP_DATAS,  # app/ (GUI nativa)
+    datas=_APP_DATAS + _BACKEND_DATAS,
     hiddenimports=[
         # libs de runtime do CLI/IA (numpy/pandas/sklearn/joblib/sentry_sdk)
         'numpy', 'pandas', 'sklearn', 'joblib', 'sentry_sdk',
@@ -82,7 +88,7 @@ a = Analysis(
         'sqlalchemy', 'polars',
         'PyQt5', 'PySide2', 'PySide6',
         # matplotlib nao se usa na GUI (graficos via Pillow/tk Canvas)
-        'matplotlib',
+        'matplotlib', 'pycparser.lextab', 'pycparser.yacctab', 'scipy.special._cdflib',
     ],
     noarchive=False,
 )
@@ -100,13 +106,9 @@ exe = EXE(
     # ------------------------------------------------------------------
     # ANTI-FALSO-POSITIVO (auditoria 2026-09-22 + ciclo onedir 2026-09-23)
     # ------------------------------------------------------------------
-    # upx=False: o UPX e o packer mais usado por malware e o Microsoft
-    # Defender marca QUALQUER binario compactado com UPX como suspeito.
-    # Foi este parametro, somado a ausencia de assinatura de codigo, que
-    # produziu a deteccao falsa "Trojan:Win32/Bearfoos.A!ml" em
-    # C:\Users\Micro\AppData\Local\XAU AI PRO\XAU AI PRO.exe (21/09).
-    # O ganho de tamanho do UPX nao compensa a perda de reputacao do
-    # binario em ambiente de dinheiro real. NAO reativar sem assinatura EV.
+    # Nao usar UPX neste build; validar cada artefato com antivirus.
+    # A deteccao anterior ocorreu em um fluxo Tauri/NSIS; sua causa
+    # nao foi comprovada e nao pode ser atribuida a este spec.
     upx=False,
     console=False,
     disable_windowed_traceback=False,
@@ -118,7 +120,7 @@ exe = EXE(
 )
 # ----------------------------------------------------------------------
 # MODO ONEDIR (ciclo 2026-09-23): elimina a auto-extracao em %TEMP%\_MEI*
-# que caracteriza o modo onefile como dropper para a heuristica !ml.
+# associado a onefile; onedir nao garante ausencia de deteccoes.
 # O EXE acima exclui binarios (exclude_binaries=True); o COLLECT abaixo
 # monta a pasta dist\XAU_AI_PRO\ com EXE + DLLs lado a lado.
 # Ver mt5-gateway.spec (mesmo padrao, nunca detectado).

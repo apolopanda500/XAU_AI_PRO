@@ -1,9 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-
-// Detecta se o frontend esta rodando dentro do webview do Tauri
-const isTauri = (): boolean =>
-  typeof window !== 'undefined' &&
-  ('__TAURI_IPC__' in window || '__TAURI__' in window || '__TAURI_INTERNALS__' in window);
+import { isMobileRuntime } from '../lib/api';
+import { isTauri } from '../lib/tauri';
 
 export type CoreStatus = 'idle' | 'starting' | 'started' | 'fallback' | 'error';
 
@@ -20,8 +17,12 @@ export function useCoreBootstrap() {
     if (attemptedRef.current) return;
     attemptedRef.current = true;
 
+    if (isMobileRuntime()) {
+      setCoreStatus('fallback');
+      console.info('[Core] mobile usa gateway remoto configurável');
+      return;
+    }
     if (!isTauri()) {
-      // Rodando no navegador (vite dev sem Tauri): Core deve ser iniciado manualmente
       setCoreStatus('fallback');
       console.warn(
         '[Core] Ambiente sem Tauri detectado - inicie o core manualmente (core\\target\\release\\xau-ai-pro-core.exe)'

@@ -65,8 +65,8 @@ if errorlevel 1 (
     echo [ERROR] Build PyInstaller fallido.
     exit /b 2
 )
-if not exist "dist\XAU_AI_PRO.exe" (
-    echo [ERROR] dist\XAU_AI_PRO.exe no generado.
+if not exist "dist\XAU_AI_PRO\XAU_AI_PRO.exe" (
+    echo [ERROR] dist\XAU_AI_PRO\XAU_AI_PRO.exe no generado.
     exit /b 2
 )
 rem Verificacion de integridad DESPUES del build (el conteo no debe bajar).
@@ -88,7 +88,7 @@ if exist "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" set "ISCC=%ProgramFiles(x86
 if exist "%ProgramFiles%\Inno Setup 6\ISCC.exe" set "ISCC=%ProgramFiles%\Inno Setup 6\ISCC.exe"
 if defined ISCC goto run_iscc
 where ISCC >nul 2>nul && goto where_iscc
-echo [AVISO] ISCC no encontrado; el EXE ya esta en dist\XAU_AI_PRO.exe
+echo [AVISO] ISCC no encontrado; el EXE ya esta en dist\XAU_AI_PRO\XAU_AI_PRO.exe
 echo         Compile el instalador manualmente con:
 echo         "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\installer.iss
 exit /b 0

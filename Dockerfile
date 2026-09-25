@@ -6,7 +6,7 @@ FROM rust:1.82-slim AS builder
 WORKDIR /app
 
 # Copiar manifesto e build dependencies
-COPY core/Cargo.toml core/Cargo.lock* core/rust-toolchain.toml ./
+COPY core/Cargo.toml core/Cargo.lock* rust-toolchain.toml ./
 COPY core/src ./src
 
 # Compilar release

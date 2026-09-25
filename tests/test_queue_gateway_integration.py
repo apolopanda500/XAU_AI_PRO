@@ -102,7 +102,7 @@ def _assert_offline_close_enfileira_202():
     data = _json_out(handler)
     assert data.get("queued") is True and data.get("queue_id")
     resumo = _Ctx.pq.queue_status()
-    assert resumo["pending"] >= 1
+    assert resumo["manual_review"] >= 1 and resumo["pending"] == 0
     assert "close" in [x["kind"] for x in resumo["recent"]]
 
 

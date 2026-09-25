@@ -1,7 +1,7 @@
 /** Contrato comum para contas, ativos, histórico e execução multi-corretora. */
 
-export type BrokerId = 'mt5' | 'mexc' | 'binance';
-export type MarketType = 'forex' | 'crypto-spot' | 'crypto-futures' | 'indices' | 'metals' | 'other';
+export type BrokerId = 'mt5' | 'mexc' | 'binance' | 'bybit' | 'okx';
+export type MarketType = 'forex' | 'crypto-spot' | 'crypto-futures' | 'indices' | 'metals' | 'stocks' | 'commodities' | 'bonds' | 'options' | 'other';
 export type AccountMode = 'DEMO' | 'REAL' | 'UNKNOWN';
 export type OrderSide = 'BUY' | 'SELL';
 export type OrderStatus = 'NEW' | 'PARTIALLY_FILLED' | 'FILLED' | 'CANCELED' | 'REJECTED' | 'UNKNOWN';
@@ -57,11 +57,13 @@ export interface UniversalDeal {
 }
 
 export const BROKER_CAPABILITIES: readonly BrokerCapabilities[] = [
-  { broker: 'mt5', label: 'MetaTrader 5', markets: ['forex', 'metals', 'indices', 'crypto-spot', 'other'], supportsDemo: true, supportsReal: true, supportsPositions: true, supportsProtection: true, supportsTrading: true, supportsWithdraw: false },
-  { broker: 'mexc', label: 'MEXC', markets: ['crypto-spot', 'crypto-futures'], supportsDemo: false, supportsReal: true, supportsPositions: false, supportsProtection: false, supportsTrading: true, supportsWithdraw: false },
-  { broker: 'binance', label: 'Binance', markets: ['crypto-spot', 'crypto-futures'], supportsDemo: false, supportsReal: true, supportsPositions: true, supportsProtection: true, supportsTrading: true, supportsWithdraw: false },
+  { broker: 'mt5', label: 'MetaTrader 5', markets: ['forex', 'metals', 'indices', 'stocks', 'commodities', 'bonds', 'crypto-spot', 'crypto-futures', 'other'], supportsDemo: true, supportsReal: false, supportsPositions: true, supportsProtection: false, supportsTrading: false, supportsWithdraw: false },
+  { broker: 'mexc', label: 'MEXC', markets: ['crypto-spot', 'crypto-futures'], supportsDemo: false, supportsReal: false, supportsPositions: false, supportsProtection: false, supportsTrading: false, supportsWithdraw: false },
+  { broker: 'binance', label: 'Binance', markets: ['crypto-spot', 'crypto-futures'], supportsDemo: false, supportsReal: false, supportsPositions: true, supportsProtection: false, supportsTrading: false, supportsWithdraw: false },
+  { broker: 'bybit', label: 'Bybit', markets: ['crypto-spot', 'crypto-futures'], supportsDemo: false, supportsReal: false, supportsPositions: false, supportsProtection: false, supportsTrading: false, supportsWithdraw: false },
+  { broker: 'okx', label: 'OKX', markets: ['crypto-spot', 'crypto-futures'], supportsDemo: false, supportsReal: false, supportsPositions: false, supportsProtection: false, supportsTrading: false, supportsWithdraw: false },
 ];
 
 export function marketLabel(market: MarketType): string {
-  return ({ 'crypto-spot': 'Cripto Spot', 'crypto-futures': 'Cripto Futures', forex: 'Forex', metals: 'Metais', indices: 'Índices', other: 'Outro' } as Record<MarketType, string>)[market];
+  return ({ 'crypto-spot': 'Cripto Spot', 'crypto-futures': 'Cripto Futures', forex: 'Forex', metals: 'Metais', indices: 'Índices', stocks: 'Ações', commodities: 'Commodities', bonds: 'Bonds', options: 'Opções', other: 'Outro' } as Record<MarketType, string>)[market];
 }

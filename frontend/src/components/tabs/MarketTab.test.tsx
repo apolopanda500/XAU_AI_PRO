@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 const storage = new Map<string, string>();
 const localStorageStub = {
@@ -18,45 +18,149 @@ const { useAppStore } = await import('../../hooks/useAppStore');
 vi.mock('../charts/MiniPriceChart', () => ({ default: () => <div data-testid="mini-chart" /> }));
 vi.mock('../charts/PriceChart', () => ({ default: () => <div data-testid="price-chart" /> }));
 
-const response = (body: unknown, ok = true) => ({ ok, status: ok ? 200 : 503, json: async () => body }) as Response;
-const connectedOverview = { ok: true, connections: [{ broker: 'binance', market: 'crypto-spot', active: true, status: 'conectada' }] };
+const now = '2026-09-24T12:00:00.000Z';
+
+function response(body: unknown, status = 200): Response {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => body,
+  } as Response;
+}
+
+function envelope(broker: string, market: string) {
+  return {
+    ok: true,
+    broker,
+    market,
+    source: `${broker}_api`,
+    received_at: now,
+    provider_timestamp: now,
+  };
+}
+
+function payloadFor(input: RequestInfo | URL): unknown {
+  const url = new URL(String(input), 'http://localhost');
+  const broker = url.searchParams.get('broker') ?? 'binance';
+  const market = url.searchParams.get('market') ?? 'crypto-spot';
+  const symbol = url.searchParams.get('symbol') ?? 'BTCUSDT';
+  const base = envelope(broker, market);
+  if (url.pathname === '/api/capabilities') {
+    return {
+      ok: true,
+      source: 'fastapi_gateway',
+      received_at: now,
+      matrix: [
+        { broker: 'mt5', market: 'forex', status: 'active', read_only: true, capabilities: ['quotes'], execution: [], withdrawals: false, transfers: false },
+        { broker: 'mt5', market: 'metals', status: 'active', read_only: true, capabilities: ['quotes'], execution: [], withdrawals: false, transfers: false },
+        { broker: 'binance', market: 'crypto-spot', status: 'active', read_only: true, capabilities: ['quotes'], execution: [], withdrawals: false, transfers: false },
+        { broker: 'binance', market: 'crypto-futures', status: 'active', read_only: true, capabilities: ['quotes'], execution: [], withdrawals: false, transfers: false },
+        { broker: 'mexc', market: 'crypto-spot', status: 'active', read_only: true, capabilities: ['quotes'], execution: [], withdrawals: false, transfers: false },
+        { broker: 'mexc', market: 'crypto-futures', status: 'active', read_only: true, capabilities: ['quotes'], execution: [], withdrawals: false, transfers: false },
+        { broker: 'bybit', market: 'crypto-spot', status: 'code_only', read_only: true, capabilities: ['quotes'], execution: [], withdrawals: false, transfers: false },
+      ],
+    };
+  }
+  if (url.pathname === '/api/universal/overview') {
+    return { ...base, source: 'universal_gateway', mt5_required: false, connected: 1, connections: [{ id: `${broker}:${market}:active`, broker, market, active: true, status: 'conectada', account: null, positions: [], pnl: null, error: null, source: 'universal_gateway' }] };
+  }
+  if (url.pathname === '/api/universal/assets') {
+    return { ...base, assets: [{ symbol, display_name: symbol, asset_type: 'crypto', base_asset: 'BTC', quote_asset: 'USDT', enabled: true }], symbols: [], errors: [] };
+  }
+  if (url.pathname === '/api/universal/quotes') {
+    return { ...base, quotes: [{ symbol, bid: 99, ask: 101, last: 100, price: 100, spread: 2, high: 110, low: 90, change: 1, change_pct: 1, volume: 10, timestamp: now, source: `${broker}_api`, received_at: now }], errors: [] };
+  }
+  if (url.pathname === '/api/universal/stats24h') {
+    return { ...base, symbol, stats: { symbol, last: 100, bid: 99, ask: 101, high: 110, low: 90, change: 1, change_pct: 1, volume: 10, quote_volume: 1000, trades_count: 5, spread: 2 } };
+  }
+  if (url.pathname === '/api/universal/candles') {
+    return { ...base, symbol, timeframe: url.searchParams.get('timeframe') ?? 'M5', candles: [{ time: 1_789_000_000, open: 99, high: 102, low: 98, close: 101, volume: 10 }] };
+  }
+  if (url.pathname === '/api/universal/depth') {
+    return { ...base, symbol, bids: [[99, 2]], asks: [[101, 3]] };
+  }
+  if (url.pathname === '/api/universal/trades') {
+    return { ...base, symbol, trades: [{ id: '1', symbol, side: 'BUY', price: 100, quantity: 1, timestamp: now, provider_timestamp: now, source: `${broker}_public_trades` }] };
+  }
+  if (url.pathname === '/api/status') {
+    return { ...base, broker: 'mt5', market: 'metals', source: 'mt5_gateway', gateway: 'online', mt5_connected: true, account: null, positions: [], ea_heartbeat: { live: true, age_sec: 2, symbol: 'XAUUSD', autotrading: true, source: 'EA FILE_COMMON' } };
+  }
+  return { ...base, error: 'not_found' };
+}
+
+function installFetch() {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => response(payloadFor(input), String(input).includes('/not-found') ? 404 : 200));
+  vi.stubGlobal('fetch', fetchMock);
+  return fetchMock;
+}
 
 beforeEach(() => {
   storage.clear();
-  useAppStore.setState({ quotes: [], selectedSymbol: '', marketWatchlist: ['BTCUSDT'], subscribeSymbols: [] });
+  localStorageStub.setItem('xau-market-source', 'binance:crypto-spot');
+  useAppStore.setState((state) => ({
+    quotes: [],
+    selectedSymbol: '',
+    marketWatchlist: ['BTCUSDT'],
+    subscribeSymbols: [],
+    settings: { ...state.settings, marketAutoRefresh: false },
+  }));
 });
-afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
+
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 describe('MarketTab', () => {
-  it('não solicita cotações quando não há corretora ativa', async () => {
-    const fetchMock = vi.fn(); vi.stubGlobal('fetch', fetchMock); render(<MarketTab />);
-    expect(await screen.findByText(/Selecione uma corretora em Contas ativas/i)).toBeTruthy();
-    expect(fetchMock).not.toHaveBeenCalled();
+  it('carrega mercado público somente por GET e sem conta ativa', async () => {
+    const fetchMock = installFetch();
+    render(<MarketTab />);
+    expect((await screen.findAllByText('binance_api')).length).toBeGreaterThan(0);
+    expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(7);
+    fetchMock.mock.calls.forEach(([, init]) => expect(init?.method).toBe('GET'));
+    fetchMock.mock.calls.forEach(([input]) => expect(String(input)).toMatch(/\/api\/(capabilities|universal\/(overview|assets|quotes|stats24h|candles|depth|trades)|status)/));
   });
-  it('não solicita cotações quando a corretora selecionada está offline', async () => {
-    localStorageStub.setItem('xau-active-account', 'binance:crypto-spot');
-    const fetchMock = vi.fn().mockResolvedValue(response({ ok: true, connections: [{ broker: 'binance', market: 'crypto-spot', active: true, status: 'offline', error: 'API indisponível' }] }));
-    vi.stubGlobal('fetch', fetchMock); render(<MarketTab />);
-    expect((await screen.findAllByText('API indisponível')).length).toBeGreaterThan(0);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(String(fetchMock.mock.calls[0][0])).toContain('/api/universal/overview');
+
+  it('não oferece controles acionáveis de trading', async () => {
+    installFetch();
+    render(<MarketTab />);
+    await screen.findAllByText('binance_api');
+    const controls = screen.getAllByRole('button').map((control) => control.textContent ?? '');
+    expect(controls.some((label) => /comprar|vender|fechar|ordem|executarPosição/i.test(label))).toBe(false);
   });
-  it('consulta fonte conectada e oculta quote de broker anterior', async () => {
-    localStorageStub.setItem('xau-active-account', 'binance:crypto-spot');
-    useAppStore.setState({ quotes: [{ broker: 'mexc', market: 'crypto-spot', symbol: 'BTCUSDT', price: 1, bid: 1, ask: 1, last: 1, volume: 0, high: 0, low: 0, change: 0, change_pct: 0, spread: 0, digits: 2, point: 0, timestamp: new Date().toISOString(), source: 'mexc_api' }] });
-    const fetchMock = vi.fn().mockResolvedValueOnce(response(connectedOverview)).mockResolvedValueOnce(response({ ok: true, quotes: [{ broker: 'binance', market: 'crypto-spot', symbol: 'BTCUSDT', bid: 100, ask: 101, last: 100.5, price: 100.5, spread: 1, source: 'binance_api', timestamp: '2026-09-21T00:00:00Z', received_at: '2026-09-21T00:00:00Z' }], errors: [] }));
-    vi.stubGlobal('fetch', fetchMock); render(<MarketTab />);
-    expect(await screen.findByText('binance_api')).toBeTruthy();
-    expect(screen.queryByText('mexc_api')).toBeNull();
-    expect(String(fetchMock.mock.calls[1][0])).toContain('/api/universal/quotes?broker=binance&market=crypto-spot&symbols=BTCUSDT');
+
+  it('descarta dados da corretora anterior ao trocar a fonte', async () => {
+    installFetch();
+    render(<MarketTab />);
+    expect((await screen.findAllByText('binance_api')).length).toBeGreaterThan(0);
+    fireEvent.change(screen.getByLabelText('Selecionar fonte do mercado'), { target: { value: 'mexc' } });
+    expect((await screen.findAllByText('mexc_api')).length).toBeGreaterThan(0);
+    expect(screen.queryByText('binance_api')).toBeNull();
   });
-  it('consulta o endpoint universal da MEXC quando a fonte está conectada', async () => {
-    localStorageStub.setItem('xau-active-account', 'mexc:crypto-spot');
-    const fetchMock = vi.fn().mockResolvedValueOnce(response({ ok: true, connections: [{ broker: 'mexc', market: 'crypto-spot', active: true, status: 'conectada' }] })).mockResolvedValueOnce(response({ ok: true, quotes: [], errors: [] }));
-    vi.stubGlobal('fetch', fetchMock); render(<MarketTab />);
-    await screen.findByText(/ainda não retornou cotações reais/i);
-    expect(String(fetchMock.mock.calls[1][0])).toContain('/api/universal/quotes?broker=mexc&market=crypto-spot&symbols=BTCUSDT');
+
+  it('limpa a seleção ao remover o último ativo', async () => {
+    localStorageStub.setItem('xau-market-watchlist:binance:crypto-spot', JSON.stringify(['BTCUSDT']));
+    installFetch();
+    render(<MarketTab />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Remover BTCUSDT da lista' }));
+    await waitFor(() => expect(useAppStore.getState().selectedSymbol).toBe(''));
+    expect(screen.getByText(/Watchlist vazia|Lista vazia/i)).toBeTruthy();
   });
+
+  it('não solicita capacidades públicas não expostas pelo MT5', async () => {
+    localStorageStub.setItem('xau-market-source', 'mt5:metals');
+    localStorageStub.setItem('xau-market-watchlist:mt5:metals', JSON.stringify(['XAUUSD']));
+    const fetchMock = installFetch();
+    render(<MarketTab />);
+    await waitFor(() => expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/api/status'))).toBe(true));
+    const paths = fetchMock.mock.calls.map(([input]) => String(input));
+    expect(paths.some((path) => path.includes('/api/universal/stats24h'))).toBe(false);
+    expect(paths.some((path) => path.includes('/api/universal/depth'))).toBe(false);
+    expect(paths.some((path) => path.includes('/api/universal/trades'))).toBe(false);
+  });
+
   it('considera quote vencida somente depois de 15 segundos', () => {
     const syncedAt = 1_000_000;
     expect(isQuoteStale(null, syncedAt + 99_999)).toBe(false);

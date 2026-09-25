@@ -88,12 +88,13 @@ def gateway(tmp_path, monkeypatch):
     server.server_close()
 
 
-def _request(base, method, path, payload=None):
+def _request(base, method, path, payload=None, headers=None):
     host, port = base.split(":")
     conn = http.client.HTTPConnection(host, int(port), timeout=10)
     body = json.dumps(payload) if payload is not None else None
-    headers = {"Content-Type": "application/json"} if body else {}
-    conn.request(method, path, body=body, headers=headers)
+    request_headers = {"Content-Type": "application/json"} if body else {}
+    request_headers.update(headers or {})
+    conn.request(method, path, body=body, headers=request_headers)
     response = conn.getresponse()
     data = json.loads(response.read() or b"{}")
     conn.close()
@@ -105,6 +106,20 @@ def test_status_e_conta_demo(gateway):
     assert status == 200 and data["account"]["mode"] == "DEMO"
     status, data = _request(gateway, "GET", "/api/inventory")
     assert status == 200 and data["account"]["login"] == 123
+
+
+def test_catalogo_modelos_somente_leitura(gateway, tmp_path, monkeypatch):
+    from Python import model_registry
+
+    monkeypatch.setattr(model_registry, "MODELS_DIR", tmp_path)
+    (tmp_path / "XAUUSD_M5.pkl").write_bytes(b"artefato de teste")
+    (tmp_path / "XAUUSD_M5.meta.json").write_text(
+        json.dumps({"symbol": "XAUUSD", "timeframe": "M5"}), encoding="utf-8"
+    )
+    status, data = _request(gateway, "GET", "/api/ai/models")
+    assert status == 200
+    assert data["models"][0]["trained_symbol"] == "XAUUSD"
+    assert data["models"][0]["training_verified"] is False
 
 
 def test_leituras_mt5_e_journal(gateway):
@@ -188,13 +203,84 @@ def test_demo_recusa_conta_real(gateway, monkeypatch):
 
 
 
+@pytest.mark.parametrize("failed_method", ["positions_get", "history_deals_get"])
+@pytest.mark.parametrize("route", ["/api/demo/order", "/api/demo/pending"])
+def test_demo_bloqueia_quando_leitura_de_risco_falha(gateway, monkeypatch, failed_method, route):
+    """Erro de leitura do MT5 nunca equivale a risco zerado."""
+    monkeypatch.setenv("XAU_ENABLE_DEMO_ORDERS", "1")
+    import backend.mt5_gateway as gw
+
+    mt5 = gw._mt5()
+    monkeypatch.setattr(mt5, failed_method, lambda *args, **kwargs: None)
+    sent = []
+    monkeypatch.setattr(mt5, "order_send", lambda request: sent.append(request), raising=False)
+    payload = {"symbol": "XAUUSD", "side": "BUY", "volume": 0.01,
+               "sl": 0.5, "tp": 2.0, "confirm_demo": True}
+    if route.endswith("pending"):
+        payload.update({"kind": "limit", "price": 0.9})
+    status, data = _request(gateway, "POST", route, payload)
+    assert status == 503
+    assert data["ok"] is False
+    assert not sent
+
+
+@pytest.mark.parametrize("route", ["/api/demo/order", "/api/demo/pending"])
+def test_demo_bloqueia_limites_de_operacoes_e_drawdown(gateway, monkeypatch, route):
+    import backend.mt5_gateway as gw
+
+    monkeypatch.setenv("XAU_ENABLE_DEMO_ORDERS", "1")
+    mt5 = gw._mt5()
+    deals = [
+        type("D", (), {"profit": 0.0, "commission": 0.0, "swap": 0.0, "entry": 0, "position_id": index, "ticket": index})()
+        for index in range(1, 21)
+    ]
+    monkeypatch.setattr(mt5, "history_deals_get", lambda *args, **kwargs: deals)
+    monkeypatch.setattr(gw.watchdog, "history", lambda limit=120: {"snapshots": [{"equity": 1200.0}], "last": {"equity": 1200.0}})
+    sent = []
+    monkeypatch.setattr(mt5, "order_send", lambda request: sent.append(request), raising=False)
+    payload = {"symbol": "XAUUSD", "side": "BUY", "volume": 0.01, "sl": 0.5, "tp": 2.0, "confirm_demo": True}
+    if route.endswith("pending"):
+        payload.update({"kind": "limit", "price": 0.9})
+    status, data = _request(gateway, "POST", route, payload)
+    assert status == 403
+    assert "operações" in data["error"] or "drawdown" in data["error"]
+    assert not sent
+
+
+def test_risk_state_calcula_operacoes_e_drawdown(gateway, monkeypatch):
+    import backend.mt5_gateway as gw
+
+    mt5 = gw._mt5()
+    deal = type("D", (), {"profit": 0.0, "commission": 0.0, "swap": 0.0, "entry": 0, "position_id": 10, "ticket": 20})()
+    monkeypatch.setattr(mt5, "history_deals_get", lambda *args, **kwargs: [deal, deal])
+    monkeypatch.setattr(gw.watchdog, "history", lambda limit=120: {"snapshots": [{"equity": 1200.0}], "last": {"equity": 1200.0}})
+    state = gw._risk_state(mt5)
+    assert state["daily_trades"] == 1
+    assert state["drawdown_pct"] == 16.6667
+    assert state["limits"]["max_daily_trades"] == 20
+    assert state["limits"]["max_drawdown_pct"] == 15.0
+
+
+def test_risk_state_recusa_saldo_indisponivel(gateway, monkeypatch):
+    """A leitura direta de risco nao apresenta zeros falsos sem conta MT5."""
+    import backend.mt5_gateway as gw
+
+    monkeypatch.setattr(gw._mt5(), "account_info", lambda: None)
+    with pytest.raises(RuntimeError, match="conta MT5 indisponivel"):
+        gw._risk_state(gw._mt5())
+
+
 def test_universal_somente_leitura_e_previews(gateway, monkeypatch):
     from unittest.mock import patch
 
     import backend.connection_service as service
+    import backend.mt5_gateway as gw
+
+    monkeypatch.setattr(gw, "_stored_exchange_credentials", lambda account_id, broker, market: ("key", "secret", "", account_id))
+    monkeypatch.setattr(gw, "resolve_connection", lambda account_id, broker, market: {"id": account_id})
 
     class StubClient:
-        def __init__(self, market="spot"):
+        def __init__(self, market="spot", *args):
             self.api_key = self.api_secret = self.secret = ""
 
         def account(self):
@@ -203,10 +289,10 @@ def test_universal_somente_leitura_e_previews(gateway, monkeypatch):
         def ticker(self, symbol):
             return {"bid": 1.0, "ask": 2.0}
 
-        def depth(self, symbol):
+        def depth(self, symbol, limit=20):
             return {"bids": [[1.0, 1.0]], "asks": [[2.0, 1.0]]}
 
-        def trades(self, symbol):
+        def trades(self, symbol, limit=20):
             return []
 
         def history(self, symbol=""):
@@ -215,16 +301,17 @@ def test_universal_somente_leitura_e_previews(gateway, monkeypatch):
     with patch.object(service, "MexcClient", StubClient), \
             patch("backend.mt5_gateway.MexcClient", StubClient):
         status, _ = _request(gateway, "GET",
-                             "/api/universal/account?broker=mexc&market=crypto-spot")
+                             "/api/universal/account?broker=mexc&market=crypto-spot&account_id=mexc%3Acrypto-spot%3Atest")
         assert status == 200
         status, _ = _request(gateway, "GET",
                              "/api/universal/quote?broker=mexc&market=crypto-spot&symbol=BTCUSDT")
         assert status == 200
         status, _ = _request(gateway, "GET",
-                             "/api/universal/history?broker=mexc&market=crypto-spot&symbol=BTCUSDT&days=1")
+                             "/api/universal/history?broker=mexc&market=crypto-spot&symbol=BTCUSDT&days=1&account_id=mexc%3Acrypto-spot%3Atest")
         assert status == 200
     payload = {"broker": "mexc", "market": "spot", "symbol": "BTCUSDT", "side": "buy",
-               "order_type": "market", "quantity": 0.01, "request_id": "t1", "confirm": False}
+               "order_type": "market", "quantity": 0.01, "account_id": "mexc:crypto-spot:test",
+               "request_id": "t1", "confirm": False}
     for path in ("/api/universal/order", "/api/universal/close",
                  "/api/universal/modify", "/api/universal/cancel"):
         status, data = _request(gateway, "POST", path, payload)
@@ -232,14 +319,20 @@ def test_universal_somente_leitura_e_previews(gateway, monkeypatch):
         assert "withdrawals" in json.dumps(data).lower()
 
 
-def test_emergencia_e_real_bloqueados(gateway):
+def test_emergencia_e_real_bloqueados(gateway, monkeypatch):
     status, _ = _request(gateway, "POST", "/api/universal/emergency-stop", {"confirm": True})
     assert status == 200
+    status, _ = _request(gateway, "POST", "/api/demo/order", {"symbol": "XAUUSD", "confirm_demo": True})
+    assert status == 403
+    status, _ = _request(gateway, "POST", "/api/universal/emergency-resume", {"confirm": True})
+    assert status == 403
+    monkeypatch.setenv("XAU_ENABLE_EMERGENCY_RESUME", "1")
     status, _ = _request(gateway, "POST", "/api/universal/emergency-resume", {"confirm": True})
     assert status == 200
     status, data = _request(gateway, "POST", "/api/real/validate",
                             {"volume": 0.01, "daily_loss_pct": 0,
-                             "exposure_pct": 0, "open_positions": 0})
+                             "exposure_pct": 0, "open_positions": 0,
+                             "daily_trades": 0, "drawdown_pct": 0})
     assert status == 200 and data["execution_enabled"] is False
     status, data = _request(gateway, "POST", "/api/real/request",
                             {"request_id": "r1", "account_id": "a",
@@ -250,7 +343,48 @@ def test_emergencia_e_real_bloqueados(gateway):
     assert status in {403, 503} and data.get("ok") is False
 
 
-def test_cobertura_restante_sem_envio(gateway):
+@pytest.mark.parametrize("path", ["/api/universal/order", "/api/universal/close",
+                                   "/api/universal/modify", "/api/universal/cancel"])
+def test_execucao_universal_bloqueada_antes_do_roteador(gateway, monkeypatch, path):
+    from backend.universal_router import UniversalRouter
+
+    def proibido(*args, **kwargs):
+        raise AssertionError("roteador de execução não pode ser chamado")
+
+    monkeypatch.setattr(UniversalRouter, "execute", proibido)
+    status, data = _request(gateway, "POST", path, {
+        "execute": True, "authorize_execution": True, "confirm_live": True,
+        "confirm": True, "request_id": "teste-bloqueio", "broker": "mexc",
+        "market": "spot", "symbol": "BTCUSDT", "side": "buy", "quantity": 1,
+    })
+    assert status == 403
+    assert data["status"] == "blocked" and data["execution_enabled"] is False
+
+
+def test_real_bloqueado_mesmo_com_variavel_ligada(gateway, monkeypatch):
+    import backend.mt5_gateway as gw
+
+    monkeypatch.setenv("XAU_ENABLE_REAL_ORDERS", "1")
+    monkeypatch.setattr(gw, "_mt5", lambda: (_ for _ in ()).throw(AssertionError("MT5 não pode ser chamado")))
+    status, data = _request(gateway, "POST", "/api/real/order", {
+        "request_id": "teste-real", "confirm_real": True, "symbol": "XAUUSD",
+        "side": "BUY", "volume": 0.01, "sl": 1, "tp": 2,
+    })
+    assert status == 403 and data["ok"] is False
+    assert "indisponíveis" in data["error"]
+
+
+def test_cobertura_restante_sem_envio(gateway, monkeypatch):
+    import backend.mt5_gateway as gw
+
+    class PublicStub:
+        def depth(self, symbol, limit=20):
+            return {"bids": [[1.0, 1.0]], "asks": [[2.0, 1.0]]}
+
+        def trades(self, symbol, limit=20):
+            return []
+
+    monkeypatch.setattr(gw, "_exchange_client", lambda *args, **kwargs: PublicStub())
     for path in ("/api/account", "/api/system", "/api/audit", "/api/audit/commands",
                  "/api/errors", "/api/capabilities", "/api/sync/status",
                  "/api/stream/status", "/api/update/check", "/api/config/themes",
@@ -294,10 +428,10 @@ def test_rotas_restantes_sem_envio(gateway, monkeypatch):
         def ticker(self, symbol):
             return {"bid": 1.0, "ask": 2.0}
 
-        def depth(self, symbol):
+        def depth(self, symbol, limit=20):
             return {"bids": [[1.0, 1.0]], "asks": [[2.0, 1.0]]}
 
-        def trades(self, symbol):
+        def trades(self, symbol, limit=20):
             return []
 
         def history(self, symbol=""):
@@ -359,6 +493,80 @@ def test_rotas_finais_ea_e_conexoes(gateway):
     assert status == 200
     status, _ = _request(gateway, "POST", "/api/ea/pause", {})
     assert status in {202, 503}
+
+
+def test_quote_read_only_nao_habilita_simbolo(gateway, monkeypatch):
+    import backend.mt5_gateway as gw
+
+    monkeypatch.setattr(gw._mt5(), "symbol_select", lambda *args: (_ for _ in ()).throw(
+        AssertionError("GET não pode habilitar símbolo")))
+    status, data = _request(gateway, "GET", "/api/mt5/quote?symbol=XAUUSD")
+    assert status == 200 and data["bid"] == 1.0
+
+
+def test_put_e_delete_exigem_token(gateway, monkeypatch):
+    import backend.mt5_gateway as gw
+
+    monkeypatch.setattr(gw, "API_TOKEN", "segredo-local")
+    status, _ = _request(gateway, "GET", "/api/health")
+    assert status == 401
+    status, _ = _request(gateway, "GET", "/api/health", headers={"Authorization": "Bearer segredo-local"})
+    assert status == 200
+    status, _ = _request(gateway, "PUT", "/api/config", {"precision": 3})
+    assert status == 401
+    status, _ = _request(gateway, "PUT", "/api/config", {"precision": 3}, {"Authorization": "Bearer segredo-local"})
+    assert status == 200
+    status, _ = _request(gateway, "DELETE", "/api/connections/inexistente")
+    assert status == 401
+
+
+def test_escopo_invalido_retorna_422(gateway):
+    status, data = _request(gateway, "GET", "/api/universal/quote?broker=binance&market=forex&symbol=EURUSD")
+    assert status == 422
+    assert data["status"] == "invalid"
+    assert data["error_code"] == "invalid_request"
+
+
+def test_matriz_de_capacidades_por_ativo(gateway):
+    status, data = _request(gateway, "GET", "/api/universal/capabilities?broker=mt5&market=metals&symbol=XAUUSD")
+    assert status == 200
+    assert data["symbol"] == "XAUUSD"
+    assert data["matrix"][0]["symbol"] == "XAUUSD"
+    assert data["matrix"][0]["capability_matrix"]
+
+
+def test_perfil_ea_externo_bloqueia_comandos_e_mantem_leitura(gateway, monkeypatch):
+    import backend.mt5_gateway as gw
+
+    monkeypatch.setattr(gw, "THIRD_PARTY_READ_ONLY", True)
+    status, _ = _request(gateway, "GET", "/api/capabilities")
+    assert status == 200
+    status, data = _request(gateway, "POST", "/api/demo/order", {"symbol": "XAUUSD", "confirm_demo": True})
+    assert status == 403
+    assert data["commands_enabled"] is False
+    status, _ = _request(gateway, "POST", "/api/universal/emergency-stop", {"confirm": True})
+    assert status == 200
+    status, _ = _request(gateway, "PUT", "/api/config", {"precision": 3})
+    assert status == 403
+
+
+def test_comando_ea_rejeita_injecao_de_linha(gateway, monkeypatch):
+    import backend.mt5_gateway as gw
+
+    monkeypatch.setenv("XAU_ENABLE_DEMO_ORDERS", "1")
+    monkeypatch.setattr(gw, "_read_ea_heartbeat", lambda: {"live": True})
+    with pytest.raises(ValueError, match="parâmetros"):
+        gw._ea_command({"confirm_demo": True, "value": "M5\ncommand=close-all"}, "set-timeframe")
+    assert not (gw.COMMON_FILES / "XAU_AI_PRO_ea_command.json").exists()
+
+
+def test_endpoint_compatibilidade_ea_externo(gateway, monkeypatch):
+    import backend.mt5_gateway as gw
+
+    expected = {"ok": True, "status": "ok", "read_only": True, "commands_enabled": False, "adapters": [], "matched": 0}
+    monkeypatch.setattr(gw, "evaluate_third_party_ea", lambda mt5: expected)
+    status, data = _request(gateway, "GET", "/api/ea-compatibility")
+    assert status == 200 and data == expected
 
 
 

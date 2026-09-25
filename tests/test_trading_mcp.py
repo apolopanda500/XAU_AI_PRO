@@ -88,6 +88,16 @@ def test_ferramenta_desconhecida(http_stub):
     assert "desconhecida" in mcp.tool_call("nao_existe", {})["error"]
 
 
+def test_emergency_resume_bloqueado_sem_trava(http_stub, monkeypatch):
+    resultado = mcp.tool_call("emergency_resume", {})
+    assert resultado.get("bloqueado") is True
+    assert not http_stub
+    monkeypatch.setattr(mcp, "TRADING_HABILITADO", True)
+    monkeypatch.setenv("XAU_ENABLE_EMERGENCY_RESUME", "1")
+    mcp.tool_call("emergency_resume", {})
+    assert http_stub[-1][0] == "/api/universal/emergency-resume"
+
+
 def test_metodo_desconhecido_erro_rpc():
     resposta = mcp.processar({"jsonrpc": "2.0", "id": 9, "method": "metodo/que/nao/existe"})
     assert resposta["error"]["code"] == -32601

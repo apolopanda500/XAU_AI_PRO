@@ -20,42 +20,73 @@ def _unprotect(value: str) -> str:
     finally: ctypes.windll.kernel32.LocalFree(out.pbData)
 
 def _path() -> Path:
-    root = Path(os.environ.get("APPDATA", Path.home())) / "XAU AI PRO"; root.mkdir(parents=True, exist_ok=True); return root / "connections.dpapi.json"
+    return Path(os.environ.get("APPDATA", Path.home())) / "XAU AI PRO" / "connections.dpapi.json"
 
-def save_connection(connection_id: str, broker: str, market: str, api_key: str, api_secret: str) -> None:
+
+def _prepare_path() -> Path:
+    path = _path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def save_connection(connection_id: str, broker: str, market: str, api_key: str, api_secret: str, api_passphrase: str = "") -> None:
     if not all(isinstance(value, str) and value.strip() for value in (connection_id, broker, market, api_key, api_secret)):
         raise ValueError("connection_id, broker, market, api_key e api_secret sao obrigatorios")
     data = {}
-    path = _path()
+    path = _prepare_path()
     if path.exists(): data = json.loads(path.read_text(encoding="utf-8"))
     previous = data.get(connection_id, {})
-    data[connection_id] = {"broker": broker, "market": market, "active": previous.get("active", True), "api_key": _protect(api_key.strip()), "api_secret": _protect(api_secret.strip())}
+    record = {"broker": broker, "market": market, "active": previous.get("active", True), "api_key": _protect(api_key.strip()), "api_secret": _protect(api_secret.strip())}
+    if isinstance(api_passphrase, str) and api_passphrase.strip():
+        record["api_passphrase"] = _protect(api_passphrase.strip())
+    data[connection_id] = record
     temp = path.with_suffix(".dpapi.tmp")
     temp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
     os.replace(temp, path)
 
-def list_connections() -> list[dict[str, str]]:
+def list_connections() -> list[dict[str, object]]:
     path = _path()
     if not path.exists(): return []
     data = json.loads(path.read_text(encoding="utf-8")); return [{"id": k, "broker": v.get("broker", ""), "market": v.get("market", ""), "configured": True, "active": v.get("active", True)} for k, v in data.items()]
 
-def load_credentials(broker: str, market: str) -> tuple[str, str] | None:
-    path = _path()
-    if not path.exists(): return None
-    data = json.loads(path.read_text(encoding="utf-8"))
-    for item in data.values():
-        if item.get("broker") == broker and item.get("market") == market and item.get("active", True):
-            return _unprotect(item["api_key"]), _unprotect(item["api_secret"])
-    return None
+
+def resolve_connection(account_id: str, broker: str, market: str) -> dict[str, object]:
+    normalized_broker = str(broker or "").strip().lower()
+    normalized_market = str(market or "").strip().lower()
+    matches = [
+        item for item in list_connections()
+        if item["broker"].lower() == normalized_broker
+        and item["market"].lower() == normalized_market
+        and bool(item.get("active", True))
+    ]
+    requested = str(account_id or "").strip()
+    if requested:
+        selected = next((item for item in matches if item["id"] == requested), None)
+        if selected is None:
+            raise LookupError("conexão inativa ou incompatível com corretora e mercado")
+        return selected
+    if len(matches) > 1:
+        raise LookupError("account_id é obrigatório quando há mais de uma conta ativa")
+    if not matches:
+        raise LookupError("conexão ativa não encontrada")
+    return matches[0]
+
 
 def load_connection_credentials(connection_id: str) -> tuple[str, str]:
+
     """Obtém exatamente a conexão solicitada, sem expor segredos na listagem."""
+    key, secret, _ = load_connection_credentials_full(connection_id)
+    return key, secret
+
+
+def load_connection_credentials_full(connection_id: str) -> tuple[str, str, str]:
     path = _path()
     data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
     item = data.get(connection_id)
     if not item:
         raise LookupError("Conexão não encontrada.")
-    return _unprotect(item["api_key"]), _unprotect(item["api_secret"])
+    passphrase = _unprotect(item["api_passphrase"]) if item.get("api_passphrase") else ""
+    return _unprotect(item["api_key"]), _unprotect(item["api_secret"]), passphrase
 
 
 def delete_connection(connection_id: str) -> bool:

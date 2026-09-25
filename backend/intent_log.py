@@ -1,16 +1,15 @@
 # -*- coding: utf-8 -*-
 """Intent Log + Reconciliacao (Fase 2 do gap analysis).
 
-Registro append-only (JSONL) de cada intencao que alteraria a conta:
+Registro append-only (JSONL) de intencoes que alterariam a conta:
   - {"event": "requested", ...}  antes do envio ao MT5
   - {"event": "result", ...}     resposta real do MT5
   - {"event": "reconciled", ...} boot encontrou a operacao na conta
-  - {"event": "unknown", ...}    boot NAO encontrou a operacao
+  - {"status": "unknown", ...}   resultado incerto; nao autoriza reenvio
 
 Nunca reescreve linhas: o status final de um intent e derivado dos eventos.
-A reconciliacao compara intents pendentes com posicoes abertas e deals do dia
-(magic 2026001), classificando como executada/desconhecida. Corrompidos sao
-ignorados linha a linha (best-effort).
+A conciliacao automatica nunca infere ausencia de execucao pela falta de
+evidencia; leitura indisponivel ou ambigua exige investigacao manual.
 
 Arquivo: %APPDATA%\\XAU_AI_PRO\\intents.jsonl (env XAU_INTENT_FILE).
 """
@@ -73,7 +72,7 @@ def _read_events() -> list[dict]:
 
 
 def pending_intents(max_age_sec: float = 0.0) -> list[dict]:
-    """Intents 'requested' sem result/reconciled/unknown correspondente.
+    """Intencoes sem resultado confirmado, inclusive as de resultado incerto.
 
     max_age_sec > 0 filtra somente intents mais novos que o limite (para
     reconciliacao considerar apenas os recentes/relevantes).
@@ -87,7 +86,7 @@ def pending_intents(max_age_sec: float = 0.0) -> list[dict]:
         status = str(event.get("status", ""))
         if status == "pending":
             requested.setdefault(intent_id, event)
-        elif status in {"sent", "failed", "reconciled", "unknown"}:
+        elif status in {"sent", "failed", "reconciled"}:
             closed.add(intent_id)
     cutoff = time_now() - max_age_sec if max_age_sec > 0 else 0.0
     return [event for intent_id, event in requested.items()
@@ -95,69 +94,31 @@ def pending_intents(max_age_sec: float = 0.0) -> list[dict]:
 
 
 def reconcile(mt5, max_age_sec: float = 86400.0) -> dict:
-    """Classifica intents pendentes comparando com a conta real do MT5.
+    """Consulta evidencias MT5 sem concluir execucao por coincidencia de magic.
 
-    Criterio: posicao aberta OU deal do dia com magic 2026001 cujo horario
-    seja >= (ts do intent - 60s) e simbolo compativel. Encontrou -> reconciled;
-    intent antigo sem rastro -> unknown; recente sem rastro segue pendente.
+    Sem um identificador exclusivo correlacionado ao servidor, simbolo/magic e
+    horario nao provam qual intencao gerou um deal. Nunca liberar reenvio.
     """
-    pend = pending_intents(max_age_sec=max_age_sec)
+    pend = pending_intents()
     if not pend:
         return {"ok": True, "checked": 0, "reconciled": 0, "unknown": 0, "still_pending": 0}
-    ref_time = datetime.now()
-    open_positions: list = []
-    day_deals: list = []
-    try:
-        open_positions = list(mt5.positions_get() or [])
-    except Exception:
-        open_positions = []
-    try:
-        day_deals = list(mt5.history_deals_get(
-            ref_time.replace(hour=0, minute=0, second=0, microsecond=0), ref_time) or [])
-    except Exception:
-        day_deals = []
-    checked = reconciled = unknown = still = 0
+    # O parametro max_age_sec permanece por compatibilidade, mas nao exclui
+    # intencoes antigas: uma tentativa antiga continua incerta apos reinicio.
+    checked = unknown = 0
     for event in pend:
         checked += 1
         data = event.get("data") or {}
-        symbol = str(data.get("symbol", "")).upper()
-        ts = float(event.get("ts", 0.0) or 0.0)
-        floor_ts = ts - 60.0
-        found = ""
-        try:
-            for pos in open_positions:
-                if int(getattr(pos, "magic", 0)) != DEMO_MAGIC:
-                    continue
-                if symbol and str(getattr(pos, "symbol", "")).upper() != symbol:
-                    continue
-                if float(getattr(pos, "time", 0.0) or 0.0) >= floor_ts:
-                    found = f"position:{int(getattr(pos, 'ticket', 0))}"
-                    break
-            if not found:
-                for deal in day_deals:
-                    if int(getattr(deal, "magic", 0)) != DEMO_MAGIC:
-                        continue
-                    if symbol and str(getattr(deal, "symbol", "")).upper() != symbol:
-                        continue
-                    if float(getattr(deal, "time", 0.0) or 0.0) >= floor_ts:
-                        found = f"deal:{int(getattr(deal, 'ticket', 0))}"
-                        break
-        except Exception:
-            found = ""
-        if found:
-            reconciled += 1
+        # Registrar a incerteza uma unica vez; nao classificar como falha nem
+        # fechar a intencao. Nao consultar MT5: leitura ambigua nao e prova.
+        intent_id = str(event.get("intent_id"))
+        if not any(row.get("intent_id") == intent_id and row.get("status") == "unknown"
+                   for row in _read_events()):
             record_intent(event.get("kind", "demo_order"), data,
-                          intent_id=str(event.get("intent_id")), status="reconciled",
-                          extra={"evidence": found})
-        elif ts < time_now() - max_age_sec or ts < time_now() - 600.0:
+                          intent_id=intent_id, status="unknown",
+                          extra={"evidence": "atribuicao nao comprovada; verificar manualmente"})
             unknown += 1
-            record_intent(event.get("kind", "demo_order"), data,
-                          intent_id=str(event.get("intent_id")), status="unknown",
-                          extra={"evidence": "sem rastro na conta"})
-        else:
-            still += 1
-    return {"ok": True, "checked": checked, "reconciled": reconciled,
-            "unknown": unknown, "still_pending": still}
+    return {"ok": True, "checked": checked, "reconciled": 0,
+            "unknown": unknown, "still_pending": checked}
 
 
 def snapshot(limit: int = 50) -> dict:

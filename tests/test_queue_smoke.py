@@ -37,7 +37,7 @@ def test_sem_runner_falha():
         return
     queue_id = q.enqueue("tipo_inexistente", {})
     report = q.process_one()
-    assert report.get("queue_id") == queue_id and report.get("ok") is False
+    assert report.get("queue_id") == queue_id and report.get("manual_review") is True
 
 
 def test_ordem_nunca_executa_sozinha():
@@ -45,10 +45,10 @@ def test_ordem_nunca_executa_sozinha():
         return
     queue_id = q.enqueue("order", {"symbol": "XAUUSD", "side": "BUY"})
     report = q.process_one()
-    assert report.get("skipped") is True and report.get("queue_id") == queue_id
+    assert report.get("manual_review") is True and report.get("queue_id") == queue_id
 
 
-def test_retry_e_sucesso():
+def test_retry_automatico_bloqueado():
     if emergencia:
         return
     tentativas = {"n": 0}
@@ -61,10 +61,10 @@ def test_retry_e_sucesso():
 
     q.register_runner("close", runner_instavel)
     queue_id = q.enqueue("close", {"ticket": 1})
-    report = q.process_one()  # 1a: retry
-    assert report.get("retry") is True and report.get("queue_id") == queue_id
-    report = q.process_one()  # 2a: sucesso
-    assert report.get("ok") is True and report.get("retcode") == 10009
+    report = q.process_one()
+    assert report.get("manual_review") is True and report.get("queue_id") == queue_id
+    assert q.process_one().get("empty") is True
+    assert tentativas["n"] == 0
 
 
 def test_fatal_nao_reenvia():
@@ -77,7 +77,7 @@ def test_fatal_nao_reenvia():
     q.register_runner("close", runner_fatal)
     queue_id = q.enqueue("close", {"ticket": 42})
     report = q.process_one()
-    assert report.get("ok") is False and "retry" not in report
+    assert report.get("manual_review") is True and "retry" not in report
 
 
 def test_status_e_fallback_offline():
@@ -86,7 +86,8 @@ def test_status_e_fallback_offline():
     resultado = q.offline_fallback_kind("close", {"ticket": 7}, LookupError("x"))
     # Com/sem pacote MT5, offline_fallback enfileira quando terminal esta offline
     if resultado is not None:
-        assert resultado.get("queued") is True and resultado.get("queue_id")
+        assert resultado.get("queued") is True and resultado.get("manual_review") is True
+        assert resultado.get("queue_id")
 
 
 def test_fallback_recusa_ordem_nova():
@@ -98,7 +99,7 @@ if __name__ == "__main__":
     test_fatal_classificacao()
     test_sem_runner_falha()
     test_ordem_nunca_executa_sozinha()
-    test_retry_e_sucesso()
+    test_retry_automatico_bloqueado()
     test_fatal_nao_reenvia()
     test_status_e_fallback_offline()
     test_fallback_recusa_ordem_nova()

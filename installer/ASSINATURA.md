@@ -1,27 +1,25 @@
 # Assinatura do Instalador (XAU_AI_PRO)
 
-## Status atual
+## Registro historico (nao comprova o build atual)
 
 | Artefato | Tamanho | Assinatura |
 |---|---|---|
-| `dist\XAU_AI_PRO.exe` | ~174 MB | ✅ Assinado (Authenticode SHA-256 + timestamp) |
-| `installer\XAU_AI_PRO_Setup.exe` | ~173 MB | ✅ Assinado (Authenticode SHA-256 + timestamp) |
+| Build anterior de `XAU_AI_PRO.exe` | ~174 MB | Assinado com certificado de desenvolvimento; nao equivale a confianca publica |
+| Build anterior de `XAU_AI_PRO_Setup.exe` | ~173 MB | Assinado com certificado de desenvolvimento; nao equivale a confianca publica |
 
 Assinatura aplicada com `signtool` (Windows SDK 10.0.26100.0 x64), certificado
 `CN=trust_1f236627-5690-4a3e-a0ac-883af776b255` (autoassinado, do store
 `CurrentUser\My`), hash SHA-256 e carimbo de tempo DigiCert (RFC3161).
 
-> ⚠️ Tamanhos atualizados em 31/08/2026 — os valores antigos (~91/92 MB) eram
-> de um build anterior menor. O EXE atual embute numpy/pandas/sklearn/scipy +
-> streamlit/altair/openai/uvicorn (necessário para o dashboard funcionar no
-> EXE) e por isso pesa ~174 MB.
+> Os tamanhos acima sao historicos (31/08/2026). O spec atual usa onedir,
+> e seus arquivos e tamanhos devem ser medidos novamente apos o build.
 
 ## Importante: limitação de confiança
 
 O certificado usado é **autoassinado (self-signed)**. Consequências:
 
-- A assinatura é criptograficamente válida e prova a integridade do arquivo
-  (o hash não é adulterável).
+- A assinatura permite verificar integridade e origem alegada quando o
+  certificado e a cadeia sao confiaveis; publique o SHA-256 separadamente.
 - Porém o Windows **não confia** na cadeia em máquinas novas: o SmartScreen /
   UAC exibirá **"Editor desconhecido"** até que a raiz seja instalada como
   confiável ou o binário seja assinado por uma CA comercial.
@@ -35,13 +33,14 @@ O certificado usado é **autoassinado (self-signed)**. Consequências:
 Adquira um certificado de **Code Signing** de uma CA comercial e assine com:
 
 ```bat
-sign.cmd "C:\certs\meu-cert.pfx" "senha"
+    sign.cmd "C:\certs\meu-cert.pfx" "senha"
 ```
 
 Opções de CA:
-- **Azure Trusted Signing** (moderno, sem hardware token, evita SmartScreen após reputação)
+- **Azure Trusted Signing** (servico de assinatura; nao dispensa reputacao nem scans)
 - **DigiCert / Sectigo / SSL.com** (tradicional, requer token USB/HSM na maioria)
-- Certificados **OV/EV** eliminam/amenizam o aviso do SmartScreen após reputação
+- Certificados **OV/EV** nao garantem ausencia de avisos do SmartScreen nem de deteccoes do Defender.
+- Verifique assinatura e hashes no artefato exato que sera distribuido.
 
 Depois de assinar com a CA, o Status (`Get-AuthenticodeSignature`) passa a ser
 `Valid` nas máquinas com a raiz da CA (pré-instalada no Windows para CAs
@@ -60,7 +59,7 @@ O script também roda a verificação (`signtool verify /pa`).
 
 ## Build completo automatizado
 
-Use `installer\build_installer.cmd` para gerar EXE + Instalador + assinatura
+Use `installer\build_installer.cmd` para gerar EXE + instalador e, opcionalmente, assinatura
 em um único passo:
 
 ```bat
@@ -72,8 +71,8 @@ installer\build_installer.cmd "C:\certs\meu-cert.pfx" "senha"
 ## Layout do instalador
 
 ```
-XAU_AI_PRO_Setup.exe
-├── XAU_AI_PRO.exe          (CLI one-file ~174 MB: numpy/pandas/sklearn/scipy/sentry/streamlit/uvicorn)
+XAU_AI_PRO_Setup_<versao>.exe
+├── XAU_AI_PRO.exe + _internal/ (bundle onedir: conferir conteudo do build)
 ├── Python\*.py             (módulos carregados do disco; SEM models/~2,3 GB e __pycache__)
 ├── MQL5\Experts|Include|Scripts  (fonte EA + integração)
 ├── EA\XAU_AI_PRO.ex5
@@ -96,6 +95,6 @@ XAU_AI_PRO_Setup.exe
    `STREAMLIT_GLOBAL_DEVELOPMENT_MODE=false` (+ port/address/headless via env).
 3. **Build do instalador ~7 h**: `Compression=lzma2/ultra64` trocada por
    `lzma2/normal` (minutos, custo mínimo de tamanho — o EXE já vem compactado
-   pelo PyInstaller/UPX).
+   pelo PyInstaller, sem UPX no spec atual).
 4. `installer.iss` ganhou metadata de versão (aba Detalhes) e limpeza de
    `__pycache__/*.pyc` em upgrades.

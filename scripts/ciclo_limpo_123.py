@@ -98,9 +98,9 @@ def etapa_frontend_gateway(py: Path) -> None:
     npm = shutil.which("npm") or r"C:\Program Files\nodejs\npm.cmd"
     run([npm, "run", "build"], cwd=ROOT / "frontend")
     log("--- [5/8] Gateway PyInstaller + bridge ---")
-    run([str(py), "-m", "PyInstaller", "--clean", "--noconfirm", "mt5-gateway.spec"])
+    run([str(py), "-m", "PyInstaller", "--noconfirm", "mt5-gateway.spec"])
     # Launcher GUI (XAU_AI_PRO.exe em dist/) exigido pelo installer.iss na etapa 8.
-    run([str(py), "-m", "PyInstaller", "--clean", "--noconfirm", "launcher.spec"])
+    run([str(py), "-m", "PyInstaller", "--noconfirm", "launcher.spec"])
     dist_exe = ROOT / "dist" / "mt5-gateway" / "mt5-gateway.exe"
     bridge = ROOT / "frontend" / "src-tauri" / "bridge"
     if bridge.exists():

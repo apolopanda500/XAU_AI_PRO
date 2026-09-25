@@ -17,7 +17,7 @@ function stored(key: string): string {
 }
 
 // Detecta plataforma mobile (Tauri injeta o user-agent do Android/iOS).
-function isMobile(): boolean {
+export function isMobileRuntime(): boolean {
   if (typeof navigator === 'undefined') return false;
   return /android|iphone|ipad|ipod/i.test(navigator.userAgent);
 }
@@ -29,7 +29,7 @@ export function apiBase(): string {
   const explicit = stored('xau-api-base') || viteEnv.env?.VITE_API_BASE;
   if (explicit) return explicit;
   // Sem configuração explícita: no desktop o gateway local é o default.
-  if (isMobile()) {
+  if (isMobileRuntime()) {
     // Evita apontar para loopback no celular (o gateway não roda no dispositivo).
     console.warn('[api] Android sem VITE_API_BASE/xau-api-base: configure o gateway remoto.');
   }

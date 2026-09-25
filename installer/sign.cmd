@@ -26,18 +26,25 @@ set "CERT="
 set "PASS="
 if not "%~1"=="" set "CERT=%~1"
 if not "%~2"=="" set "PASS=%~2"
+set "VERSION="
+set /p VERSION=<"%ROOT%\VERSION"
+set "SETUP=%ROOT%\dist\XAU_AI_PRO_Setup_%VERSION%.exe"
+if not exist "%ROOT%\dist\XAU_AI_PRO\XAU_AI_PRO.exe" goto :missing
+if not exist "%SETUP%" goto :missing
 
 echo == Assinando EXE ==
-call :sign "%ROOT%\dist\XAU_AI_PRO.exe"
+call :sign "%ROOT%\dist\XAU_AI_PRO\XAU_AI_PRO.exe"
 if errorlevel 1 goto :fail
 
 echo == Assinando Instalador ==
-call :sign "%ROOT%\installer\XAU_AI_PRO_Setup.exe"
+call :sign "%SETUP%"
 if errorlevel 1 goto :fail
 
 echo == Verificacao ==
-"%SIGNTOOL%" verify /pa /v "%ROOT%\dist\XAU_AI_PRO.exe"
-"%SIGNTOOL%" verify /pa /v "%ROOT%\installer\XAU_AI_PRO_Setup.exe"
+"%SIGNTOOL%" verify /pa /v "%ROOT%\dist\XAU_AI_PRO\XAU_AI_PRO.exe"
+if errorlevel 1 goto :fail
+"%SIGNTOOL%" verify /pa /v "%SETUP%"
+if errorlevel 1 goto :fail
 
 echo.
 echo Concluido. Use um certificado de CA comercial para confianca publica.
@@ -51,6 +58,10 @@ exit /b 2
 
 :fail
 echo [ERRO] falha na assinatura
+exit /b 1
+
+:missing
+echo [ERRO] artefato de assinatura ausente
 exit /b 1
 
 :sign

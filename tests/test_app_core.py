@@ -95,8 +95,10 @@ def test_launcher_spec_compiles() -> None:
     spec_path = ROOT / "launcher.spec"
     assert spec_path.exists()
     text = spec_path.read_text()
-    assert "Tree as _Tree" in text
-    assert "from PyInstaller.building.datastruct" in text
+    assert "_source_datas" in text
+    assert "'node_modules'" in text
+    assert "'__pycache__'" in text
+    assert "_BACKEND_DATAS = _source_datas" in text
 
 
 # ---------------------------------------------------------------------------
