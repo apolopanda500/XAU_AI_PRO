@@ -3,8 +3,8 @@ import ReactDOM from 'react-dom/client';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { invoke } from '@tauri-apps/api/core';
 import { queryClient } from './hooks/queries';
-import { isMobileRuntime } from './lib/api';
-import { installGatewayAuth, isTauri } from './lib/tauri';
+import { isMobileRuntime, sessionToken } from './lib/api';
+import { installGatewayAuth, installRemoteGatewayAuth, isTauri } from './lib/tauri';
 import App from './App';
 import './theme/global.css';
 import './theme/market.css';
@@ -65,11 +65,20 @@ async function waitForGateway() {
 }
 
 async function bootstrap() {
-  if (isTauri() && !isMobileRuntime()) {
+  const mobile = isMobileRuntime();
+  if (isTauri() && !mobile) {
     const token = await invoke<string>('gateway_token_command');
     if (!/^[a-f0-9]{64}$/.test(token)) throw new Error('token de sessao invalido');
     installGatewayAuth(token);
     await waitForGateway();
+  }
+  if (mobile) {
+    // No celular o Tauri desktop nao existe, entao nao ha gateway_token_command
+    // nem espera por 127.0.0.1:9001. O token vem de /api/auth/login, guardado
+    // por LoginGate. O interceptor e instalado sempre, mesmo sem sessao: a
+    // funcao de token e consultada a cada requisicao, entao o header passa a
+    // existir no instante em que o login acontece.
+    installRemoteGatewayAuth(sessionToken);
   }
   if (!root) throw new Error('elemento raiz indisponivel');
   ReactDOM.createRoot(root).render(

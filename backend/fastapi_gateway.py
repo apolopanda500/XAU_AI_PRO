@@ -15,9 +15,10 @@ from typing import Any
 import asyncio
 from urllib.parse import unquote
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import backend.mt5_gateway as gw
@@ -29,12 +30,46 @@ from backend.third_party_ea import evaluate_all as evaluate_third_party_ea
 from Python.model_registry import model_catalog
 from app.social_paper import follow_strategy, following_strategies, list_strategies, unfollow_strategy
 from app.subscriptions import activate_local_plan, get_subscription, list_plans
+from backend import remote_auth
 
 API_TOKEN = gw.API_TOKEN
 RATE_LIMIT_MAX = gw.RATE_LIMIT_MAX
 RATE_LIMIT_CMD_MAX = gw.RATE_LIMIT_CMD_MAX
 _RATE_STATE = {"count": 0, "window": 0.0}
 _RATE_STATE_CMD = {"count": 0, "window": 0.0}
+
+# Cadastro de usuario e liberado por padrao? NAO. Sem isso qualquer pessoa que
+# alcance o gateway cria conta e obtem token. Habilite com
+# XAU_ALLOW_SELF_REGISTER=1 so em ambiente de teste.
+ALLOW_SELF_REGISTER = os.environ.get("XAU_ALLOW_SELF_REGISTER", "0") == "1"
+
+# Rotas que NAO exigem token: quem nao tem token ainda precisa delas para
+# conseguir um. Todo o resto continua protegido.
+PUBLIC_AUTH_PATHS = {"/api/auth/login", "/api/auth/register", "/api/auth/ping"}
+
+# Cache curto dos tokens de sessao, para nao abrir o sqlite a cada requisicao.
+_SESSION_CACHE: dict[str, float] = {}
+_SESSION_CACHE_TTL = 30.0
+
+
+def _session_user_id(token: str) -> int:
+    """Resolve o usuario de um token de sessao, com cache de 30s.
+
+    Cache curto de proposito: logout e expiracao precisam valer em segundos,
+    nao em horas. O risco aceito e a janela de 30s apos um logout.
+    """
+    agora = time.time()
+    expira = _SESSION_CACHE.get(token)
+    if expira is not None and expira > agora:
+        return remote_auth.authenticate(token)
+    try:
+        user_id = remote_auth.authenticate(token)
+    except PermissionError:
+        _SESSION_CACHE.pop(token, None)
+        return 0
+    _SESSION_CACHE[token] = agora + _SESSION_CACHE_TTL
+    return user_id
+
 
 app = FastAPI(
     title="XAU AI PRO Trading Gateway",
@@ -57,10 +92,17 @@ async def _auth_rate_limit(request, call_next):  # type: ignore[no-untyped-def]
     if path in {"/api/docs", "/api/redoc", "/api/openapi.json"} \
             or path.startswith(("/docs", "/redoc", "/openapi.json")):
         return await call_next(request)
+    if path in PUBLIC_AUTH_PATHS:
+        return await call_next(request)
     if API_TOKEN:
         auth = request.headers.get("authorization", "")
         if auth != f"Bearer {API_TOKEN}":
-            return _send({"ok": False, "error": "token invalido"}, 401)
+            # Token de sessao emitido por /api/auth/login (usado pelo app
+            # Android, que nao tem o Tauri desktop para injetar API_TOKEN).
+            token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+            if not token or not _session_user_id(token):
+                _SESSION_CACHE.clear()
+                return _send({"ok": False, "error": "token invalido"}, 401)
     if gw.THIRD_PARTY_READ_ONLY and request.method.upper() not in {"GET", "HEAD", "OPTIONS"} and path != "/api/universal/emergency-stop":
         return _send({"ok": False, "status": "blocked", "error": "perfil de compatibilidade somente leitura", "commands_enabled": False, "execution_enabled": False, "withdrawals_enabled": False}, 403)
     if gw.RATE_LIMIT_MAX <= 0 and gw.RATE_LIMIT_CMD_MAX <= 0:
@@ -103,6 +145,84 @@ def _read_error_status(exc: Exception) -> int:
 async def health() -> dict:
     return {"ok": True, "uptime_sec": int(time.time() - gw._T0),
             "source": "mt5_gateway", "gateway_build": gw.GATEWAY_BUILD}
+
+
+# --------------------------------------------------------------------------
+# Autenticacao por usuario (fluxo do app Android)
+#
+# O desktop injeta XAU_GATEWAY_TOKEN pelo proprio Tauri. O Android nao tem
+# esse canal, entao o usuario faz login e recebe um token de sessao com TTL.
+# O middleware acima aceita os dois.
+# --------------------------------------------------------------------------
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class RegisterRequest(BaseModel):
+    email: str
+    password: str
+
+
+@app.get("/api/auth/ping")
+async def auth_ping() -> dict:
+    """Sonda de disponibilidade do servico de auth, sem exigir credencial."""
+    return {"ok": True, "service": "auth",
+            "self_register": ALLOW_SELF_REGISTER,
+            "session_ttl_sec": remote_auth.SESSION_TTL}
+
+
+@app.post("/api/auth/register")
+async def auth_register(body: RegisterRequest) -> JSONResponse:
+    """Cria usuario. Desligado por padrao de proposito."""
+    if not ALLOW_SELF_REGISTER:
+        return _send({"ok": False,
+                      "error": "cadastro automatico desativado; use um usuario criado pelo operador"}, 403)
+    try:
+        user_id = remote_auth.register(body.email, body.password)
+    except ValueError as exc:
+        return _send({"ok": False, "error": str(exc)}, 422)
+    return _send({"ok": True, "user_id": user_id})
+
+
+@app.post("/api/auth/login")
+async def auth_login(body: LoginRequest) -> JSONResponse:
+    """Troca email+senha por um token de sessao com TTL.
+
+    Mensagem de erro identica para usuario inexistente e senha errada, para
+    nao revelar quais emails estao cadastrados.
+    """
+    try:
+        token, user_id = remote_auth.login(body.email, body.password)
+    except PermissionError as exc:
+        return _send({"ok": False, "error": str(exc)}, 401)
+    except ValueError as exc:
+        return _send({"ok": False, "error": str(exc)}, 422)
+    return _send({"ok": True, "token": token, "user_id": user_id,
+                  "expires_in": remote_auth.SESSION_TTL})
+
+
+@app.get("/api/auth/me")
+async def auth_me(request: Request) -> JSONResponse:  # type: ignore[no-untyped-def]
+    """Confere o token informado e devolve o usuario."""
+    auth = request.headers.get("authorization", "")
+    token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+    user_id = _session_user_id(token) if token else 0
+    if not user_id:
+        return _send({"ok": False, "error": "token invalido ou expirado"}, 401)
+    return _send({"ok": True, "user_id": user_id})
+
+
+@app.post("/api/auth/logout")
+async def auth_logout(request: Request) -> JSONResponse:  # type: ignore[no-untyped-def]
+    auth = request.headers.get("authorization", "")
+    token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+    if not token:
+        return _send({"ok": False, "error": "token ausente"}, 401)
+    remote_auth.logout(token)
+    _SESSION_CACHE.pop(token, None)
+    return _send({"ok": True})
 
 
 @app.get("/api/ai/models")

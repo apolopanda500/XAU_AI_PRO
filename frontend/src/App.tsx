@@ -4,6 +4,7 @@ import { useTheme } from './hooks/useTheme';
 import { useCoreBootstrap } from './hooks/useCoreBootstrap';
 import { useMarketWebSocket } from './hooks/useMarketWebSocket';
 import AuthGate from './components/AuthGate';
+import UserSessionGate from './components/auth/UserSessionGate';
 import QuantumBackground from './components/QuantumBackground';
 import Sidebar from './components/Sidebar';
 import TopNav from './components/TopNav';
@@ -72,16 +73,18 @@ export default function App() {
   return <>
     <QuantumBackground density={60} speed={1} />
     <SystemStartupSync />
-    <AuthGate>
-      <div className="app-shell">
-        <Sidebar />
-        <main className="main">
-          <TopNav />
-          <section ref={contentRef} className="content">
-            {renderActiveTab(activeTab)}
-          </section>
-        </main>
-      </div>
-    </AuthGate>
+    <UserSessionGate>
+      <AuthGate>
+        <div className="app-shell">
+          <Sidebar />
+          <main className="main">
+            <TopNav />
+            <section ref={contentRef} className="content">
+              {renderActiveTab(activeTab)}
+            </section>
+          </main>
+        </div>
+      </AuthGate>
+    </UserSessionGate>
   </>;
 }
