@@ -66,12 +66,17 @@
 [✓] MQL5/Experts intacto em todas as etapas
 
 ## Pendencias que permanecem (exigem decisao ou recurso externo)
-[•] GitHub reportou 1 vulnerabilidade moderada no branch default (Dependabot #74) - nao investigada
-[•] Token Android: como o app obtem XAU_GATEWAY_TOKEN sem o Tauri desktop? Bloqueador do Android
-[•] Assinatura publica/free para Google Play ainda nao obtida
+[•] GitHub reporta 1 vulnerabilidade moderada no branch DEFAULT (main, 70 commits atras de develop)
+    -> npm audit esta em 0 no develop; o alerta pode estar em pip/cargo/github-actions
+    -> exige gh auth login: o token do gh esta invalido e a URL do alerta retorna 404
+[•] Token Android: backend/remote_auth.py pronto e com 18 testes; falta expor rotas HTTP e a tela de login
+[•] Conflito A1 (assinatura proprietaria) vs B3 (assinatura Windows gratis): SignPath so atende OSS
+[•] Assinatura Android: keystore de teste pronto; Google Play exige conta (US$ 25) e assinatura de release
 [•] APK nao testado em dispositivo fisico nem emulador
-[•] 6,04 GB de snapshots de checkpoint do Cline em C:\Users\Micro\.git (alcancados, nao removidos)
-[•] 28 componentes .tsx orfaos: exclusao exige confirmacao de import dinamico
-[•] Preco/open source nao definidos, apesar de SubscriptionPanel.tsx existir
-[•] Testes vazam 4 processos mt5_gateway.py que seguram a porta 9001 apos o pytest
+[•] 28 componentes .tsx orfaos: REMOVIDOS em 2026-09-25 (verificado, hash do bundle inalterado)
+[•] CSS: 5 folhas de override CONSOLIDADAS em robot-terminal.css (verificado, CSS 109,4 -> 109,1 KB)
 [•] Tauri sem testes unitarios (cargo test roda 0 casos); UI sem cobertura de renderizacao
+[•] Preco/open source: assinatura decidida, mas nenhuma assinatura de preco definida
+[•] Matriz de capabilities por corretora/ativo (exigida por A3) ainda nao publicada
+[•] Lacuna C1: market_ticks sem coluna de procedencia; fallback do grafico nao rotula a origem
+[•] main 70 commits atras de develop; GitLab aceitando push direto em develop sem MR

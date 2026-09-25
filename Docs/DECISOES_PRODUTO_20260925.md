@@ -65,7 +65,7 @@ O que falta não é adapter novo, é a **matriz de capabilities por corretora e 
 | C3 | **Concluído** | 6,04 GB liberados; `C:\Users\Micro\.git` removido. Sem remote, sem worktree, árvore HEAD vazia. Disco foi de 0,75 GB para 8,97 GB. |
 | D1 | **Concluído** | 3 submódulos removidos de `experiments/isolated` (mcp-servers, opentelemetry-js, tanstack-query). Eram gitlinks sem `.gitmodules`, impossíveis de inicializar. Diretórios preservados em disco e blindados no `.gitignore`. |
 | C4 | **Concluído** | Vazamento reproduzido (4 processos, porta 9001 travada) e corrigido em três pontos: teardown do fixture `app`, handle do `Popen` em `app/mt5_gateway.py`, e fixture `autouse` de sessão em `tests/conftest.py`. Verificado: 267 passed, 0 órfãos, porta livre. |
-| C2 | **Concluído** | `npm audit` de 6 (1 alta + 5 moderadas) para **0**. Removido `react-router-dom` (dependência de produção sem nenhum import). Upgrade de vite 5→8, vitest 3→5, plugin-react 4→6. `manualChunks` migrado para a forma de função (Rolldown rejeita a forma de objeto). tsc limpo, 35 testes, build OK. |
+| C2 | **Parcial** | `npm audit` de 6 (1 alta + 5 moderadas) para **0** no `develop`. Removido `react-router-dom` (dependência de produção sem nenhum import). Upgrade de vite 5→8, vitest 3→5, plugin-react 4→6. `manualChunks` migrado para a forma de função (Rolldown rejeita a forma de objeto). tsc limpo, 35 testes, build OK. **O alerta do Dependabot NÃO foi encerrado** — ver seção "Por que o alerta do Dependabot continua aberto". |
 | C1 | **Parcial** | Procedência registrada como dado de teste no docstring de `app/market_store.py` e no handoff. **Lacuna aberta:** `market_ticks` não tem coluna de procedência e o fallback do gráfico não rotula a origem. |
 | C5 | **Concluído** | `scripts/segredos_windows.ps1` criado. Senhas cifradas com DPAPI, ACL restrita a usuário/SYSTEM/Administradores, nada mais em `Temp`. Round-trip verificado: a senha recuperada reassinou o APK com digest de certificado idêntico. |
 
@@ -83,11 +83,30 @@ Trabalho que A2/A3 exigem, ainda não feito:
 2. Garantir que cada ativo do catálogo tem depth, candles e trades reais, ou declara `unavailable` honestamente.
 3. Decidir o que fazer com símbolos que a corretora não expõe — falhar explícito, nunca fallback silencioso.
 
+## Por que o alerta do Dependabot continua aberto
+
+O push para o GitHub continua respondendo "1 vulnerability on the default branch (1 moderate)", mesmo com `npm audit` em zero no `develop`.
+
+Diagnóstico:
+
+1. **O branch default do repositório é `main`, não `develop`.** Confirmado com `git remote show origin` → `HEAD branch: main`. Todos os commits desta sessão foram para `develop`.
+2. `main` está **70 commits atrás** de `develop` e não tem nenhum commit exclusivo (`git rev-list --left-right --count main...develop` → `0 70`).
+3. O `.github/dependabot.yml` monitora **seis ecossistemas**: `pip` (raiz), `npm` (`/backend`), `npm` (`/frontend`), `cargo` (`/core`), `cargo` (`/frontend/src-tauri`) e `github-actions`. O alerta pode estar em qualquer um deles, não necessariamente em npm.
+
+O que **não** consegui verificar:
+
+- O conteúdo do alerta #74. A URL retorna **404** sem autenticação e o token do `gh` CLI está inválido (`The token in default is invalid`). Precisa de `gh auth login -h github.com`.
+- Os ecossistemas `pip`, `cargo` e `github-actions` não foram auditados. `cargo-audit` não está instalado e `pip list --outdated` não retornou dados confiáveis nesta sessão.
+
+O que **foi** verificado: `npm audit` no `frontend` e no `backend`, ambos contra o advisory DB do GitHub. `backend` já estava em 0. `frontend` foi de 6 para 0, com typecheck, os 35 testes e o build verificados.
+
+Encerrar o alerta exige saber qual ecossistema é. Sem `gh auth login` não dá para distinguir.
+
 ## Ordem sugerida
 
-1. **B1 — login por usuários** no Android. Sem isso o APK não é produto. É o bloqueador número um.
+1. **B1 — login por usuários** no Android. Sem isso o APK não é produto. É o bloqueador número um. O backend (`backend/remote_auth.py`) já está pronto e agora tem 18 testes; falta expor as rotas e a tela de login.
 2. Resolver o conflito A1/B3, porque a resposta muda a estratégia de distribuição no Windows.
-3. **B4/B5** — limpeza de código morto e de CSS. Reduz custo de mudança e superfície de risco.
+3. Fazer `gh auth login` e auditar `pip`, `cargo` e `github-actions`, para fechar o alerta do Dependabot.
 4. Publicar a matriz de capabilities (A3).
 5. Corrigir a lacuna de procedência do gráfico (C1).
-6. D2 — definir o papel do GitLab.
+6. Decidir o papel de `main` e do GitLab (D2).
