@@ -800,7 +800,15 @@ Consequência: em qualquer máquina de desenvolvimento, rodar os testes deixa o 
 
 ### Banco de dados desrastreado
 
-`git rm --cached app/data/marketdata.db` (2,9 MB). O arquivo permanece em disco e agora é coberto por `.gitignore:122:*.db`. Conteúdo auditado: tabela única `market_ticks`, colunas `ts_ms, symbol, source, price, bid, ask, change_value, change_pct, spread`; 23.820 linhas; fontes `MT5` 15.572, `HTTP` 8.206, `Binance` 34, `Yahoo` 8. **Nenhuma credencial, conta ou PII.** A procedência dos dados continua sem confirmação de data de origem.
+`git rm --cached app/data/marketdata.db` (2,9 MB). O arquivo permanece em disco e agora é coberto por `.gitignore:122:*.db`. Conteúdo auditado: tabela única `market_ticks`, colunas `ts_ms, symbol, source, price, bid, ask, change_value, change_pct, spread`; 23.820 linhas; fontes `MT5` 15.572, `HTTP` 8.206, `Binance` 34, `Yahoo` 8. **Nenhuma credencial, conta ou PII.**
+
+**Procedência confirmada pelo usuário em 2026-09-25: são DADOS DE TESTE.**
+
+Isso tem consequência prática, não apenas documental. `app/market_store.py:last_ticks()` lê essa tabela e é usada como **fallback do gráfico quando o MT5 não fornece candles**. Portanto ticks de teste podem ser desenhados como se fossem preço de mercado, o que contraria a regra do `AGENTS.md` sobre não apresentar dado simulado como dado real.
+
+Mitigação aplicada agora: aviso de procedência no docstring de `app/market_store.py`.
+
+**Lacuna que permanece:** a tabela `market_ticks` não tem coluna de procedência, e o fallback do gráfico não rotula a origem. Qualquer tela que mostre esse fallback precisa distinguir "ao vivo" de "armazenado/teste". Corrigir isso é decisão de produto e não foi implementado.
 
 ### Git
 

@@ -1,5 +1,22 @@
 # -*- coding: utf-8 -*-
-"""Persistencia local e leve de cotações recebidas pelo desk."""
+"""Persistencia local e leve de cotações recebidas pelo desk.
+
+AVISO DE PROCEDENCIA (2026-09-25)
+---------------------------------
+O conteudo atual de ``app/data/marketdata.db`` sao **DADOS DE TESTE**
+(23.820 ticks; fontes MT5/HTTP/Binance/Yahoo; confirmado pelo usuario em
+2026-09-25). O arquivo esta correto em disco, mas foi desrastreado do Git e
+passa a ser coberto por ``.gitignore`` (``*.db``).
+
+`last_ticks` e usado como fallback do grafico quando o MT5 nao fornece
+candles. Isso significa que ticks antigos ou de teste podem ser desenhados como
+se fossem preco de mercado. Pela regra do `AGENTS.md`, dado de teste **nao**
+pode ser apresentado como dado real.
+
+Antes de exibir o fallback em uma tela que o usuario possa confundir com
+mercado ao vivo, a origem precisa estar rotulada. Hoje nao existe coluna de
+procedencia nesta tabela — ver pendencia C1 em `CONVERSAHOJE.txt`.
+"""
 from __future__ import annotations
 
 import sqlite3

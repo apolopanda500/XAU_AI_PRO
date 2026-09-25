@@ -1,0 +1,87 @@
+/* Terminal do Robô — folha consolidada.
+ *
+ * Substitui cinco folhas que se sobrescreviam em camadas sobre o MESMO
+ * seletor (.robot-command-actions + .card):
+ *
+ *   robot-terminal-compact.css    base (padding 7px 10px, max-height 170px)
+ *   robot-terminal-clean.css      sobrescreve (padding 5px 8px, max-height 125px)
+ *   robot-terminal-dedup.css      esconder linhas 13+ e destacar as 4 primeiras
+ *   robot-no-warnings.css         esconde .hint com !important
+ *   robot-clean-messages.css      redundante: .robot-operations .hint com
+ *                                 !important ja cobre .card:last-child .hint
+ *
+ * Os valores abaixo sao o resultado EFETIVO da cascata anterior, nao os
+ * valores declarados em cada arquivo. A ordem de import em main.tsx nao
+ * muda: esta folha ocupa a posicao do primeiro robot-terminal-*.css.
+ *
+ * Os !important foram mantidos porque as regras base do global.css ainda
+ * conflitam com estes seletores. Remove-los exige mexer no global.css
+ * (70 KB) em uma etapa separada.
+ */
+
+/* ---- cartão de ações do robô ---- */
+.robot-command-actions + .card {
+  margin-top: 8px !important;
+  padding: 5px 8px !important;
+}
+.robot-command-actions + .card .section-head {
+  margin-bottom: 2px !important;
+}
+.robot-command-actions + .card h2 {
+  font-size: 13px !important;
+}
+.robot-command-actions + .card .muted {
+  font-size: 10px;
+}
+.robot-command-actions + .card .btn {
+  min-height: 27px;
+  padding: 4px 8px;
+  font-size: 10px;
+}
+.robot-command-actions + .card .table-scroll {
+  max-height: 125px;
+  overflow: auto;
+}
+.robot-command-actions + .card .compact-table {
+  font-size: 10px;
+}
+.robot-command-actions + .card .compact-table th,
+.robot-command-actions + .card .compact-table td {
+  white-space: nowrap;
+  padding: 4px 6px;
+  line-height: 1.1;
+}
+/* esconde as dicas; margin-top/font-size anteriores ficaram sem efeito */
+.robot-command-actions + .card .hint {
+  display: none;
+}
+
+/* ---- legibilidade da tabela ---- */
+.robot-command-actions + .card tbody tr:nth-child(n + 13) {
+  display: none;
+}
+.robot-command-actions + .card tbody tr:nth-child(-n + 4) {
+  background: #22d3ee0f;
+}
+
+/* ---- terminal ao vivo ---- */
+.robot-live-latest .table-scroll {
+  max-height: 300px;
+  overflow: auto;
+}
+.robot-live-latest .compact-table {
+  min-width: 760px;
+}
+.robot-live-latest .compact-table td,
+.robot-live-latest .compact-table th {
+  padding: 5px 8px;
+  line-height: 1.2;
+}
+.robot-live-latest .hint {
+  display: none !important;
+}
+
+/* ---- operações: esconder avisos redundantes ---- */
+.robot-operations .hint {
+  display: none !important;
+}
