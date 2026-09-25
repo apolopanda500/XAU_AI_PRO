@@ -46,3 +46,32 @@
 [•] Achado: app/data/marketdata.db (2,9 MB) segue RASTREADO apesar de .gitignore ter *.db
 [•] Achado: 23.820 ticks no DB com fontes MT5/HTTP/Binance/Yahoo - confirmar data de origem
 [•] Artefatos Windows (gateway, launcher, MSI, NSIS) ainda nao reconstruidos
+
+## Registro 2026-09-25 19:00 - Todas as pendencias executadas
+[✓] Desrastreado app/data/marketdata.db (git rm --cached); arquivo preservado em disco
+[✓] Build completo: core Rust, gateway PyInstaller, launcher PyInstaller, Inno, Tauri MSI e NSIS
+[✓] 7 artefatos assinados com Authenticode SHA256 + timestamp DigiCert RFC3161
+[✓] release/1.2.3/release-manifest.json gerado com hashes de todos os artefatos
+[✓] Defender: "found no threats", exit 0, nos 7 artefatos
+[✓] Smoke test: NSIS instalado em diretorio isolado, executado pelo atalho do Desktop
+[✓] Portas 9001 (bridge) e 9002/9003 (core) assumidas pelos FILHOS do app; arvore pai/filho correta
+[✓] Auth exigida: /health, /api/boot e core retornaram 401 sem token
+[✓] Encerramento gracioso: "processos filhos encerrados com a UI", 0 processo orfao, portas livres
+[✓] Desinstalador testado: 0 arquivos remanescentes, atalhos removidos, instalacoes antigas preservadas
+[✓] Bug corrigido: validate_release.ps1 falhava por $LASTEXITCODE nulo; agora "Validação de release aprovada"
+[✓] Doc de deploy do gateway remoto para Android
+[✓] Benchmark 2026 com 11 fontes datadas; matriz de features com evidencia
+[✓] Relatorio UI/UX: 28 componentes orfaos confirmados, 25 folhas CSS, 22 carregadas
+[✓] Commit 51f53d5 (111 arquivos, +10191/-1404) e push para GitHub e GitLab
+[✓] MQL5/Experts intacto em todas as etapas
+
+## Pendencias que permanecem (exigem decisao ou recurso externo)
+[•] GitHub reportou 1 vulnerabilidade moderada no branch default (Dependabot #74) - nao investigada
+[•] Token Android: como o app obtem XAU_GATEWAY_TOKEN sem o Tauri desktop? Bloqueador do Android
+[•] Assinatura publica/free para Google Play ainda nao obtida
+[•] APK nao testado em dispositivo fisico nem emulador
+[•] 6,04 GB de snapshots de checkpoint do Cline em C:\Users\Micro\.git (alcancados, nao removidos)
+[•] 28 componentes .tsx orfaos: exclusao exige confirmacao de import dinamico
+[•] Preco/open source nao definidos, apesar de SubscriptionPanel.tsx existir
+[•] Testes vazam 4 processos mt5_gateway.py que seguram a porta 9001 apos o pytest
+[•] Tauri sem testes unitarios (cargo test roda 0 casos); UI sem cobertura de renderizacao

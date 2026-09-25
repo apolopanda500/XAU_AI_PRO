@@ -734,6 +734,89 @@ Ambiente usado: Python 3.11.15, pytest 8.4.2, Node 26.3.0, npm 11.16.0, cargo 1.
 3. Artefatos Windows (gateway, launcher, MSI, NSIS) seguem **não reconstruídos** após as mudanças mobile.
 4. O `Tauri` não tem testes unitários; `cargo test` passa com 0 casos. A cobertura do runtime do launcher continua dependente dos testes Python e do smoke test manual.
 
+## Execução completa das pendências — 2026-09-25 19:00
+
+### Correção de bug no projeto
+
+`scripts/validate_release.ps1:22` falhava de forma espúria. O bloco de pré-requisitos só executa cmdlets do PowerShell (`Test-Path`), nenhum processo nativo; nesse caso `$LASTEXITCODE` é `$null` e a comparação `$null -ne 0` retorna `$true`, jogando um erro de "Comando finalizou com código ." e travando a validação. Corrigido para `if ($null -ne $LASTEXITCODE -and $LASTEXITCODE -ne 0)`. Depois da correção a validação retorna **"Validação de release aprovada"**, exit 0.
+
+### Artefatos Windows reconstruídos
+
+| Artefato | Tamanho | SHA-256 |
+| --- | --- | --- |
+| `XAU_AI_PRO.exe` (PyInstaller launcher) | 29,3 MB | `A8A030BE73346F7C11732D916E0599A9D2E6947D35FF1F16C3806CE556F3899B` |
+| `mt5-gateway.exe` (PyInstaller) | 13,0 MB | `CECC4813C784DB6A23E5091B0673A3BB7F1EDDBBDE41599D6E923CDED01E67B9` |
+| `xau-ai-pro-core.exe` (Rust) | 8,7 MB | `B59D4C08A761F72DFF654847AA32BEEFC2DA7374316ED360DB489849DE15A67E` |
+| `XAU AI PRO.exe` (Tauri app) | 13,1 MB | `768AF76C8C280475DE163ECA55A11629D036A5FBFC0F618C75D3957553CCE87D` |
+| `XAU AI PRO_1.2.3_x64_en-US.msi` | 48,9 MB | `2CC31768FB45F44C45F656E588A0005BA20866785A717D1C9B46B15D2D1EC1E4` |
+| `XAU AI PRO_1.2.3_x64-setup.exe` (NSIS) | 37,7 MB | `B81DE87BE719A7489CFE7A6668E051FA25040999BFEE42D302E6E69A064D2526` |
+| `XAU_AI_PRO_Setup_1.2.3.exe` (Inno) | 76,3 MB | `C52934E8A1F4D0881F9C52267FEE4115DAAE4229BD3D51BC3315090CCD4813F6` |
+
+Observação: o **MSI foi gerado sem WiX instalado** — o Tauri v2 embarca o próprio WiX. A preocupação registrada anteriormente com o WiX Toolset ausente era infundada.
+
+O instalador Inno **lê** arquivos `.set` de `MQL5/Experts/.../Config/` para empacotar. Leitura autorizada; nenhum arquivo MQL5 foi escrito.
+
+Integridade da árvore fonte verificada em volta do build: `app\*.py` = 54 antes e depois, `Python\*.py` = 46 antes e depois.
+
+### Assinatura
+
+Os 7 artefatos foram assinados com Authenticode SHA256 e **timestamp RFC3161 da DigiCert**, usando certificado self-signed criado apenas em `CurrentUser\My`.
+
+- Subject: `CN=XAU AI PRO Local Test Signing, OU=Development, O=XAU AI PRO, L=Sao Paulo, S=SP, C=BR`
+- Thumbprint: `C10CA55F533E33F54252A2D3423A6FFE837951E9`
+- Validade: 25/09/2026 a 25/09/2036
+- **Confirmado ausente de `CurrentUser\Root` e `LocalMachine\Root`** — nenhuma CA pessoal instalada no trust store.
+
+`Get-AuthenticodeSignature` retorna `Status = UnknownError` em todos os 7, com `StatusMessage` "Uma cadeia de certificação foi processada, mas terminou em um certificado raiz que não é confiável para o provedor de confiabilidade", e `Issuer == Subject`. Isso é o resultado **esperado** para certificado self-signed, e não indica corrupção: o status não é `HashMismatch` nem `Corrupt`, e `SignerCertificate` e `TimeStamperCertificate` estão presentes.
+
+O script `scripts/assinar_release.ps1` faz `throw` quando `signtool verify /pa` falha, o que ocorre inevitavelmente com certificado de teste. **Não foi alterado** — afrouxar essa verificação seria pior do que o inconvenient.
+
+### Defender
+
+`MpCmdRun -Scan -ScanType 3 -File release\1.2.3 -DisableRemediation` → `found no threats`, exit 0. O `-DisableRemediation` evita quarentena dos artefatos durante o teste.
+
+### Smoke test em instalação isolada
+
+Por existirem duas instalações antigas (`AppData\Local\XAU_AI_PRO`, que tem histórico de detecção, e `Program Files\XAU AI PRO`), o NSIS foi instalado em `%LOCALAPPDATA%\XAU_AI_PRO_TAURI_TEST` para não interferir.
+
+- Instalação: exit 0, 783 arquivos, 102,0 MB, com `bridge`, `core`, `uninstall.exe`.
+- Execução pelo **atalho do Desktop**: `XAU AI PRO.exe` (pid 3392) → `mt5-gateway.exe` (pid 10340) em `127.0.0.1:9001` → `xau-ai-pro-core.exe` (pid 4268) em `9002` e `9003`. Árvore pai/filho correta.
+- Log `core_bootstrap.log`: `bridge MT5 spawnado com sucesso` → `bridge MT5 autenticado e pronto antes do Core` → `core spawnado com sucesso`.
+- **Auth verificada**: `/health`, `/api/boot` e o Core em `9003` retornaram **401** sem token.
+- Encerramento gracioso: `processos filhos encerrados com a UI`, 0 processos residuais, **9001/9002/9003 livres**.
+- Desinstalação: exit 0, 0 arquivos remanescentes, atalhos removidos, **as duas instalações antigas foram preservadas**.
+
+### Bug encontrado: a suíte Python vaza processos
+
+Na primeira tentativa de smoke test, a porta 9001 já estava ocupada por um `python.exe` de `backend/mt5_gateway.py` iniciado em 17:54:27 — exatamente o horário do `pytest -q tests`. A enumeração via `Win32_Process` mostrou **4 processos órfãos** (pids 8648, 12540, 9044, 1060) deixados pelo pytest, segurando a 9001.
+
+Consequência: em qualquer máquina de desenvolvimento, rodar os testes deixa o gateway órfão, e o app instalado depois falha ao fazer bind da 9001. **Não foi corrigido** — exige localizar o teste que não faz cleanup dos subprocessos.
+
+### Documentação criada
+
+- `Docs/DEPLOY_GATEWAY_REMOTO_ANDROID.md` — por que o APK não funciona ainda, contrato do gateway, Travas que não podem ser desligadas, passo a passo com Caddy e as pendências honestas.
+- `Docs/BENCHMARK_TRADING_APPS_2026.md` — 11 fontes datadas, matriz de features, e a conclusão de que a alegação "Mercado 10/10" **não se sustenta**.
+- `Docs/RELATORIO_UI_UX_E_NOTAS_PRODUTO_20260925.md` — 28 componentes `.tsx` órfãos confirmados por enumeração, 5 famílias de variantes paralelas sem canônica, 25 folhas CSS (22 carregadas) com nomes de override, ausência de teste de renderização, e o log de runtime escrevendo fora do diretório de instalação.
+
+### Banco de dados desrastreado
+
+`git rm --cached app/data/marketdata.db` (2,9 MB). O arquivo permanece em disco e agora é coberto por `.gitignore:122:*.db`. Conteúdo auditado: tabela única `market_ticks`, colunas `ts_ms, symbol, source, price, bid, ask, change_value, change_pct, spread`; 23.820 linhas; fontes `MT5` 15.572, `HTTP` 8.206, `Binance` 34, `Yahoo` 8. **Nenhuma credencial, conta ou PII.** A procedência dos dados continua sem confirmação de data de origem.
+
+### Git
+
+Revisão de staging antes do commit:
+
+- `git diff --cached --shortstat` → 111 arquivos, +10.191 / −1.404.
+- Guarda MQL5: nenhum arquivo MQL5 no staging; `MQL5/Experts` com 184 arquivos EA e diff vazio.
+- Varredura de segredos por padrão (chave privada, token, senha, AWS key, stripe/GitHub token, JWT, DSN com senha) em 112 arquivos: **0 ocorrências**.
+- Nenhum `.exe`, `.msi`, `.apk`, `.p12`, `node_modules`, `.output`, `target/`, `release/`, `.db` ou `.log` no staging.
+- `experiments/isolated/opentelemetry-js` é um **submodule** (gitlink, 0 KB, 0 inserções). Foi deixado **fora** do stage conforme instrução do handoff; continua aparecendo como modificado.
+- Única deleção no commit: `app/data/marketdata.db`, que era o desrastreamento intencional.
+
+Commit `51f53d5` na branch `develop`, push para `origin` (GitHub) e `gitlab`, ambos confirmados em `51f53d5`.
+
+O push para o GitHub reportou **1 vulnerabilidade moderada** no branch default: `github.com/apolopanda500/XAU_AI_PRO/security/dependabot/74`. **Não foi investigada.**
+
 ## Conclusão honesta do estado
 
 O produto tem uma base ampla e testes substaciais, mas ainda não está pronto para Mercado real, Google Play ou venda como “10/10”.
