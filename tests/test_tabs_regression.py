@@ -111,6 +111,14 @@ def app(root_tk, monkeypatch):
                 stopper()
             except Exception:
                 pass
+    # XAUAProApp._start_threads() sobe o gateway local (porta 9001) numa
+    # thread daemon. Sem este stop, o processo filho sobrevive ao fim da
+    # sessao de testes e segura a porta 9001, impedindo o app de subir.
+    try:
+        from app.mt5_gateway import stop_gateway
+        stop_gateway()
+    except Exception:
+        pass
 
 
 def test_todas_as_abas_carregam_sem_excecao(app):

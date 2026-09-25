@@ -177,3 +177,6 @@ build_headless.cmd
 validar_build.ps1
 
 
+
+# clones de repositorios externos em experimentos (nao versionar)
+experiments/isolated/

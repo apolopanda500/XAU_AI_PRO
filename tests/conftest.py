@@ -29,3 +29,21 @@ def root_tk():
         root.destroy()
     except Exception:
         pass
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _sem_gateway_orfao():
+    """Rede de segurança: nenhum subprocesso do gateway sobrevive à sessão.
+
+    `XAUAProApp._start_threads()` sobe `backend/mt5_gateway.py` numa thread
+    daemon. O processo filho é independente do pytest: se a suíte terminar
+    sem encerrá-lo, ele continua segurando a porta 9001 e o app falha ao
+    fazer bind no smoke test seguinte. Este autouse garante a limpeza mesmo
+    se um teste futuro instanciar o app sem usar o fixture `app`.
+    """
+    yield
+    try:
+        from app.mt5_gateway import stop_gateway
+        stop_gateway()
+    except Exception:
+        pass

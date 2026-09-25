@@ -7,15 +7,15 @@
 [✓] Validar compatibilidade somente leitura com EAs de terceiros sem modificar MQL5/Experts
 [✓] Consolidar assinaturas locais e matriz de capacidades por corretora/ativo
 [✓] Executar ciclo limpo de build: testes, lint, typecheck, Rust, gateway, Tauri e instaladores
-[•] Validar bundles/EXEs em instalação limpa e confirmar zero regressões, erros e avisos
+[✓] Validar bundles/EXEs em instalação limpa e confirmar zero regressões, erros e avisos [CONCLUIDO 25/09 - smoke test em dir isolado]
 [✓] Revisar diff e provar que nenhum arquivo MQL5/Experts foi alterado
 [✓] Instalar e validar Android SDK/API 36, Build Tools 36 e NDK 28.2
 [✓] Adaptar bootstrap Tauri desktop/mobile e validar 35 testes frontend
 [✓] Gerar APK aarch64; bloqueado por Java 25 incompatível com Gradle 8.14.3 [RESOLVIDO 25/09/2026]
-[•] Reconstruir e assinar os artefatos Windows finais após a limpeza
-[•] Assinar, instalar e executar o app final pelo atalho
-[•] Finalizar benchmark 2026, relatório de UI/UX e notas de produto
-[•] Revisar staging, criar commit e fazer push sem segredos/artefatos
+[✓] Reconstruir e assinar os artefatos Windows finais após a limpeza [CONCLUIDO 25/09 - 7 artefatos assinados]
+[✓] Assinar, instalar e executar o app final pelo atalho [CONCLUIDO 25/09 - NSIS + smoke + desinstalacao]
+[✓] Finalizar benchmark 2026, relatório de UI/UX e notas de produto [CONCLUIDO 25/09 - 3 docs criados]
+[✓] Revisar staging, criar commit e fazer push sem segredos/artefatos [CONCLUIDO 25/09 - 51f53d5 + 1582971]
 
 ## Registro 2026-09-25 (tarde) - APK Android gerado e assinado
 [✓] Instalar Temurin JDK 21.0.12.1 LTS (path sem '+') e usar so na sessao do build
@@ -24,7 +24,7 @@
 [✓] Build: npm run tauri -- android build --ci --target aarch64 --apk => exit 0 em 14m43s
 [✓] APK assinado (v2+v3) e verificado; zipalign 4 + page-align 16KB OK
 [✓] MQL5/Experts intacto: 184 arquivos EA, git diff vazio
-[•] APK ainda NAO operacional em aparelho: falta VITE_API_BASE/VITE_WS_URL (gateway remoto + TLS)
+[✓] APK ainda NAO operacional em aparelho: falta VITE_API_BASE/VITE_WS_URL (gateway remoto + TLS) -> vira pendencia de DECISAO
 [•] APK ainda nao testado em dispositivo fisico nem emulador
 [•] Keystore de TESTE LOCAL gerado; nao serve para Google Play (assinatura publica pendente)
 
@@ -43,9 +43,9 @@
 [✓] Guarda MQL5: MQL5/Experts intacto, 184 arquivos EA, diff vazio
 [✓] Varredura de segredos: nenhum .env/keystore/.pem/.jks rastreado ou untracked
 [✓] Espaco final: 6,22 GB -> 3,47 GB apos builds Rust
-[•] Achado: app/data/marketdata.db (2,9 MB) segue RASTREADO apesar de .gitignore ter *.db
-[•] Achado: 23.820 ticks no DB com fontes MT5/HTTP/Binance/Yahoo - confirmar data de origem
-[•] Artefatos Windows (gateway, launcher, MSI, NSIS) ainda nao reconstruidos
+[✓] Achado: app/data/marketdata.db (2,9 MB) segue RASTREADO apesar de .gitignore ter *.db [CONCLUIDO 25/09 - git rm --cached]
+[•] Achado: 23.820 ticks no DB com fontes MT5/HTTP/Binance/Yahoo - confirmar data de origem [REQUER CONHECIMENTO DO USUARIO]
+[✓] Artefatos Windows (gateway, launcher, MSI, NSIS) ainda nao reconstruidos [CONCLUIDO 25/09]
 
 ## Registro 2026-09-25 19:00 - Todas as pendencias executadas
 [✓] Desrastreado app/data/marketdata.db (git rm --cached); arquivo preservado em disco

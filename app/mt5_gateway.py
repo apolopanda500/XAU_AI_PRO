@@ -43,6 +43,11 @@ def _python_exe() -> str:
 # Nesse caso stop_gateway() NAO pode fazer taskkill (mataria o proprio app).
 _INPROCESS = False
 
+# Handle do processo filho, quando o gateway foi spawneado (modo fonte).
+# Mantido para que stop_gateway() possa encerrar o PID exato em vez de
+# adivinhar via netstat. Sem isso, Popen e' descartado e o filho vaza.
+_CHILD: "subprocess.Popen[bytes] | None" = None
+
 
 def _start_gateway_inprocess() -> bool:
     """Roda o gateway na propria process (thread daemon).
@@ -85,6 +90,7 @@ def start_gateway(force: bool = False) -> bool:
     # EXE: in-process (spawn com o proprio EXE nao funciona)
     if getattr(sys, "frozen", False):
         return _start_gateway_inprocess()
+    global _CHILD
     script = _gateway_script()
     if not script.exists():
         return gateway_online()
@@ -92,7 +98,7 @@ def start_gateway(force: bool = False) -> bool:
         flags = 0
         if os.name == "nt":
             flags = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
-        subprocess.Popen(
+        _CHILD = subprocess.Popen(
             [_python_exe(), str(script)],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -101,7 +107,7 @@ def start_gateway(force: bool = False) -> bool:
             creationflags=flags,
         )
     except Exception:
-        pass
+        _CHILD = None
     # aguarda ate 8s pela porta
     for _ in range(16):
         if gateway_online():
@@ -116,15 +122,37 @@ def stop_gateway() -> None:
     Se o gateway roda in-process (EXE), nao faz taskkill: a thread daemon
     morre junto com o app (matar o PID da porta encerraria o proprio app).
     """
-    if not gateway_online():
-        return
     if _INPROCESS:
         return
+    global _CHILD
+    # 1) Prefere o handle exato do Popen (confiavel e independente de locale).
+    child = _CHILD
+    _CHILD = None
+    if child is not None:
+        try:
+            if child.poll() is None:
+                child.terminate()
+                try:
+                    child.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    child.kill()
+                    try:
+                        child.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        pass
+        except Exception:
+            pass
+        if not gateway_online():
+            return
+    if not gateway_online():
+        return
+    # 2) Fallback: sem handle (processo herdado de sessao anterior).
     try:
         if os.name == "nt":
             out = subprocess.run(["netstat", "-ano"], capture_output=True, text=True, timeout=5)
-            for line in (out.stdout or "").splitlines():
-                if (":9001" in line) and "LISTENING" in line:
+            texto = (out.stdout or "").lower()
+            for line in texto.splitlines():
+                if ":9001" in line and ("listening" in line or "escutando" in line):
                     pid = line.split()[-1].strip()
                     if pid.isdigit() and pid != str(os.getpid()):
                         subprocess.run(["taskkill", "/PID", pid, "/F"],

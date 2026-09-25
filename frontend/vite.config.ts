@@ -9,9 +9,15 @@ export default defineConfig({
     sourcemap: true,
     rollupOptions: {
       output: {
-        manualChunks: {
-          charts: ['lightweight-charts'],
-          tauri: ['@tauri-apps/api', '@tauri-apps/plugin-notification'],
+        // Forma de funcao: aceita tanto pelo Rollup (vite <=7) quanto pelo
+        // Rolldown (vite 8+). A forma de objeto e rejeitada pelo Rolldown com
+        // "manualChunks is not a function".
+        manualChunks(id: string) {
+          if (id.includes('lightweight-charts')) return 'charts';
+          if (id.includes('@tauri-apps/api') || id.includes('@tauri-apps/plugin-notification')) {
+            return 'tauri';
+          }
+          return undefined;
         },
       },
     },
