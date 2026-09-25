@@ -25,7 +25,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Super-Linter
-        uses: super-linter/super-linter/slim@v7
+        # >= 8.3.1 corrige CVE-2026-25761 (GHSA-r79c-pqj3-577x): injecao de
+        # comando via nome de arquivo com sintaxe $(...) em pull requests.
+        # @v7 fica em >= 6.0.0 e < 8.3.1, portanto vulneravel.
+        uses: super-linter/super-linter/slim@v8.3.1
         env:
           DEFAULT_BRANCH: develop
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
