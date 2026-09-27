@@ -19,12 +19,8 @@ import UniversalLiveTerminal from './components/UniversalLiveTerminalLatest';
 import HistoryTab from './components/tabs/HistoryTab';
 import SystemHealth from './components/SystemHealthOnly';
 import SettingsCore from './components/SettingsCoreSimple';
-import SubscriptionPanel from './components/SubscriptionPanel';
 import ExitAppButton from './components/ExitAppButton';
-import ConnectedDevicesPanel from './components/ConnectedDevicesPanel';
-import ConnectionSettings from './components/ConnectionSettings';
 import RiskTab from './components/tabs/RiskTab';
-import AlertTab from './components/tabs/AlertTab';
 import AnalyticsTab from './components/tabs/AnalyticsTab';
 import EconomicCalendarTab from './components/tabs/EconomicCalendarTab';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
@@ -32,18 +28,17 @@ import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 function renderActiveTab(tab: TabType): ReactNode {
   switch (tab) {
     case 'portfolio': return <PortfolioHome />;
-    // Robô é o posto de operação: sinal do modelo, operação automática, ordem
-    // manual, posições ao vivo, gestão por posição, EA e o copiloto que explica
-    // tudo isso. Mercado, Inteligência Artificial e Risco saíram de abas
-    // próprias e vieram para cá — a inferência só tem utilidade quando o
-    // comando para agir na sequência está no mesmo lugar.
-    case 'robot': return <><RobotModelPanel /><AutoEnginePanel /><DemoOrderPanel /><UniversalLiveTerminal /><RiskTab /><CopilotPanel /><GuardianManager /><RobotAssetTable /></>;
+    // Ordem pensada para o uso: primeiro o que orienta a decisão (modelo e
+    // operação automática), depois o que executa (ordem), depois o resultado
+    // (risco e posições). O Mini Terminal fica NO FIM de propósito: ele é
+    // conferência, não comando. No meio da aba ele empurrava a gestão para
+    // baixo da dobra e o operador lia o resultado antes de decidir.
+    case 'robot': return <><RobotModelPanel /><AutoEnginePanel /><DemoOrderPanel /><RiskTab /><GuardianManager /><RobotAssetTable /><CopilotPanel /><UniversalLiveTerminal /></>;
     // Performance & Analytics foi fundida no Histórico: as duas telas
     // analisam a mesma coisa — as operações realizadas.
     case 'history': return <><HistoryTab /><AnalyticsTab /></>;
     case 'system': return <SystemHealth />;
-    case 'settings': return <><ConnectionSettings /><ConnectedDevicesPanel /><SubscriptionPanel /><SettingsCore /><ExitAppButton /></>;
-    case 'alert': return <AlertTab />;
+    case 'settings': return <><SettingsCore /><ExitAppButton /></>;
     case 'calendar': return <EconomicCalendarTab />;
     default: return null;
   }

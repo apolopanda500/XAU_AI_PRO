@@ -13,7 +13,6 @@ const ITEMS: Array<[TabType, string, IconName]> = [
   ['calendar', 'Calendário', 'calendar'],
   ['system', 'Sistema', 'system'],
   ['settings', 'Configuração', 'settings'],
-  ['alert', 'Alertas', 'bell'],
 ];
 
 export default function Sidebar() {

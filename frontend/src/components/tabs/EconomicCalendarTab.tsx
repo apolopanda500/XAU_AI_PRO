@@ -6,6 +6,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useEconomicData } from '../../hooks/useEconomicData';
 import { apiBase } from '../../lib/api';
+import '../../theme/calendar.css';
 import {
   EconomicEvent,
   FiltroCalendario,
@@ -80,40 +81,24 @@ function CountdownEvento({ evento }: { evento: EconomicEvent }) {
 }
 
 function EventoRow({ evento }: { evento: EconomicEvent }) {
-  const corImpacto = CORES_IMPACTO[evento.impacto];
-  const corBadge = CORES_BADGE[evento.impacto];
   const horaFormatada = evento.horario.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-
   return (
-    <div style={{
-      display: 'grid', gridTemplateColumns: '60px 40px 1fr 100px 80px 80px 80px',
-      gap: '10px', padding: '10px 12px',
-      backgroundColor: evento.divulgado ? '#111827' : '#1f2937',
-      borderRadius: '6px', borderLeft: `3px solid ${corImpacto}`,
-      alignItems: 'center', fontSize: '12px',
-    }}>
-      <span style={{ fontFamily: 'monospace', color: '#d1d5db', fontWeight: 600 }}>
-        {horaFormatada}
-      </span>
-      <span style={{ fontSize: '18px', textAlign: 'center' }}>{evento.bandeira}</span>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-        <span style={{ color: '#f3f4f6', fontWeight: 500 }}>{evento.titulo}</span>
-        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-          <span style={{ backgroundColor: corBadge.bg, color: corBadge.text, padding: '1px 6px', borderRadius: '3px', fontSize: '9px', fontWeight: 700 }}>
-            {LABELS_IMPACTO[evento.impacto].toUpperCase()}
-          </span>
-          {evento.divulgado && (
-            <span style={{ backgroundColor: '#064e3b', color: '#34d399', padding: '1px 6px', borderRadius: '3px', fontSize: '9px', fontWeight: 600 }}>
-              DIVULGADO
-            </span>
-          )}
-        </div>
+    <div className="cal-row">
+      <span className="cal-row-time">{horaFormatada}</span>
+      <span className="cal-row-flag" title={evento.nomePais}>{evento.bandeira}</span>
+      <div className="cal-row-title">
+        <strong>
+          {evento.titulo}
+          
+        </strong>
+        <span className="cal-row-note">
+          <span className={`cal-impact ${evento.impacto}`}>{LABELS_IMPACTO[evento.impacto]}</span>
+          {evento.divulgado ? ' divulgado' : ''}
+        </span>
       </div>
-      <span style={{ color: '#9ca3af', textAlign: 'center' }}>{evento.anterior ?? '-'}</span>
-      <span style={{ color: '#d1d5db', textAlign: 'center', fontWeight: 500 }}>{evento.consenso ?? '-'}</span>
-      <span style={{ color: evento.real ? '#34d399' : '#6b7280', textAlign: 'center', fontWeight: evento.real ? 600 : 400 }}>
-        {evento.real ?? '-'}
-      </span>
+      <span className="num muted">{evento.anterior ?? '—'}</span>
+      <span className="num">{evento.consenso ?? '—'}</span>
+      <span className="num" style={evento.real ? { color: 'var(--success, #34d399)' } : undefined}>{evento.real ?? '—'}</span>
     </div>
   );
 }
@@ -188,117 +173,102 @@ export function EconomicCalendarTab() {
 
   if (erro) {
     return (
-      <div style={{ padding: '20px', color: '#fca5a5', textAlign: 'center' }}>
-        <p>Erro ao carregar calendário: {erro}</p>
-        <button type="button" onClick={refreshManual}>Tentar novamente</button>
+      <div className="card compact-card cal-copilot" role="alert">
+        <h3>Erro ao carregar o calendário</h3>
+        <p className="hint">{erro}</p>
+        <button className="btn sm ghost" type="button" onClick={refreshManual}>Tentar novamente</button>
       </div>
     );
   }
 
   return (
-    <div className="calendar-tab" style={{ display: 'flex', flexDirection: 'column', height: '100%', color: '#f3f4f6', fontSize: '13px' }}>
-      <div style={{ padding: '12px 16px', borderBottom: '1px solid #374151', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>📅 Calendário Econômico</h2>
-          <span style={{ color: '#9ca3af', fontSize: '11px' }}>{totalEventos} eventos</span>
+    <div className="calendar-tab">
+      <div className="cal-head">
+        <div>
+          <h2>Calendário Econômico</h2>
+          <span className="cal-head-count">{totalEventos} eventos</span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          {ultimaAtualizacao && (
-            <span style={{ color: '#6b7280', fontSize: '10px' }}>Atualizado: {ultimaAtualizacao.toLocaleTimeString('pt-BR')}</span>
-          )}
-          <button type="button" onClick={refreshManual} disabled={carregando} style={{ padding: '4px 10px', backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '4px', color: '#d1d5db', cursor: carregando ? 'not-allowed' : 'pointer', fontSize: '11px' }}>
-            {carregando ? '⏳' : '🔄'} Refresh
+        <div className="cal-head-actions">
+          {ultimaAtualizacao && <span className="muted">Atualizado {ultimaAtualizacao.toLocaleTimeString('pt-BR')}</span>}
+          <button className="btn xs ghost" type="button" onClick={refreshManual} disabled={carregando}>
+            {carregando ? 'Carregando…' : 'Atualizar'}
           </button>
         </div>
       </div>
 
       {proximoEventoAlto && <CountdownEvento evento={proximoEventoAlto} />}
 
-      <div style={{ padding: '10px 16px', borderBottom: '1px solid #374151', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-          <span style={{ color: '#9ca3af', fontSize: '11px', minWidth: '40px' }}>País:</span>
+      <div className="cal-filters">
+        <div className="cal-filter-row">
+          <span className="cal-filter-label">País</span>
           {PAISES_SUPORTADOS.map((pais) => (
-          <button key={pais.codigo} type="button" onClick={() => togglePais(pais.codigo)} style={{
-              padding: '3px 8px', backgroundColor: filtro.paises.includes(pais.codigo) ? '#2563eb' : '#1f2937',
-              border: `1px solid ${filtro.paises.includes(pais.codigo) ? '#3b82f6' : '#374151'}`,
-              borderRadius: '4px', color: '#d1d5db', cursor: 'pointer', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px',
-            }}>
+            <button key={pais.codigo} type="button" onClick={() => togglePais(pais.codigo)}
+              className={`cal-chip ${filtro.paises.includes(pais.codigo) ? 'on' : ''}`}>
               {pais.bandeira} {pais.nome}
             </button>
           ))}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span style={{ color: '#9ca3af', fontSize: '11px', minWidth: '40px' }}>Impacto:</span>
+        <div className="cal-filter-row">
+          <span className="cal-filter-label">Impacto</span>
           {(['alto', 'medio', 'baixo'] as ImpactLevel[]).map((impacto) => (
-          <button key={impacto} type="button" onClick={() => toggleImpacto(impacto)} style={{
-              padding: '3px 8px',
-              backgroundColor: filtro.impactos.includes(impacto) ? CORES_IMPACTO[impacto] : '#1f2937',
-              border: `1px solid ${CORES_IMPACTO[impacto]}`,
-              borderRadius: '4px',
-              color: filtro.impactos.includes(impacto) ? '#000' : '#d1d5db',
-              cursor: 'pointer', fontSize: '11px', fontWeight: 600,
-            }}>
+            <button key={impacto} type="button" onClick={() => toggleImpacto(impacto)}
+              className={`cal-chip ${filtro.impactos.includes(impacto) ? 'on' : ''}`}>
               {LABELS_IMPACTO[impacto]}
             </button>
           ))}
           {(filtro.paises.length > 0 || filtro.impactos.length > 0) && (
-          <button type="button" onClick={limparFiltros} style={{ padding: '3px 8px', backgroundColor: 'transparent', border: '1px solid #6b7280', borderRadius: '4px', color: '#9ca3af', cursor: 'pointer', fontSize: '10px', marginLeft: 'auto' }}>
-              ✕ Limpar
-            </button>
+            <button className="cal-chip cal-chip-clear" type="button" onClick={limparFiltros}>Limpar</button>
           )}
         </div>
       </div>
 
-      <div className="card" style={{ margin: '12px 16px', padding: 12 }}>
+      <div className="card compact-card cal-copilot">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-          <div><h3 style={{ margin: 0 }}>Copiloto econômico</h3><span className="muted" style={{ fontSize: 11 }}>IA contextual baseada apenas nos eventos reais carregados</span></div>
-          <span className="chip warn">Somente análise</span>
+          <div>
+            <h3>Copiloto econômico</h3>
+            <span className="muted">Responde só com os eventos reais carregados</span>
+          </div>
+          <span className="chip warn">Somente leitura</span>
         </div>
-        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-          <input value={copilotPrompt} onChange={(event) => setCopilotPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void consultarCopiloto(); } }} placeholder="Pergunte sobre risco, volatilidade ou agenda..." style={{ flex: 1 }} />
-          <button className="btn sm primary" type="button" onClick={() => void consultarCopiloto()} disabled={copilotLoading || !eventos.length}>{copilotLoading ? 'Analisando...' : 'Analisar'}</button>
+        <div className="cal-copilot-row">
+          <input
+            value={copilotPrompt}
+            onChange={(event) => setCopilotPrompt(event.target.value)}
+            onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void consultarCopiloto(); } }}
+            placeholder="Pergunte sobre risco, volatilidade ou agenda…"
+          />
+          <button className="btn sm primary" type="button" onClick={() => void consultarCopiloto()} disabled={copilotLoading || !eventos.length}>
+            {copilotLoading ? 'Analisando…' : 'Analisar'}
+          </button>
         </div>
         {copilotError && <div className="hint neg" role="alert" style={{ marginTop: 8 }}>Copiloto indisponível: {copilotError}</div>}
-        {copilotReply && <div className="placeholder" style={{ marginTop: 10, whiteSpace: 'pre-wrap', textAlign: 'left', alignItems: 'flex-start' }}>{copilotReply}</div>}
-        <div className="hint" style={{ marginTop: 8 }}>A IA não envia ordens, não altera o EA e não movimenta ativos. Chaves permanecem no backend.</div>
+        {copilotReply && <div className="cal-copilot-reply">{copilotReply}</div>}
+        <p className="hint" style={{ margin: '8px 0 0' }}>O copiloto não envia ordens, não altera o EA e não movimenta ativos.</p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '60px 40px 1fr 100px 80px 80px 80px', gap: '10px', padding: '8px 12px', backgroundColor: '#111827', borderBottom: '1px solid #374151', fontSize: '10px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase' }}>
-        <span>Hora</span><span></span><span>Evento</span>
-        <span style={{ textAlign: 'center' }}>Anterior</span>
-        <span style={{ textAlign: 'center' }}>Consenso</span>
-        <span style={{ textAlign: 'center' }}>Real</span>
+      <div className="cal-columns">
+        <span className="num">Hora</span>
+        <span></span>
+        <span>Evento</span>
+        <span className="num">Anterior</span>
+        <span className="num">Consenso</span>
+        <span className="num">Real</span>
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+      <div className="cal-body">
         {carregando && eventos.length === 0 ? (
-          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100px', color: '#6b7280' }}>
-            Carregando eventos...
-          </div>
+          <div className="cal-state">Carregando eventos…</div>
         ) : Object.entries(eventosPorData).length === 0 ? (
-          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100px', color: '#6b7280' }}>
-            Nenhum evento encontrado.
-          </div>
+          <div className="cal-state">Nenhum evento encontrado.</div>
         ) : (
           Object.entries(eventosPorData).map(([data, eventosData]) => (
-            <div key={data}>
-              <div style={{ padding: '6px 0', color: '#9ca3af', fontSize: '11px', fontWeight: 600, textTransform: 'capitalize', borderBottom: '1px solid #374151', marginBottom: '6px' }}>
-                {data}
-              </div>
-              {eventosData.map((evento) => (
-                <EventoRow key={evento.id} evento={evento} />
-              ))}
+            <div key={data} className="cal-day">
+              <div className="cal-day-label">{data}</div>
+              {eventosData.map((evento) => <EventoRow key={evento.id} evento={evento} />)}
             </div>
           ))
         )}
       </div>
-
-      <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.85; }
-        }
-      `}</style>
     </div>
   );
 }

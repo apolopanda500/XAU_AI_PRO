@@ -674,7 +674,11 @@ def _universal_history(broker: str, market: str, symbol: str = "", days: int = 0
                 "source": "mt5_gateway",
             })
         return canonical_market_response(broker="mt5", market=market, source="mt5_gateway", status="ok", deals=deals, count=len(deals), days=days or 30)
-    if broker not in {"mexc", "binance"}:
+    # Bybit e OKX estavam fora daqui, mas os quatro clientes implementam
+    # `history(symbol, limit)` e o bloco de normalizacao abaixo e generico
+    # (`first_value` por nome de campo). A interface oferecia as duas na lista
+    # de corretoras e recebia "corretora nao suportada" — opcao quebrada na UI.
+    if broker not in {"mexc", "binance", "bybit", "okx"}:
         raise LookupError("corretora não suportada")
     client = _exchange_client(broker, market, private=True, account_id=account_id)
     selected_account_id = client.account_id

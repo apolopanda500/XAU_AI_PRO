@@ -1,18 +1,23 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { apiBase } from '../lib/api';
 import { useAppStore } from '../hooks/useAppStore';
 import { useAuthStore } from '../auth/authStore';
 import { definirPin, removerPin, validarPin, verificarPin } from '../auth/auth';
 import { THEMES } from '../hooks/useTheme';
+import SubscriptionPanel from './SubscriptionPanel';
+import ConnectionSettings from './ConnectionSettings';
+import ConnectedDevicesPanel from './ConnectedDevicesPanel';
 import '../theme/settings.css';
 
-type Section = 'general' | 'alerts' | 'connections' | 'security' | 'plans';
+type Section = 'general' | 'connections' | 'security' | 'plans';
 const tabs: [Section, string][] = [
   ['general', 'Geral / Interface'],
-  ['alerts', '🔔 Notificações & Alertas'],
-  ['connections', '🔑 Conexões & API'],
-  ['security', '🔒 Segurança & Risco'],
-  ['plans', '📦 Planos'],
+  // "Notificações & Alertas" saiu: a seção existia no menu sem renderizar
+  // nada, e a aba Alertas também foi removida. Um item que abre uma tela vazia
+  // é pior que não existir.
+  ['connections', 'Conexões & Corretoras'],
+  ['security', 'Segurança'],
+  ['plans', 'Planos'],
 ];
 const fmt = (v: unknown) => { const n = Number(v); return Number.isFinite(n) ? n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '--'; };
 export default function SettingsCoreSimple() {
@@ -156,6 +161,8 @@ export default function SettingsCoreSimple() {
                 <input className="input" value={settings.mt5Path} onChange={(e) => setSettings({ mt5Path: e.target.value })} placeholder="terminal64.exe" />
               </label>
             </div>
+            <ConnectionSettings />
+            <ConnectedDevicesPanel />
             <p className="hint">
               Por segurança o app nunca inicia o MT5 sozinho — a conexão é uma
               ação sua, na aba do Robô.
@@ -217,6 +224,13 @@ export default function SettingsCoreSimple() {
             {status && <div className="hint" role="status">{status}</div>}
           </div>
         )}
+
+        {section === 'plans' && (
+          <div className="settings-panel">
+            <SubscriptionPanel />
+          </div>
+        )}
       </div>
     </div>
-  );}
+  );
+}
