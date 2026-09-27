@@ -1,4 +1,15 @@
-"""Barreira de risco comum aos adaptadores de corretoras."""
+"""Barreira de risco comum aos adaptadores de corretoras.
+
+FALHA FECHADA
+-------------
+`max_spread` e `max_notional` eram `None` por padrao, e a checagen era
+`if limits.max_spread is not None and ...`: com o padrao, **a checagem era
+pulada** e a trava ficava desligada sem ninguem perceber. Alem disso
+`validate_trade` nunca recebia `spread`/`notional` de nenhum chamador.
+
+Agora todo limite tem valor numerico e a checagen e sempre executada. Dado
+ausente e falha fechada, nao aprovacao.
+"""
 from __future__ import annotations
 
 import math
@@ -13,8 +24,12 @@ class RiskLimits:
     max_positions: int = 5
     max_daily_trades: int = 20
     max_drawdown_pct: float = 15.0
-    max_spread: float | None = None
-    max_notional: float | None = None
+    # Antes None (=> checagem pulada). 50 pontos cobre Ouro/Forex/Indices com
+    # folga em condicoes normais e barra o spread de noticia ou horario morto.
+    max_spread: float = 50.0
+    # Nocional por operacao. 0.10 lote de XAU a ~4000 com contrato 100 = 40.000
+    # de nocional; 100.000 barra Forex/Indice sem barrar Ouro.
+    max_notional: float = 100_000.0
     withdrawals_enabled: bool = False
 
 
@@ -30,7 +45,12 @@ def validate_trade(
     notional: float | None = None,
     limits: RiskLimits = RiskLimits(),
 ) -> None:
-    """Rejeita uma operação que exceda qualquer limite local."""
+    """Rejeita uma operação que exceda qualquer limite local.
+
+    `spread` e `notional` sao obrigatorios porque os limites existem. Enviar
+    `None` e recusado com mensagem explicita: sem dado de risco, a decisao e
+    nao aprovada.
+    """
     values = (volume, daily_loss_pct, exposure_pct, drawdown_pct)
     if not all(math.isfinite(float(value)) for value in values):
         raise ValueError("métricas de risco devem ser finitas")
@@ -54,9 +74,17 @@ def validate_trade(
         raise ValueError(f"limite diário de {limits.max_daily_trades} operações atingido")
     if drawdown_pct >= limits.max_drawdown_pct:
         raise ValueError(f"drawdown atingiu o limite de {limits.max_drawdown_pct}%")
-    if limits.max_spread is not None and (spread is None or spread > limits.max_spread):
+    if spread is None:
+        raise ValueError("spread é obrigatório: a trava de spread não pode ser pulada")
+    if not math.isfinite(float(spread)) or spread < 0:
+        raise ValueError("spread deve ser um número finito e não negativo")
+    if spread > limits.max_spread:
         raise ValueError(f"spread fora do limite: máximo {limits.max_spread}")
-    if limits.max_notional is not None and (notional is None or notional > limits.max_notional):
+    if notional is None:
+        raise ValueError("notional é obrigatório: a trava de nocional não pode ser pulada")
+    if not math.isfinite(float(notional)) or notional < 0:
+        raise ValueError("notional deve ser um número finito e não negativo")
+    if notional > limits.max_notional:
         raise ValueError(f"notional fora do limite: máximo {limits.max_notional}")
 
 

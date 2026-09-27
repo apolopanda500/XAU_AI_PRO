@@ -5,6 +5,16 @@
 # publicacao da imagem no Vercel Container Registry (VCR).
 # ============================================================
 
+> **AVISO - 2026-09-26:** os instaladores automaticos deste guia foram removidos
+> (`Tools/install_docker_windows.ps1`, `Tools/install_docker.bat`,
+> `Tools/pos_reboot_docker.ps1`, `Tools/post_docker_cli_setup.ps1`,
+> `Tools/vercel_vcr_setup.ps1`, `setup-vercel.bat`). Eram instaladores silenciosos
+> que baixavam e executavam binarios, com execucao no boot, e nao ha nenhuma
+> garantia de assinatura verificavel. Instale Docker Desktop manualmente pelo
+> site oficial e use `docker login` no seu proprio terminal. A lista esta
+> bloqueada em `.gitignore` e `scripts/validate_release.ps1` reprova a release
+> se algum deles voltar.
+
 ## Resumo
 
 O projeto XAU_AI_PRO usa containers de tres formas:

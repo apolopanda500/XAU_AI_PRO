@@ -1,0 +1,86 @@
+/* Mini Terminal em estilo MT5.
+   A faixa de conta reproduz a barra de status do MT5: uma linha, celulas
+   coladas, rotulo curto em cima do valor. As 8 caixas empilhadas ocupavam
+   meia aba para repetir a mesma informacao. */
+
+.mt-status-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  margin: 0 0 6px;
+  padding: 2px 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  overflow: hidden;
+}
+
+.mt-status-strip > span {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 4px 10px;
+  border-right: 1px solid var(--border);
+  min-width: 78px;
+}
+
+.mt-status-strip > span:last-child {
+  border-right: 0;
+}
+
+.mt-status-strip em {
+  color: var(--muted);
+  font-size: 10px;
+  font-style: normal;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  line-height: 1.3;
+}
+
+.mt-status-strip strong {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.mt-status-strip strong.num,
+.mt-status-strip .num {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* Tabela de posicoes: mesma densidade e alinhamento do MT5. */
+.mt5-table th,
+.mt5-table td {
+  padding: 3px 8px;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.mt5-table th.num,
+.mt5-table td.num {
+  text-align: right;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.mt5-table th:last-child,
+.mt5-table td:last-child {
+  width: 1%;
+  padding-left: 4px;
+  padding-right: 4px;
+}
+
+.mt-footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0;
+  flex-wrap: wrap;
+}
+
+.mt-footer-actions .muted {
+  font-size: 11.5px;
+}

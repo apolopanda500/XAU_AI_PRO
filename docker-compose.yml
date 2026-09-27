@@ -120,10 +120,14 @@ services:
       - "9003:9003"   # HTTP API
     volumes:
       - ./data:/app/data
-      - ./core/config.json:/app/config.json:ro
     environment:
       - RUST_LOG=info
       - MT5_ENABLED=true
+      # O core le config.json deste caminho (core/src/config.rs:173). Antes o
+      # compose montava ./core/config.json, que nunca existiu: o Docker criava
+      # um diretorio vazio chamado config.json dentro de core/ e a configuracao
+      # ficava silenciosamente no default. Os defaults do codigo sao 9002/9003.
+      - XAU_AI_PRO_CONFIG=/app/data/config.json
     networks:
       - xau_ai_pro_net
 

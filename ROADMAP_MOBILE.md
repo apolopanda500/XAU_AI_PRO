@@ -84,3 +84,17 @@ Transformar a Trading Desk desktop (Tkinter) em um app mobile multiplataforma (F
 4. JWT no backend (substituir Bearer)
 5. WebSocket delta (nao reenviar snapshot)
 6. Prototipo Flutter (tab Mercado + grafico)
+
+<!-- status-real-2026-09-27 -->
+
+## Correcao de status (2026-09-27)
+
+A linha 20 marcava Rate limiting como "Pronto". O codigo existe
+(`backend/mt5_gateway.py:81-82`, `backend/server-desktop.cjs:183`), mas:
+
+- o default e **0 = ilimitado** (comentario na propria linha 81);
+- o Tauri **nao define** `XAU_RATE_LIMIT` ao subir o gateway
+  (`frontend/src-tauri/src/main.rs:387-393`), entao segue desligado;
+- `backend/trading_mcp.py` **nao tem** nenhum rate limit.
+
+Status correto: **existe, porem desligado por padrao**.

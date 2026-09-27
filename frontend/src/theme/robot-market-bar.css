@@ -1,0 +1,99 @@
+/* Faixa de mercado da aba Robo: preco ao vivo do ativo que sera operado.
+   Uma linha, celulas coladas, numeros tabulares -- como a barra de cotacao do
+   MT5. */
+
+.robot-market-bar {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.rmb-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-right: 1px solid var(--border);
+  min-width: 210px;
+  flex-wrap: wrap;
+}
+
+.rmb-symbol {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: var(--primary);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+
+.rmb-symbol:hover {
+  text-decoration: underline;
+}
+
+.rmb-time {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  margin-left: auto;
+}
+
+.rmb-quotes {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.rmb-quotes > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 5px 12px;
+  border-right: 1px solid var(--border);
+  min-width: 86px;
+  flex: 1 1 0;
+}
+
+.rmb-quotes > div:last-child {
+  border-right: 0;
+}
+
+.rmb-quotes em {
+  color: var(--muted);
+  font-size: 10px;
+  font-style: normal;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  line-height: 1.3;
+}
+
+.rmb-quotes strong {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.rmb-quotes strong.num {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+@media (max-width: 900px) {
+  .robot-market-bar {
+    flex-direction: column;
+  }
+
+  .rmb-top {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .rmb-time {
+    margin-left: 0;
+  }
+}

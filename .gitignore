@@ -185,3 +185,40 @@ validar_build.ps1
 
 # clones de repositorios externos em experimentos (nao versionar)
 experiments/isolated/
+
+# ---------------------------------------------------------------------------
+# Scripts e binarios bloqueados (2026-09-26)
+#
+# Automao permanente, inicializador silencioso, instalador silencioso ou binario
+# solto. Nenhum deles deve voltar ao repositorio: ha verificacao em
+# scripts/validate_release.ps1 que bloqueia a release se algum reaparecer.
+#
+#   cmd.exe                 -> sombreava o cmd.exe do sistema (ja executado pelo
+#                              MoNotificationUx.exe do Office) e era magnet de AV
+#   XAU_AI_PRO_START.vbs    -> inicializador silencioso com autoexecucao (padrao PUP)
+#   overnight_session.ps1   -> build + assinatura + instalacao + limpeza sem revisao
+#   ciclo_limpo_123.py      -> limpeza automatica em segundo plano
+#   pos_reboot_docker.ps1   -> execucao no boot do Windows
+#   post_docker_cli_setup.ps1 / install_docker*  -> instalador silencioso
+#   setup/connect_sandbox_claude*.ps1 -> sandbox de terceiros, fora do produto
+#   vercel_vcr_setup.ps1 / setup-vercel.bat -> instalador silencioso
+# ---------------------------------------------------------------------------
+/cmd.exe
+/XAU_AI_PRO_START.vbs
+/*.vbs
+/scripts/overnight_session.ps1
+/scripts/ciclo_limpo_123.py
+/Tools/pos_reboot_docker.ps1
+/Tools/post_docker_cli_setup.ps1
+/Tools/connect_sandbox_claude.ps1
+/Tools/setup_sandbox_claude.ps1
+/Tools/vercel_vcr_setup.ps1
+/Tools/install_docker.bat
+/Tools/install_docker_windows.ps1
+/setup-vercel.bat
+
+# Binarios nunca versionados na raiz do repositorio
+/*.exe
+/*.dll
+/*.scr
+/*.sys

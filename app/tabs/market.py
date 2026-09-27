@@ -25,7 +25,13 @@ from typing import Callable
 from app.components.tables import MarketTable
 from app.config_manager import get_config
 from app.market_data import MarketData
-from app.market_store import store_quotes, last_ticks
+from app.market_store import (
+    PROVENIENCE_LIVE,
+    PROVENIENCE_UNVERIFIED,
+    fallback_provenance,
+    last_ticks,
+    store_quotes,
+)
 from app.mt5_robot import MT5Robot
 from app.theme.mexc import Theme
 from app.components.button import ProButton
@@ -354,7 +360,8 @@ class TradingViewMarket(tk.Frame):
                     self._apply_quotes(item[1], item[2])
                 elif kind == "chart":
                     chart_kind = item[3] if len(item) > 3 else "candles"
-                    self._apply_chart(item[1], item[2], chart_kind)
+                    origem = item[4] if len(item) > 4 else None
+                    self._apply_chart(item[1], item[2], chart_kind, origem)
                 elif kind == "error":
                     self._show_fetch_error(item[1])
         except (queue.Empty, RuntimeError):
@@ -423,12 +430,17 @@ class TradingViewMarket(tk.Frame):
             self._queue.put(("quotes", quotes, payload))
             try:
                 candles = self._collect_candles(self._selected, self.chart_tf_var.get())
+                origem = {"live": True, "label": f"candles MT5 · {self.chart_tf_var.get()}", "provenance": "live"}
                 if not candles:
                     candles = last_ticks(self._selected, 80)
                     chart_kind = "line"
+                    # Fallback local: a tela precisa dizer se isso e mercado ao
+                    # vivo ou dado armazenado (lacuna C1). Sem esta distincao o
+                    # grafico mostraria tick de teste com aparencia de preco real.
+                    origem = fallback_provenance(self._selected)
                 else:
                     chart_kind = "candles"
-                self._queue.put(("chart", self._selected, candles, chart_kind))
+                self._queue.put(("chart", self._selected, candles, chart_kind, origem))
             except Exception:
                 pass
         except Exception as exc:  # noqa: BLE001 - error de red capturado
@@ -464,14 +476,18 @@ class TradingViewMarket(tk.Frame):
         except Exception:
             return []
 
-    def _apply_chart(self, symbol: str, candles: list[dict], chart_kind: str = "candles") -> None:
+    def _apply_chart(self, symbol: str, candles: list[dict], chart_kind: str = "candles",
+                     origem: dict | None = None) -> None:
         try:
             if not candles:
                 self.chart_info.configure(text="sem dados")
                 return
             self.chart.set_data(candles, chart_kind)
-            suffix = "(ticks)" if chart_kind == "line" else ""
-            self.chart_info.configure(text="%d ponto(s) %s" % (len(candles), suffix))
+            # A origem entra no rodape do grafico: dado armazenado ou nao
+            # verificado nunca aparece com a etiqueta de mercado ao vivo.
+            rotulo = (origem or {}).get("label") or ("candles" if chart_kind == "candles" else "ticks locais")
+            sufixo = "" if chart_kind == "candles" else " · historico local"
+            self.chart_info.configure(text="%d ponto(s) · %s%s" % (len(candles), rotulo, sufixo))
         except tk.TclError:
             pass
 
@@ -511,7 +527,9 @@ class TradingViewMarket(tk.Frame):
             self.status_label.configure(
                 text="Sem cotacoes: verifique internet/MT5 (%s)" % self._selected)
         try:
-            store_quotes(list(quotes.values()))
+            # `live` so quando veio de uma fonte conectada agora; caso contrario
+            # fica `unverified` e o fallback do grafico se rotula sozinho.
+            store_quotes(list(quotes.values()), provenance=PROVENIENCE_LIVE if filled else PROVENIENCE_UNVERIFIED)
         except Exception:  # noqa: BLE001 - persistencia opcional
             pass
 

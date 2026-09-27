@@ -288,12 +288,17 @@ export interface MarketCapabilities {
   matrix: MarketCapabilityRow[];
 }
 
+// `enabled` reflete o status do gateway em backend/broker_registry.py.
+// Bybit e OKX foram promovidos a `active` em 2026-09-26 depois de os clientes
+// responderem a API publica real: catalogo (OKX 1415 instrumentos), ticker,
+// klines, depth e trades. Aqui estavam como `enabled: false`, o que fazia a UI
+// esconder duas corretoras que funcionam e contradizia o registro.
 export const MARKET_SOURCES: readonly MarketSourceOption[] = [
   { broker: 'mt5', label: 'MetaTrader 5', markets: ['forex', 'metals', 'indices', 'stocks', 'commodities', 'bonds', 'crypto-spot', 'crypto-futures', 'other'], enabled: true },
   { broker: 'binance', label: 'Binance', markets: ['crypto-spot', 'crypto-futures'], enabled: true },
   { broker: 'mexc', label: 'MEXC', markets: ['crypto-spot', 'crypto-futures'], enabled: true },
-  { broker: 'bybit', label: 'Bybit', markets: ['crypto-spot', 'crypto-futures'], enabled: false },
-  { broker: 'okx', label: 'OKX', markets: ['crypto-spot', 'crypto-futures'], enabled: false },
+  { broker: 'bybit', label: 'Bybit', markets: ['crypto-spot', 'crypto-futures'], enabled: true },
+  { broker: 'okx', label: 'OKX', markets: ['crypto-spot', 'crypto-futures'], enabled: true },
 ];
 
 const SOURCE_REJECTION = /simulated|simulation|mock|mocked|fake|dummy|synthetic|placeholder/i;

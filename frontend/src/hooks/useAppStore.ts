@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { DEFAULT_SYMBOLS, normalizeSymbols } from '../lib/constants';
 
 export type TabType =
   | 'dashboard'
@@ -123,11 +124,9 @@ export interface Settings {
   discordActive: boolean;
 }
 
-export const DEFAULT_MARKET_WATCHLIST = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XAUUSD', 'EURUSD', 'GBPUSD', 'USDJPY'];
-
-const normalizeSymbols = (symbols: string[]): string[] => [...new Set(
-  symbols.map((symbol) => String(symbol ?? '').trim().toUpperCase()).filter(Boolean),
-)].slice(0, 24);
+// Watchlist e normalizacao vem de lib/constants.ts (fonte unica). Antes eram
+// listas locais duplicadas que comecavam em BTCUSDT.
+export { DEFAULT_SYMBOLS as DEFAULT_MARKET_WATCHLIST } from '../lib/constants';
 
 const quoteKey = (quote: Quote): string => [
   String(quote.broker ?? '').trim().toLowerCase(),
@@ -220,7 +219,7 @@ export const useAppStore = create<AppState>()(
       // O produto é universal; XAUUSD é apenas uma opção do catálogo.
       selectedSymbol: '',
       setSelectedSymbol: (symbol) => set({ selectedSymbol: symbol }),
-      marketWatchlist: DEFAULT_MARKET_WATCHLIST,
+      marketWatchlist: normalizeSymbols(DEFAULT_SYMBOLS),
       setMarketWatchlist: (symbols) => set({ marketWatchlist: normalizeSymbols(symbols) }),
       subscribeSymbols: [],
       setSubscribeSymbols: (symbols) => set({ subscribeSymbols: normalizeSymbols(symbols) }),

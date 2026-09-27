@@ -1,4 +1,4 @@
-"""Cobertura HTTP do gateway local: endpoints seguros, comandos e rejeições."""
+﻿"""Cobertura HTTP do gateway local: endpoints seguros, comandos e rejeições."""
 from __future__ import annotations
 
 import http.client
@@ -6,6 +6,7 @@ import importlib
 import json
 import sys
 import threading
+from conftest import TOKEN_DE_TESTE
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from types import ModuleType
@@ -57,8 +58,13 @@ class FakeMT5:
         return True
 
     def symbol_info(self, symbol):
+        # `trade_contract_size` e necessario: o risk_gate passou a exigir
+        # nocional real (contract_size x volume x preco) e a recusar a operacao
+        # quando o dado falta. Um duble sem esse campo media "sem risco", o que
+        # e o oposto de fail-closed.
         return type("S", (), {"visible": True, "digits": 2, "volume_min": 0.01,
-                              "volume_max": 1.0, "volume_step": 0.01, "point": 0.01})()
+                              "volume_max": 1.0, "volume_step": 0.01, "point": 0.01,
+                              "trade_contract_size": 100.0})()
 
     def symbol_info_tick(self, symbol):
         return type("K", (), {"bid": 1.0, "ask": 1.0, "last": 1.0, "volume": 1.0})()
@@ -78,6 +84,15 @@ def gateway(tmp_path, monkeypatch):
             setattr(fake, name, getattr(fake_mt5, name))
     monkeypatch.setitem(sys.modules, "MetaTrader5", fake)
     import backend.mt5_gateway as gw
+    # O gateway e fail-closed: sem token ele recusa tudo. Esta fixture sobe o
+    # servidor real, entao define o token de teste ANTES do import para que
+    # `API_TOKEN` ja valha. A validacao continua real — `_request` envia o
+    # Bearer. Definir aqui, e nao numa fixture global, evita que o
+    # `fastapi_gateway` copie o token no import e quebre a matriz de rejeicao.
+    monkeypatch.setenv("XAU_GATEWAY_TOKEN", TOKEN_DE_TESTE)
+    import importlib
+
+    gw = importlib.reload(gw)
 
     gw = importlib.reload(gw)
     server = ThreadingHTTPServer(("127.0.0.1", 0), gw.Handler)
@@ -92,7 +107,14 @@ def _request(base, method, path, payload=None, headers=None):
     host, port = base.split(":")
     conn = http.client.HTTPConnection(host, int(port), timeout=10)
     body = json.dumps(payload) if payload is not None else None
+    # O gateway e fail-closed: sem o Bearer correto ele devolve 401.
+    # Enviamos o token de teste FIXO, e nao o valor corrente de
+    # `gw.API_TOKEN`: `test_put_e_delete_exigem_token` troca o token do módulo
+    # para "segredo-local" justamente para provar que um header diferente é
+    # recusado. Ler o token do módulo faria a chamada sem header virar uma
+    # chamada autenticada, e o teste passaria a mentir.
     request_headers = {"Content-Type": "application/json"} if body else {}
+    request_headers["Authorization"] = f"Bearer {TOKEN_DE_TESTE}"
     request_headers.update(headers or {})
     conn.request(method, path, body=body, headers=request_headers)
     response = conn.getresponse()
@@ -329,11 +351,25 @@ def test_emergencia_e_real_bloqueados(gateway, monkeypatch):
     monkeypatch.setenv("XAU_ENABLE_EMERGENCY_RESUME", "1")
     status, _ = _request(gateway, "POST", "/api/universal/emergency-resume", {"confirm": True})
     assert status == 200
+    # `/api/real/validate` exige as metricas completas de risco. `spread` e
+    # `notional` entraram na exigencia quando o risk_gate deixou de ter as
+    # duas travas com default None (que as desligava).
+    status, data = _request(gateway, "POST", "/api/real/validate",
+                            {"volume": 0.01, "daily_loss_pct": 0,
+                             "exposure_pct": 0, "open_positions": 0,
+                             "daily_trades": 0, "drawdown_pct": 0,
+                             "spread": 20, "notional": 4000})
+    assert status == 200 and data["execution_enabled"] is False
+
+    # Sem spread/nocional a operacao e recusada: dado de risco ausente nao vira
+    # aprovacao. Este e o comportamento fail-closed.
     status, data = _request(gateway, "POST", "/api/real/validate",
                             {"volume": 0.01, "daily_loss_pct": 0,
                              "exposure_pct": 0, "open_positions": 0,
                              "daily_trades": 0, "drawdown_pct": 0})
-    assert status == 200 and data["execution_enabled"] is False
+    assert status == 403 and data["approved"] is False
+    assert "spread" in data["error"]
+
     status, data = _request(gateway, "POST", "/api/real/request",
                             {"request_id": "r1", "account_id": "a",
                              "broker": "mt5", "market": "forex"})

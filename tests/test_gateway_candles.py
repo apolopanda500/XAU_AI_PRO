@@ -83,7 +83,9 @@ def test_candles_clamp_count(gw, fake_mt5_candles):
 def test_candles_timeframe_valido(gw, fake_mt5_candles):
     gw._mt5_candles("XAUUSD", "H1", 100)
     assert fake_mt5_candles["last"]["timeframe"] == 16385  # código MT5 de H1
-    with pytest.raises(ValueError, match="timeframe MT5 inválido"):
+    # A mensagem estava corrompida no fonte ("inv?lido"); foi corrigida para
+    # ASCII e o teste passa a fixar o texto certo.
+    with pytest.raises(ValueError, match="timeframe MT5 invalido"):
         gw._mt5_candles("XAUUSD", "timeframe-estranho", 100)
 
 

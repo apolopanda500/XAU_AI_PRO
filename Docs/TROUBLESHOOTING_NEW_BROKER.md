@@ -159,3 +159,24 @@ Depois que o robô aparecer no gráfico:
 4. Confira se o magic number está correto no histórico
 
 **NÃO opere em conta real até validar em demo!**
+
+---
+
+> ## ⚠️ ESTE GUIA NAO PODE SER SEGUIDO ASSIM (marcado em 2026-09-26)
+>
+> As instrucoes deste arquivo mandam **editar `MQL5/Experts/.../Config.mqh`**
+> para trocar `Symbols`, `MagicNumber`, `LotSize` e `DebugTradeDecision`. Isso e
+> **proibido** por `AGENTS.md` e por `opencode.json` (`permission.edit` nega
+> `**/MQL5/Experts/**`, `**/*.mq5`, `**/*.mqh`, `**/*.set`).
+>
+> Os numeros de linha citados aqui tambem estao errados. No EA real:
+> `Symbols` esta em `Config.mqh:322`, `MagicNumber` em `:9`, `LotSize` em `:16`
+> e `DebugTradeDecision` em `:254` — nao 110-119, 8, 15 e 103.
+>
+> **O que continua util:** o raciocinio de diagnostico. Se o EA nao abre
+> operacoes apos mudar de corretora, o sintoma quase sempre e o **nome do
+> simbolo** (`XAUUSD`, `XAUUSDc`, `XAUUSD.pro`, `GOLD`, `XAU/USD`). O
+> gateway descobre os simbolos reais em `GET /api/assets` — use isso em vez de
+> editar o EA.
+>
+> Para o estado atual, leia `CONVERSAHOJE.txt`.

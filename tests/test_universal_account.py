@@ -104,7 +104,22 @@ def test_capability_matrix_is_single_and_fail_closed():
     assert {row["broker"] for row in matrix} == {"mt5", "binance", "mexc", "bybit", "okx"}
     assert all(row["execution"] == [] for row in matrix)
     assert all(row["withdrawals"] is False for row in matrix)
-    assert next(row for row in matrix if row["broker"] == "bybit")["status"] == "code_only"
+    # Bybit e OKX passaram a active em 2026-09-26: os clientes responderam a API
+    # publica real (catalogo, ticker, klines, depth, trades). Execucao continua
+    # desligada em todas as corretoras.
+    assert all(row["status"] == "active" for row in matrix)
+    assert all(row["read_only"] is True for row in matrix)
+    assert all(row["transfers"] is False for row in matrix)
+
+
+def test_planned_brokers_stay_out_of_the_matrix():
+    # Corretoras apenas planejadas nao podem aparecer como disponiveis.
+    with_planned = capability_matrix(include_planned=True)
+    estados = {row["status"] for row in with_planned}
+    assert "planned" in estados
+    planejadas = {row["broker"] for row in with_planned if row["status"] == "planned"}
+    assert planejadas == {"bitget", "coinbase", "kraken", "kucoin"}
+    assert all(row["capabilities"] == [] for row in with_planned if row["status"] == "planned")
 
 
 def test_asset_capability_matrix_reflects_mt5_trade_mode():

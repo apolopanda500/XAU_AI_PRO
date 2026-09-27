@@ -1,0 +1,224 @@
+/* Copiloto do XAU AI PRO — dentro da aba de Inteligência Artificial.
+   Escopo estrito em .copilot-* para nao vazar estilo no resto do app. */
+
+.copilot-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line, #2a2f3a);
+}
+
+.copilot-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.copilot-tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.copilot-tab {
+  background: transparent;
+  border: 1px solid var(--line, #2a2f3a);
+  color: var(--muted, #9aa4b2);
+  padding: 4px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.copilot-tab.on {
+  background: var(--accent, #2fbf71);
+  border-color: var(--accent, #2fbf71);
+  color: #0b0e13;
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------------------ chat */
+
+.copilot-chat {
+  max-height: 420px;
+  min-height: 200px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 2px;
+}
+
+.copilot-vazio {
+  color: var(--muted, #9aa4b2);
+  font-size: 13px;
+}
+
+.copilot-fatos {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.copilot-fatos li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.copilot-sugestoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.copilot-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-width: 92%;
+}
+
+.copilot-msg.from-user {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.copilot-msg.from-bot {
+  align-self: flex-start;
+}
+
+.copilot-intent {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted, #9aa4b2);
+}
+
+.copilot-bubble {
+  padding: 8px 11px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  background: rgba(127, 127, 127, 0.1);
+  border: 1px solid var(--line, #2a2f3a);
+  overflow-wrap: anywhere;
+}
+
+.from-user .copilot-bubble {
+  background: rgba(47, 191, 113, 0.14);
+  border-color: rgba(47, 191, 113, 0.4);
+}
+
+.copilot-p { margin: 0 0 4px; }
+.copilot-h3 { margin: 6px 0 4px; font-size: 14px; }
+.copilot-h4 { margin: 6px 0 3px; font-size: 13px; }
+
+.copilot-li {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  margin: 1px 0;
+}
+
+.copilot-bullet,
+.copilot-num {
+  color: var(--muted, #9aa4b2);
+  flex: 0 0 auto;
+  min-width: 12px;
+}
+
+.copilot-hr {
+  border: 0;
+  border-top: 1px solid var(--line, #2a2f3a);
+  margin: 8px 0;
+}
+
+.copilot-code {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 11.5px;
+  background: rgba(127, 127, 127, 0.16);
+  padding: 1px 4px;
+  border-radius: 4px;
+  color: #8fd3ff;
+}
+
+/* ----------------------------------------------------------------- input */
+
+.copilot-input {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.copilot-input textarea {
+  flex: 1;
+  resize: vertical;
+  min-height: 42px;
+  font-size: 13px;
+  font-family: inherit;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--line, #2a2f3a);
+  background: rgba(0, 0, 0, 0.2);
+  color: inherit;
+}
+
+.copilot-input textarea:focus {
+  outline: 1px solid var(--accent, #2fbf71);
+}
+
+/* --------------------------------------------------------------- achados */
+
+.copilot-achados {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 460px;
+  overflow-y: auto;
+}
+
+.copilot-filtros {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  position: sticky;
+  top: 0;
+  background: inherit;
+  padding-bottom: 4px;
+  z-index: 1;
+}
+
+.copilot-achado {
+  border: 1px solid var(--line, #2a2f3a);
+  border-left-width: 3px;
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.copilot-achado.g-critico { border-left-color: #e5484d; }
+.copilot-achado.g-alto    { border-left-color: #f0a020; }
+.copilot-achado.g-medio   { border-left-color: #6b7280; }
+.copilot-achado.g-baixo   { border-left-color: #3a4050; }
+
+.copilot-achado-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+
+.copilot-achado p {
+  margin: 5px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+}

@@ -17,8 +17,15 @@ class OkxError(RuntimeError):
 
 
 class OkxClient:
-    support_status = "code_only"
+    support_status = "active"
     production_ready = False
+
+    # A OKX responde 403 a qualquer requisicao sem User-Agent reconhecivel.
+    USER_AGENT = "XAU-AI-PRO/1.2.3 (+gateway local)"
+
+    # Quotes publicas da OKX usam o par separado por hifen (BTC-USDT); o app
+    # trabalha com o par concatenado (BTCUSDT) e converte aqui.
+    QUOTE_SUFFIXES = ("USDT", "USDC", "USD", "BTC", "ETH", "EUR")
 
     def __init__(self, market: str = "spot", demo: bool = False, api_key: str | None = None, api_secret: str | None = None, api_passphrase: str | None = None) -> None:
         normalized = str(market or "spot").strip().lower()
@@ -46,7 +53,7 @@ class OkxClient:
         request_path = path
         if query:
             request_path = f"{path}?{urlencode(query)}"
-        headers = {"Accept": "application/json"}
+        headers = {"Accept": "application/json", "User-Agent": self.USER_AGENT}
         if signed:
             if not self.configured:
                 raise OkxError("credenciais OKX incompletas")
@@ -75,12 +82,24 @@ class OkxClient:
             return data.get("data", data)
         return data
 
-    @staticmethod
-    def _symbol(symbol: str) -> str:
-        value = str(symbol or "").strip().upper().replace("/", "-")
+    @classmethod
+    def _symbol(cls, symbol: str) -> str:
+        value = str(symbol or "").strip().upper().replace("/", "-").replace("_", "-")
         if not value:
             raise ValueError("symbol é obrigatório")
+        if "-" in value:
+            return value
+        for suffix in cls.QUOTE_SUFFIXES:
+            if value.endswith(suffix) and len(value) > len(suffix):
+                return f"{value[: -len(suffix)]}-{suffix}"
         return value
+
+    def _inst_id(self, symbol: str) -> str:
+        """InstId da OKX: no futuro, o par concatenado vira um swap."""
+        inst_id = self._symbol(symbol)
+        if self.market == "futures" and inst_id.count("-") == 1:
+            return f"{inst_id}-SWAP"
+        return inst_id
 
     @staticmethod
     def _rows(raw: object) -> list[object]:
@@ -107,11 +126,11 @@ class OkxClient:
     def history(self, symbol: str = "", limit: int = 100) -> object:
         params: dict[str, object] = {"instType": self.inst_type, "limit": min(max(int(limit), 1), 100)}
         if str(symbol or "").strip():
-            params["instId"] = self._symbol(symbol)
+            params["instId"] = self._inst_id(symbol)
         return self._get("/api/v5/trade/fills", params, signed=True)
 
     def depth(self, symbol: str, limit: int = 20) -> object:
-        rows = self._rows(self._get("/api/v5/market/books", {"instId": self._symbol(symbol), "sz": min(max(int(limit), 1), 400)}))
+        rows = self._rows(self._get("/api/v5/market/books", {"instId": self._inst_id(symbol), "sz": min(max(int(limit), 1), 400)}))
         row = rows[0] if rows and isinstance(rows[0], dict) else {}
         bids = row.get("bids", [])
         asks = row.get("asks", [])
@@ -125,13 +144,13 @@ class OkxClient:
         }
 
     def trades(self, symbol: str, limit: int = 20) -> object:
-        rows = self._rows(self._get("/api/v5/market/trades", {"instId": self._symbol(symbol), "limit": min(max(int(limit), 1), 500)}))
+        rows = self._rows(self._get("/api/v5/market/trades", {"instId": self._inst_id(symbol), "limit": min(max(int(limit), 1), 500)}))
         return rows
 
     def ticker(self, symbol: str) -> object | None:
-        symbol = self._symbol(symbol)
-        rows = self._rows(self._get("/api/v5/market/ticker", {"instId": symbol}))
-        row = next((item for item in rows if isinstance(item, dict) and str(item.get("instId", "")).upper() == symbol), None)
+        inst_id = self._inst_id(symbol)
+        rows = self._rows(self._get("/api/v5/market/ticker", {"instId": inst_id}))
+        row = next((item for item in rows if isinstance(item, dict) and str(item.get("instId", "")).upper() == inst_id), None)
         if row is None:
             return None
         return {
@@ -142,7 +161,7 @@ class OkxClient:
         }
 
     def ticker_batch(self, symbols: list[str] | tuple[str, ...] | None = None) -> list[object]:
-        normalized = [self._symbol(item) for item in (symbols or []) if str(item or "").strip()]
+        normalized = [self._inst_id(item) for item in (symbols or []) if str(item or "").strip()]
         rows = self._rows(self._get("/api/v5/market/tickers", {"instType": self.inst_type}))
         if not normalized:
             return rows
@@ -164,7 +183,7 @@ class OkxClient:
     def klines(self, symbol: str, interval: str = "M5", limit: int = 500,
                start_time: int | None = None, end_time: int | None = None) -> object:
         params: dict[str, object] = {
-            "instId": self._symbol(symbol),
+            "instId": self._inst_id(symbol),
             "bar": self._interval(interval),
             "limit": min(max(int(limit), 1), 300),
         }

@@ -7,9 +7,9 @@ import { useAppStore } from './useAppStore';
 import {
   PROTOCOL_VERSION,
   WS_PING_INTERVAL_MS,
-  DEFAULT_SYMBOLS,
   type WsMessageV1,
 } from '../lib/protocol';
+import { DEFAULT_SYMBOLS, normalizeSymbols } from '../lib/constants';
 
 const getWsUrl = (): string => wsUrl();
 const nowMs = (): number => Date.now();
@@ -17,12 +17,8 @@ const nowMs = (): number => Date.now();
 // Símbolos ativos: watchlist informada pelo painel ou o padrão do protocolo.
 const desiredSymbols = (): string[] => {
   const wanted = useAppStore.getState().subscribeSymbols;
-  return wanted.length ? wanted : DEFAULT_SYMBOLS;
+  return wanted.length ? wanted : [...DEFAULT_SYMBOLS];
 };
-
-const normalizeSymbols = (symbols: string[]): string[] => [...new Set(
-  symbols.map((symbol) => String(symbol ?? '').trim().toUpperCase()).filter(Boolean),
-)].slice(0, 24);
 
 const newRequestId = (): string =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto

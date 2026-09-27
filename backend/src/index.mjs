@@ -53,7 +53,23 @@ app.use(express.json());
 const apiLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 100 });
 app.use('/api', apiLimiter);
 
+// /api/chat e um proxy para a AI Gateway, que cobra por token. Antes ele era
+// publico: qualquer pessoa na internet POSTava e a conta pagava. Um limite por
+// IP nao protege - basta trocar de IP.
+//
+// Agora e fail-closed: sem CHAT_API_KEY configurado, o endpoint responde 503
+// e nao chama a AI Gateway. O preco e que o chat so funciona depois de definir
+// a chave no ambiente da Vercel.
+const CHAT_API_KEY = String(process.env.CHAT_API_KEY || '').trim();
+
 app.post('/api/chat', async (req, res) => {
+  if (!CHAT_API_KEY) {
+    return res.status(503).json({ error: 'chat desativado: defina CHAT_API_KEY no ambiente' });
+  }
+  const informado = String(req.get('x-chat-key') || '').trim();
+  if (informado !== CHAT_API_KEY) {
+    return res.status(401).json({ error: 'nao autorizado' });
+  }
   const message = String(req.body?.message || '').trim();
   const model = String(req.body?.model || 'openai/gpt-5.6-sol').trim();
   const apiKey = process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN;

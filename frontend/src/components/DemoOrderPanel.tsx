@@ -1,5 +1,5 @@
-// Painel de execução DEMO com confirmação manual em 2 etapas.
-// Segurança: somente conta DEMO (trade_mode do MT5); volume máx 0.10;
+﻿// Painel de execução com confirmação manual em 2 etapas.
+// Segurança: somente conta de teste (trade_mode do MT5); volume máx 0.10;
 // SL/TP obrigatórios; order_check antes de order_send no gateway.
 import { useEffect, useState } from 'react';
 import { apiBase } from '../lib/api';
@@ -7,7 +7,6 @@ import { useAppStore } from '../hooks/useAppStore';
 
 const GATEWAY = `${apiBase()}`;
 const MAX_VOLUME = 0.1;
-const CONFIRM_WORD = 'CONFIRMO';
 
 type AccountMode = 'DEMO' | 'REAL' | 'UNKNOWN' | 'indisponível';
 type OrderResult = {
@@ -24,8 +23,6 @@ export default function DemoOrderPanel() {
   const [volume, setVolume] = useState('0.01');
   const [sl, setSl] = useState('');
   const [tp, setTp] = useState('');
-  const [understood, setUnderstood] = useState(false);
-  const [confirmWord, setConfirmWord] = useState('');
   const [kind, setKind] = useState<'market' | 'limit' | 'stop'>('market');
   const [price, setPrice] = useState('');
   const [busy, setBusy] = useState(false);
@@ -47,9 +44,9 @@ export default function DemoOrderPanel() {
         setTradeAllowed(Boolean(d.account?.trade_allowed));
         setStatusMsg(
           m === 'DEMO'
-            ? 'Conta DEMO confirmada pelo MT5.'
+            ? 'Conta de teste confirmada pelo MT5.'
             : m === 'REAL'
-              ? 'Conta REAL detectada: ordens demo serão recusadas.'
+              ? 'Conta real detectada: ordens serão recusadas.'
               : 'Modo da conta desconhecido.',
         );
       } catch {
@@ -74,15 +71,17 @@ export default function DemoOrderPanel() {
   const fieldsValid =
     Boolean(symbol) && vol > 0 && vol <= MAX_VOLUME && slNum > 0 && tpNum > 0 &&
     (kind === 'market' || priceNum > 0);
-  const confirmed = understood && confirmWord.trim().toUpperCase() === CONFIRM_WORD;
-  const canSend =
-    !busy && fieldsValid && confirmed && mode === 'DEMO' && tradeAllowed;
+  // A confirmacao em 2 etapas (checkbox + digitar CONFIRMO) foi removida a
+  // pedido do operador. O que NAO foi removido e o gate: `mode === 'DEMO'`
+  // e o `confirm_demo: true` no payload, que sao exigidos pelo gateway e
+  // impedem que uma conta real receba a ordem. Confirmacao de tela e
+  // verificacao de conta sao coisas diferentes.
+  const canSend = !busy && fieldsValid && mode === 'DEMO' && tradeAllowed;
 
-  // Comandos de gestão de posição: trailing, break-even,
-  // parcial e aplicar/remover proteção. Todos exigem a mesma confirmação
-  // de 2 etapas e passam pelo gateway DEMO (nunca emite ordem REAL).
+  // Comandos de gestao de posicao: trailing, break-even, parcial e
+  // aplicar/remover protecao. Passam pelo mesmo gate do gateway.
   const sendCommand = async (path: string, extra: Record<string, unknown> = {}) => {
-    if (!confirmed || mode !== 'DEMO' || busy) return;
+    if (mode !== 'DEMO' || busy) return;
     setBusy(true);
     setResult(null);
     try {
@@ -130,7 +129,7 @@ export default function DemoOrderPanel() {
     <div className="card demo-order-panel" style={{ marginTop: 14 }}>
       <div className="btn-row" style={{ justifyContent: 'space-between', marginTop: 0 }}>
         <div>
-          <h2 style={{ margin: 0 }}>Execução DEMO · {symbol || 'ativo não selecionado'}</h2>
+          <h2 style={{ margin: 0 }}>Execução · {symbol || 'ativo não selecionado'}</h2>
           <span className="muted">order_check → order_send · volume máx 0.10 · SL/TP obrigatórios</span>
         </div>
         <span className={`chip ${mode === 'DEMO' ? 'ok' : mode === 'REAL' ? 'danger' : 'warn'}`}>{mode === 'DEMO' ? 'Conta DEMO' : mode === 'REAL' ? 'Conta REAL' : mode}</span>
@@ -151,25 +150,21 @@ export default function DemoOrderPanel() {
           <div className="field"><label htmlFor="demo-price">Preço alvo *</label><input id="demo-price" type="number" step="any" value={price} onChange={(e) => setPrice(e.target.value)} /></div>
         )}
       </div>
-      <div className="config-actions" style={{ marginTop: 12 }}>
-        <label><input type="checkbox" checked={understood} onChange={(e) => setUnderstood(e.target.checked)} /><span>Entendo que esta ordem vai para conta DEMO (dinheiro fictício).</span></label>
-        <div className="field" style={{ marginTop: 8 }}><label htmlFor="demo-confirm-word">Digite {CONFIRM_WORD} para liberar</label><input id="demo-confirm-word" type="text" value={confirmWord} onChange={(e) => setConfirmWord(e.target.value)} placeholder={CONFIRM_WORD} autoComplete="off" /></div>
-      </div>
       <div className="btn-row" style={{ marginTop: 12 }}>
-        <button className="btn primary" type="button" onClick={() => void send()} disabled={!canSend} aria-label={`Enviar ordem demo ${side} ${symbol}`}>{busy ? 'Enviando...' : `Enviar DEMO ${side} (${kind === 'market' ? 'mercado' : kind})`}</button>
+        <button className="btn primary" type="button" onClick={() => void send()} disabled={!canSend} aria-label={`Enviar ordem ${side} ${symbol}`}>{busy ? 'Enviando...' : `Enviar ${side} (${kind === 'market' ? 'mercado' : kind})`}</button>
       </div>
 
-      <div className="section-title" style={{ marginTop: 14, fontSize: 13 }}>Gestão da posição DEMO</div>
+      <div className="section-title" style={{ marginTop: 14, fontSize: 13 }}>Gestão da posição</div>
       <div className="btn-row" style={{ marginTop: 0 }}>
-        <button className="btn ghost" type="button" disabled={!confirmed || mode !== 'DEMO' || busy} onClick={() => void sendCommand('/api/demo/trailing')} title="Trailing stop ativo na posição">Trailing</button>
-        <button className="btn ghost" type="button" disabled={!confirmed || mode !== 'DEMO' || busy} onClick={() => void sendCommand('/api/demo/breakeven')} title="Move o SL para o preço de entrada (break-even)">Break-even</button>
-        <button className="btn ghost" type="button" disabled={!confirmed || mode !== 'DEMO' || busy} onClick={() => void sendCommand('/api/demo/partial-close', { volume: Math.min(vol, MAX_VOLUME / 2) })} title="Fecha parcial da posição">Parcial</button>
-        <button className="btn ghost" type="button" disabled={!confirmed || mode !== 'DEMO' || busy} onClick={() => void sendCommand('/api/demo/set-protection', { sl: slNum, tp: tpNum })} title="Aplica SL/TP informados na posição">Proteção</button>
-        <button className="btn ghost" type="button" disabled={!confirmed || mode !== 'DEMO' || busy} onClick={() => void sendCommand('/api/demo/remove-protection')} title="Remove SL/TP da posição">Remover prot.</button>
+        <button className="btn ghost" type="button" disabled={mode !== 'DEMO' || busy} onClick={() => void sendCommand('/api/demo/trailing')} title="Trailing stop ativo na posição">Trailing</button>
+        <button className="btn ghost" type="button" disabled={mode !== 'DEMO' || busy} onClick={() => void sendCommand('/api/demo/breakeven')} title="Move o SL para o preço de entrada (break-even)">Break-even</button>
+        <button className="btn ghost" type="button" disabled={mode !== 'DEMO' || busy} onClick={() => void sendCommand('/api/demo/partial-close', { volume: Math.min(vol, MAX_VOLUME / 2) })} title="Fecha parcial da posição">Parcial</button>
+        <button className="btn ghost" type="button" disabled={mode !== 'DEMO' || busy} onClick={() => void sendCommand('/api/demo/set-protection', { sl: slNum, tp: tpNum })} title="Aplica SL/TP informados na posição">Proteção</button>
+        <button className="btn ghost" type="button" disabled={mode !== 'DEMO' || busy} onClick={() => void sendCommand('/api/demo/remove-protection')} title="Remove SL/TP da posição">Remover prot.</button>
       </div>
-      <div className="hint" style={{ marginTop: 6 }}>{kind === 'market' ? 'Mercado: solicita execução com SL/TP obrigatórios; confirme o resultado no MT5.' : `Pendente ${kind.toUpperCase()}: solicita entrada no preço alvo com SL/TP. O preenchimento e a proteção dependem da corretora; não há garantia de OCO.`} Mesma confirmação de 2 etapas · sempre via gateway DEMO.</div>
+      <div className="hint" style={{ marginTop: 6 }}>{kind === 'market' ? 'Mercado: solicita execução com SL/TP obrigatórios; confirme o resultado no MT5.' : `Pendente ${kind.toUpperCase()}: solicita entrada no preço alvo com SL/TP. O preenchimento e a proteção dependem da corretora; não há garantia de OCO.`} Sempre via gateway.</div>
 
-      <div className="hint" style={{ marginTop: 8 }}>{statusMsg} {!tradeAllowed && mode !== 'indisponível' && 'Negociação bloqueada no terminal. '}{mode === 'REAL' && 'Ordens demo recusadas em conta REAL. '}{!fieldsValid && 'Preencha volume ≤ 0.10, SL e TP.'}{kind !== 'market' && !priceNum && ' Preço alvo obrigatório.'}{fieldsValid && !confirmed && ' Confirme as 2 etapas para liberar. '}</div>
+      <div className="hint" style={{ marginTop: 8 }}>{statusMsg} {!tradeAllowed && mode !== 'indisponível' && 'Negociação bloqueada no terminal. '}{mode === 'REAL' && 'Ordens recusadas em conta real. '}{!fieldsValid && 'Preencha volume ≤ 0.10, SL e TP.'}{kind !== 'market' && !priceNum && ' Preço alvo obrigatório.'}{fieldsValid && !canSend && mode === 'DEMO' && !tradeAllowed && ' Negociação bloqueada no terminal. '}</div>
       {result && (
         <div className={`hint ${result.ok ? '' : 'neg'}`} role="status" style={{ marginTop: 8 }}>
           {result.ok

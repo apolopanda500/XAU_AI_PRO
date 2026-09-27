@@ -27,8 +27,11 @@ BROKERS: dict[str, BrokerDefinition] = {
     "mt5": BrokerDefinition("mt5", "MetaTrader 5", MT5_MARKETS, ("forex", "metal", "index", "equity", "commodity", "bond", "crypto", "other"), True, True, True, False, False, "active"),
     "binance": BrokerDefinition("binance", "Binance", EXCHANGE_MARKETS, ("crypto",), True, True, False, False, False, "active"),
     "mexc": BrokerDefinition("mexc", "MEXC", EXCHANGE_MARKETS, ("crypto",), True, True, False, False, False, "active"),
-    "bybit": BrokerDefinition("bybit", "Bybit", EXCHANGE_MARKETS, ("crypto",), True, True, False, False, False, "code_only"),
-    "okx": BrokerDefinition("okx", "OKX", EXCHANGE_MARKETS, ("crypto",), True, True, False, False, False, "code_only"),
+    # Bybit e OKX passaram a active para dados publicos depois que os clientes
+    # responderam a API publica real (catalogo, ticker, klines, depth, trades).
+    # A leitura de conta continua dependendo de credencial configurada pelo usuario.
+    "bybit": BrokerDefinition("bybit", "Bybit", EXCHANGE_MARKETS, ("crypto",), True, True, False, False, False, "active"),
+    "okx": BrokerDefinition("okx", "OKX", EXCHANGE_MARKETS, ("crypto",), True, True, False, False, False, "active"),
     "bitget": BrokerDefinition("bitget", "Bitget", EXCHANGE_MARKETS, ("crypto",), True, False, False, False, False, "planned"),
     "coinbase": BrokerDefinition("coinbase", "Coinbase", EXCHANGE_MARKETS, ("crypto",), True, False, False, False, False, "planned"),
     "kraken": BrokerDefinition("kraken", "Kraken", EXCHANGE_MARKETS, ("crypto",), True, False, False, False, False, "planned"),

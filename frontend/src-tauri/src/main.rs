@@ -428,7 +428,12 @@ fn spawn_core(app: &tauri::AppHandle) -> Result<(), String> {
     let mut command = Command::new(&path);
     ocultar_console(&mut command);
     command.current_dir(working_dir);
-    command.env("XAU_CORE_HEALTH_TOKEN", token);
+    command.env("XAU_CORE_HEALTH_TOKEN", &token);
+    // O core fala com o gateway Python (core/src/bridge/mod.rs). Sem este token
+    // toda chamada autenticada volta 401 e o bridge nunca conecta, o que deixava
+    // o WebSocket 9002 sem entregar cotacao nenhuma. O token e o mesmo
+    // gerado por sessao que o bridge recebe.
+    command.env("XAU_GATEWAY_TOKEN", &token);
     if let Some(config) = config_path {
         command.env("XAU_AI_PRO_CONFIG", config);
     }

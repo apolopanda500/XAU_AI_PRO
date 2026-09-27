@@ -740,3 +740,23 @@ Proximos marcos: Plataforma/App/MCP/Sentry, Forward Test 5 dias, 100%.
 
 > Bloco PLATAFORMA/APP/MCP/SENTRY CONCLUIDO.
 > Proximo marco: FORWARD TEST 5 DIAS -> 100%.
+
+<!-- status-real-2026-09-27 -->
+
+## Correcao de status (2026-09-27)
+
+A linha 702 afirma que o conjunto "esta pronto como" produto. O que foi
+verificado no estado real:
+
+- **A IA esta inerte**: `MQL5/Files/Data/prediction.json` tem
+  `symbol: BTCUSDC`, `timestamp` de 67 dias e `model_version 1.1.0`, para
+  um EA configurado em XAUUSD. `system_status.json` reporta
+  `ai.available: false, stale: true`. O fail-safe funciona (nao vira sinal
+  errado), mas **todas as decisoes vem do fallback heuristico local**.
+- Falta `XAUUSD_M15.pkl`, que e o timeframe de backtest do produto
+  (`Python/models/` tem H1, H4 e M5).
+- Endurance nunca executada; forward test nunca executado.
+- `MQL5/Logs` chegou a 1,7 GB em 6 dias: `ValidationEngine.mqh` imprime
+  em todo tick aprovado, sem throttle.
+
+Ver `CONVERSAHOJE.txt` para o inventario atualizado.

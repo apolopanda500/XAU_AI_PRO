@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
@@ -117,7 +117,7 @@ describe('MarketTab', () => {
   it('carrega mercado público somente por GET e sem conta ativa', async () => {
     const fetchMock = installFetch();
     render(<MarketTab />);
-    expect((await screen.findAllByText('binance_api')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByTitle(/binance_api/)).length).toBeGreaterThan(0);
     expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(7);
     fetchMock.mock.calls.forEach(([, init]) => expect(init?.method).toBe('GET'));
     fetchMock.mock.calls.forEach(([input]) => expect(String(input)).toMatch(/\/api\/(capabilities|universal\/(overview|assets|quotes|stats24h|candles|depth|trades)|status)/));
@@ -126,7 +126,7 @@ describe('MarketTab', () => {
   it('não oferece controles acionáveis de trading', async () => {
     installFetch();
     render(<MarketTab />);
-    await screen.findAllByText('binance_api');
+    await screen.findAllByTitle(/binance_api/);
     const controls = screen.getAllByRole('button').map((control) => control.textContent ?? '');
     expect(controls.some((label) => /comprar|vender|fechar|ordem|executarPosição/i.test(label))).toBe(false);
   });
@@ -134,10 +134,10 @@ describe('MarketTab', () => {
   it('descarta dados da corretora anterior ao trocar a fonte', async () => {
     installFetch();
     render(<MarketTab />);
-    expect((await screen.findAllByText('binance_api')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByTitle(/binance_api/)).length).toBeGreaterThan(0);
     fireEvent.change(screen.getByLabelText('Selecionar fonte do mercado'), { target: { value: 'mexc' } });
-    expect((await screen.findAllByText('mexc_api')).length).toBeGreaterThan(0);
-    expect(screen.queryByText('binance_api')).toBeNull();
+    expect((await screen.findAllByTitle(/mexc_api/)).length).toBeGreaterThan(0);
+    expect(screen.queryByTitle(/binance_api/)).toBeNull();
   });
 
   it('limpa a seleção ao remover o último ativo', async () => {
@@ -146,7 +146,10 @@ describe('MarketTab', () => {
     render(<MarketTab />);
     fireEvent.click(await screen.findByRole('button', { name: 'Remover BTCUSDT da lista' }));
     await waitFor(() => expect(useAppStore.getState().selectedSymbol).toBe(''));
-    expect(screen.getByText(/Watchlist vazia|Lista vazia/i)).toBeTruthy();
+    // A lista de acompanhamento como painel proprio foi removida: a tabela de
+    // cotacoes ja e a lista, com remover por linha. Sem ativos, o estado vazio
+    // e o da propria tabela.
+    await waitFor(() => expect(screen.getByText(/Nenhum ativo (dispon|corresponde)/i)).toBeTruthy());
   });
 
   it('não solicita capacidades públicas não expostas pelo MT5', async () => {
@@ -154,7 +157,10 @@ describe('MarketTab', () => {
     localStorageStub.setItem('xau-market-watchlist:mt5:metals', JSON.stringify(['XAUUSD']));
     const fetchMock = installFetch();
     render(<MarketTab />);
-    await waitFor(() => expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/api/status'))).toBe(true));
+    // A aba Mercado nao le mais conta nem status do terminal: o painel
+    // "Conta e posicoes" foi removido e, junto, o getMt5Status. O que ancora
+    // este teste agora e a leitura de candles do proprio ativo.
+    await waitFor(() => expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/api/universal/candles'))).toBe(true));
     const paths = fetchMock.mock.calls.map(([input]) => String(input));
     expect(paths.some((path) => path.includes('/api/universal/stats24h'))).toBe(false);
     expect(paths.some((path) => path.includes('/api/universal/depth'))).toBe(false);

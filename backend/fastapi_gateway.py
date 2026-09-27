@@ -22,6 +22,11 @@ from pydantic import BaseModel
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import backend.mt5_gateway as gw
+from backend import ai_inference
+from backend import auto_engine
+from backend import ea_manager
+from backend import chart_attach
+from backend import copilot
 from backend import intent_log
 from backend import persistent_queue
 from backend import watchdog
@@ -230,6 +235,250 @@ async def ai_models() -> dict:
     return {"ok": True, "models": model_catalog(), "source": "local_model_artifacts"}
 
 
+@app.get("/api/ai/trained")
+async def ai_trained() -> dict:
+    """Inventario dos modelos realmente treinados, com os metricos do treino.
+
+    Complementa /api/ai/models (que so lista arquivos) com accuracy, edge,
+    dispersao entre folds e se o artefato .pkl existe. Um modelo reprovado
+    aparece com o motivo — some-lo esconderia a razao da recusa.
+    """
+    modelos = ai_inference.listar_modelos()
+    return {
+        "ok": True,
+        "models": modelos,
+        "publishable": [m["id"] for m in modelos if m["publicable"] and m["pkl_present"]],
+        "cpu_threads": ai_inference.cpu_threads(),
+        "source": "ai_inference.listar_modelos",
+    }
+
+
+@app.get("/api/ai/predict")
+async def ai_predict(symbol: str = "XAUUSD", timeframe: str = "H1") -> dict:
+    """Inferencia real do modelo publicado sobre os candles do MT5.
+
+    Devolve a probabilidade que o classificador atribui a decisao. Se o
+    timeframe nao tem modelo publicado, ou nao ha candles, a resposta traz
+    `available: false` e o motivo — nunca um sinal fabricado.
+    """
+    return await _read_call(
+        lambda: _ai_predict_sync(symbol, timeframe),
+        timeout=30.0,
+    )
+
+
+def _ai_predict_sync(symbol: str, timeframe: str) -> dict:  # type: ignore[no-untyped-def]
+    import pandas as pd
+
+    from backend.mt5_gateway import _mt5_candles
+
+    candles = _mt5_candles(symbol, timeframe, 600)
+    if candles is None:
+        return {
+            "ok": False,
+            "available": False,
+            "reason": "MT5 nao devolveu candles",
+            "symbol": symbol,
+            "timeframe": timeframe,
+        }
+    # `_mt5_candles` devolve a RESPOSTA canonica (ok, status, provenance,
+    # candles, ...), nao a lista de linhas. Passar o dict inteiro ao DataFrame
+    # misturava escalares com a lista e estourava em
+    # "All arrays must be of the same length" — a previsao real estava
+    # quebrada para todo timeframe.
+    linhas = candles.get("candles") if isinstance(candles, dict) else candles
+    if not linhas:
+        motivo = candles.get("reason_code") or candles.get("error") if isinstance(candles, dict) else None
+        return {
+            "ok": False,
+            "available": False,
+            "reason": f"MT5 nao devolveu candles para {symbol} {timeframe}" + (f" ({motivo})" if motivo else ""),
+            "symbol": symbol,
+            "timeframe": timeframe,
+        }
+    df = pd.DataFrame(linhas)
+    # O dataset do treino usa Time/Open/High/Low/Close/Volume (ver
+    # INPUT_COLUMNS em Python/ai/train_v2.py). As linhas do MT5 vem em minusculo
+    # e a feature builder exigia 'Time' — sem este rename a inferencia real
+    # devolvia "None of ['Time'] are in the columns" para todo timeframe.
+    df = df.rename(columns={c: c.capitalize() for c in df.columns})
+    # `t.reamostrar` usa resample(), que exige DatetimeIndex; a feature builder
+    # exige a COLUNA 'Time'. `drop=False` satisfaz os dois: o indice vira
+    # datetime sem remover a coluna. Sem isso a inferencia quebrava com
+    # "Only valid with DatetimeIndex" e depois com
+    # "None of ['Time'] are in the columns".
+    if "Time" in df.columns:
+        df["Time"] = pd.to_datetime(df["Time"], unit="s", errors="coerce", utc=True)
+        df = df.dropna(subset=["Time"]).sort_values("Time").set_index("Time", drop=False)
+    if df.empty:
+        return {
+            "ok": False,
+            "available": False,
+            "reason": "serie vazia do MT5",
+            "symbol": symbol,
+            "timeframe": timeframe,
+        }
+    resultado = ai_inference.inferir(symbol, df, timeframe)
+    return {"ok": True, **resultado.para_dict()}
+
+
+@app.get("/api/copilot/contexto")
+async def copilot_contexto() -> dict:
+    """O que o copiloto sabe: mapa do EA, achados e limites.
+
+    `escreve_codigo: false` e `previsao_mercado: false` nao sao cerimonia: sao as
+    duas coisas que um copiloto de trading costuma prometer e nao pode cumprir.
+    A UI usa isso para nao oferecer o que nao existe.
+    """
+    return copilot.contexto()
+
+
+@app.post("/api/copilot/perguntar")
+async def copilot_perguntar(request: Request) -> JSONResponse:
+    """Pergunta ao copiloto. Resposta sempre cita arquivo:linha do EA."""
+    try:
+        corpo = await request.json()
+    except Exception:
+        return _send({"ok": False, "error": "corpo JSON invalido"}, 400)
+    if not isinstance(corpo, dict):
+        return _send({"ok": False, "error": "corpo JSON invalido"}, 400)
+    pergunta = str(corpo.get("pergunta", "")).strip()
+    if not pergunta:
+        return _send({"ok": False, "error": "pergunta vazia"}, 400)
+    if len(pergunta) > 2000:
+        return _send({"ok": False, "error": "pergunta longa demais (max 2000)"}, 400)
+    return _send(copilot.perguntar(pergunta))
+
+
+@app.get("/api/ea/achados")
+async def ea_achados(
+    gravidade: str = Query("", max_length=20),
+    categoria: str = Query("", max_length=40),
+    busca: str = Query("", max_length=120),
+    limite: int = Query(50, ge=1, le=200),
+) -> dict:
+    """Achados verificados no EA, filtráveis por gravidade, categoria ou busca.
+
+    Os parametros precisam estar NA ASSINATURA. Uma versao anterior os tinha
+    so no corpo, e o FastAPI passava o objeto Query cru para dentro — o que
+    quebrava em `busca.strip()`.
+    """
+    if busca:
+        lista = copilot.ea_map.buscar(busca, limite=limite)
+    elif categoria:
+        lista = copilot.ea_map.por_categoria(categoria)
+    elif gravidade:
+        lista = copilot.ea_map.por_gravidade(gravidade)
+    else:
+        lista = [a.para_dict() for a in copilot.ea_map.TODOS_ACHADOS]
+    return {"ok": True, "count": len(lista), "achados": lista[:limite]}
+
+
+@app.get("/api/charts")
+async def charts_list() -> dict:
+    """Graficos dos perfis do terminal, com o EA ja anexado em cada um."""
+    return chart_attach.listar_graficos()
+
+
+@app.post("/api/charts/attach")
+async def charts_attach(request: Request) -> JSONResponse:
+    """Anexa (ou re-liga) um EA em um grafico.
+
+    Grava o bloco <expert> no .chr do perfil. Exige o terminal MT5 FECHADO:
+    com o terminal aberto ele reescreve os perfis ao sair e a alteracao seria
+    descartada. Exige tambem XAU_ALLOW_CHART_WRITE=1 no ambiente do gateway.
+    Faz backup do .chr antes de escrever.
+    """
+    try:
+        corpo = await request.json()
+    except Exception:
+        return _send({"ok": False, "error": "corpo JSON invalido"}, 400)
+    if not isinstance(corpo, dict):
+        return _send({"ok": False, "error": "corpo JSON invalido"}, 400)
+    resultado = chart_attach.anexar_ea_por_nome(
+        str(corpo.get("perfil", "Default")),
+        str(corpo.get("grafico", "chart01.chr")),
+        str(corpo.get("nome_ea", "")),
+        str(corpo.get("caminho", "")),
+        corpo.get("inputs") if isinstance(corpo.get("inputs"), dict) else None,
+        bool(corpo.get("autotrade", True)),
+    )
+    return _send(resultado, 200 if resultado.get("ok") else 400)
+
+
+@app.get("/api/eas")
+async def eas_list() -> dict:
+    """Inventario dos Expert Advisors instalados no terminal MT5.
+
+    Somente leitura. O MT5 nao executa EA via API: o app nao compila, nao
+    anexa a grafico e nao comanda EA. Ele lista o que existe de verdade e
+    informa o estado de cada um, cruzando o heartbeat e o journal.
+    """
+    return ea_manager.listar_eas_instalados()
+
+
+@app.get("/api/eas/status")
+async def eas_status() -> dict:
+    """Estado por EA: instalado, visto no journal, heartbeat do terminal."""
+    return await _read_call(lambda: ea_manager.status_eas(com_journal=True), timeout=25.0)
+
+
+@app.get("/api/auto/state")
+async def auto_state() -> dict:
+    """Estado do motor de operacao automatica."""
+    return {"ok": True, **auto_engine.motor.snapshot()}
+
+
+@app.post("/api/auto/config")
+async def auto_config(request: Request) -> JSONResponse:
+    """Define os limites de risco que o operador assume."""
+    try:
+        corpo = await request.json()
+    except Exception:
+        return _send({"ok": False, "error": "corpo JSON invalido"}, 400)
+    if not isinstance(corpo, dict):
+        return _send({"ok": False, "error": "corpo JSON invalido"}, 400)
+    return _send(auto_engine.motor.configurar(corpo))
+
+
+@app.post("/api/auto/start")
+async def auto_start() -> dict:
+    """Liga a operacao automatica. Exige limites validos."""
+    return auto_engine.motor.ligar()
+
+
+@app.post("/api/auto/stop")
+async def auto_stop() -> dict:
+    """Desliga a operacao automatica."""
+    return auto_engine.motor.desligar()
+
+
+@app.post("/api/auto/tick")
+async def auto_tick() -> dict:
+    """Executa UM ciclo sob demanda, sem depender da thread.
+
+    E o botao "rodar agora" e, no teste, a forma de exercitar o motor
+    inteiro com dependencias controladas.
+    """
+    import pandas as pd
+
+    from backend.mt5_gateway import _demo_order, _mt5, _mt5_candles, _risk_state
+
+    m = auto_engine.motor
+
+    def risk_state() -> dict[str, Any]:
+        return _risk_state(_mt5())
+
+    def enviar(payload: dict[str, Any]) -> dict[str, Any]:
+        return _demo_order(payload)
+
+    candles = _mt5_candles(m.simbolo, m.timeframe, 600)
+    df = pd.DataFrame(candles or [])
+    inf = ai_inference.inferir(m.simbolo, df, m.timeframe)
+    decisao = m.ciclo_unico(lambda s, t: inf, enviar, risk_state)
+    return {"ok": True, "decision": decisao.para_dict()}
+
+
 @app.get("/api/universal/overview")
 async def universal_overview() -> dict:
     return await _read_call(gw._universal_overview, timeout=30.0)
@@ -424,7 +673,7 @@ async def assets() -> dict:
 
 
 @app.get("/api/assets/details")
-async def asset_details(symbol: str = Query(default="XAUUSD")) -> dict:
+async def asset_details(symbol: str = Query(min_length=1)) -> dict:
     try:
         return {"ok": True, "symbols": [gw._quote(symbol)], "count": 1}
     except (LookupError, ValueError) as exc:
@@ -472,7 +721,7 @@ async def audit_commands() -> dict:
 
 
 @app.get("/api/mt5/quote")
-async def mt5_quote(symbol: str = Query(default="XAUUSD")) -> dict:
+async def mt5_quote(symbol: str = Query(min_length=1)) -> dict:
     try:
         return gw._quote(symbol)
     except (LookupError, ValueError) as exc:
@@ -482,7 +731,7 @@ async def mt5_quote(symbol: str = Query(default="XAUUSD")) -> dict:
 
 
 @app.get("/api/mt5/quotes")
-async def mt5_quotes(symbols: str = Query(default="XAUUSD")) -> dict:
+async def mt5_quotes(symbols: str = Query(min_length=1)) -> dict:
     out, errors = [], []
     for sym in symbols.split(","):
         try:
@@ -493,7 +742,7 @@ async def mt5_quotes(symbols: str = Query(default="XAUUSD")) -> dict:
 
 
 @app.get("/api/mt5/candles")
-async def mt5_candles(symbol: str = Query(default="XAUUSD"),
+async def mt5_candles(symbol: str = Query(min_length=1),
                       timeframe: str = Query(default="M5"),
                       count: int = Query(default=300, ge=1, le=2000)) -> JSONResponse:
     try:
@@ -507,13 +756,25 @@ async def mt5_candles(symbol: str = Query(default="XAUUSD"),
 # ---------------------------------------------------------------------------
 @app.post("/api/backtest/run")
 async def backtest_run(payload: dict) -> JSONResponse:
-    symbol = str(payload.get("symbol", "XAUUSD")).strip().upper()
+    symbol = str(payload.get("symbol", "")).strip().upper()
     timeframe = str(payload.get("timeframe", "M15")).strip().upper()
     try:
         count = max(30, min(int(payload.get("count", 500)), 2000))
         candle_data = await asyncio.wait_for(asyncio.to_thread(gw._mt5_candles, symbol, timeframe, count), timeout=15.0)
         if not candle_data.get("ok"):
-            return _send({"ok": False, "error": candle_data.get("error", "candles reais indisponíveis"), "candles": []}, 503)
+            # O motivo real vem do gateway (terminal desconectado, simbolo sem
+            # historico, timeframe invalido) junto com o last_error do MetaTrader5.
+            return _send({
+                "ok": False,
+                "error": candle_data.get("error", "candles reais indisponíveis"),
+                "reason_code": candle_data.get("reason_code"),
+                "terminal_open": candle_data.get("terminal_open"),
+                "mt5_last_error": candle_data.get("mt5_last_error"),
+                "symbol": symbol,
+                "timeframe": timeframe,
+                "live_execution": False,
+                "candles": [],
+            }, 503)
         result = run_backtest(
             candle_data["candles"],
             initial_balance=float(payload.get("initial_balance", 10000.0)),
@@ -755,24 +1016,48 @@ async def guardian_tick_route(payload: dict) -> JSONResponse:
 
 
 def _demo_post(route: str, func: Any, payload: dict, **kwargs: Any) -> JSONResponse:
-    """POST demo com fallback de fila offline persistente (gestao/fechamento)."""
+    """POST demo com fallback de fila offline persistente (gestao/fechamento).
+
+    Todo comando demo que altera conta passa por aqui, entao a auditoria e
+    registrada num unico ponto. Antes o `audit_log` so era chamado no handler
+    stdlib de `mt5_gateway.py`, que o processo empacotado (FastAPI) nao executa:
+    nao havia rastro de auditoria no app de verdade.
+    """
     try:
-        return _send(func(payload, **kwargs))
+        resposta = _send(func(payload, **kwargs))
     except PermissionError as exc:
+        _audit_demo(route, payload, "blocked", str(exc))
         queued = persistent_queue.offline_fallback_kind(route, payload, exc)
         if queued is not None:
             return _send(queued, 202)
         return _send({"ok": False, "error": str(exc), "demo": True}, 403)
     except (ValueError, LookupError) as exc:
+        _audit_demo(route, payload, "rejected", str(exc))
         queued = persistent_queue.offline_fallback_kind(route, payload, exc)
         if queued is not None:
             return _send(queued, 202)
         return _send({"ok": False, "error": str(exc), "demo": True}, 403)
     except Exception as exc:
+        _audit_demo(route, payload, "error", str(exc))
         queued = persistent_queue.offline_fallback_kind(route, payload, exc)
         if queued is not None:
             return _send(queued, 202)
         return _send({"ok": False, "error": str(exc), "demo": True}, 503)
+    _audit_demo(route, payload, "sent" if getattr(resposta, "status_code", 0) == 200 else "rejected")
+    return resposta
+
+
+def _audit_demo(route: str, payload: dict, status: str, detail: str = "") -> None:
+    """Grava o comando demo no log de auditoria append-only, sem segredos."""
+    try:
+        from backend.audit_log import record as record_audit
+
+        enriched = dict(payload)
+        if detail:
+            enriched["_error"] = detail[:200]
+        record_audit(gw.AUDIT_FILE, action=f"demo/{route}", payload=enriched, status=status)
+    except Exception:  # noqa: BLE001 - auditoria nunca pode derrubar a ordem
+        pass
 
 
 @app.post("/api/demo/order")
@@ -930,7 +1215,7 @@ async def universal_capabilities(broker: str = Query(default="mt5"), market: str
 
 
 @app.get("/api/universal/candles")
-async def universal_candles(broker: str = Query(default="mt5"), market: str = Query(default="other"), symbol: str = Query(default="XAUUSD"), timeframe: str = Query(default="M5"), interval: str | None = None, limit: int = Query(default=500, ge=1, le=2000)) -> JSONResponse:
+async def universal_candles(broker: str = Query(default="mt5"), market: str = Query(default="other"), symbol: str = Query(min_length=1), timeframe: str = Query(default="M5"), interval: str | None = None, limit: int = Query(default=500, ge=1, le=2000)) -> JSONResponse:
     try:
         result = await _read_call(gw._universal_candles, broker.lower(), market.lower(), symbol, interval or timeframe, limit)
         return _send(result, gw._response_status(result))

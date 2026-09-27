@@ -1,14 +1,10 @@
 import React from 'react';
-import { useAppStore, TabType } from '../hooks/useAppStore';
+import { useAppStore } from '../hooks/useAppStore';
 import QuantumClock from './QuantumClock';
 
-
-const TABS: [TabType, string, string][] = [
-  ['dashboard', 'Painel', 'dashboard'],
-  ['portfolio', 'Patrimônio', 'wallet'],
-  ['robot', 'Robô', 'robot'],
-  ['history', 'Histórico', 'history'],
-];
+// A navegacao vive em Sidebar.tsx (ITEMS). Este arquivo usava declarar um
+// TABS proprio com 4 entradas que nunca eram renderizadas — uma terceira lista
+// de abas que divergia da Sidebar conforme as abas eram adicionadas.
 
 export default function TopNav() {
   const wsConnected = useAppStore((s) => s.wsConnected);

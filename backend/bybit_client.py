@@ -16,7 +16,7 @@ class BybitError(RuntimeError):
 
 
 class BybitClient:
-    support_status = "code_only"
+    support_status = "active"
     production_ready = False
 
     def __init__(self, market: str = "spot", demo: bool = False, api_key: str | None = None, api_secret: str | None = None) -> None:

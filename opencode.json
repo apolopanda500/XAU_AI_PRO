@@ -23,14 +23,23 @@
     ]
   },
   "permission": {
+    "read": "allow",
     "edit": {
       "*": "allow",
       "**/*.mq4": "deny",
       "**/*.mq5": "deny",
       "**/*.mqh": "deny",
       "**/*.set": "deny",
-      "**/MQL5/Experts/**": "deny"
+      "**/MQL5/Experts/**": "deny",
+      "**/.env": "deny",
+      "**/.env.*": "deny",
+      "**/*.dpapi.json": "deny"
     },
+    "glob": "allow",
+    "grep": "allow",
+    "list": "allow",
+    "bash": "allow",
+    "task": "allow",
     "external_directory": {
       "*": "allow",
       "**/.env": "deny",
@@ -39,8 +48,39 @@
       "~/.ssh/**": "deny",
       "~/.config/opencode/auth.json": "deny"
     },
-    "bash": {
-      "*": "ask"
+    "todowrite": "allow",
+    "question": "allow",
+    "webfetch": "allow",
+    "websearch": "allow",
+    "lsp": "allow",
+    "doom_loop": "allow",
+    "skill": "allow"
+  },
+  "agent": {
+    "build": {
+      "permission": {
+        "read": "allow",
+        "edit": {
+          "*": "allow",
+          "**/*.mq4": "deny",
+          "**/*.mq5": "deny",
+          "**/*.mqh": "deny",
+          "**/*.set": "deny",
+          "**/MQL5/Experts/**": "deny"
+        },
+        "bash": "allow",
+        "webfetch": "allow",
+        "websearch": "allow"
+      }
+    },
+    "general": {
+      "permission": {
+        "read": "allow",
+        "edit": "allow",
+        "bash": "allow",
+        "webfetch": "allow",
+        "websearch": "allow"
+      }
     }
   },
   "mcp": {

@@ -5,6 +5,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useEconomicData } from '../../hooks/useEconomicData';
+import { apiBase } from '../../lib/api';
 import {
   EconomicEvent,
   FiltroCalendario,
@@ -157,20 +158,30 @@ export function EconomicCalendarTab() {
   const consultarCopiloto = async () => {
     if (!copilotPrompt.trim() || !eventos.length) return;
     setCopilotLoading(true); setCopilotError('');
+    // Este bloco chamava um LLM EXTERNO na Vercel
+    // (xau-ai-pro-api-apolopanda500.vercel.app/api/chat) e ainda montava o
+    // contexto com campos que a agenda real nao devolve (titulo, anterior,
+    // consenso, real) — os eventos usam title/note/impact/when. Resultado:
+    // chamada paga a um servico de terceiros com contexto vazio.
+    // Agora usa o copiloto local, que tem intencao `agenda` e le a mesma
+    // agenda real do gateway.
     const contexto = eventos.slice(0, 40).map((evento) => ({
-      horario: evento.horario.toISOString(), pais: evento.codigoPais, impacto: evento.impacto,
-      titulo: evento.titulo, anterior: evento.anterior, consenso: evento.consenso, real: evento.real,
+      quando: evento.horario.toISOString(), titulo: evento.titulo,
+      moeda: evento.codigoPais, impacto: evento.impacto,
+      consenso: evento.consenso, anterior: evento.anterior, real: evento.real,
     }));
     try {
-      const base = 'https://xau-ai-pro-api-apolopanda500.vercel.app';
-      const response = await fetch(`${base}/api/chat`, {
+      const response = await fetch(`${apiBase()}/api/copilot/perguntar`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: `Analise somente os eventos econômicos reais abaixo para um trader de XAUUSD. Não dê ordem de compra/venda, não invente números e deixe claro quando não houver evidência. Pergunta: ${copilotPrompt}\nEventos: ${JSON.stringify(contexto)}` }),
-        signal: AbortSignal.timeout(30000),
+        body: JSON.stringify({
+          pergunta: copilotPrompt,
+          contexto: { eventos: contexto, fonte: 'agenda economica real do app' },
+        }),
+        signal: AbortSignal.timeout(15000),
       });
-      const data = await response.json() as { reply?: string; error?: string };
-      if (!response.ok) throw new Error(data.error || `IA HTTP ${response.status}`);
-      setCopilotReply(data.reply || 'A IA não retornou uma análise.');
+      const data = await response.json() as { resposta?: string; reply?: string; error?: string };
+      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+      setCopilotReply(data.resposta || data.reply || 'O copiloto não retornou uma análise.');
     } catch (error) { setCopilotError(error instanceof Error ? error.message : 'Copiloto indisponível'); }
     finally { setCopilotLoading(false); }
   };

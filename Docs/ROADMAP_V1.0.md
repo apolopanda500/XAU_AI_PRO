@@ -158,3 +158,24 @@ C:\Users\Micro\AppData\Roaming\MetaQuotes\Terminal\D0E8209F77C8CF37AD8BF550E51FF
 - Última atualização: 30/07/2026
 - Versão atual: 1.10
 - Status: Em desenvolvimento (V1.0)
+
+---
+
+> ## ⚠️ DOCUMENTO OBSOLETO — NAO EXECUTAR (marcado em 2026-09-26)
+>
+> Este arquivo **nao deve ser seguido**. Ele foi escrito em 30/07/2026 e esta
+> errado em relacao ao projeto atual (`ee90466`).
+>
+> **Motivo principal:** os passos aqui pedem **editar arquivos `.mqh` do MQL5**
+> (`Core/ExecutionEngine.mqh`, `Core/DecisionEngine.mqh`, `AI/AIEngine.mqh`,
+> `Core/RiskEngine.mqh`, `Core/SignalCore.mqh`, `Core/PositionManager.mqh`,
+> `Core/Config.mqh`). Isso e **proibido**: `AGENTS.md` e `opencode.json`
+> (`permission.edit`) tratam `MQL5/Experts`, `.mq4`, `.mq5`, `.mqh` e `.set`
+> como intocaveis. Executar este plano viola a regra de escopo do projeto.
+>
+> **Outros desvios:** afirma versao `1.10` (a real e 1.2.3) e caminhos em
+> `C:\Users\Micro\Downloads\XAU_AI_PRO\` (o repo esta em
+> `MQL5\Files\XAU_AI_PRO`).
+>
+> Para o estado atual, leia `CONVERSAHOJE.txt` e
+> `Docs/HANDOFF_XAU_AI_PRO_20260926.md`.

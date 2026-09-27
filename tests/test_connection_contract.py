@@ -1,4 +1,4 @@
-"""Contrato HTTP de conexões: cadastro e validação somente leitura.
+﻿"""Contrato HTTP de conexões: cadastro e validação somente leitura.
 
 Usa servidor efêmero em 127.0.0.1:0, credenciais sintéticas e clientes stub.
 Nenhuma credencial real é lida; nenhum arquivo do usuário é alterado.
@@ -9,6 +9,8 @@ import http.client
 import json
 import sys
 import threading
+
+from conftest import TOKEN_DE_TESTE
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import patch
@@ -32,7 +34,15 @@ def gateway(tmp_path, monkeypatch):
     monkeypatch.setattr(Path, "read_text", safe_read)
     if ROOT not in sys.path:
         sys.path.insert(0, ROOT)
+    # Gateway fail-closed: sem token ele recusa tudo. Definido antes do import
+    # para que `API_TOKEN` ja valha; a validacao continua real.
+    monkeypatch.setenv("XAU_GATEWAY_TOKEN", TOKEN_DE_TESTE)
+    monkeypatch.setenv("XAU_RATE_LIMIT", "0")
+    monkeypatch.setenv("XAU_RATE_LIMIT_CMD", "0")
     import backend.mt5_gateway as gw
+    import importlib
+
+    gw = importlib.reload(gw)
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), gw.Handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -47,6 +57,7 @@ def _request(base: str, method: str, path: str, payload: dict | None = None):
     conn = http.client.HTTPConnection(host, int(port), timeout=10)
     body = json.dumps(payload) if payload is not None else None
     headers = {"Content-Type": "application/json"} if body else {}
+    headers["Authorization"] = f"Bearer {TOKEN_DE_TESTE}"
     conn.request(method, path, body=body, headers=headers)
     response = conn.getresponse()
     data = json.loads(response.read() or b"{}")

@@ -1,1 +1,45 @@
 .robot-command-actions{padding:8px 10px!important}.robot-command-actions .section-head{margin-bottom:4px!important}.robot-command-actions .section-head .muted{font-size:10px}.robot-command-actions .btn-row{gap:5px;flex-wrap:nowrap}.robot-command-actions .btn{min-height:28px;padding:4px 9px;font-size:11px}.robot-command-actions .hint{margin-top:4px;font-size:10px;line-height:1.15}.robot-command-actions .chip{padding:3px 6px;font-size:10px}
+
+/* Seletor de modelo do robo: campo e metricas na mesma linha, sem card extra. */
+.robot-model-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.robot-model-row .field {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.robot-model-metrics {
+  display: flex;
+  gap: 6px;
+  margin: 0;
+  flex: 0 1 auto;
+}
+
+.robot-model-metrics > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  min-width: 74px;
+}
+
+.robot-model-metrics dt {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.robot-model-metrics dd {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 600;
+}

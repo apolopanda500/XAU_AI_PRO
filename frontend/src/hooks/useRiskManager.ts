@@ -97,12 +97,12 @@ export function useRiskManager() {
     return shouldStopTrading(state.metrics, state.config);
   }, [state.metrics, state.config]);
   
-  // Obter nível de risco
-  const getDrawdownLevel = useCallback((): RiskLevel => {
-    if (!state.metrics) return 'Baixo';
-    return getRiskLevel(state.metrics.dailyDrawdown, DRAWDOWN_THRESHOLDS);
-  }, [state.metrics]);
-  
+  // Obter nível de risco.
+  // getDrawdownLevel foi removido: a aba Risco passou a mostrar o drawdown
+  // somente a partir do risk_gate do gateway, que é a fonte autoritativa e já
+  // traz o limite efetivo (15%). Manter os dois medidores com nomes diferentes
+  // ("Drawdown Diário"/"Drawdown Total" aqui, "Drawdown" do gateway) dava a
+  // impressao de dois controles de risco quando existe um só.
   const getMarginLevel = useCallback((): RiskLevel => {
     if (!state.metrics) return 'Baixo';
     return getRiskLevel(state.metrics.marginUsed, MARGIN_THRESHOLDS);
@@ -116,7 +116,6 @@ export function useRiskManager() {
     updateConfig,
     toggleAutoStop,
     stopCheck,
-    getDrawdownLevel,
     getMarginLevel,
     refresh: () => setState((prev) => ({ ...prev, lastUpdate: new Date() })),
   };

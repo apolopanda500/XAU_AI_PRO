@@ -177,3 +177,24 @@ O XAU AI Pro agora possui:
 - Documentacao completa
 
 **Proximo passo**: Execute `sentry-cli login` para configurar autenticacao.
+
+<!-- status-real-2026-09-27 -->
+
+## Status real (2026-09-27)
+
+A frase "TUDO PRONTO PARA PRODUCAO!" nao se sustenta. O produto esta em
+`PRODUCTION CANDIDATE` e nao foi promovido:
+
+- Endurance 24h/72h/7d **nunca executada** (CP1-CP5 vazios em
+  `ENDURANCE_20_6_PROTOCOLO.md:44-48`).
+- Forward test em conta DEMO **nada executado**.
+- Profit Factor medido **0,46** com 57% de acerto: reprovado
+  economicamente (`Docs/production_gate_etapa24.md:57`).
+- **8 condicoes de seguranca para dinheiro real, todas abertas**
+  (`RELATORIO_AUDITORIA_SEGURANCA.md:187-199`).
+- Assinatura dos binarios e **autoassinada de teste**; sem certificado
+  publico, a reputacao no SmartScreen e zero.
+- `release/1.2.3/release-manifest.json` com os hashes **nao existe**.
+
+Ver tambem `LAUDO_FINAL_AUDITORIA.md:18` e
+`ACOMPANHAMENTO_OFICIAL_PC_20260921.md:430`.

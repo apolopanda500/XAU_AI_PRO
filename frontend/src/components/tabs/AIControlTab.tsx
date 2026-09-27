@@ -1,262 +1,334 @@
-// Painel de IA para XAU AI PRO
-// AI Panel - universal: opera em todos os simbolos suportados
+// Painel de IA do XAU AI PRO.
+//
+// O sinal vem da INFERENCIA REAL do modelo treinado
+// (POST /api/ai/predict -> backend/ai_inference.py). Não há mais gerador de
+// regras no frontend: os valores de RSI/MACD/volume fixos, a confiança
+// constante por regra e o SL/TP em preco*0,99 / preco*1,02 foram removidos.
+//
+// Quando o modelo não está publicado, ou o MT5 não devolve candles, ou o
+// timeframe não bate com o treino, a tela mostra o motivo. Não há número
+// inventado para preencher espaço.
 
-import { useState, useCallback, useEffect, useMemo } from 'react';
-import { useAICommunication, type AISignal } from '../../hooks/useAICommunication';
-import { useAppStore } from '../../hooks/useAppStore';
-import { fmtNum, fmtPct } from '../../lib/format';
+import { useCallback, useEffect, useState } from 'react';
 import { HelpTooltip } from '../../components/HelpTooltip';
-import { apiBase } from '../../lib/api';
-import { rsi as calcRsi, macd as calcMacd, type Candle } from '../../lib/technical';
+import CopilotPanel from '../../components/CopilotPanel';
+import '../copilot.css';
+import { useAppStore } from '../../hooks/useAppStore';
+import {
+  buscarModelosTreinados,
+  useInferenciaIA,
+  type ModeloTreinado,
+  type SinalIA,
+} from '../../hooks/useAICommunication';
+import { fmtNum, fmtPct } from '../../lib/format';
 
-const API = `${apiBase()}`;
-const TF_BY_MODEL: Record<string, string> = { M1: 'M1', M5: 'M5', M15: 'M15', H1: 'H1', H4: 'H4', D1: 'D1' };
-
-type TrainedArtifact = {
-  artifact: string;
-  status: string;
-  training_verified: boolean;
-  training_metadata_status: string;
-  trained_symbol: string | null;
-  trained_timeframe: string | null;
-  train_date: string | null;
-  algorithm: string | null;
-  model_version: string | null;
-  dataset_version: string | null;
-  feature_count: number | null;
+const ROTULO_DIR: Record<string, string> = {
+  BUY: 'Compra',
+  SELL: 'Venda',
+  NEUTRAL: 'Aguardar',
 };
 
+function pct(n: number | null, casas = 4): string {
+  return n === null ? '--' : `${n >= 0 ? '+' : ''}${(n * 100).toFixed(casas * 100 - 1)}%`;
+}
+
+function num(n: number | null, casas = 4): string {
+  return n === null ? '--' : n.toFixed(casas);
+}
+
 export default function AIPanel() {
-  const quotes = useAppStore((s) => s.quotes);
-  const selectedSymbol = useAppStore((s) => s.selectedSymbol);
-  const setAiStatus = useAppStore((s) => s.setAiStatus);
+  const selectedSymbol = useAppStore((s) => s.selectedSymbol) || 'XAUUSD';
+  const aiEnabled = useAppStore((s) => s.settings.aiEnabled);
+  const aiInterval = useAppStore((s) => s.settings.aiInterval) || 60;
+  // Aba interna: 'modelo' e a leitura do operador (probabilidade real do
+  // modelo treinado); 'copiloto' e a conversa sobre o codigo do EA. Os dois
+  // coexistem em vez de se substituirem — um responde "o que o modelo diz
+  // agora", o outro responde "por que o codigo esta assim".
+  const [aba, setAba] = useState<'modelo' | 'copiloto'>('modelo');
 
-  const { aiStatus, getModel, generateSignal, getAvailableModels, changeModel, isEnabled, interval } = useAICommunication();
+  const [modelos, setModelos] = useState<ModeloTreinado[]>([]);
+  const [cpuThreads, setCpuThreads] = useState(0);
+  const [modeloId, setModeloId] = useState<string>('');
+  const [erroCatalogo, setErroCatalogo] = useState('');
+  const [historico, setHistorico] = useState<SinalIA[]>([]);
 
-  const [currentSignal, setCurrentSignal] = useState<AISignal | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [recentSignals, setRecentSignals] = useState<AISignal[]>([]);
-  const [indicatorStatus, setIndicatorStatus] = useState('Aguardando candles do MT5...');
-  const [trainedModels, setTrainedModels] = useState<TrainedArtifact[]>([]);
-  const [catalogStatus, setCatalogStatus] = useState('Carregando catálogo local...');
+  const modelo = modelos.find((m) => m.id === modeloId) ?? null;
+  const timeframe = modelo?.timeframe ?? 'H1';
 
+  const { sinal, carregando, motivo, disponivel, inferir } = useInferenciaIA(
+    timeframe,
+    aiEnabled,
+  );
+
+  // Inventário dos modelos treinados.
   useEffect(() => {
     const controller = new AbortController();
-    const loadCatalog = async () => {
-      try {
-        const response = await fetch(`${API}/api/ai/models`, { signal: controller.signal });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json() as { models?: TrainedArtifact[] };
-        if (!Array.isArray(data.models)) throw new Error('Resposta inválida');
-        setTrainedModels(data.models);
-        setCatalogStatus(data.models.length ? '' : 'Nenhum artefato de modelo instalado.');
-      } catch (error) {
-        if (!controller.signal.aborted) setCatalogStatus(`Catálogo indisponível: ${error instanceof Error ? error.message : 'erro desconhecido'}`);
-      }
-    };
-    void loadCatalog();
+    void buscarModelosTreinados(controller.signal).then(({ modelos: lista, cpuThreads: cpus, erro }) => {
+      if (controller.signal.aborted) return;
+      setModelos(lista);
+      setCpuThreads(cpus);
+      setErroCatalogo(erro);
+      // Preselecciona o primeiro publicavel com artefato carregado.
+      const primeiro = lista.find((m) => m.publicable && m.pklPresent) ?? lista[0] ?? null;
+      if (primeiro) setModeloId(primeiro.id);
+    });
     return () => controller.abort();
   }, []);
 
-  const currentQuote = useMemo(() => quotes.find(q => q.symbol === selectedSymbol), [quotes, selectedSymbol]);
-  const activeModel = getModel();
-  const [selectedModel, setSelectedModel] = useState(activeModel?.id || 'xau-pro-v2');
+  const rodar = useCallback(async () => {
+    const r = await inferir(selectedSymbol);
+    if (r.sinal) setHistorico((h) => [r.sinal!, ...h].slice(0, 10));
+  }, [inferir, selectedSymbol]);
 
-  // Indicadores REAIS: candles do MT5 -> RSI/MACD locais. Sem valores aleatórios.
-  const loadIndicators = useCallback(async (symbol: string, timeframe: string) => {
-    try {
-      const url = `${API}/api/mt5/candles?symbol=${encodeURIComponent(symbol)}&timeframe=${timeframe}&count=200`;
-      const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
-      const d = (await r.json()) as { candles?: Candle[]; error?: string };
-      if (!r.ok || !d.candles?.length) {
-        setIndicatorStatus(`Sem candles: ${d.error ?? 'MT5 indisponível'}`);
-        return null;
-      }
-      const rsiValue = calcRsi(d.candles);
-      const macdValue = calcMacd(d.candles);
-      const lastVolume = 1;
-      setIndicatorStatus(`${d.candles.length} candles ${timeframe} · RSI ${rsiValue?.toFixed(1) ?? '--'} · MACD ${macdValue?.macd.toFixed(3) ?? '--'}`);
-      return { rsi: rsiValue ?? 50, macd: macdValue?.macd ?? 0, volume: lastVolume };
-    } catch (e) {
-      setIndicatorStatus(`Gateway indisponível: ${e instanceof Error ? e.message : 'erro'}`);
-      return null;
-    }
-  }, []);
-
-  const handleGenerateSignal = useCallback(async () => {
-    if (!currentQuote || !isEnabled || !activeModel) return;
-    setIsAnalyzing(true);
-    const indicators = await loadIndicators(currentQuote.symbol, TF_BY_MODEL[activeModel.parameters.timeframe ?? 'M15'] ?? 'M15');
-    if (!indicators) {
-      setIsAnalyzing(false);
-      setAiStatus('IA: candles indisponíveis');
-      return;
-    }
-    const response = await generateSignal(currentQuote.symbol, currentQuote.price, indicators);
-    setIsAnalyzing(false);
-    if (response.success && response.signal) {
-      setCurrentSignal(response.signal);
-      setRecentSignals(prev => [response.signal!, ...prev.slice(0, 9)]);
-      setAiStatus(`Sinal: ${response.signal.direction} (${response.signal.confidence}%)`);
-    }
-  }, [currentQuote, isEnabled, activeModel, generateSignal, setAiStatus, loadIndicators]);
-
+  // Inferência ao vivo, no intervalo configurado pelo operador.
   useEffect(() => {
-    if (!isEnabled || !currentQuote) return;
-    const id = window.setInterval(handleGenerateSignal, interval * 1000);
+    if (!aiEnabled || !modelo) return;
+    void rodar();
+    const id = window.setInterval(() => void rodar(), Math.max(15, aiInterval) * 1000);
     return () => clearInterval(id);
-  }, [isEnabled, currentQuote, interval, handleGenerateSignal]);
+  }, [aiEnabled, modelo, aiInterval, rodar]);
 
-  const handleModelChange = (modelId: string) => {
-    changeModel(modelId);
-    setSelectedModel(modelId);
-    handleGenerateSignal();
-  };
-
-  const model = activeModel;
-  const availableModels = getAvailableModels();
-  const signalClass = currentSignal?.direction === 'BUY' ? 'pos' : currentSignal?.direction === 'SELL' ? 'neg' : '';
-
-  const catalog = (
-    <section className="ai-info-section" aria-label="Modelos treinados instalados">
-      <h4>Artefatos de modelos instalados</h4>
-      <p className="muted">Inventário local somente leitura. Metadados declarados não comprovam integridade do arquivo, desempenho nem vínculo com operações.</p>
-      {catalogStatus && <p className="muted">{catalogStatus}</p>}
-      {trainedModels.map(item => (
-        <div className="ai-model-card" key={item.artifact}>
-          <div className="ai-model-info">
-            <strong>{item.artifact}</strong>
-            <span>Treinado para: {item.trained_symbol ?? 'não informado'} · Timeframe: {item.trained_timeframe ?? 'não informado'}</span>
-            <span>Treino: {item.train_date ?? 'não informado'} · Algoritmo: {item.algorithm ?? 'não informado'}</span>
-            <span>Versão declarada: {item.model_version ?? 'não informada'} · Dataset: {item.dataset_version ?? 'não informado'} · Features: {item.feature_count ?? 'não informado'}</span>
-            <span>Estado do arquivo: {item.status} (idade do arquivo; não é validação do treino) · Metadados: {item.training_metadata_status === 'present' ? 'presentes (não verificados)' : item.training_metadata_status === 'mismatch' ? 'divergentes do nome do arquivo' : item.training_metadata_status === 'invalid' ? 'inválidos' : 'ausentes'}</span>
-          </div>
-        </div>
-      ))}
-    </section>
-  );
-
-  if (!isEnabled) {
+  if (!aiEnabled) {
     return (
       <div className="ai-panel disabled">
         <div className="ai-header">
-          <h3>Inteligencia Artificial</h3>
+          <h3>Inteligência Artificial</h3>
           <span className="muted">Desativado</span>
         </div>
         <div className="ai-disabled">
-          <HelpTooltip text="Ative a IA nas configuracoes">
+          <HelpTooltip text="Ative a IA nas configurações">
             <span>IA desativada.</span>
           </HelpTooltip>
         </div>
-        {catalog}
+        {/* O copiloto NAO depende do motor de inferencia: ele le o codigo e
+            o mapa de achados. Deixa-lo disponivel com a IA desligada e o
+            comportamento correto — desligar a inferencia nao deve apagar a
+            ferramenta de diagnostico do codigo. */}
+        <CopilotPanel />
       </div>
     );
   }
 
-    return (
+  const classe = sinal?.direction === 'BUY' ? 'pos' : sinal?.direction === 'SELL' ? 'neg' : '';
+
+  return (
     <div className="ai-panel">
       <div className="ai-header">
-        <h3>Inteligencia Artificial</h3>
-        <span className="muted">{aiStatus}</span>
+        <h3>Inteligência Artificial</h3>
+        <span className="muted">
+          {sinal ? `inferência real · ${sinal.inferenceMs.toFixed(0)}ms` : 'sem inferência'}
+          {cpuThreads > 0 ? ` · ${cpuThreads} threads CPU` : ''}
+        </span>
       </div>
-      <p className="muted">Os perfis abaixo analisam indicadores localmente; não são os artefatos treinados listados no catálogo.</p>
-      <div className="hint" style={{ marginBottom: 8 }}>{indicatorStatus}</div>
+
+      <div className="copilot-tabs" role="tablist" style={{ marginBottom: 10 }}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={aba === 'modelo'}
+          className={`copilot-tab ${aba === 'modelo' ? 'on' : ''}`}
+          onClick={() => setAba('modelo')}
+        >
+          Modelo
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={aba === 'copiloto'}
+          className={`copilot-tab ${aba === 'copiloto' ? 'on' : ''}`}
+          onClick={() => setAba('copiloto')}
+        >
+          Copiloto
+        </button>
+      </div>
+
+      {aba === 'copiloto' ? (
+        <CopilotPanel />
+      ) : (
+        <>
+      {/* Seleção de modelo: o operador escolhe o artefato e vê as métricas reais. */}
       <div className="ai-model-card">
         <div className="ai-model-info">
           <div className="ai-model-name">
-            {model?.name || 'Sem modelo'}
-            <span className="ai-model-version">v{model?.version}</span>
+            {modelo ? `XAUUSD ${modelo.timeframe}` : 'Nenhum modelo'}
           </div>
-          <div className="ai-model-type">
-            <span className="chip">{model?.type || 'unknown'}</span>
-          </div>
+          <span>
+            {modelo?.algorithm ?? '--'} · {modelo?.featureVersion ?? '--'} ·{' '}
+            {modelo?.trainSamples ?? '--'} amostras de treino
+          </span>
         </div>
         <div className="ai-model-selector">
-          <label>Perfil de indicadores:</label>
-          <select value={selectedModel} onChange={(e) => handleModelChange(e.target.value)}>
-            {availableModels.map(m => (
+          <label htmlFor="ai-modelo">Modelo</label>
+          <select
+            id="ai-modelo"
+            value={modeloId}
+            onChange={(e) => setModeloId(e.target.value)}
+          >
+            {modelos.length === 0 && <option value="">—</option>}
+            {modelos.map((m) => (
               <option key={m.id} value={m.id}>
-                {m.name} ({m.type})
+                {m.id} · acc {num(m.accuracy, 3)} · edge {pct(m.edge, 3)}
+                {m.publicable ? '' : ' (reprovado)'}
               </option>
             ))}
           </select>
         </div>
       </div>
-      {catalog}
 
-      {currentSignal && (
-        <div className={`ai-signal-card ${signalClass}`}>
-          <div className="ai-signal-header">
-            <span className="ai-symbol">{currentSignal.symbol}</span>
-            <span className={`ai-direction ${signalClass}`}>
-              {currentSignal.direction === 'BUY' ? 'COMPRA' : currentSignal.direction === 'SELL' ? 'VENDA' : 'AGUARDAR'}
-            </span>
-            <span className={`ai-confidence ${signalClass}`}>{fmtPct(currentSignal.confidence)}</span>
-          </div>
-          <div className="ai-signal-reason"><strong>Razao:</strong> {currentSignal.reason}</div>
-          <div className="ai-signal-details">
-            <div className="detail-item"><span className="detail-label">Preco</span><span className="detail-value mono">{fmtNum(currentSignal.indicators.price, 2)}</span></div>
-            {currentSignal.indicators.rsi != null && (
-              <div className="detail-item"><span className="detail-label">RSI</span><span className="detail-value mono">{fmtNum(currentSignal.indicators.rsi, 1)}</span></div>
-            )}
-            {currentSignal.indicators.macd != null && (
-              <div className="detail-item"><span className="detail-label">MACD</span><span className="detail-value mono">{fmtNum(currentSignal.indicators.macd, 3)}</span></div>
-            )}
-          </div>
-          <div className="ai-risk-section">
-            <h4>Sugestencias de Risco</h4>
-            <div className="ai-risk-grid">
-              <div className="risk-item"><span className="risk-label">Stop Loss</span><span className="risk-value mono">{fmtNum(currentSignal.risk.suggestedSL, 2)}</span></div>
-              <div className="risk-item"><span className="risk-label">Take Profit</span><span className="risk-value mono">{fmtNum(currentSignal.risk.suggestedTP, 2)}</span></div>
-              <div className="risk-item"><span className="risk-label">Volume</span><span className="risk-value mono">{fmtNum(currentSignal.risk.suggestedVolume, 2)}</span></div>
-              <div className="risk-item"><span className="risk-label">Risco</span><span className="risk-value">{currentSignal.risk.riskPercent}%</span></div>
+      {/* Métricas do modelo escolhido. */}
+      {modelo && (
+        <section className="ai-info-section" aria-label="Desempenho do modelo">
+          <h4>Desempenho medido</h4>
+          <div className="metrics-grid">
+            <div className="card metric-card">
+              <span className="muted">Acurácia</span>
+              <strong>{fmtNum(modelo.accuracy, 4)}</strong>
+              <small>palpite: {num(modelo.baseline, 3)}</small>
+            </div>
+            <div className="card metric-card">
+              <span className="muted">Edge</span>
+              <strong className={modelo.edge != null && modelo.edge > 0 ? 'pos' : ''}>
+                {pct(modelo.edge, 2)}
+              </strong>
+              <small>mínimo exigido: {pct(modelo.edgeMin, 0)}</small>
+            </div>
+            <div className="card metric-card">
+              <span className="muted">Edge médio</span>
+              <strong>{pct(modelo.edgeMean, 2)}</strong>
+              <small>desvio {num(modelo.edgeStd, 3)}</small>
+            </div>
+            <div className="card metric-card">
+              <span className="muted">Teste</span>
+              <strong>{modelo.testSamples ?? '--'}</strong>
+              <small>purga: {modelo.purged ?? '--'} candles</small>
             </div>
           </div>
+          {modelo.edgeFolds.length > 0 && (
+            <p className="muted">
+              Edge por fold: {modelo.edgeFolds.map((e) => pct(e, 2)).join('  ')}
+            </p>
+          )}
+          {!modelo.publicable && (
+            <p className="auth-erro">
+              Modelo reprovado na porta de qualidade — não pode operar. Motivo:{' '}
+              {modelo.reason || 'não registrado'}
+            </p>
+          )}
+        </section>
+      )}
+
+      {/* Sinal. Só aparece quando a inferência rodou de verdade. */}
+      {sinal ? (
+        <div className={`ai-signal-card ${classe}`}>
+          <div className="ai-signal-header">
+            <span className="ai-symbol">
+              {sinal.symbol} {sinal.timeframe}
+            </span>
+            <span className={`ai-direction ${classe}`}>{ROTULO_DIR[sinal.direction]}</span>
+            <span className={`ai-confidence ${classe}`}>
+              {fmtPct(sinal.confidence)}
+            </span>
+          </div>
+          <div className="ai-signal-details">
+            <div className="detail-item">
+              <span className="detail-label">Compra</span>
+              <span className="detail-value mono">{fmtPct(sinal.probBuy * 100)}</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Venda</span>
+              <span className="detail-value mono">{fmtPct(sinal.probSell * 100)}</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Neutro</span>
+              <span className="detail-value mono">{fmtPct(sinal.probNeutral * 100)}</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Preço</span>
+              <span className="detail-value mono">{fmtNum(sinal.price, 2)}</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">ATR</span>
+              <span className="detail-value mono">{fmtNum(sinal.atr, 2)}</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Modelo</span>
+              <span className="detail-value mono">{sinal.model}</span>
+            </div>
+          </div>
+          <p className="muted">
+            A confiança é a probabilidade que o modelo atribui à decisão. Stop Loss,
+            Take Profit e volume não vêm do modelo: são definidos pelo operador no
+            tamanho da posição, porque dependem da banca e do risco por trade.
+          </p>
+        </div>
+      ) : (
+        <div className="placeholder" role="status">
+          {carregando
+            ? 'Inferindo…'
+            : disponivel
+              ? 'Sem sinal.'
+              : motivo || 'Aguardando inferência.'}
         </div>
       )}
 
       <div className="ai-actions">
-        <HelpTooltip text="Gerar novo sinal">
-          <button className="btn primary" onClick={handleGenerateSignal} disabled={isAnalyzing || !currentQuote}>
-            {isAnalyzing ? 'Analisando...' : 'Gerar Sinal'}
-          </button>
-        </HelpTooltip>
+        <button className="btn primary" onClick={() => void rodar()} disabled={carregando || !modelo}>
+          {carregando ? 'Inferindo...' : 'Inferir agora'}
+        </button>
       </div>
 
-      {recentSignals.length > 0 && (
+      {historico.length > 0 && (
         <div className="ai-recent-signals">
-          <h4>Sinais Recentes</h4>
+          <h4>Sinais recentes</h4>
           <div className="ai-signals-list">
-            {recentSignals.map((signal) => (
-              <div key={signal.id} className={`ai-signal-item ${signal.direction === 'BUY' ? 'pos' : signal.direction === 'SELL' ? 'neg' : ''}`}>
-                <span className="signal-time">{signal.timestamp.toLocaleTimeString('pt-BR')}</span>
-                <span className="signal-symbol">{signal.symbol}</span>
-                <span className="signal-direction">{signal.direction}</span>
-                <span className="signal-confidence">{fmtPct(signal.confidence)}</span>
+            {historico.map((s) => (
+              <div
+                key={s.id}
+                className={`ai-signal-item ${s.direction === 'BUY' ? 'pos' : s.direction === 'SELL' ? 'neg' : ''}`}
+              >
+                <span className="signal-time">{s.timestamp.toLocaleTimeString('pt-BR')}</span>
+                <span className="signal-symbol">
+                  {s.symbol} {s.timeframe}
+                </span>
+                <span className="signal-direction">{s.direction}</span>
+                <span className="signal-confidence">{fmtPct(s.confidence)}</span>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {model && (
-        <div className="ai-info-section">
-          <h4>Sobre o Modelo</h4>
-          <div className="ai-model-description">{model.description}</div>
-          <div className="ai-parameters">
-            <strong>Parametros:</strong>
-            <div className="params-grid">
-              {Object.entries(model.parameters).map(([key, value]) => (
-                <div key={key} className="param-item">
-                  <span className="param-key">{key}:</span>
-                  <span className="param-value mono">{String(value)}</span>
-                </div>
-              ))}
+      <section className="ai-info-section" aria-label="Inventário de modelos">
+        <h4>Inventário de modelos</h4>
+        {erroCatalogo && <p className="auth-erro">Catálogo: {erroCatalogo}</p>}
+        {modelos.map((m) => (
+          <div className="ai-model-card" key={m.id}>
+            <div className="ai-model-info">
+              <strong>
+                {m.id}{' '}
+                <span className={`chip ${m.publicable && m.pklPresent ? 'ok' : 'warn'}`}>
+                  {m.publicable && m.pklPresent ? 'publicado' : m.publicable ? 'sem artefato' : 'reprovado'}
+                </span>
+              </strong>
+              <span>
+                acc {num(m.accuracy, 4)} · f1 {num(m.f1, 4)} · edge {pct(m.edge, 4)} (min{' '}
+                {pct(m.edgeMin, 0)}) · treino {m.trainSamples ?? '--'} · teste{' '}
+                {m.testSamples ?? '--'}
+              </span>
+              <span>
+                algoritmo {m.algorithm ?? '--'} · features {m.featureVersion ?? '--'} ·{' '}
+                {m.trainDate ? new Date(m.trainDate).toLocaleDateString('pt-BR') : '--'}
+              </span>
+              {!m.publicable && m.reason && <span className="muted">{m.reason}</span>}
             </div>
           </div>
-        </div>
+        ))}
+        {modelos.length === 0 && !erroCatalogo && (
+          <p className="muted">Nenhum metadado de modelo encontrado.</p>
+        )}
+      </section>
+        </>
       )}
     </div>
   );
 }
-

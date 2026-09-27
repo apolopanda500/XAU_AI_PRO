@@ -1,4 +1,4 @@
-import { useEffect, useState, type ChangeEvent } from 'react';
+﻿import { useEffect, useState, type ChangeEvent } from 'react';
 import { apiBase } from '../lib/api';
 import { requestId } from '../lib/format';
 import { notify } from '../lib/notify';
@@ -50,7 +50,6 @@ export default function GuardianManager() {
   const guardian = useGuardian();
   const intents = useIntents(25);
   const reconcile = useReconcile();
-  const tickNow = useCommand('/api/guardian/tick');
   const positions = usePositions();
   const posRows = ((positions.data as { positions?: unknown } | undefined)?.positions ?? []) as unknown as PosRow[];
   const [ticket, setTicket] = useState('');
@@ -107,14 +106,13 @@ export default function GuardianManager() {
   return (
     <div className="card compact-card guardian-manager">
       <div className="section-head">
-        <h2>Guardian · Trade Manager (DEMO)</h2>
+        <h2>Guardian · Trade Manager</h2>
         <span className={chip}>{engine === 'offline' ? 'gateway offline' : engine}</span>
       </div>
       <div className="btn-row">
         <input className="input sm" type="number" min="1" placeholder="Ticket da posição" value={ticket} onChange={setPart(setTicket)} />
         <button className="btn sm primary" onClick={() => { void activate(); }} disabled={setBusy.busy || !active}>{setBusy.busy ? 'Ativando…' : 'Ativar guardian'}</button>
         <button className="btn sm ghost" onClick={() => { void removeRule(ticket); }} disabled={removeBusy.busy || !active}>Remover</button>
-        <button className="btn sm ghost" onClick={() => { void tickNow.run({}).then(() => { void guardian.refetch(); }); }} disabled={tickNow.busy}>{tickNow.busy ? 'Executando…' : 'Tick agora'}</button>
       </div>
       <div className="guardian-grid">
         <label>Breakeven gatilho <input className="input sm" type="number" step="0.1" value={rule.breakeven.trigger} onChange={(e) => patch('breakeven.trigger', num(e.target.value))} /></label>
@@ -152,43 +150,9 @@ export default function GuardianManager() {
         </div>
       )}
       {guardian.data?.last_error && <div className="hint danger">Último erro: {String(guardian.data.last_error)}</div>}
-      <div className="section-head"><h3>Ciclo imediato</h3>
-        <button className="btn xs ghost" onClick={() => { void tickNow.run().then(() => { void guardian.refetch(); }); }} disabled={tickNow.busy || !active}>{tickNow.busy ? 'Executando…' : 'Tick agora'}</button></div>
-      {tickNow.data && (
-        <div className="hint" role="status" aria-live="polite">
-          {tickNow.data.ok
-            ? `Tick ok · regras: ${String((tickNow.data as { count?: unknown }).count ?? 0)} · ações: ${String(((tickNow.data as { actions?: unknown[] }).actions ?? []).length)}`
-            : `Tick falhou: ${String(tickNow.data.error ?? 'erro desconhecido')}`}
-        </div>
-      )}
-      <div className="guardian-live">
-        <div className="section-head"><h3>Posições monitoradas (tempo real)</h3><span className="chip">{posRows.length}</span></div>
-        {posRows.map((p) => (
-          <LivePosRow key={String(p.ticket ?? '')} p={p}
-            watched={Object.keys(guardian.data?.rules ?? {}).includes(String(p.ticket ?? ''))}
-            onPick={(t) => { setTicket(t); setStatus(`Ticket ${t} preenchido.`); }} />
-        ))}
-        {positions.data && posRows.length === 0 && <div className="hint">Nenhuma posição aberta no momento.</div>}
-        {!positions.data && <div className="hint">Aguardando posições do gateway…</div>}
-      </div>
-      <div className="guardian-audit">
-        <div className="section-head"><h3>Intents (auditoria)</h3><span className="chip">{intents.data?.count ?? 0}</span>
-          <button className="btn xs ghost" onClick={() => { void reconcile.run().then(() => { void intents.refetch(); }); }} disabled={reconcile.busy}>{reconcile.busy ? 'Reconciliando…' : 'Reconciliar agora'}</button></div>
-        {reconcile.report && (
-          <div className="hint" role="status" aria-live="polite">
-            {reconcile.report.ok
-              ? `Verificados: ${reconcile.report.checked ?? 0} · reconciliados: ${reconcile.report.reconciled ?? 0} · desconhecidos: ${reconcile.report.unknown ?? 0} · pendentes: ${reconcile.report.still_pending ?? 0}`
-              : `Reconciliação falhou: ${reconcile.report.error ?? 'erro desconhecido'}`}
-          </div>
-        )}
-        {(intents.data?.intents ?? []).slice(0, 8).map((it) => (
-          <div key={it.intent_id} className="guardian-rule-row">
-            <span className={`chip ${it.status === 'sent' || it.status === 'reconciled' ? 'ok' : it.status === 'pending' ? 'warn' : 'danger'}`}>{it.status}</span>
-            <span>{String(it.kind ?? '')} · {String(it.ts_iso ?? '')}</span>
-          </div>
-        ))}
-        {!intents.data && <div className="hint">Sem registros de auditoria.</div>}
-      </div>
+      {/* "Posições monitoradas" foi removido: duplicava a tabela do Mini
+          Terminal, que ja lista as posicoes ao vivo com Fechar por linha. As
+          regras de guardian continuam listadas acima, com Remover. */}
     </div>
   );
 }

@@ -40,11 +40,23 @@ def test_all_tabs_importable() -> None:
 # 2. Configuracoes
 # ---------------------------------------------------------------------------
 
-def test_config_manager_defaults() -> None:
-    from app.config_manager import ConfigManager
-    cfg = ConfigManager(path=Path(ROOT) / "Temp" / "test_config.json")
-    assert cfg.get("app_version") == "1.2.0"
-    assert cfg.get("market", "default_symbol", default="XAUUSD") == "XAUUSD"
+def test_config_manager_defaults(tmp_path: Path) -> None:
+    """Verifica os defaults reais do ConfigManager.
+
+    Antes este teste escrevia em `ROOT/Temp/test_config.json` e afirmava uma
+    versao fixa. Passava por acidente: lia o arquivo leftover de uma execucao
+    antiga em vez de exercitar o default. Alem disso procurava
+    `market.default_symbol`, que nao existe — a chave real e
+    `trading.default_symbol` — entao o `get()` devolvia o proprio fallback
+    `"XAUUSD"` do teste e a assert nunca verificava a configuracao. Agora o
+    arquivo e isolado por teste e os valores vem da fonte da verdade, entao
+    nao podem voltar a divergir em silencio.
+    """
+    from app.config_manager import DEFAULT_CONFIG, ConfigManager
+
+    cfg = ConfigManager(path=tmp_path / "test_config.json")
+    assert cfg.get("app_version") == DEFAULT_CONFIG["app_version"]
+    assert cfg.get("trading", "default_symbol") == DEFAULT_CONFIG["trading"]["default_symbol"]
 
 
 # ---------------------------------------------------------------------------

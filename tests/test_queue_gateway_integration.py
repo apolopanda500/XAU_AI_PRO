@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """Integracao HTTP da fila persistente offline (Fase 4) - Handler direto, sem servidor.
 
 Valida de ponta a ponta, sem terminal MT5 instalado:
@@ -21,6 +21,8 @@ import types
 from pathlib import Path
 
 import pytest
+
+from conftest import TOKEN_DE_TESTE
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -46,6 +48,8 @@ def _setup(tmp: str) -> None:
     os.environ["XAU_ENABLE_DEMO_ORDERS"] = "1"
     os.environ["XAU_RATE_LIMIT"] = "1000"
     os.environ["XAU_RATE_LIMIT_CMD"] = "1000"
+    # Fail-closed: o gateway exige token. Sem ele os handlers caem em 401.
+    os.environ["XAU_GATEWAY_TOKEN"] = TOKEN_DE_TESTE
     _Ctx.fake = types.ModuleType("MetaTrader5")
     sys.modules["MetaTrader5"] = _Ctx.fake
     import backend.persistent_queue as pq  # primeiro import: envs ja aplicados
@@ -83,7 +87,9 @@ def _make_handler(path: str, body: bytes = b""):
     handler.rfile = io.BytesIO(body)
     handler.wfile = io.BytesIO()
     handler.headers = {"Content-Type": "application/json",
-                       "Content-Length": str(len(body))}
+                       "Content-Length": str(len(body)),
+                       # Fail-closed: sem o Bearer o gateway responde 401.
+                       "Authorization": f"Bearer {TOKEN_DE_TESTE}"}
     status: list[int] = []
     handler.send_response = lambda code, *a, **k: status.append(code)  # type: ignore[method-assign]
     handler.end_headers = lambda: None  # type: ignore[method-assign]

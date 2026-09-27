@@ -8,43 +8,43 @@ import UserSessionGate from './components/auth/UserSessionGate';
 import QuantumBackground from './components/QuantumBackground';
 import Sidebar from './components/Sidebar';
 import TopNav from './components/TopNav';
-import PortfolioHomeClean from './components/tabs/PortfolioHomeSafe';
-import MarketTab from './components/tabs/MarketTab';
-import RobotTableCommands from './components/RobotAssetTableFixed';
-import RobotCommandActions from './components/RobotCommandActions';
+import PortfolioHome from './components/tabs/PortfolioHomeSafe';
+import AutoEnginePanel from './components/AutoEnginePanel';
+import RobotModelPanel from './components/RobotModelPanel';
+import CopilotPanel from './components/CopilotPanel';
+import RobotAssetTable from './components/RobotAssetTableFixed';
 import GuardianManager from './components/GuardianManager';
 import DemoOrderPanel from './components/DemoOrderPanel';
 import UniversalLiveTerminal from './components/UniversalLiveTerminalLatest';
 import HistoryTab from './components/tabs/HistoryTab';
-import SystemMonitorUniversalTab from './components/SystemHealthOnly';
-import SettingsTab from './components/SettingsCoreSimple';
+import SystemHealth from './components/SystemHealthOnly';
+import SettingsCore from './components/SettingsCoreSimple';
 import SubscriptionPanel from './components/SubscriptionPanel';
 import ExitAppButton from './components/ExitAppButton';
 import ConnectedDevicesPanel from './components/ConnectedDevicesPanel';
-import SystemStartupSync from './components/SystemStartupSync';
-import ConnectionManager from './components/ConnectionSettings';
-import StrategyTesterTab from './components/tabs/StrategyTesterTab';
+import ConnectionSettings from './components/ConnectionSettings';
 import RiskTab from './components/tabs/RiskTab';
 import AlertTab from './components/tabs/AlertTab';
-import AIControlTab from './components/tabs/AIControlTab';
 import AnalyticsTab from './components/tabs/AnalyticsTab';
 import EconomicCalendarTab from './components/tabs/EconomicCalendarTab';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 
 function renderActiveTab(tab: TabType): ReactNode {
   switch (tab) {
-    case 'portfolio': return <PortfolioHomeClean />;
-    case 'market': return <MarketTab />;
-    case 'robot': return <><RobotTableCommands /><RobotCommandActions /><DemoOrderPanel /><GuardianManager /><UniversalLiveTerminal /></>;
-    case 'history': return <HistoryTab />;
-    case 'system': return <SystemMonitorUniversalTab />;
-    case 'settings': return <><ConnectionManager /><ConnectedDevicesPanel /><SubscriptionPanel /><SettingsTab /><ExitAppButton /></>;
-    case 'strategy-tester': return <StrategyTesterTab />;
-    case 'risk': return <RiskTab />;
+    case 'portfolio': return <PortfolioHome />;
+    // Robô é o posto de operação: sinal do modelo, operação automática, ordem
+    // manual, posições ao vivo, gestão por posição, EA e o copiloto que explica
+    // tudo isso. Mercado, Inteligência Artificial e Risco saíram de abas
+    // próprias e vieram para cá — a inferência só tem utilidade quando o
+    // comando para agir na sequência está no mesmo lugar.
+    case 'robot': return <><RobotModelPanel /><AutoEnginePanel /><DemoOrderPanel /><UniversalLiveTerminal /><RiskTab /><CopilotPanel /><GuardianManager /><RobotAssetTable /></>;
+    // Performance & Analytics foi fundida no Histórico: as duas telas
+    // analisam a mesma coisa — as operações realizadas.
+    case 'history': return <><HistoryTab /><AnalyticsTab /></>;
+    case 'system': return <SystemHealth />;
+    case 'settings': return <><ConnectionSettings /><ConnectedDevicesPanel /><SubscriptionPanel /><SettingsCore /><ExitAppButton /></>;
     case 'alert': return <AlertTab />;
-    case 'analytics': return <AnalyticsTab />;
     case 'calendar': return <EconomicCalendarTab />;
-    case 'ai': return <AIControlTab />;
     default: return null;
   }
 }
@@ -72,7 +72,6 @@ export default function App() {
 
   return <>
     <QuantumBackground density={60} speed={1} />
-    <SystemStartupSync />
     <UserSessionGate>
       <AuthGate>
         <div className="app-shell">

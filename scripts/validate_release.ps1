@@ -102,6 +102,54 @@ Invoke-ReleaseCheck -Name 'Configuração de bundle Windows' -Command {
     }
 }
 
+Invoke-ReleaseCheck -Name 'Pre-flight de ambiente' -Command {
+    # Falha cedo e com mensagem clara: disco, ferramentas, guarda de MQL5 e
+    # scripts bloqueados. Sem isso os problemas so apareciam no meio de um build
+    # de 15 minutos, quando ja custou caro.
+    Assert-Path -Path (Join-Path $Root '.venv/Scripts/python.exe') -Description 'Python do projeto'
+    Push-Location $Root
+    try {
+        & (Join-Path $Root '.venv/Scripts/python.exe') (Join-Path $Root 'scripts/preflight.py') --etapa longa
+        if ($LASTEXITCODE -ne 0) { throw 'O pre-flight de ambiente reprovou; a release esta bloqueada.' }
+    } finally { Pop-Location }
+}
+
+Invoke-ReleaseCheck -Name 'Nenhum script perigoso reintroduzido' -Command {
+    # Bloqueados em 2026-09-26. Motivos:
+    #   - cmd.exe na raiz: binario solto que sombreia o cmd.exe do sistema para
+    #     qualquer processo com esta pasta como diretorio de trabalho (ja foi
+    #     executado pelo MoNotificationUx.exe do Office) e e magnet de heuristica
+    #     de antivirus, conforme o relatorio de seguranca;
+    #   - XAU_AI_PRO_START.vbs: inicializador silencioso com entrada de
+    #     autoexecucao, padrao classificado como comportamento de PUP;
+    #   - overnight_session.ps1 / ciclo_limpo_123.py: automacao permanente de
+    #     build, assinatura, instalacao e limpeza, sem revisao de staging;
+    #   - pos_reboot_docker.ps1 / post_docker_cli_setup.ps1: execucao no boot e
+    #     instalador silencioso;
+    #   - setup/connect_sandbox_claude: setup de sandbox de terceiros, sem
+    #     qualquer relacao com o produto;
+    #   - install_docker* / vercel_vcr_setup / setup-vercel: instaladores que
+    #     baixam e executam binarios em silencio.
+    $Proibidos = @(
+        'cmd.exe', 'XAU_AI_PRO_START.vbs',
+        'scripts/overnight_session.ps1', 'scripts/ciclo_limpo_123.py',
+        'Tools/pos_reboot_docker.ps1', 'Tools/post_docker_cli_setup.ps1',
+        'Tools/connect_sandbox_claude.ps1', 'Tools/setup_sandbox_claude.ps1',
+        'Tools/vercel_vcr_setup.ps1', 'Tools/install_docker.bat',
+        'Tools/install_docker_windows.ps1', 'setup-vercel.bat'
+    )
+    $Encontrados = @($Proibidos | Where-Object { Test-Path -LiteralPath (Join-Path $Root $_) })
+    if ($Encontrados.Count -gt 0) {
+        throw "scripts perigosos presentes no repositorio: $($Encontrados -join ', ')"
+    }
+    # Nenhum binario solto na raiz: sombreamento de caminho e magnet de AV.
+    $Binarios = @(Get-ChildItem -LiteralPath $Root -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.Extension -match '^\.(exe|dll|vbs|scr|sys)$' })
+    if ($Binarios.Count -gt 0) {
+        throw "binarios na raiz do repositorio: $(($Binarios | ForEach-Object { $_.Name }) -join ', ')"
+    }
+}
+
 Invoke-ReleaseCheck -Name 'Integridade da diff Git' -Command {
     Push-Location $Root
     try { git diff --check } finally { Pop-Location }

@@ -25,6 +25,10 @@ import './theme/clock.css';
 import './theme/mini-info.css';
 import './theme/level1.css';
 import './theme/guardian.css';
+// Escala visual: tipografia minima, espacamento em multiplos de 4 e tabelas
+// com numerais tabulares. Carregada por ULTIMO de proposito — assim ela
+// vence as folhas que inventaram valores proprios. Ver theme/scale.css.
+import './theme/scale.css';
 
 
 // Ajusta para Tauri (mobile viewport)

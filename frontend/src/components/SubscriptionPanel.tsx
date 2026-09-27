@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+﻿import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiBase } from '../lib/api';
 
 type Plan = {
@@ -109,7 +109,7 @@ export default function SubscriptionPanel() {
           <h2>Planos locais e Social Paper</h2>
           <span className="muted">Preferência local de recursos; não é licença comercial nem cobrança</span>
         </div>
-        <span className="chip warn">paper/demo</span>
+        <span className="chip warn">simulado</span>
       </div>
       <div className="plan-grid">
         {plans.map((plan) => (

@@ -5,13 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "csp": "node scripts/apply-csp.mjs",
     "build": "vite build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "android:emulador": "tauri android build --config src-tauri/tauri.emulador.conf.json"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.103.1",
