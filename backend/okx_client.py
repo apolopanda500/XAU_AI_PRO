@@ -6,6 +6,7 @@ import hmac
 import json
 import os
 from datetime import datetime, timezone
+from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import Request
 
@@ -16,12 +17,30 @@ class OkxError(RuntimeError):
     pass
 
 
+def _http_detail(exc: HTTPError) -> str:
+    """Corpo do erro da corretora, sem credencial em lugar nenhum."""
+    try:
+        raw = exc.read().decode("utf-8", "replace")[:400]
+    except Exception:
+        return str(exc)
+    try:
+        parsed = json.loads(raw)
+    except ValueError:
+        return raw
+    if isinstance(parsed, dict):
+        rows = parsed.get("data")
+        if isinstance(rows, list) and rows and isinstance(rows[0], dict):
+            parsed = rows[0]
+        return str(parsed.get("msg") or parsed.get("error") or parsed)[:400]
+    return raw
+
+
 class OkxClient:
     support_status = "active"
     production_ready = False
 
     # A OKX responde 403 a qualquer requisicao sem User-Agent reconhecivel.
-    USER_AGENT = "XAU-AI-PRO/1.2.3 (+gateway local)"
+    USER_AGENT = "XAU-AI-PRO/1.2.4 (+gateway local)"
 
     # Quotes publicas da OKX usam o par separado por hifen (BTC-USDT); o app
     # trabalha com o par concatenado (BTCUSDT) e converte aqui.
@@ -82,6 +101,68 @@ class OkxClient:
             return data.get("data", data)
         return data
 
+    def _post(self, path: str, body: dict[str, object]) -> object:
+        """POST de envio (ordem). Assinatura HMAC cobre timestamp+metodo+rota+corpo."""
+        if not self.configured:
+            raise OkxError("credenciais OKX incompletas")
+        timestamp = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+        payload = json.dumps(body, separators=(",", ":"))
+        signed_text = f"{timestamp}POST{path}{payload}"
+        signature = base64.b64encode(hmac.new(self.secret.encode(), signed_text.encode(), hashlib.sha256).digest()).decode()
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "User-Agent": self.USER_AGENT,
+            "OK-ACCESS-KEY": self.api_key,
+            "OK-ACCESS-SIGN": signature,
+            "OK-ACCESS-TIMESTAMP": timestamp,
+            "OK-ACCESS-PASSPHRASE": self.passphrase,
+        }
+        if self.demo:
+            headers["x-simulated-trading"] = "1"
+        url = f"{validate_exchange_base_url(self.base, 'okx')}{path}"
+        request = Request(url, data=payload.encode("utf-8"), headers=headers, method="POST")
+        try:
+            with open_exchange_request(request, timeout=15) as response:
+                data = json.loads(response.read().decode("utf-8"))
+        except HTTPError as exc:
+            detail = _http_detail(exc)
+            raise OkxError(f"OKX recusou a ordem (HTTP {exc.code}): {detail}") from exc
+        except OkxError:
+            raise
+        except Exception as exc:
+            raise OkxError(f"OKX indisponível: {exc}") from exc
+        if isinstance(data, dict):
+            if "code" not in data:
+                raise OkxError("resposta OKX sem code")
+            if str(data.get("code", "")) not in {"0", ""}:
+                raise OkxError(str(data.get("msg") or data))
+            return data.get("data", data)
+        return data
+
+    def create_order(self, *, symbol: str, side: str, order_type: str, quantity: float,
+                     price: float | None = None, request_id: str) -> dict[str, object]:
+        """Envia ordem spot/swap. Sem contraparte de saque em nenhum ramo."""
+        kind = str(order_type or "market").lower()
+        if kind not in {"market", "limit"}:
+            raise OkxError(f"tipo de ordem OKX não suportado: {order_type}")
+        if kind == "limit" and (price is None or float(price) <= 0):
+            raise OkxError("preço é obrigatório para ordem limit")
+        body: dict[str, object] = {
+            "instId": self._inst_id(symbol),
+            "tdMode": "cash" if self.market == "spot" else "cross",
+            "side": str(side).lower(),
+            "ordType": kind,
+            "sz": str(quantity),
+            "clOrdId": request_id,
+        }
+        if kind == "limit":
+            body["px"] = str(price)
+        rows = self._post("/api/v5/trade/order", body)
+        if isinstance(rows, list) and rows and isinstance(rows[0], dict):
+            return rows[0]
+        return rows if isinstance(rows, dict) else {"raw": rows}
+
     @classmethod
     def _symbol(cls, symbol: str) -> str:
         value = str(symbol or "").strip().upper().replace("/", "-").replace("_", "-")
@@ -93,6 +174,7 @@ class OkxClient:
             if value.endswith(suffix) and len(value) > len(suffix):
                 return f"{value[: -len(suffix)]}-{suffix}"
         return value
+
 
     def _inst_id(self, symbol: str) -> str:
         """InstId da OKX: no futuro, o par concatenado vira um swap."""

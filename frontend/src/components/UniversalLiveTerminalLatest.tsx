@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { apiBase } from '../lib/api';
-import { useCoreStatus, useAccount, usePositions, useJournal, useAllCryptoAccounts } from '../hooks/queries';
+import { useCoreStatus, useAccount, usePositions, useJournal, useAllCryptoAccounts, useAutoState } from '../hooks/queries';
 import { fmtNum, clsPnl, sideOfPosition, extractSymbol, requestId } from '../lib/format';
 import { notify } from '../lib/notify';
 import '../theme/mini-terminal.css';
@@ -22,6 +22,13 @@ export default function UniversalLiveTerminalLatest() {
   const positionsQ = usePositions();
   const journalQ = useJournal(10);          // journal MT5: 10s (baixa latência)
   const cryptoQ = useAllCryptoAccounts();   // cripto: 30s (fundo de Rede)
+  const autoQ = useAutoState();             // motor automático: 5s
+
+  // O motor roda em background, a sub-aba Automação pode estar fechada. O
+  // operador precisa ver AQUI se ele está ligado e sobre qual par — é a
+  // prova de que "ativar automático" teve efeito, sem abrir a configuração.
+  const auto = autoQ.data;
+  const autoAtivo = Boolean(auto?.ativo);
 
   // O modo da conta (DEMO/REAL) aparece AQUI e em mais lugar nenhum da
   // interface: o Mini Terminal ja mostra saldo, patrimonio e posicoes, entao
@@ -61,8 +68,8 @@ export default function UniversalLiveTerminalLatest() {
 
   // Fechamento de posição via gateway.
   //
-  // O campo obrigatorio e `confirm_demo` (backend/mt5_gateway.py:1872,
-  // `_require_demo_command`). Este componente mandava `confirm`,
+  // O campo obrigatorio e `confirm` (backend/mt5_gateway.py:1872,
+  // `_require_trade_command`). Este componente mandava `confirm`,
   // `confirm_live` e `authorize_execution`, que o gateway ignora: o
   // fechamento era recusado com 403 em todas as tentativas.
   //
@@ -86,7 +93,7 @@ export default function UniversalLiveTerminalLatest() {
           symbol: p.symbol ?? '',
           ticket: p.ticket ?? 0,
           request_id: requestId(),
-          confirm_demo: true,
+          confirm: true,
           action: 'close',
         }),
         signal: AbortSignal.timeout(10000),
@@ -122,7 +129,9 @@ export default function UniversalLiveTerminalLatest() {
         <span className={`chip ${modoTone}`} title="Modo da conta no MT5">{modoLabel}</span>
         <span className={`chip ${connected ? 'ok' : 'warn'}`}>{connected ? 'Conectado' : 'Desconectado'}</span>
         <span className={`chip ${eaHeartbeat.live ? 'ok' : 'warn'}`}>EA {eaHeartbeat.live ? `${eaHeartbeat.age_sec ?? 0}s` : 'off'}</span>
-        <button type="button" className="btn xs ghost" onClick={refreshAll} disabled={busy}>{busy ? '…' : 'Atualizar'}</button>
+        <button type="button" className="btn xs ghost" onClick={refreshAll} disabled={busy} aria-label="Atualizar Mini Terminal">
+          {busy ? 'Atualizando…' : 'Atualizar'}
+        </button>
       </div>
     </div>
 
@@ -139,6 +148,14 @@ export default function UniversalLiveTerminalLatest() {
       <span><em>Livre</em><strong className="num">{fmtNum(freeMargin)}</strong></span>
       <span><em>Nível</em><strong className={`num ${marginLevel > 0 && marginLevel < 200 ? 'neg' : ''}`}>{marginLevel > 0 ? `${marginLevel.toFixed(0)}%` : '--'}</strong></span>
       <span><em>Posições</em><strong className="num">{positions.length}</strong></span>
+      <span title="Motor de operação automática — liga e desliga na sub-aba Automação">
+        <em>Auto</em>
+        <strong className={autoAtivo ? 'auto-on' : ''}>
+          {autoAtivo
+            ? `Ligado · ${auto?.simbolo ?? '--'} ${auto?.timeframe ?? ''} · ciclo ${auto?.ciclo ?? 0}`
+            : (autoQ.isError ? 'sem leitura' : 'Desligado')}
+        </strong>
+      </span>
     </div>
 
     <div className="table-scroll"><table className="tbl compact-table positions-table mt5-table">

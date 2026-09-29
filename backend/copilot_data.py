@@ -19,10 +19,10 @@ milissegundos, consumo de memoria desprezivel.
 O QUE ESTE MODULO LE
 ====================
 - Mercado:   cotações, 24h, depth, trades, candles
-- Conta:     saldo, moeda, modo demo/real, servidor
+- Conta:     saldo, moeda, modo da conta, servidor
 - Posições:  abertas com P/L
 - Risco:     o estado do risk_gate (limites efetivos)
-- Execução:  demos, histórico, fila
+- Execução:  ordens, histórico, fila
 - Sistema:   saúde do core, watchdog, boot
 - Calendário: eventos econômicos que podem mexer no vol
 """
@@ -132,7 +132,7 @@ def _traduzir_erro_gateway(mensagem: str | None, status: Any = None) -> str:
         return f"fonte indisponível (HTTP {status})" if status else "fonte indisponível"
     m = str(mensagem).lower()
     if "conta mt5 indisponivel" in m or "conta" in m and "indisponivel" in m:
-        return "**Conta MT5 não logada.** Abra o terminal e logue numa conta demo. " \
+        return "**Conta MT5 não logada.** Abra o terminal e logue numa conta. " \
                f"({mensagem})"
     if "simbolo indisponivel" in m:
         return f"**Símbolo não existe no Market Watch deste terminal.** {mensagem}"
@@ -217,7 +217,7 @@ def risco() -> dict[str, Any]:
 
 
 def demos() -> dict[str, Any]:
-    return buscar("/api/demo/orders")
+    return buscar("/api/trade/orders")
 
 
 # ------------------------------------------------------------------ sistema
@@ -280,7 +280,7 @@ def resumo_do_ambiente() -> dict[str, Any]:
         "saldo": _num(c.get("balance")),
         "patrimonio": _num(c.get("equity")),
         "disponivel_margem": _num(c.get("margin_free")),
-        "modo": "DEMO" if c.get("trade_mode") == 0 else "REAL/desconhecido",
+        "modo": "DEMO" if c.get("trade_mode") == 1 else "REAL" if c.get("trade_mode") == 0 else "desconhecido",
     }
 
     p = posicoes()

@@ -36,6 +36,44 @@ os.environ.setdefault("XAU_RATE_LIMIT", "0")
 os.environ.setdefault("XAU_RATE_LIMIT_CMD", "0")
 
 
+@pytest.fixture(autouse=True)
+def _limpa_recibos_de_envio():
+    """O recibo de idempotencia e estado de processo: zera entre testes.
+
+    Sem isto um `request_id` repetido em arquivos diferentes devolveria o
+    recibo do teste anterior e mascararia o que se quer provar.
+    """
+    from backend.execution_receipts import reset
+
+    reset()
+    yield
+    reset()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _bloqueia_rede_externa():
+    """Nenhum teste pode falar com uma corretora de verdade.
+
+    Os adaptadores agora enviam ordem real. Sem esta barreira um teste que
+    esquecer o monkeypatch abriria posicao em conta de verdade (ou esperaria
+    10s de timeout por chamada). Loopback continua liberado: o gateway de
+    teste roda em 127.0.0.1.
+    """
+    import socket
+
+    original = socket.create_connection
+
+    def guard(address, *args, **kwargs):  # noqa: ANN001 - assinatura de socket
+        host = address[0] if isinstance(address, (tuple, list)) else str(address)
+        if str(host) not in {"127.0.0.1", "::1", "localhost"}:
+            raise RuntimeError(f"rede externa bloqueada em teste: {host}")
+        return original(address, *args, **kwargs)
+
+    socket.create_connection = guard
+    yield
+    socket.create_connection = original
+
+
 @pytest.fixture(scope="session")
 def root_tk():
     """Um único root Tk para toda a sessão de testes (headless)."""

@@ -1,0 +1,86 @@
+/* Copiloto dentro da aba Robo.
+   O painel naso tinha respiro: cartoes encostados, filtro colado no titulo e
+   a lista de achados em tres linhas por item. Aqui ganha folga, e os achados
+   viram tabela densa. */
+
+.copilot-panel {
+  margin-top: 10px;
+}
+
+.copilot-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.copilot-filtros {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.copilot-achados-scroll {
+  max-height: 62vh;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+}
+
+.copilot-achados-table th,
+.copilot-achados-table td {
+  padding: 5px 9px;
+  font-size: 12px;
+  vertical-align: top;
+  line-height: 1.45;
+}
+
+.copilot-achados-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.copilot-achados-table .num {
+  text-align: right;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  width: 1%;
+}
+
+.copilot-achados-table td.mono {
+  font-family: var(--mono);
+  font-size: 11px;
+  white-space: nowrap;
+  width: 1%;
+}
+
+.copilot-achados-table td.muted {
+  color: var(--muted);
+  font-size: 11.5px;
+  min-width: 220px;
+}
+
+.copilot-achados-table td strong {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.copilot-achados-table tbody tr:hover {
+  background: color-mix(in srgb, var(--primary) 7%, transparent);
+}
+
+/* Faixa de gravidade na borda esquerda, sem numero de coluna extra. */
+.copilot-achados-table tr.g-critico td:first-child { box-shadow: inset 2px 0 0 var(--danger); }
+.copilot-achados-table tr.g-alto td:first-child { box-shadow: inset 2px 0 0 #eab308; }
+.copilot-achados-table tr.g-medio td:first-child { box-shadow: inset 2px 0 0 var(--muted); }
+.copilot-achados-table tr.g-baixo td:first-child { box-shadow: inset 2px 0 0 color-mix(in srgb, var(--muted) 40%, transparent); }

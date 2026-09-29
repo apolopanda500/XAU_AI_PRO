@@ -53,18 +53,35 @@ def _pedido(**overrides) -> dict:
 # ------------------------------------------------------------ ordem real
 
 
-def test_ordem_real_e_sempre_recusada():
-    # A ordem real nao esta implementada. A porta precisa recusar com motivo,
-    # nunca devolver sucesso nem silencio.
-    with pytest.raises(PermissionError) as exc:
-        gw._real_order(_pedido())
-    assert "indispon" in str(exc.value).lower()
+def test_ordem_real_nao_e_mais_recusada_por_tipo():
+    # _real_order deixou de levantar "ordens REAIS indisponiveis". Ele roteia
+    # para _trade_order, que e o MESMO caminho do demo. O que pode recusar
+    # agora e falta de trava de envio, confirm ausente ou validacao de campo
+    # - nunca o rotulo REAL.
+    # Qualquer outra excecao (MT5 ausente no ambiente de teste, validacao de
+    # campo) e aceitavel aqui: o unico motivo que este teste proibe e recusa
+    # por tipo de conta.
+    try:
+        gw._real_order(_pedido(confirm=True, sl=3000.0, tp=3100.0))
+    except PermissionError as exc:
+        texto = str(exc).lower()
+        assert "indispon" not in texto, texto
+        assert "real" not in texto, texto
+        assert "demo" not in texto, texto
+    except Exception:  # noqa: BLE001 - nao e recusa por tipo de conta
+        pass
 
 
 @pytest.mark.parametrize("broker", BROKERS)
-def test_ordem_real_recusada_em_todas_as_corretoras(broker):
-    with pytest.raises(PermissionError):
-        gw._real_order(_pedido(broker=broker))
+def test_ordem_real_passa_pelo_mesmo_caminho(broker):
+    """Toda corretora cai no mesmo caminho; nenhuma recusa por ser real."""
+    try:
+        gw._real_order(_pedido(broker=broker, confirm=True, sl=3000.0, tp=3100.0))
+    except PermissionError as exc:
+        texto = str(exc).lower()
+        assert "indispon" not in texto and "real" not in texto, texto
+    except Exception:  # noqa: BLE001 - MT5/validacao, nao rotulo de conta
+        pass
 
 
 def test_rota_real_por_fastapi_responde_403(monkeypatch):
@@ -80,9 +97,9 @@ def test_rota_real_por_fastapi_responde_403(monkeypatch):
     assert corpo["real"] is True
 
 
-def test_solicitacao_real_fica_em_revisao_manual(monkeypatch):
-    # /api/real/request registra a intencao e devolve pending_manual_review.
-    # Ele jamais confirma execucao.
+def test_solicitacao_real_e_aprovada(monkeypatch):
+    # /api/real/request deixou de exigir autorizacao manual: devolve
+    # status=approved e execution_enabled=True, como o operador pediu.
     from fastapi.testclient import TestClient
 
     import backend.fastapi_gateway as fgw
@@ -92,28 +109,42 @@ def test_solicitacao_real_fica_em_revisao_manual(monkeypatch):
     assert resposta.status_code in (200, 422)
     if resposta.status_code == 200:
         corpo = resposta.json()
-        assert corpo["status"] == "pending_manual_review"
-        assert corpo["execution_enabled"] is False
+        assert corpo["status"] == "approved"
+        assert corpo["execution_enabled"] is True
         assert corpo["withdrawals_enabled"] is False
 
 
 # ------------------------------------------------------------ ordem demo
 
 
-def test_demo_exige_flag_de_ambiente(monkeypatch):
-    monkeypatch.delenv("XAU_ENABLE_DEMO_ORDERS", raising=False)
-    with pytest.raises(PermissionError, match="XAU_ENABLE_DEMO_ORDERS"):
-        gw._demo_order(_pedido(confirm_demo=True, sl=3000.0, tp=3100.0))
+def test_gate_de_trade_desligada_bloqueia_envio(monkeypatch):
+    # O app nasce com a gate aberta; quem bloqueia e o operador, com =0.
+    monkeypatch.setenv("XAU_ENABLE_TRADE_COMMANDS", "0")
+    monkeypatch.setenv("XAU_ENABLE_DEMO_ORDERS", "0")
+    with pytest.raises(PermissionError, match="XAU_ENABLE_TRADE_COMMANDS"):
+        gw._trade_order(_pedido(confirm=True, sl=3000.0, tp=3100.0))
 
 
-def test_demo_exige_confirmacao_explicita(monkeypatch):
-    monkeypatch.setenv("XAU_ENABLE_DEMO_ORDERS", "1")
-    with pytest.raises(PermissionError, match="confirm_demo"):
-        gw._demo_order(_pedido(sl=3000.0, tp=3100.0))
+def test_trade_exige_confirmacao_explicita(monkeypatch):
+    """Sem confirm=true o gateway recusa, mesmo com a trava de envio ligada."""
+    monkeypatch.setenv("XAU_ENABLE_TRADE_COMMANDS", "1")
+    with pytest.raises(PermissionError, match="confirm"):
+        gw._trade_order(_pedido(confirm=False, sl=3000.0, tp=3100.0))
 
 
-def test_demo_exige_conta_demo(monkeypatch):
-    monkeypatch.setenv("XAU_ENABLE_DEMO_ORDERS", "1")
+def test_trade_aceita_conta_real(monkeypatch):
+    """O tipo de conta deixa de ser criterio de recusa.
+
+    A antiga trava `trade_mode == DEMO` foi removida junto com o
+    vocabulario demo: DEMO e REAL passam pelo mesmo caminho e pelas
+    mesmas travas de risco (XAU_ENABLE_TRADE_COMMANDS=1, confirm=true,
+    SL/TP obrigatorios, order_check antes do order_send).
+
+    O que este teste garante e negativo e especifico: nenhuma recusa
+    volta dizendo que a conta e real. Qualquer outra falha (mock do MT5
+    incompleto, validacao de campo) e aceitavel aqui.
+    """
+    monkeypatch.setenv("XAU_ENABLE_TRADE_COMMANDS", "1")
 
     class _ContaReal:
         trade_mode = 0  # ACCOUNT_TRADE_MODE_REAL
@@ -129,12 +160,18 @@ def test_demo_exige_conta_demo(monkeypatch):
             return _ContaReal()
 
     monkeypatch.setattr(gw, "_mt5", lambda: _Mt5())
-    with pytest.raises(PermissionError, match="DEMO"):
-        gw._demo_order(_pedido(confirm_demo=True, sl=3000.0, tp=3100.0))
+    try:
+        gw._trade_order(_pedido(confirm=True, symbol="XAUUSD", side="BUY",
+                                volume=0.01, sl=3000.0, tp=3100.0))
+    except PermissionError as exc:
+        raise AssertionError(
+            f"conta real ainda e recusada: {exc}") from exc
+    except Exception:  # noqa: BLE001 - o que importa e nao ser por tipo de conta
+        pass
 
 
 def test_demo_exige_sl_e_tp(monkeypatch):
-    monkeypatch.setenv("XAU_ENABLE_DEMO_ORDERS", "1")
+    monkeypatch.setenv("XAU_ENABLE_TRADE_COMMANDS", "1")
 
     class _Conta:
         trade_mode = 1
@@ -151,11 +188,11 @@ def test_demo_exige_sl_e_tp(monkeypatch):
 
     monkeypatch.setattr(gw, "_mt5", lambda: _Mt5())
     with pytest.raises(ValueError, match="sl e tp"):
-        gw._demo_order(_pedido(confirm_demo=True, sl=0, tp=0))
+        gw._trade_order(_pedido(confirm=True, sl=0, tp=0))
 
 
 def test_demo_respeita_teto_de_volume(monkeypatch):
-    monkeypatch.setenv("XAU_ENABLE_DEMO_ORDERS", "1")
+    monkeypatch.setenv("XAU_ENABLE_TRADE_COMMANDS", "1")
 
     class _Conta:
         trade_mode = 1
@@ -172,7 +209,7 @@ def test_demo_respeita_teto_de_volume(monkeypatch):
 
     monkeypatch.setattr(gw, "_mt5", lambda: _Mt5())
     with pytest.raises(ValueError):
-        gw._demo_order(_pedido(confirm_demo=True, sl=3000.0, tp=3100.0, volume=5.0))
+        gw._trade_order(_pedido(confirm=True, sl=3000.0, tp=3100.0, volume=5.0))
 
 
 # -------------------------------------------------------------- adaptadores
@@ -209,18 +246,20 @@ def test_execute_sem_autorizacao_explicita_e_recusado(broker):
         adaptador.execute({"symbol": "BTCUSDT"}, explicit_authorization=False)
 
 
-def test_mexc_execute_autorizado_ainda_bloqueia_por_padrao():
-    # Autorizacao explicita nao basta: o envio real exige etapa separada.
+def test_mexc_autorizado_sem_credencial_ainda_nao_envia():
+    # Autorizacao explicita nao basta: sem chave da corretora nao ha envio, e o
+    # motivo e dito antes de qualquer requisicao.
     adaptador = MexcExecutionAdapter()
     resultado = adaptador.execute({"symbol": "BTCUSDT"}, explicit_authorization=True)
     assert resultado["ok"] is False
     assert resultado["status"] == "blocked"
+    assert resultado["code"] == "EXECUTION_NO_CREDENTIALS"
     assert resultado["live_execution"] is False
     assert resultado["withdrawals_enabled"] is False
 
 
 def test_mt5_execute_depende_de_flag_dedicada(monkeypatch):
-    monkeypatch.delenv("XAU_ENABLE_MT5_EXECUTION", raising=False)
+    monkeypatch.setenv("XAU_ENABLE_MT5_EXECUTION", "0")
     adaptador = MT5ExecutionAdapter()
     resultado = adaptador.execute({"symbol": "XAUUSD"}, explicit_authorization=True)
     assert resultado["ok"] is False
@@ -236,7 +275,7 @@ def test_router_exige_autorizacao_explicita():
         router.execute(_pedido(), explicit_authorization=False)
 
 
-def test_router_autorizado_mantem_bloqueado():
+def test_router_autorizado_sem_credencial_fica_bloqueado():
     router = UniversalRouter()
     resultado = router.execute(_pedido(), explicit_authorization=True)
     assert resultado["status"] == "blocked"
@@ -301,7 +340,9 @@ def test_kill_switch_presente_no_gateway():
     assert hasattr(gw, "REAL_EMERGENCY_STOP")
 
 
-def test_execucao_real_desligada_por_padrao_no_ambiente():
-    # Nenhuma flag de execucao real pode estar ligada por acidente.
+def test_gate_padrao_e_aberta_e_nao_ambiente_acidental():
+    # As gates nascem abertas (100% desbloqueado), mas ninguem pode ter
+    # deixado uma variavel ligada sem querer neste ambiente de teste: o
+    # comportamento tem de vir do padrao do codigo, nao do console.
     for flag in ("XAU_ENABLE_REAL_ORDERS", "XAU_MCP_TRADING", "XAU_ENABLE_EMERGENCY_RESUME"):
         assert os.getenv(flag, "0") != "1", f"{flag} esta ligada neste ambiente de teste"

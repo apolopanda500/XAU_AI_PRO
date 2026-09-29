@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Guardian Engine - gestao continua de posicoes DEMO (Fase 1 do gap analysis).
+"""Guardian Engine - gestao continua de posicoes (Fase 1 do gap analysis).
 
 Monitora posicoes a cada tick e executa automaticamente:
   - Breakeven automatico (SL -> entrada + offset) apos gatilho de lucro
@@ -9,8 +9,8 @@ Monitora posicoes a cada tick e executa automaticamente:
   - Time exit (tempo maximo em minutos ou horario de fechamento)
 
 Seguranca: o motor NAO possui caminho proprio de ordens. Toda acao e executada
-exclusivamente pelas funcoes _demo_* do mt5_gateway, herdando as travas
-XAU_ENABLE_DEMO_ORDERS=1, confirm_demo=true e conta somente-DEMO. Com a parada
+exclusivamente pelas funcoes _trade_* do mt5_gateway, herdando as travas
+XAU_ENABLE_TRADE_COMMANDS=1 e confirm=true. Com a parada
 de emergencia (REAL_EMERGENCY_STOP) ativa, o motor pausa toda execucao.
 
 Rodar: importado pelo gateway; loop inicia com start_guardian_loop().
@@ -201,14 +201,14 @@ def _normalize_rule(payload: dict) -> dict:
 
 
 def guardian_set(payload: dict) -> dict:
-    """Ativa/atualiza regra de guardian para um ticket (somente DEMO)."""
+    """Ativa/atualiza regra de guardian para um ticket (DEMO e REAL)."""
     from backend import mt5_gateway as gw
-    payload = {**payload, "confirm_demo": True}
-    mt5, _ = gw._require_demo_command(payload)
+    payload = {**payload, "confirm": True}
+    mt5, _ = gw._require_trade_command(payload)
     ticket = int(_num(payload.get("ticket"), 0))
     rows = mt5.positions_get(ticket=ticket) if ticket else None
     if not rows:
-        raise LookupError("posicao DEMO nao encontrada para o guardian")
+        raise LookupError("posicao nao encontrada para o guardian")
     pos = rows[0]
     rule = _normalize_rule(payload)
     symbol = str(getattr(pos, "symbol", ""))
@@ -242,14 +242,14 @@ def guardian_set(payload: dict) -> dict:
                              status="sent")
     _watchdog.record("guardian_set", {"ticket": ticket, "symbol": symbol})
     return {"ok": True, "guardian": "active", "ticket": ticket, "symbol": symbol,
-            "rule": rule, "demo_only": True}
+            "rule": rule, "trade_only": True}
 
 
 def guardian_remove(payload: dict) -> dict:
     """Remove a regra do guardian para um ticket (posicao continua aberta)."""
     from backend import mt5_gateway as gw
-    payload = {**payload, "confirm_demo": True}
-    gw._require_demo_command(payload)
+    payload = {**payload, "confirm": True}
+    gw._require_trade_command(payload)
     ticket = int(_num(payload.get("ticket"), 0))
     with _LOCK:
         removed = RULES.pop(ticket, None)
@@ -266,14 +266,14 @@ def guardian_status() -> dict:
         rules = {str(t): dict(r) for t, r in RULES.items()}
         state = {str(t): dict(s) for t, s in STATE.items()}
     emergency = _emergency_stop()
-    demo_enabled = os.getenv("XAU_ENABLE_DEMO_ORDERS", "0") == "1"
+    trade_enabled = (os.getenv("XAU_ENABLE_TRADE_COMMANDS", "1") == "1" or os.getenv("XAU_ENABLE_DEMO_ORDERS", "0") == "1")
     if emergency:
         engine = "paused_emergency_stop"
-    elif not demo_enabled:
-        engine = "blocked_demo_orders"
+    elif not trade_enabled:
+        engine = "blocked_trade_orders"
     else:
         engine = "enabled"
-    return {"ok": True, "guardian": engine, "demo_only": True,
+    return {"ok": True, "guardian": engine, "trade_only": True,
             "interval_sec": INTERVAL_SEC, "rules": rules, "state": state,
             "count": len(rules), "last_tick": _TICK_INFO.get("last_tick"),
             "last_actions": _TICK_INFO.get("actions", [])[-20:],
@@ -353,7 +353,7 @@ def _guard_tick_rule(gw, mt5, ticket: int, rule: dict, actions: list) -> None:
             st.setdefault("executed_partials", []).append(idx)
             continue
         try:
-            result = gw._demo_partial_close({"ticket": ticket, "volume": part, "confirm_demo": True})
+            result = gw._trade_partial_close({"ticket": ticket, "volume": part, "confirm": True})
         except Exception as exc:
             result = {"ok": False, "error": str(exc)}
         intent_log.record_intent("guardian_partial",
@@ -458,7 +458,7 @@ def _guard_tick_rule(gw, mt5, ticket: int, rule: dict, actions: list) -> None:
             if te.get("only_if_loss") and profit >= 0:
                 return
         try:
-            result = gw._demo_close({"ticket": ticket, "confirm_demo": True})
+            result = gw._trade_close({"ticket": ticket, "confirm": True})
         except Exception as exc:
             result = {"ok": False, "error": str(exc)}
         intent_log.record_intent("guardian_time_exit",

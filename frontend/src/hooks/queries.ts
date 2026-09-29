@@ -55,7 +55,7 @@ export function useJournal(limit = 10) {
 }
 // Guardian Engine (gestão contínua de posições DEMO) — status em 5s.
 export type GuardianStatus = {
-  ok?: boolean; guardian?: string; demo_only?: boolean; interval_sec?: number;
+  ok?: boolean; guardian?: string; trade_only?: boolean; interval_sec?: number;
   count?: number; last_tick?: string | null; last_error?: string | null;
   emergency_stop?: boolean; rules?: Record<string, Record<string, unknown>>; state?: Record<string, Record<string, unknown>>;
   last_actions?: Array<Record<string, unknown>>;
@@ -65,6 +65,30 @@ export function useGuardian() {
     queryKey: ['guardian-status'],
     queryFn: () => get<GuardianStatus>('/api/guardian/status'),
     refetchInterval: 5_000, staleTime: 4_000, retry: 1,
+  });
+}
+
+// Motor de operação automática (/api/auto/state) — 5s.
+//
+// O painel de Automação e o Mini Terminal leem ESTA query: uma chamada só
+// para as duas telas. O painel abandonou o fetch proprio em favor dela, que
+// e a razão de o motor aparecer rodando na conferência sem duplicar polling.
+export type AutoState = {
+  ok?: boolean;
+  ativo?: boolean;
+  simbolo?: string;
+  timeframe?: string;
+  ciclo?: number;
+  limites?: Json;
+  decisoes?: Array<{ ts?: string; simbolo?: string; side?: string; motivo?: string }>;
+};
+export function useAutoState() {
+  return useQuery<AutoState>({
+    queryKey: ['auto-state'],
+    queryFn: () => get<AutoState>('/api/auto/state'),
+    refetchInterval: 5_000,
+    staleTime: 4_000,
+    retry: 1,
   });
 }
 
@@ -215,6 +239,73 @@ export function useBoot() {
     queryKey: ['boot-report'],
     queryFn: () => get<BootReport>('/api/boot'),
     staleTime: 60_000, retry: 1,
+  });
+}
+
+
+// Expert Advisors instalados no terminal (/api/eas) — inventario de disco.
+export type EaInventoryItem = {
+  nome?: string; arquivo?: string; extensao?: string; executavel?: boolean;
+  tem_codigo_fonte?: boolean; bytes?: number; modificado_em?: string;
+  hash_sha256_16?: string;
+};
+export type EaInventory = {
+  ok?: boolean; status?: string; error?: string; experts_dir?: string | null;
+  experts?: EaInventoryItem[]; count?: number; executaveis?: number;
+  apenas_fonte?: number; commands_enabled?: boolean; control_supported?: boolean;
+  observed_at?: string;
+};
+export function useEaInventory() {
+  return useQuery<EaInventory>({
+    queryKey: ['ea-inventory'],
+    queryFn: () => get<EaInventory>('/api/eas'),
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+    retry: 1,
+  });
+}
+
+// Estado por EA (/api/eas/status): instalado + visto no journal + heartbeat.
+export type EaDetailed = EaInventoryItem & {
+  estado?: string; no_journal?: boolean; ocorrencias_journal?: number;
+  ultima_linha_journal?: string | null;
+};
+export type EaStatusDetail = EaInventory & {
+  detalhado?: EaDetailed[];
+  heartbeat?: WatchdogStatus & Record<string, unknown>;
+  heartbeat_estado?: string;
+  nota?: string;
+};
+export function useEaStatusDetail() {
+  return useQuery<EaStatusDetail>({
+    queryKey: ['ea-status-detail'],
+    queryFn: () => get<EaStatusDetail>('/api/eas/status', 30000),
+    refetchInterval: 30_000,
+    staleTime: 25_000,
+    retry: 1,
+  });
+}
+
+// Runtime do EA (/api/ea/status): heartbeat vivo, autotrading, terminal.
+//
+// Este e o sinal que destrava os comandos: o gateway recusa qualquer comando
+// de EA sem heartbeat vivo, entao a interface mostra o motivo em vez de um
+// botao morto sem explicacao.
+export type EaRuntime = {
+  ok?: boolean;
+  live?: boolean;
+  terminal_connected?: boolean;
+  autotrading?: boolean;
+  ea_heartbeat?: { live?: boolean; reason?: string; state?: string; age_sec?: number; file_age_sec?: number; symbol?: string; timeframe?: string; source?: string };
+  source?: string;
+};
+export function useEaRuntime() {
+  return useQuery<EaRuntime>({
+    queryKey: ['ea-runtime'],
+    queryFn: () => get<EaRuntime>('/api/ea/status'),
+    refetchInterval: 10_000,
+    staleTime: 9_000,
+    retry: 1,
   });
 }
 

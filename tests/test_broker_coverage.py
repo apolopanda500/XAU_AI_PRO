@@ -178,11 +178,28 @@ def test_bybit_e_okx_estao_ativos_para_dados_publicos():
     assert "bybit" in supported_brokers() and "okx" in supported_brokers()
 
 
-def test_matriz_nao_promete_execucao_nem_saque():
+def test_matriz_declara_execucao_e_nunca_saque():
+    # App desbloqueado: corretoras ativas expoem execucao real e deixam de ser
+    # somente-leitura. Saque e transferencia continuam fixos em False.
     for row in capability_matrix(include_planned=True):
-        assert row["execution"] == []
         assert row["withdrawals"] is False
         assert row["transfers"] is False
+        if row["status"] == "active":
+            assert row["execution"], row
+            assert row["read_only"] is False
+        else:
+            assert row["execution"] == []
+            assert row["read_only"] is True
+
+
+def test_gate_desligada_torna_a_corretora_somente_leitura(monkeypatch):
+    monkeypatch.setenv("XAU_ENABLE_BINANCE_EXECUTION", "0")
+    rows = [row for row in capability_matrix() if row["broker"] == "binance"]
+    assert rows
+    for row in rows:
+        assert row["execution"] == []
+        assert row["read_only"] is True
+        assert row["withdrawals"] is False
 
 
 def test_corretoras_planejadas_nao_entram_no_padrao():

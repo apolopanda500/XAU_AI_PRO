@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Copiloto do XAU AI PRO — painel de conversa dentro da aba de IA.
  *
  * Nao substitui o painel de inferencia: os dois convivem. O painel de
@@ -12,6 +12,13 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiBase } from '../lib/api';
+// As duas folhas do copiloto ficavam sem importar: `copilot.css` so era
+// puxado pelo AIControlTab (que a interface nunca monta) e
+// `theme/copilot-table.css` nao tinha import em nenhum lugar. Sem elas a
+// tabela de achados caia sem largura, sem sticky e com numeros sobre os
+// textos. A ordem importa: a folha da tabela sobrescreve o respiro do painel.
+import './copilot.css';
+import '../theme/copilot-table.css';
 
 const API = `${apiBase()}`;
 
@@ -324,7 +331,7 @@ export default function CopilotPanel() {
               onClick={() => void enviar(pergunta)}
               disabled={enviando || !pergunta.trim()}
             >
-              {enviando ? '...' : 'Enviar'}
+              {enviando ? 'Enviando…' : 'Enviar'}
             </button>
           </div>
 
@@ -350,23 +357,41 @@ export default function CopilotPanel() {
               </button>
             ))}
           </div>
-          {achados.map((a) => (
-            <div key={a.id} className={`copilot-achado g-${a.gravidade.toLowerCase()}`}>
-              <div className="copilot-achado-head">
-                <span className={`chip ${a.gravidade === 'CRITICO' ? 'danger' : a.gravidade === 'ALTO' ? 'warn' : 'neutral'}`}>
-                  {a.gravidade}
-                </span>
-                <strong>#{a.id} {a.titulo}</strong>
-              </div>
-              <code className="copilot-code">
-                {a.arquivo}:{a.linha}
-              </code>
-              <p className="muted">{a.por_que_importa}</p>
-            </div>
-          ))}
-          {achados.length === 0 && (
-            <div className="placeholder">Nenhum achado neste filtro.</div>
-          )}
+          {/* Os 42 achados eram um cartao empilhado por item, com titulo,
+              arquivo:linha e paragrafo. Tres linhas por achado = 126 linhas
+              de rolagem para ler uma lista. Virou tabela: uma linha por
+              achado, com gravidade, arquivo:linha e o "por que importa"
+              condensado. */}
+          <div className="table-scroll copilot-achados-scroll">
+            <table className="tbl compact-table copilot-achados-table">
+              <caption className="sr-only">Achados da auditoria do EA</caption>
+              <thead>
+                <tr>
+                  <th className="num">#</th>
+                  <th>Gravidade</th>
+                  <th>Achado</th>
+                  <th>Arquivo</th>
+                  <th>Por que importa</th>
+                </tr>
+              </thead>
+              <tbody>
+                {achados.map((a) => (
+                  <tr key={a.id} className={`g-${a.gravidade.toLowerCase()}`}>
+                    <td className="num">{a.id}</td>
+                    <td>
+                      <span className={`chip ${a.gravidade === 'CRITICO' ? 'danger' : a.gravidade === 'ALTO' ? 'warn' : 'neutral'}`}>
+                        {a.gravidade}
+                      </span>
+                    </td>
+                    <td><strong>{a.titulo}</strong></td>
+                    <td className="mono muted">{a.arquivo}:{a.linha}</td>
+                    <td className="muted">{a.por_que_importa}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {achados.length === 0 && <div className="placeholder">Nenhum achado neste filtro.</div>}
+          </div>
         </div>
       )}
     </div>

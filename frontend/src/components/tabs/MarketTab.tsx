@@ -46,12 +46,12 @@ const DEFAULT_WATCHLISTS: Record<string, string[]> = {
 const ERROR_LABELS: Record<EndpointKey, string> = {
   capabilities: 'Capacidades',
   overview: 'Contas',
-  assets: 'CatÃ¡logo',
-  quotes: 'CotaÃ§Ãµes',
-  stats24h: 'EstatÃ­sticas',
+  assets: 'Catálogo',
+  quotes: 'Cotações',
+  stats24h: 'Estatísticas',
   candles: 'Candles',
   depth: 'Livro de ofertas',
-  trades: 'NegÃ³cios',
+  trades: 'Negócios',
   status: 'MT5',
 };
 
@@ -133,13 +133,13 @@ function readSelectedSymbol(source: MarketSource, watchlist: string[]): string {
   return stored && watchlist.includes(stored) ? stored : watchlist[0] ?? '';
 }
 
-// normalizeSymbols agora vem de lib/constants.ts (fonte Ãºnica). Esta cÃ³pia
-// local era a 3Âª implementaÃ§Ã£o e divergia das outras duas.
+// normalizeSymbols agora vem de lib/constants.ts (fonte única). Esta cópia
+// local era a 3ª implementação e divergia das outras duas.
 
 function sourceLabel(source: MarketSource, sources: readonly MarketSourceOption[] = MARKET_SOURCES): string {
   const broker = sources.find((item) => item.broker === source.broker)?.label ?? source.broker.toUpperCase();
   const market = source.market === 'crypto-spot' ? 'Spot' : source.market === 'crypto-futures' ? 'Futuros' : source.market;
-  return `${broker} Â· ${market}`;
+  return `${broker} · ${market}`;
 }
 
 function marketLabel(market: string): string {
@@ -148,7 +148,7 @@ function marketLabel(market: string): string {
 
 function readError(reason: unknown): string {
   if (reason instanceof Error && reason.message) return reason.message;
-  return 'A fonte nÃ£o respondeu.';
+  return 'A fonte não respondeu.';
 }
 
 function isAborted(reason: unknown): boolean {
@@ -183,7 +183,7 @@ function partialErrorMessage(errors: ErrorState): string {
   return Object.entries(errors)
     .filter((entry): entry is [EndpointKey, string] => Boolean(entry[1]))
     .map(([key, value]) => `${ERROR_LABELS[key]}: ${value}`)
-    .join(' Â· ');
+    .join(' · ');
 }
 
 function KpiGrid({ stats, quote }: { stats: MarketStats24h | null; quote: MarketQuote | null }) {
@@ -195,16 +195,16 @@ function KpiGrid({ stats, quote }: { stats: MarketStats24h | null; quote: Market
   const change = stats?.change ?? quote?.change ?? null;
   const changePct = stats?.change_pct ?? quote?.change_pct ?? null;
   const tone = change === null ? 'neutral' : change > 0 ? 'positive' : change < 0 ? 'negative' : 'neutral';
-  return <div className="market-kpis" role="group" aria-label="Indicadores da cotaÃ§Ã£o">
+  return <div className="market-kpis" role="group" aria-label="Indicadores da cotação">
     <Kpi label="Ãšltimo" value={last} />
     <Kpi label="Compra" value={bid} />
     <Kpi label="Venda" value={ask} />
     <Kpi label="Spread" value={spread} />
     <Kpi label="Spread bps" value={spreadBps} digits={3} />
-    <Kpi label="MÃ¡xima 24h" value={stats?.high ?? quote?.high ?? null} />
-    <Kpi label="MÃ­nima 24h" value={stats?.low ?? quote?.low ?? null} />
-    <Kpi label="VariaÃ§Ã£o" value={change} tone={tone} />
-    <Kpi label="VariaÃ§Ã£o %" value={changePct} digits={3} tone={tone} />
+    <Kpi label="Máxima 24h" value={stats?.high ?? quote?.high ?? null} />
+    <Kpi label="Mínima 24h" value={stats?.low ?? quote?.low ?? null} />
+    <Kpi label="Variação" value={change} tone={tone} />
+    <Kpi label="Variação %" value={changePct} digits={3} tone={tone} />
     <Kpi label="Volume" value={stats?.volume ?? quote?.volume ?? null} digits={4} />
     <div className="market-kpi"><span className="kpi-label">Provedor</span><strong className="market-kpi-timestamp">{formatDateTime(stats?.provider_timestamp ?? quote?.provider_timestamp)}</strong><small>Recebido: {formatDateTime(stats?.received_at ?? quote?.received_at)}</small></div>
   </div>;
@@ -297,7 +297,7 @@ export default function MarketTab() {
       if (requestSignal?.aborted) return;
       const grouped = new Map<MarketSourceOption['broker'], MarketSourceOption>();
       result.matrix.forEach((row) => {
-        if (row.withdrawals || row.transfers || row.execution.length > 0) return;
+        if (row.withdrawals || row.transfers) return;
         const fallback = MARKET_SOURCES.find((item) => item.broker === row.broker);
         const current = grouped.get(row.broker) ?? { broker: row.broker, label: fallback?.label ?? row.broker.toUpperCase(), markets: [], enabled: false };
         if (!current.markets.includes(row.market)) current.markets.push(row.market);
@@ -347,7 +347,7 @@ export default function MarketTab() {
       setAssets(result.assets);
       setErrors((current) => ({
         ...current,
-        assets: result.errors.length ? result.errors.map((item) => `${item.symbol ?? 'ativo'}: ${item.error}`).join(' Â· ') : '',
+        assets: result.errors.length ? result.errors.map((item) => `${item.symbol ?? 'ativo'}: ${item.error}`).join(' · ') : '',
       }));
     } catch (reason) {
       if (!requestSignal?.aborted && !isAborted(reason)) setErrors((current) => ({ ...current, assets: readError(reason) }));
@@ -376,7 +376,7 @@ export default function MarketTab() {
       setNow(Date.now());
       setErrors((current) => ({
         ...current,
-        quotes: result.errors.length ? result.errors.map((item) => `${item.symbol ?? 'ativo'}: ${item.error}`).join(' Â· ') : '',
+        quotes: result.errors.length ? result.errors.map((item) => `${item.symbol ?? 'ativo'}: ${item.error}`).join(' · ') : '',
       }));
     } catch (reason) {
       if (!requestSignal?.aborted && !isAborted(reason)) setErrors((current) => ({ ...current, quotes: readError(reason) }));
@@ -588,26 +588,26 @@ export default function MarketTab() {
   const rsiValue = useMemo(() => rsi(visibleCandles as never), [visibleCandles]);
   const macdValue = useMemo(() => macd(visibleCandles as never), [visibleCandles]);
   const atrValue = useMemo(() => atr(visibleCandles as never), [visibleCandles]);
-  const publicStatus = marketLoading && !hasMarketData ? 'Consultando' : hasMarketData ? marketStale ? 'Dados vencidos' : 'Dados reais' : errors.assets || errors.quotes ? 'IndisponÃ­vel' : 'Aguardando';
+  const publicStatus = marketLoading && !hasMarketData ? 'Consultando' : hasMarketData ? marketStale ? 'Dados vencidos' : 'Dados reais' : errors.assets || errors.quotes ? 'Indisponível' : 'Aguardando';
   const sourceLabelText = sourceLabel(source, marketSources);
-  const statusTone = publicStatus === 'Dados reais' ? 'ok' : publicStatus === 'IndisponÃ­vel' ? 'danger' : 'warn';
+  const statusTone = publicStatus === 'Dados reais' ? 'ok' : publicStatus === 'Indisponível' ? 'danger' : 'warn';
   const chartValues = useMemo(() => visibleCandles.map((candle) => ({ time: candle.time, price: candle.close })), [visibleCandles]);
 
   return <section className="market-page" aria-labelledby="market-title" aria-busy={capabilitiesLoading || marketLoading || selectedLoading || overviewLoading}>
-    <div className="page-head market-page-head"><div><span className="eyebrow">LEITURA UNIVERSAL</span><h1 id="market-title" tabIndex={-1}>Mercado</h1><span className="muted">PreÃ§os, histÃ³rico e livro pÃºblico em tempo real, sem execuÃ§Ã£o.</span></div><div className="btn-row"><span className={`chip ${statusTone}`} role="status">{publicStatus} Â· {sourceLabelText}</span><button className="btn" type="button" onClick={() => setSettings({ marketAutoRefresh: !marketAutoRefresh })}>{marketAutoRefresh ? 'Pausar atualizaÃ§Ã£o' : 'Retomar atualizaÃ§Ã£o'}</button><button className="btn primary" type="button" onClick={refreshAll} disabled={capabilitiesLoading || marketLoading || selectedLoading || overviewLoading}>{capabilitiesLoading || marketLoading || selectedLoading || overviewLoading ? 'Atualizandoâ€¦' : 'Atualizar agora'}</button></div></div>
-    <div className="market-security-banner" role="status"><strong>Somente leitura</strong><span>Dados de mercado sÃ£o independentes do status da conta. Nenhuma aÃ§Ã£o de trading estÃ¡ disponÃ­vel nesta aba.</span></div>
-    <section className="card market-source-panel" aria-labelledby="market-source-title"><div className="section-head"><div><h2 id="market-source-title">Fonte e mercado</h2><span className="muted">A identidade da leitura Ã© corretora + mercado + ativo.</span></div><span className="chip primary">PÃºblico</span></div><div className="market-source-controls"><label className="field"><span>Fonte</span><select aria-label="Selecionar fonte do mercado" value={source.broker} onChange={(event) => changeBroker(event.target.value)}>{marketSources.map((item) => <option key={item.broker} value={item.broker} disabled={!item.enabled}>{item.label}{item.enabled ? '' : ' Â· homologaÃ§Ã£o, desativado'}</option>)}</select></label><label className="field"><span>Mercado</span><select aria-label="Selecionar mercado" value={source.market} onChange={(event) => changeSource({ ...source, market: event.target.value as MarketKind })}>{marketSources.find((item) => item.broker === source.broker)?.markets.map((market) => <option key={market} value={market}>{marketLabel(market)}</option>)}</select></label><label className="field market-search-field"><span>Buscar ativo</span><input aria-label="Buscar ativo" value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') addSymbol(); }} placeholder="Ex.: BTCUSDT" /></label><button className="btn sm" type="button" onClick={addSymbol}>Adicionar ativo</button></div><div className="market-source-meta"><span>Status pÃºblico: <strong>{publicStatus}</strong></span><span>Recebido: <strong>{formatTime(overview?.received_at)}</strong></span><span>Fonte: <strong>{overview?.source ?? 'â€”'}</strong></span></div></section>
+    <div className="page-head market-page-head"><div><span className="eyebrow">LEITURA UNIVERSAL</span><h1 id="market-title" tabIndex={-1}>Mercado</h1><span className="muted">Preços, histórico e livro público em tempo real. A ordem sai em Robô → Mesa.</span></div><div className="btn-row"><span className={`chip ${statusTone}`} role="status">{publicStatus} · {sourceLabelText}</span><button className="btn" type="button" onClick={() => setSettings({ marketAutoRefresh: !marketAutoRefresh })}>{marketAutoRefresh ? 'Pausar atualização' : 'Retomar atualização'}</button><button className="btn primary" type="button" onClick={refreshAll} disabled={capabilitiesLoading || marketLoading || selectedLoading || overviewLoading}>{capabilitiesLoading || marketLoading || selectedLoading || overviewLoading ? 'Atualizando…' : 'Atualizar agora'}</button></div></div>
+    <div className="market-security-banner" role="status"><strong>Esta aba é leitura</strong><span>Dados de mercado são independentes do status da conta. A ordem sai em Robô → Mesa, nas corretoras MT5, MEXC, Binance, Bybit e OKX.</span></div>
+    <section className="card market-source-panel" aria-labelledby="market-source-title"><div className="section-head"><div><h2 id="market-source-title">Fonte e mercado</h2><span className="muted">A identidade da leitura é corretora + mercado + ativo.</span></div><span className="chip primary">Público</span></div><div className="market-source-controls"><label className="field"><span>Fonte</span><select aria-label="Selecionar fonte do mercado" value={source.broker} onChange={(event) => changeBroker(event.target.value)}>{marketSources.map((item) => <option key={item.broker} value={item.broker} disabled={!item.enabled}>{item.label}{item.enabled ? '' : ' · homologação, desativado'}</option>)}</select></label><label className="field"><span>Mercado</span><select aria-label="Selecionar mercado" value={source.market} onChange={(event) => changeSource({ ...source, market: event.target.value as MarketKind })}>{marketSources.find((item) => item.broker === source.broker)?.markets.map((market) => <option key={market} value={market}>{marketLabel(market)}</option>)}</select></label><label className="field market-search-field"><span>Buscar ativo</span><input aria-label="Buscar ativo" value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') addSymbol(); }} placeholder="Ex.: BTCUSDT" /></label><button className="btn sm" type="button" onClick={addSymbol}>Adicionar ativo</button></div><div className="market-source-meta"><span>Status público: <strong>{publicStatus}</strong></span><span>Recebido: <strong>{formatTime(overview?.received_at)}</strong></span><span>Fonte: <strong>{overview?.source ?? '—'}</strong></span></div></section>
     {errorSummary && <p className="market-partial-note" role="status">{errorSummary}</p>}
-    {!marketLoading && !hasMarketData && <div className="market-offline-state" role="status"><strong>Gateway indisponÃ­vel</strong><span>NÃ£o hÃ¡ dados de mercado para exibir. Nenhum valor simulado foi usado.</span></div>}
-    <section className="card market-quotes-panel" aria-labelledby="market-quotes-title" aria-busy={quotesLoading}><div className="section-head"><div><h2 id="market-quotes-title">CotaÃ§Ãµes</h2><span className="muted">{marketStale ? 'Dados vencidos; aguardando nova leitura.' : `AtualizaÃ§Ã£o automÃ¡tica a cada ${Math.round(refreshMs / 1000)}s`}</span></div><span className={`chip ${marketStale ? 'warn' : hasMarketData ? 'ok' : 'warn'}`}>{marketStale ? 'Vencida' : hasMarketData ? 'Atualizada' : 'Aguardando'}</span></div>{quotesLoading && !hasMarketData ? <div className="market-state" role="status">Carregando cotaÃ§Ãµes reaisâ€¦</div> : filteredSymbols.length ? <div className="table-scroll market-focus-scroll" role="region" aria-label="Tabela de cotaÃ§Ãµes reais" tabIndex={0}><table className="tbl market-quotes-table"><caption className="sr-only">Cotações reais por ativo e fonte</caption><thead><tr><th scope="col">Ativo</th><th scope="col" className="num">Último</th><th scope="col" className="num">Compra</th><th scope="col" className="num">Venda</th><th scope="col" className="num">Spread</th><th scope="col">Leitura</th><th scope="col"></th></tr></thead><tbody>{filteredSymbols.map((symbol) => { const quote = quotes[symbol] ?? null; const quoteStale = quote ? isMarketStale(receivedTimestamp(quote.received_at), now) : false; const quoteHasValues = Boolean(quote && (quote.last !== null || quote.bid !== null || quote.ask !== null)); const dica = quote ? `${quote.source ?? ''}${quote.provider_timestamp ? ' · ' + formatTime(quote.provider_timestamp) : ''}${quote.received_at ? ' · recebido ' + formatTime(quote.received_at) : ''}` : 'sem retorno'; return <tr key={symbol} className={selectedSymbol === symbol ? 'selected' : ''} title={dica}><th scope="row"><button type="button" className="market-table-symbol" aria-pressed={selectedSymbol === symbol} onClick={() => setSelectedSymbol(symbol)}>{symbol}</button></th><td className="num">{formatNumber(quote?.last)}</td><td className="num">{formatNumber(quote?.bid)}</td><td className="num">{formatNumber(quote?.ask)}</td><td className="num">{formatNumber(quote?.spread)}</td><td><span className={`chip ${quoteHasValues && !quoteStale ? 'ok' : 'warn'}`}>{quoteHasValues ? (quoteStale ? 'vencida' : 'real') : 'sem retorno'}</span></td><td><button type="button" className="market-remove-symbol" aria-label={`Remover ${symbol} da lista`} onClick={() => removeSymbol(symbol)}>x</button></td></tr>; })}</tbody></table></div> : <div className="market-state" role="status">{search ? 'Nenhum ativo corresponde Ã  busca.' : 'Nenhum ativo disponÃ­vel nesta fonte.'}</div>}</section>
-    <section className="card market-instrument-panel" aria-labelledby="market-instrument-title" aria-busy={selectedLoading}><div className="section-head"><div><h2 id="market-instrument-title">{selectedSymbol || 'Ativo'}</h2><span className="muted">Mesma fonte: {sourceLabelText} Â· campos ausentes permanecem indisponÃ­veis</span></div><span className={`chip ${selectedStale ? 'warn' : 'primary'}`}>{selectedStale ? 'Leitura vencida' : 'Somente leitura'}</span></div>{selectedLoading && !hasInstrumentData ? <div className="market-state" role="status">Carregando detalhes reaisâ€¦</div> : <KpiGrid stats={visibleStats} quote={selectedQuote} />}</section>
-    <div className="market-charts-grid"><MiniPriceChart quote={selectedQuote} values={chartValues} symbol={selectedSymbol || 'â€”'} sourceLabel={sourceLabelText} /><PriceChart symbol={selectedSymbol} broker={source.broker} market={source.market} candles={visibleCandles} timeframe={timeframe} onTimeframeChange={setTimeframe} loading={selectedLoading} error={errors.candles ?? ''} sourceLabel={sourceLabelText} /></div>
-    <div className="market-indicator-strip" role="group" aria-label="Indicadores"><div className="market-indicator-grid"><div><span>RSI</span><strong>{rsiValue === null ? 'IndisponÃ­vel' : formatNumber(rsiValue, 2)}</strong></div><div><span>MACD</span><strong>{macdValue === null ? 'IndisponÃ­vel' : formatNumber(macdValue.macd, 4)}</strong></div><div><span>ATR</span><strong>{atrValue === null ? 'IndisponÃ­vel' : formatNumber(atrValue, 4)}</strong></div><div><span>Candles</span><strong>{visibleCandles.length || 'â€”'}</strong></div></div></div>
-    <div className="market-secondary-grid"><section className="card market-depth-panel" aria-labelledby="market-depth-title"><div className="section-head"><div><h2 id="market-depth-title">Livro de ofertas</h2><span className="muted">{selectedSymbol || 'â€”'} Â· {visibleDepth?.source ?? sourceLabelText}</span></div><span className="chip">{visibleDepth ? 'somente leitura' : 'indisponÃ­vel'}</span></div>{selectedLoading && !visibleDepth ? <div className="market-state" role="status">Carregando livro de ofertasâ€¦</div> : source.broker === 'mt5' ? <div className="market-state" role="status">O adaptador MT5 nÃ£o expÃµe DOM pÃºblico.</div> : visibleDepth && (visibleDepth.bids.length || visibleDepth.asks.length) ? <div className="market-depth-grid"><DepthTable title="Compras" levels={visibleDepth.bids} /><DepthTable title="Vendas" levels={visibleDepth.asks} /></div> : <div className="market-state" role="status">Livro de ofertas real indisponÃ­vel para esta fonte.</div>}</section><section className="card market-trades-panel" aria-labelledby="market-trades-title"><div className="section-head"><div><h2 id="market-trades-title">NegÃ³cios pÃºblicos</h2><span className="muted">{selectedSymbol || 'â€”'} Â· {visibleTrades?.source ?? sourceLabelText}</span></div><span className="chip">{visibleTrades ? 'somente leitura' : 'indisponÃ­vel'}</span></div>{selectedLoading && !visibleTrades ? <div className="market-state" role="status">Carregando negÃ³ciosâ€¦</div> : source.broker === 'mt5' ? <div className="market-state" role="status">O adaptador MT5 nÃ£o expÃµe tape pÃºblico.</div> : visibleTrades?.trades.length ? <div className="table-scroll market-focus-scroll" role="region" aria-label="NegÃ³cios pÃºblicos normalizados" tabIndex={0}><table className="tbl market-trades-table"><caption className="sr-only">NegÃ³cios pÃºblicos normalizados</caption><thead><tr><th scope="col">Hora</th><th scope="col">Lado</th><th scope="col">PreÃ§o</th><th scope="col">Quantidade</th><th scope="col">Fonte</th></tr></thead><tbody>{visibleTrades.trades.slice(0, 12).map((trade, index) => <tr key={`${trade.id ?? 'trade'}-${index}`}><td>{formatTime(trade.provider_timestamp)}</td><td>{trade.side ?? 'â€”'}</td><td>{formatNumber(trade.price, 6)}</td><td>{formatNumber(trade.quantity, 6)}</td><td>{trade.source}</td></tr>)}</tbody></table></div> : <div className="market-state" role="status">NegÃ³cios pÃºblicos reais indisponÃ­veis para esta fonte.</div>}</section></div>
+    {!marketLoading && !hasMarketData && <div className="market-offline-state" role="status"><strong>Gateway indisponível</strong><span>Não há dados de mercado para exibir. Nenhum valor simulado foi usado.</span></div>}
+    <section className="card market-quotes-panel" aria-labelledby="market-quotes-title" aria-busy={quotesLoading}><div className="section-head"><div><h2 id="market-quotes-title">Cotações</h2><span className="muted">{marketStale ? 'Dados vencidos; aguardando nova leitura.' : `Atualização automática a cada ${Math.round(refreshMs / 1000)}s`}</span></div><span className={`chip ${marketStale ? 'warn' : hasMarketData ? 'ok' : 'warn'}`}>{marketStale ? 'Vencida' : hasMarketData ? 'Atualizada' : 'Aguardando'}</span></div>{quotesLoading && !hasMarketData ? <div className="market-state" role="status">Carregando cotações reais…</div> : filteredSymbols.length ? <div className="table-scroll market-focus-scroll" role="region" aria-label="Tabela de cotações reais" tabIndex={0}><table className="tbl market-quotes-table"><caption className="sr-only">Cotações reais por ativo e fonte</caption><thead><tr><th scope="col">Ativo</th><th scope="col" className="num">Último</th><th scope="col" className="num">Compra</th><th scope="col" className="num">Venda</th><th scope="col" className="num">Spread</th><th scope="col">Leitura</th><th scope="col"></th></tr></thead><tbody>{filteredSymbols.map((symbol) => { const quote = quotes[symbol] ?? null; const quoteStale = quote ? isMarketStale(receivedTimestamp(quote.received_at), now) : false; const quoteHasValues = Boolean(quote && (quote.last !== null || quote.bid !== null || quote.ask !== null)); const dica = quote ? `${quote.source ?? ''}${quote.provider_timestamp ? ' · ' + formatTime(quote.provider_timestamp) : ''}${quote.received_at ? ' · recebido ' + formatTime(quote.received_at) : ''}` : 'sem retorno'; return <tr key={symbol} className={selectedSymbol === symbol ? 'selected' : ''} title={dica}><th scope="row"><button type="button" className="market-table-symbol" aria-pressed={selectedSymbol === symbol} onClick={() => setSelectedSymbol(symbol)}>{symbol}</button></th><td className="num">{formatNumber(quote?.last)}</td><td className="num">{formatNumber(quote?.bid)}</td><td className="num">{formatNumber(quote?.ask)}</td><td className="num">{formatNumber(quote?.spread)}</td><td><span className={`chip ${quoteHasValues && !quoteStale ? 'ok' : 'warn'}`}>{quoteHasValues ? (quoteStale ? 'vencida' : 'real') : 'sem retorno'}</span></td><td><button type="button" className="market-remove-symbol" aria-label={`Remover ${symbol} da lista`} onClick={() => removeSymbol(symbol)}>x</button></td></tr>; })}</tbody></table></div> : <div className="market-state" role="status">{search ? 'Nenhum ativo corresponde à busca.' : 'Nenhum ativo disponível nesta fonte.'}</div>}</section>
+    <section className="card market-instrument-panel" aria-labelledby="market-instrument-title" aria-busy={selectedLoading}><div className="section-head"><div><h2 id="market-instrument-title">{selectedSymbol || 'Ativo'}</h2><span className="muted">Mesma fonte: {sourceLabelText} · campos ausentes permanecem indisponíveis</span></div><span className={`chip ${selectedStale ? 'warn' : 'primary'}`}>{selectedStale ? 'Leitura vencida' : 'Leitura do mercado'}</span></div>{selectedLoading && !hasInstrumentData ? <div className="market-state" role="status">Carregando detalhes reais…</div> : <KpiGrid stats={visibleStats} quote={selectedQuote} />}</section>
+    <div className="market-charts-grid"><MiniPriceChart quote={selectedQuote} values={chartValues} symbol={selectedSymbol || '—'} sourceLabel={sourceLabelText} /><PriceChart symbol={selectedSymbol} broker={source.broker} market={source.market} candles={visibleCandles} timeframe={timeframe} onTimeframeChange={setTimeframe} loading={selectedLoading} error={errors.candles ?? ''} sourceLabel={sourceLabelText} /></div>
+    <div className="market-indicator-strip" role="group" aria-label="Indicadores"><div className="market-indicator-grid"><div><span>RSI</span><strong>{rsiValue === null ? 'Indisponível' : formatNumber(rsiValue, 2)}</strong></div><div><span>MACD</span><strong>{macdValue === null ? 'Indisponível' : formatNumber(macdValue.macd, 4)}</strong></div><div><span>ATR</span><strong>{atrValue === null ? 'Indisponível' : formatNumber(atrValue, 4)}</strong></div><div><span>Candles</span><strong>{visibleCandles.length || '—'}</strong></div></div></div>
+    <div className="market-secondary-grid"><section className="card market-depth-panel" aria-labelledby="market-depth-title"><div className="section-head"><div><h2 id="market-depth-title">Livro de ofertas</h2><span className="muted">{selectedSymbol || '—'} · {visibleDepth?.source ?? sourceLabelText}</span></div><span className="chip">{visibleDepth ? 'leitura' : 'indisponível'}</span></div>{selectedLoading && !visibleDepth ? <div className="market-state" role="status">Carregando livro de ofertas…</div> : source.broker === 'mt5' ? <div className="market-state" role="status">O adaptador MT5 não expõe DOM público.</div> : visibleDepth && (visibleDepth.bids.length || visibleDepth.asks.length) ? <div className="market-depth-grid"><DepthTable title="Compras" levels={visibleDepth.bids} /><DepthTable title="Vendas" levels={visibleDepth.asks} /></div> : <div className="market-state" role="status">Livro de ofertas real indisponível para esta fonte.</div>}</section><section className="card market-trades-panel" aria-labelledby="market-trades-title"><div className="section-head"><div><h2 id="market-trades-title">Negócios públicos</h2><span className="muted">{selectedSymbol || '—'} · {visibleTrades?.source ?? sourceLabelText}</span></div><span className="chip">{visibleTrades ? 'leitura' : 'indisponível'}</span></div>{selectedLoading && !visibleTrades ? <div className="market-state" role="status">Carregando negócios…</div> : source.broker === 'mt5' ? <div className="market-state" role="status">O adaptador MT5 não expõe tape público.</div> : visibleTrades?.trades.length ? <div className="table-scroll market-focus-scroll" role="region" aria-label="Negócios públicos normalizados" tabIndex={0}><table className="tbl market-trades-table"><caption className="sr-only">Negócios públicos normalizados</caption><thead><tr><th scope="col">Hora</th><th scope="col">Lado</th><th scope="col">Preço</th><th scope="col">Quantidade</th><th scope="col">Fonte</th></tr></thead><tbody>{visibleTrades.trades.slice(0, 12).map((trade, index) => <tr key={`${trade.id ?? 'trade'}-${index}`}><td>{formatTime(trade.provider_timestamp)}</td><td>{trade.side ?? '—'}</td><td>{formatNumber(trade.price, 6)}</td><td>{formatNumber(trade.quantity, 6)}</td><td>{trade.source}</td></tr>)}</tbody></table></div> : <div className="market-state" role="status">Negócios públicos reais indisponíveis para esta fonte.</div>}</section></div>
   </section>;
 }
 
 function DepthTable({ title, levels }: { title: string; levels: Array<{ price: number | null; quantity: number | null }> }) {
-  return <div className="market-depth-table"><h3>{title}</h3><div className="table-scroll market-focus-scroll" role="region" aria-label={`NÃ­veis de ${title}`} tabIndex={0}><table className="tbl"><caption className="sr-only">NÃ­veis de {title} do livro pÃºblico</caption><thead><tr><th scope="col">PreÃ§o</th><th scope="col">Quantidade</th></tr></thead><tbody>{levels.slice(0, 8).map((level, index) => <tr key={`${title}-${index}`}><td>{formatNumber(level.price, 8)}</td><td>{formatNumber(level.quantity, 8)}</td></tr>)}</tbody></table></div></div>;
+  return <div className="market-depth-table"><h3>{title}</h3><div className="table-scroll market-focus-scroll" role="region" aria-label={`Níveis de ${title}`} tabIndex={0}><table className="tbl"><caption className="sr-only">Níveis de {title} do livro público</caption><thead><tr><th scope="col">Preço</th><th scope="col">Quantidade</th></tr></thead><tbody>{levels.slice(0, 8).map((level, index) => <tr key={`${title}-${index}`}><td>{formatNumber(level.price, 8)}</td><td>{formatNumber(level.quantity, 8)}</td></tr>)}</tbody></table></div></div>;
 }
 

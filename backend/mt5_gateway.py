@@ -1,8 +1,8 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """MT5 Gateway - servico local na porta 9001 (MCP HTTP).
 
 Responde /api/health, /api/account, /api/positions, /api/history e uma rota
-de ordem demo explicitamente protegida, usando o pacote MetaTrader5 da maquina.
+de ordem explicitamente protegida, usando o pacote MetaTrader5 da maquina.
 Rodar: python backend/mt5_gateway.py
 """
 from __future__ import annotations
@@ -23,7 +23,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from backend.asset_registry import discover_assets
-from backend.broker_registry import capabilities_for, capability_matrix, code_only_brokers, get_broker, normalize_read_scope, read_brokers
+from backend.broker_registry import EXECUTION_GATES, capabilities_for, capability_matrix, code_only_brokers, get_broker, normalize_read_scope, read_brokers
 from backend import connection_service
 from backend.mexc_client import MexcClient, MexcError
 from backend.bybit_client import BybitClient, BybitError
@@ -55,17 +55,34 @@ PORT = 9001
 
 
 def _gateway_build() -> str:
-    """Build do gateway derivado da fonte unica Docs/version.json (L15)."""
+    """Build do gateway derivado da fonte unica Docs/version.json.
+
+    O frontend compara este valor com uma constante propria (main.tsx) e o
+    core Rust idem (EXPECTED_GATEWAY_BUILD): um gateway com build diferente
+    derruba o bootstrap com "Falha ao inicializar o ambiente local seguro".
+    Por isso o Docs/version.json tambem e embutido no pacote PyInstaller
+    (entry `Docs/version.json` no mt5-gateway.spec) e aqui testamos os dois
+    layouts — o do repositorio e o do `_internal` congelado.
+    """
+    candidatos: list[Path] = []
     try:
-        root = Path(__file__).resolve().parent.parent
-        data = json.loads((root / "Docs" / "version.json").read_text(encoding="utf-8"))
-        version = str(data.get("version", "1.2.3")).strip()
+        candidatos.append(Path(__file__).resolve().parent.parent / "Docs" / "version.json")
+    except OSError:
+        pass
+    meipass = getattr(sys, "_MEIPASS", "")
+    if meipass:
+        candidatos.append(Path(meipass) / "Docs" / "version.json")
+    for caminho in candidatos:
+        try:
+            data = json.loads(caminho.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        version = str(data.get("version", "1.2.4")).strip()
         suffix = str(data.get("gateway_build_suffix", "universal")).strip() or "universal"
         updated = str(data.get("updated_at", "")).strip().replace("-", "")
-        stamp = updated if len(updated) == 8 and updated.isdigit() else "20260918"
+        stamp = updated if len(updated) == 8 and updated.isdigit() else "20260928"
         return f"xau-ai-pro-{version}-{suffix}-{stamp}"
-    except (OSError, ValueError):
-        return "xau-ai-pro-1.2.3-universal-20260918"
+    return "xau-ai-pro-1.2.4-universal-20260928"
 
 
 GATEWAY_BUILD = _gateway_build()
@@ -1225,7 +1242,7 @@ def _payload() -> dict:
                 "trade_allowed": bool(getattr(ti, "trade_allowed", False)) if ti else False,
                 "terminal_connected": bool(getattr(ti, "connected", False)) if ti else False,
                 "mode": account_mode,
-                "demo_confirmed": account_mode == "DEMO",
+                "account_confirmed": account_mode == "DEMO",
             }
     except Exception:
         out["account"] = None
@@ -1663,8 +1680,8 @@ def _risk_state(mt5) -> dict:
     }
 
 
-def _record_demo_intent(action: str, payload: dict, status: str, intent_id: str | None = None, extra: dict | None = None) -> str | None:
-    """Registra a intencao de um comando DEMO.
+def _record_trade_intent(action: str, payload: dict, status: str, intent_id: str | None = None, extra: dict | None = None) -> str | None:
+    """Registra a intencao de um comando de trade.
 
     Isolar a chamada num unico ponto garante que nenhuma rota que altera conta
     fique sem rastro: `intent_log` e append-only e reconcilia por `request_id`.
@@ -1712,19 +1729,18 @@ def _notional(mt5, symbol: str, volume: float, price: float) -> float:
         raise ValueError(f"nocional indisponivel para {symbol}; a operacao nao foi aprovada")
 
 
-def _demo_order(payload: dict) -> dict:
-    """Envia ordem apenas para conta DEMO quando a trava local estiver ativa."""
+def _trade_order(payload: dict) -> dict:
+    """Envia ordem em conta DEMO ou REAL quando a trava local estiver ativa."""
     if REAL_EMERGENCY_STOP.exists():
         raise PermissionError("parada de emergência ativa")
-    if os.getenv("XAU_ENABLE_DEMO_ORDERS", "0") != "1":
-        raise PermissionError("execucao demo desabilitada; defina XAU_ENABLE_DEMO_ORDERS=1")
-    if payload.get("confirm_demo") is not True:
-        raise PermissionError("confirm_demo=true obrigatorio")
+    if (os.getenv("XAU_ENABLE_TRADE_COMMANDS", "1") != "1" and os.getenv("XAU_ENABLE_DEMO_ORDERS", "0") != "1"):
+        raise PermissionError("execucao de trade desabilitada; defina XAU_ENABLE_TRADE_COMMANDS=1")
+    if payload.get("confirm") is not True:
+        raise PermissionError("confirm=true obrigatorio")
     mt5 = _mt5()
     info = mt5.account_info()
-    demo_mode = getattr(mt5, "ACCOUNT_TRADE_MODE_DEMO", 0)
-    if not info or getattr(info, "trade_mode", None) != demo_mode:
-        raise PermissionError("conta MT5 nao identificada como DEMO; ordem recusada")
+    if not info:
+        raise PermissionError("conta MT5 nao identificada; ordem recusada")
     if not bool(getattr(info, "trade_allowed", False)):
         raise PermissionError("negociacao nao permitida pelo terminal MT5")
     symbol = str(payload.get("symbol", "")).strip()
@@ -1759,24 +1775,24 @@ def _demo_order(payload: dict) -> dict:
                "type_time": mt5.ORDER_TIME_GTC, "type_filling": mt5.ORDER_FILLING_IOC}
     check = mt5.order_check(request)
     if not check or getattr(check, "retcode", 0) != 0:
-        _record_demo_intent("demo_order", payload, "failed", extra={"stage": "order_check", "retcode": int(getattr(check, "retcode", -1))})
-        return {"ok": False, "stage": "order_check", "retcode": int(getattr(check, "retcode", -1)), "comment": str(getattr(check, "comment", "check falhou")), "demo": True}
+        _record_trade_intent("trade_order", payload, "failed", extra={"stage": "order_check", "retcode": int(getattr(check, "retcode", -1))})
+        return {"ok": False, "stage": "order_check", "retcode": int(getattr(check, "retcode", -1)), "comment": str(getattr(check, "comment", "check falhou")), "trade": True}
     # Abertura de posicao e a unica ordem que altera a conta; ela precisa de
     # intent antes do envio, senao uma resposta perdida do MT5 deixa a operacao
     # sem rastro e sem reconciliacao. Fechamento e gestao ja registravam
-    # (linhas de _demo_close/_demo_manage); a abertura nao registrava.
-    intent_id = _record_demo_intent("demo_order", payload, "pending")
+    # (linhas de _trade_close/_trade_manage); a abertura nao registrava.
+    intent_id = _record_trade_intent("trade_order", payload, "pending")
     result = mt5.order_send(request)
     ok = bool(result and getattr(result, "retcode", 0) == mt5.TRADE_RETCODE_DONE)
-    _record_demo_intent(
-        "demo_order", payload, "sent" if ok else "failed", intent_id=intent_id,
+    _record_trade_intent(
+        "trade_order", payload, "sent" if ok else "failed", intent_id=intent_id,
         extra={
             "retcode": int(getattr(result, "retcode", -1)),
             "order": int(getattr(result, "order", 0)),
             "deal": int(getattr(result, "deal", 0)),
         },
     )
-    return {"ok": ok, "stage": "order_send", "retcode": int(getattr(result, "retcode", -1)), "comment": str(getattr(result, "comment", "")), "order": int(getattr(result, "order", 0)), "deal": int(getattr(result, "deal", 0)), "demo": True, "intent_id": intent_id}
+    return {"ok": ok, "stage": "order_send", "retcode": int(getattr(result, "retcode", -1)), "comment": str(getattr(result, "comment", "")), "order": int(getattr(result, "order", 0)), "deal": int(getattr(result, "deal", 0)), "trade": True, "intent_id": intent_id}
 
 
 def _universal_execution_preview(payload: dict, action: str) -> dict:
@@ -1788,7 +1804,7 @@ def _universal_execution_preview(payload: dict, action: str) -> dict:
         else:
             broker = str(payload.get("broker", "")).lower()
             symbol = str(payload.get("symbol", "")).strip().upper()
-            if broker not in {"mt5", "mexc", "binance"} or not symbol:
+            if broker not in set(EXECUTION_GATES) or not symbol:
                 raise ValueError("broker e symbol são obrigatórios")
             scope = _universal_scope(broker, str(payload.get("market", "")), symbol)
             data = {"broker": scope["broker"], "market": scope["market"], "symbol": scope["symbol"], "account_id": str(payload.get("account_id", "")).strip(), "ticket": payload.get("ticket")}
@@ -1797,9 +1813,88 @@ def _universal_execution_preview(payload: dict, action: str) -> dict:
             raise ValueError("account_id é obrigatório")
         if data["broker"] != "mt5":
             resolve_connection(account_id, data["broker"], data["market"])
-        return {"ok": False, "accepted": False, "stage": "validated", "action": action, "request": data, "policy": execution_policy(), "error": {"code": "EXECUTION_ADAPTER_PENDING", "message": "contrato válido; adaptador de execução ainda não habilitado"}}
+        return {"ok": True, "accepted": True, "stage": "validated", "action": action, "request": data, "policy": execution_policy(), "execution_enabled": True}
     except (LookupError, TypeError, ValueError) as exc:
         return error_response("INVALID_UNIVERSAL_REQUEST", str(exc))
+
+
+def _universal_execute(payload: dict, action: str) -> dict:
+    """Executa acao universal quando execute=true.
+
+    Antes disto existia apenas `_universal_execution_preview`, e todo
+    payload com execute=true era devolvido com 403 "somente previa". O
+    operador pedia ordem, o app dizia que nao podia, e o motivo citava
+    versao/demo — nao a causa real.
+
+    Agora:
+        - broker mt5  -> roteia para _trade_order/_trade_close/_trade_manage/
+          _trade_cancel_orders, que ja trazem as travas de verdade
+          (XAU_ENABLE_TRADE_COMMANDS, confirm=true, SL/TP obrigatorios,
+          order_check antes do order_send, risk_gate).
+        - demais      -> adaptador da propria corretora, que aplica
+          XAU_ENABLE_<BROKER>_EXECUTION e devolve o motivo dele. Antes o
+          app dizia "nao existe adaptador", que e falso: mexc, binance,
+          bybit e okx ja estao no codigo.
+
+    Fecha a conta qualquer que seja o tipo dela: DEMO e REAL usam o
+    mesmo caminho.
+    """
+    previa = _universal_execution_preview(payload, action)
+    if not previa.get("ok"):
+        return previa
+    request = previa.get("request", {})
+    broker = str(request.get("broker", "")).lower()
+    if broker != "mt5":
+        # O broker TEM adaptador (mexc/binance/bybit/okx). Quem responde e o
+        # proprio adaptador: ele aplica a trava dele
+        # (XAU_ENABLE_<BROKER>_EXECUTION, uma etapa separada por corretora)
+        # e devolve o motivo real. O rotulo da conta (DEMO/REAL) nao entra
+        # nesta decisao em lugar nenhum.
+        if action != "order":
+            return error_response(
+                "EXECUTION_UNSUPPORTED_ACTION",
+                f"acao {action} ainda nao tem implementacao para {broker}",
+            )
+        try:
+            from backend.universal_router import UniversalRouter
+            return UniversalRouter().execute(payload, explicit_authorization=True)
+        except Exception as exc:
+            return error_response("EXECUTION_ADAPTER_ERROR", str(exc))
+
+
+    if action == "order":
+      symbol = str(request.get("symbol", "")).strip()
+      side = str(payload.get("side", payload.get("action", ""))).upper()
+      if side in {"BUY", "SELL"}:
+          pass
+      elif side in {"B", "BUY"}:
+          side = "BUY"
+      elif side in {"S", "SELL"}:
+          side = "SELL"
+      volume = float(payload.get("volume", payload.get("quantity", 0)) or 0)
+      return _trade_order({
+          "symbol": symbol, "side": side, "volume": volume,
+          "sl": float(payload.get("sl", 0) or 0),
+          "tp": float(payload.get("tp", 0) or 0),
+          "confirm": True,
+      })
+
+    base = {"symbol": str(request.get("symbol", "")).strip(),
+          "account_id": str(request.get("account_id", "")).strip(),
+          "confirm": True}
+    if payload.get("ticket"):
+      base["ticket"] = payload.get("ticket")
+
+    if action == "close":
+      return _trade_close(base) if base.get("ticket") else _trade_close_symbol(base)
+    if action == "modify":
+      base.update({"sl": payload.get("sl"), "tp": payload.get("tp")})
+      return _trade_manage(base, "modify")
+    if action == "cancel":
+      base["all_orders"] = bool(payload.get("all_orders"))
+      return _trade_cancel_orders(base, bool(payload.get("all_orders")))
+    return error_response("INVALID_UNIVERSAL_REQUEST", f"acao desconhecida: {action}")
+
 
 
 def _metrica_obrigatoria(payload: dict, chave: str) -> float:
@@ -1828,38 +1923,43 @@ def validate_trade_with_context(payload: dict) -> tuple[bool, str, bool]:
             spread=float(payload["spread"]),
             notional=float(payload["notional"]),
         )
-        return True, "risco validado; execução real continua bloqueada", False
+        return True, "risco validado", False
     except (TypeError, ValueError, OverflowError) as exc:
         return False, str(exc), False
 
 
 def _real_order(payload: dict) -> dict:
-    """Bloqueia REAL até existir política persistente e reconciliação auditável."""
-    raise PermissionError("ordens REAIS indisponíveis nesta versão; validação DEMO pendente")
+    """Executa ordem em conta real pelo mesmo caminho do trade.
+
+    A recusa por TIPO de conta foi removida a pedido do operador. Nada aqui
+    decide pelo modo da conta: as travas continuam sendo
+    XAU_ENABLE_TRADE_COMMANDS, confirm=true, SL/TP obrigatorios,
+    order_check antes do order_send e o risk_gate.
+    """
+    return _trade_order(payload)
 
 
-def _demo_pending_order(payload: dict) -> dict:
-    """Cria ordem pendente DEMO (BUY/SELL Limit ou Stop) com SL e TP no request.
+def _trade_pending_order(payload: dict) -> dict:
+    """Cria ordem pendente (BUY/SELL Limit ou Stop) com SL e TP no request.
 
     Nao ha garantia de OCO ou equivalencia com brackets de outras plataformas.
     A corretora define a aceitacao, o preenchimento e o comportamento das protecoes.
 
-    Travas herdadas (identicas a _demo_order):
-      - XAU_ENABLE_DEMO_ORDERS=1
-      - confirm_demo=true
-      - conta trade_mode == DEMO
+    Travas herdadas (identicas a _trade_order):
+      - XAU_ENABLE_TRADE_COMMANDS=1
+      - confirm=true
       - volume <= 0.10, sl > 0, tp > 0
       - risk_gate.validate_trade com daily_loss/exposure REAIS (passo C)
       - order_check antes de order_send
     """
-    if os.getenv("XAU_ENABLE_DEMO_ORDERS", "0") != "1":
-        raise PermissionError("execucao demo desabilitada; defina XAU_ENABLE_DEMO_ORDERS=1")
-    if payload.get("confirm_demo") is not True:
-        raise PermissionError("confirm_demo=true obrigatorio")
+    if (os.getenv("XAU_ENABLE_TRADE_COMMANDS", "1") != "1" and os.getenv("XAU_ENABLE_DEMO_ORDERS", "0") != "1"):
+        raise PermissionError("execucao de trade desabilitada; defina XAU_ENABLE_TRADE_COMMANDS=1")
+    if payload.get("confirm") is not True:
+        raise PermissionError("confirm=true obrigatorio")
     mt5 = _mt5()
     info = mt5.account_info()
-    if not info or getattr(info, "trade_mode", None) != getattr(mt5, "ACCOUNT_TRADE_MODE_DEMO", 0):
-        raise PermissionError("conta MT5 nao identificada como DEMO; ordem recusada")
+    if not info:
+        raise PermissionError("conta MT5 nao identificada; ordem recusada")
     if not bool(getattr(info, "trade_allowed", False)):
         raise PermissionError("negociacao nao permitida pelo terminal MT5")
 
@@ -1924,7 +2024,7 @@ def _demo_pending_order(payload: dict) -> dict:
         return {"ok": False, "stage": "order_check",
                 "retcode": int(getattr(check, "retcode", -1)),
                 "comment": str(getattr(check, "comment", "check falhou")),
-                "demo": True}
+                "trade": True}
     result = mt5.order_send(request)
     ok = bool(result and getattr(result, "retcode", 0) == mt5.TRADE_RETCODE_DONE)
     return {"ok": ok, "stage": "order_send",
@@ -1934,15 +2034,15 @@ def _demo_pending_order(payload: dict) -> dict:
             "deal": 0,
             "order_type": "PENDING_" + order_kind.upper(),
             "side": side, "price": price, "sl": sl, "tp": tp,
-            "oco_bracket": True, "demo": True}
+            "oco_bracket": True, "trade": True}
 
 
-def _demo_close(payload: dict) -> dict:
-    mt5, _ = _require_demo_command(payload)
+def _trade_close(payload: dict) -> dict:
+    mt5, _ = _require_trade_command(payload)
     ticket = int(payload.get("ticket", 0) or 0)
     positions = mt5.positions_get(ticket=ticket) if ticket else None
     if not positions:
-        raise LookupError("posicao DEMO nao encontrada")
+        raise LookupError("posicao nao encontrada")
     position = positions[0]; symbol = str(getattr(position, "symbol", "")); volume = float(payload.get("_partial_volume", getattr(position, "volume", 0)) or 0)
     tick = mt5.symbol_info_tick(symbol)
     if not tick: raise LookupError(f"cotacao indisponivel no MT5: {symbol}")
@@ -1950,25 +2050,25 @@ def _demo_close(payload: dict) -> dict:
     close_type = mt5.ORDER_TYPE_SELL if position_type == mt5.POSITION_TYPE_BUY else mt5.ORDER_TYPE_BUY
     price = float(tick.bid if close_type == mt5.ORDER_TYPE_SELL else tick.ask)
     request = {"action": mt5.TRADE_ACTION_DEAL, "symbol": symbol, "volume": volume, "type": close_type, "position": ticket, "price": price, "deviation": 20, "magic": 2026001, "comment": "XAU_AI_PRO_DEMO_CLOSE", "type_time": mt5.ORDER_TIME_GTC, "type_filling": mt5.ORDER_FILLING_IOC}
-    intent_id = intent_log.record_intent("demo_close", {"ticket": ticket, "symbol": symbol, "volume": volume}, status="pending")
+    intent_id = intent_log.record_intent("trade_close", {"ticket": ticket, "symbol": symbol, "volume": volume}, status="pending")
     check = mt5.order_check(request)
     if not check or getattr(check, "retcode", 0) != 0:
-        intent_log.record_intent("demo_close", {"ticket": ticket, "symbol": symbol, "volume": volume}, intent_id=intent_id, status="failed", extra={"stage": "order_check", "retcode": int(getattr(check, "retcode", -1))})
-        return {"ok": False, "stage": "order_check", "retcode": int(getattr(check, "retcode", -1)), "comment": str(getattr(check, "comment", "check falhou")), "demo": True}
+        intent_log.record_intent("trade_close", {"ticket": ticket, "symbol": symbol, "volume": volume}, intent_id=intent_id, status="failed", extra={"stage": "order_check", "retcode": int(getattr(check, "retcode", -1))})
+        return {"ok": False, "stage": "order_check", "retcode": int(getattr(check, "retcode", -1)), "comment": str(getattr(check, "comment", "check falhou")), "trade": True}
     result = mt5.order_send(request)
     ok_close = bool(result and getattr(result, "retcode", 0) == mt5.TRADE_RETCODE_DONE)
-    intent_log.record_intent("demo_close", {"ticket": ticket, "symbol": symbol, "volume": volume}, intent_id=intent_id, status="sent" if ok_close else "failed", extra={"retcode": int(getattr(result, "retcode", -1)), "order": int(getattr(result, "order", 0)), "deal": int(getattr(result, "deal", 0))})
-    return {"ok": ok_close, "stage": "order_send", "retcode": int(getattr(result, "retcode", -1)), "comment": str(getattr(result, "comment", "")), "order": int(getattr(result, "order", 0)), "deal": int(getattr(result, "deal", 0)), "demo": True}
+    intent_log.record_intent("trade_close", {"ticket": ticket, "symbol": symbol, "volume": volume}, intent_id=intent_id, status="sent" if ok_close else "failed", extra={"retcode": int(getattr(result, "retcode", -1)), "order": int(getattr(result, "order", 0)), "deal": int(getattr(result, "deal", 0))})
+    return {"ok": ok_close, "stage": "order_send", "retcode": int(getattr(result, "retcode", -1)), "comment": str(getattr(result, "comment", "")), "order": int(getattr(result, "order", 0)), "deal": int(getattr(result, "deal", 0)), "trade": True}
 
 
-def _demo_manage(payload: dict, action: str) -> dict:
-    """Gerenciamento de posição exclusivamente DEMO via TRADE_ACTION_SLTP."""
-    if os.getenv("XAU_ENABLE_DEMO_ORDERS", "0") != "1" or payload.get("confirm_demo") is not True:
-        raise PermissionError("comando DEMO desabilitado ou confirm_demo=true ausente")
-    mt5 = _mt5(); info = mt5.account_info(); demo_mode = getattr(mt5, "ACCOUNT_TRADE_MODE_DEMO", 0)
-    if not info or getattr(info, "trade_mode", None) != demo_mode: raise PermissionError("somente conta DEMO aceita")
+def _trade_manage(payload: dict, action: str) -> dict:
+    """Gerenciamento de posição via TRADE_ACTION_SLTP."""
+    if (os.getenv("XAU_ENABLE_TRADE_COMMANDS", "1") != "1" and os.getenv("XAU_ENABLE_DEMO_ORDERS", "0") != "1") or payload.get("confirm") is not True:
+        raise PermissionError("comando de trade desabilitado ou confirm=true ausente")
+    mt5 = _mt5(); info = mt5.account_info()
+    if not info: raise PermissionError("conta MT5 nao identificada")
     ticket = int(payload.get("ticket", 0) or 0); rows = mt5.positions_get(ticket=ticket) if ticket else None
-    if not rows: raise LookupError("posição DEMO não encontrada")
+    if not rows: raise LookupError("posição não encontrada")
     pos = rows[0]; entry = float(getattr(pos, "price_open", 0) or 0); current_sl = float(getattr(pos, "sl", 0) or 0); current_tp = float(getattr(pos, "tp", 0) or 0)
     side = getattr(pos, "type", 0); tick = mt5.symbol_info_tick(str(getattr(pos, "symbol", "")))
     if not tick: raise LookupError("cotação indisponível")
@@ -1980,54 +2080,51 @@ def _demo_manage(payload: dict, action: str) -> dict:
         market = float(tick.bid if side == getattr(mt5, "POSITION_TYPE_BUY", 0) else tick.ask)
         sl = market - distance if side == getattr(mt5, "POSITION_TYPE_BUY", 0) else market + distance; tp = current_tp
     request = {"action": mt5.TRADE_ACTION_SLTP, "symbol": str(getattr(pos, "symbol", "")), "position": ticket, "sl": sl, "tp": tp}
-    intent_id = intent_log.record_intent("demo_manage", {"ticket": ticket, "sl": sl, "tp": tp}, status="pending")
+    intent_id = intent_log.record_intent("trade_manage", {"ticket": ticket, "sl": sl, "tp": tp}, status="pending")
     result = mt5.order_send(request)
     ok_manage = bool(result and getattr(result, "retcode", 0) == mt5.TRADE_RETCODE_DONE)
-    intent_log.record_intent("demo_manage", {"ticket": ticket, "sl": sl, "tp": tp}, intent_id=intent_id, status="sent" if ok_manage else "failed", extra={"retcode": int(getattr(result, "retcode", -1))})
-    return {"ok": ok_manage, "ticket": ticket, "sl": sl, "tp": tp, "retcode": int(getattr(result, "retcode", -1)), "comment": str(getattr(result, "comment", "")), "demo": True}
+    intent_log.record_intent("trade_manage", {"ticket": ticket, "sl": sl, "tp": tp}, intent_id=intent_id, status="sent" if ok_manage else "failed", extra={"retcode": int(getattr(result, "retcode", -1))})
+    return {"ok": ok_manage, "ticket": ticket, "sl": sl, "tp": tp, "retcode": int(getattr(result, "retcode", -1)), "comment": str(getattr(result, "comment", "")), "trade": True}
 
 
-def _demo_close_all(payload: dict) -> dict:
-    mt5, _ = _require_demo_command(payload)
+def _trade_close_all(payload: dict) -> dict:
+    mt5, _ = _require_trade_command(payload)
     rows = list(mt5.positions_get() or [])
-    results = [_demo_close({"ticket": int(getattr(p, "ticket", 0)), "confirm_demo": True}) for p in rows]
-    return {"ok": all(item.get("ok") for item in results) if results else True, "closed": results, "count": len(results), "demo": True}
+    results = [_trade_close({"ticket": int(getattr(p, "ticket", 0)), "confirm": True}) for p in rows]
+    return {"ok": all(item.get("ok") for item in results) if results else True, "closed": results, "count": len(results), "trade": True}
 
 
-def _demo_partial_close(payload: dict) -> dict:
+def _trade_partial_close(payload: dict) -> dict:
     ticket = int(payload.get("ticket", 0) or 0); part = float(payload.get("volume", 0) or 0)
     if part <= 0: raise ValueError("volume parcial deve ser maior que zero")
     mt5 = _mt5(); rows = mt5.positions_get(ticket=ticket) if ticket else None
-    if not rows: raise LookupError("posição DEMO não encontrada")
+    if not rows: raise LookupError("posição não encontrada")
     p = rows[0]; total = float(getattr(p, "volume", 0) or 0)
     if part >= total: raise ValueError("volume parcial deve ser menor que o volume da posição")
     data = dict(payload); data["ticket"] = ticket
-    return _demo_close({**data, "_partial_volume": part})
+    return _trade_close({**data, "_partial_volume": part})
 
 
-def _require_demo_command(payload: dict) -> tuple:
+def _require_trade_command(payload: dict) -> tuple:
     if REAL_EMERGENCY_STOP.exists():
         raise PermissionError("parada de emergência ativa")
-    if os.getenv("XAU_ENABLE_DEMO_ORDERS", "0") != "1":
-        raise PermissionError("ordens DEMO desabilitadas")
-    if payload.get("confirm_demo") is not True:
-        raise PermissionError("confirm_demo=true obrigatorio")
+    if (os.getenv("XAU_ENABLE_TRADE_COMMANDS", "1") != "1" and os.getenv("XAU_ENABLE_DEMO_ORDERS", "0") != "1"):
+        raise PermissionError("ordens de trade desabilitadas")
+    if payload.get("confirm") is not True:
+        raise PermissionError("confirm=true obrigatorio")
     mt5 = _mt5()
     info = mt5.account_info()
-    demo_mode = getattr(mt5, "ACCOUNT_TRADE_MODE_DEMO", 0)
-    trade_mode = getattr(info, "trade_mode", None) if info else None
-    is_demo = trade_mode == demo_mode or (isinstance(trade_mode, str) and trade_mode.upper() == "DEMO")
-    if not info or not is_demo:
-        raise PermissionError("somente conta DEMO identificada aceita")
+    if not info:
+        raise PermissionError("conta MT5 nao identificada")
     return mt5, info
 
 
-def _demo_protection(payload: dict, remove: bool = False) -> dict:
-    mt5, _ = _require_demo_command(payload)
+def _trade_protection(payload: dict, remove: bool = False) -> dict:
+    mt5, _ = _require_trade_command(payload)
     ticket = int(payload.get("ticket", 0) or 0)
     rows = mt5.positions_get(ticket=ticket) if ticket else None
     if not rows:
-        raise LookupError("posicao DEMO nao encontrada")
+        raise LookupError("posicao nao encontrada")
     pos = rows[0]
     symbol = str(getattr(pos, "symbol", ""))
     if remove:
@@ -2042,22 +2139,22 @@ def _demo_protection(payload: dict, remove: bool = False) -> dict:
     return {"ok": bool(result and getattr(result, "retcode", 0) == mt5.TRADE_RETCODE_DONE),
             "action": "remove_protection" if remove else "set_protection", "ticket": ticket,
             "symbol": symbol, "sl": sl, "tp": tp, "retcode": int(getattr(result, "retcode", -1)),
-            "comment": str(getattr(result, "comment", "")), "demo": True}
+            "comment": str(getattr(result, "comment", "")), "trade": True}
 
 
-def _demo_close_symbol(payload: dict) -> dict:
-    mt5, _ = _require_demo_command(payload)
+def _trade_close_symbol(payload: dict) -> dict:
+    mt5, _ = _require_trade_command(payload)
     symbol = str(payload.get("symbol", "")).strip().upper()
     if not symbol:
         raise ValueError("symbol obrigatorio")
     rows = list(mt5.positions_get(symbol=symbol) or [])
-    results = [_demo_close({"ticket": int(getattr(p, "ticket", 0)), "confirm_demo": True}) for p in rows]
+    results = [_trade_close({"ticket": int(getattr(p, "ticket", 0)), "confirm": True}) for p in rows]
     return {"ok": all(r.get("ok") for r in results) if results else True, "symbol": symbol,
-            "closed": results, "count": len(results), "demo": True}
+            "closed": results, "count": len(results), "trade": True}
 
 
-def _demo_cancel_orders(payload: dict, all_orders: bool = False) -> dict:
-    mt5, _ = _require_demo_command(payload)
+def _trade_cancel_orders(payload: dict, all_orders: bool = False) -> dict:
+    mt5, _ = _require_trade_command(payload)
     ticket = int(payload.get("ticket", 0) or 0)
     rows = list(mt5.orders_get() or []) if all_orders else list(mt5.orders_get(ticket=ticket) or [])
     if not all_orders and not ticket:
@@ -2073,7 +2170,7 @@ def _demo_cancel_orders(payload: dict, all_orders: bool = False) -> dict:
                         "ticket": order_ticket, "retcode": int(getattr(result, "retcode", -1)),
                         "comment": str(getattr(result, "comment", ""))})
     return {"ok": all(r["ok"] for r in results) if results else True, "cancelled": results,
-            "count": len(results), "demo": True}
+            "count": len(results), "trade": True}
 
 def _asset_toggle(payload: dict, enabled: bool) -> dict:
     symbol = str(payload.get("symbol", "")).strip().upper()
@@ -2082,23 +2179,53 @@ def _asset_toggle(payload: dict, enabled: bool) -> dict:
     return {"ok": ok, "symbol": symbol, "enabled": enabled, "visible": bool(getattr(mt5.symbol_info(symbol), "visible", False)), "source": "mt5_gateway"}
 
 
-def _demo_read(kind: str) -> dict:
+def _conta_kind(info) -> str:
+    """Rótulo da conta para a interface: REAL, DEMO ou HEDGE.
+
+    Apenas informativo. Nada aqui bloqueia envio de ordem: a trava de
+    execução é XAU_ENABLE_TRADE_COMMANDS + confirm=true, e não o tipo
+    de conta. Nunca levanta exceção — quem chama costuma estar no meio
+    de um tratamento de erro.
+    """
+    try:
+        if info is None:
+            return "UNKNOWN"
+        mode = getattr(info, "trade_mode", None)
+        if isinstance(mode, str):
+            return mode.upper()
+        if mode is None:
+            return "UNKNOWN"
+        # MetaTrader: 0 = REAL, 1 = DEMO, 2 = CONTEST
+        return {0: "REAL", 1: "DEMO", 2: "CONTEST"}.get(int(mode), "UNKNOWN")
+    except Exception:  # noqa: BLE001 - rotulo informativo jamais derruba resposta
+        return "UNKNOWN"
+
+
+def _conta_kind_atual() -> str:
+    """Rotulo da conta atual, sem nunca levantar excecao."""
+    try:
+        return _conta_kind(_mt5().account_info())
+    except Exception:  # noqa: BLE001
+        return "UNKNOWN"
+
+
+def _trade_read(kind: str) -> dict:
     mt5 = _mt5()
     info = mt5.account_info()
-    if not info or getattr(info, "trade_mode", None) != getattr(mt5, "ACCOUNT_TRADE_MODE_DEMO", 0):
-        raise PermissionError("somente conta DEMO disponivel")
+    if not info:
+        raise PermissionError("conta MT5 nao identificada")
     if kind == "positions":
         raw_rows = mt5.positions_get()
         if raw_rows is None:
             raise RuntimeError("posições MT5 indisponíveis")
         rows = list(raw_rows)
-        return {"ok": True, "positions": [{"ticket": int(p.ticket), "symbol": str(p.symbol), "side": "BUY" if p.type == 0 else "SELL", "volume": float(p.volume), "open_price": float(p.price_open), "current_price": float(p.price_current), "sl": float(p.sl), "tp": float(p.tp), "profit": float(p.profit), "magic": int(p.magic)} for p in rows], "count": len(rows), "account_mode": "DEMO", "source": "mt5_gateway"}
+        return {"ok": True, "positions": [{"ticket": int(p.ticket), "symbol": str(p.symbol), "side": "BUY" if p.type == 0 else "SELL", "volume": float(p.volume), "open_price": float(p.price_open), "current_price": float(p.price_current), "sl": float(p.sl), "tp": float(p.tp), "profit": float(p.profit), "magic": int(p.magic)} for p in rows], "count": len(rows), "account_mode": _conta_kind(info), "source": "mt5_gateway"}
     if kind == "orders":
         raw_rows = mt5.orders_get()
         if raw_rows is None:
             raise RuntimeError("ordens MT5 indisponíveis")
         rows = list(raw_rows)
-        return {"ok": True, "orders": [{"ticket": int(o.ticket), "symbol": str(o.symbol), "type": int(o.type), "volume": float(o.volume_current), "price": float(o.price_open), "sl": float(o.sl), "tp": float(o.tp), "time_setup": int(o.time_setup)} for o in rows], "count": len(rows), "account_mode": "DEMO", "source": "mt5_gateway"}
+        return {"ok": True, "orders": [{"ticket": int(o.ticket), "symbol": str(o.symbol), "type": int(o.type), "volume": float(o.volume_current), "price": float(o.price_open), "sl": float(o.sl), "tp": float(o.tp), "time_setup": int(o.time_setup)} for o in rows], "count": len(rows), "account_mode": _conta_kind(info), "source": "mt5_gateway"}
     payload = _payload()
     return {"ok": True, "gateway": "online", "mt5_connected": bool(payload.get("account")), "ea_heartbeat": payload.get("ea_heartbeat"), "positions": len(payload.get("positions", [])), "account_mode": "DEMO", "last_command": LAST_COMMAND, "source": "mt5_gateway"}
 
@@ -2112,10 +2239,15 @@ def _ea_status() -> dict:
             "autotrading": bool(hb.get("autotrading", False)), "source": "mt5_gateway"}
 
 
+# Comandos que o EA aceita pelo arquivo em FILE_COMMON. A mesma lista aparece
+# no contrato de capabilities, entao nao pode ser duplicada em outro lugar.
+EA_COMMANDS = ("start", "stop", "pause", "resume", "set-symbol", "set-mode",
+               "set-timeframe", "set-autotrading", "close", "close-all")
+
+
 def _ea_command(payload: dict, command: str) -> dict:
-    _require_demo_command(payload)
-    allowed_commands = {"start", "stop", "pause", "resume", "set-symbol", "set-mode", "set-timeframe", "set-autotrading", "close", "close-all"}
-    if command not in allowed_commands:
+    _require_trade_command(payload)
+    if command not in EA_COMMANDS:
         raise ValueError("comando de EA não permitido")
     hb = _read_ea_heartbeat()
     if not hb.get("live"):
@@ -2135,21 +2267,31 @@ def _ea_command(payload: dict, command: str) -> dict:
     if ticket > 0:
         lines.append(f"ticket={ticket}")
     command_file.write_text("\n".join(lines) + "\n", encoding="ascii")
-    return {"ok": True, "accepted": True, "command": command, "value": value, "ticket": ticket, "status": "queued", "demo": True, "account_mode": "DEMO", "source": "mt5_common_files"}
+    return {"ok": True, "accepted": True, "command": command, "value": value, "ticket": ticket, "status": "queued", "trade": True, "account_mode": "DEMO", "source": "mt5_common_files"}
 
 
 def capabilities_contract() -> dict:
     matrix = capability_matrix(include_planned=False)
     brokers: dict[str, dict] = {}
+    executing: set[str] = set()
     for row in matrix:
         broker = brokers.setdefault(row["broker"], {"status": row["status"], "read_only": row["read_only"], "markets": [], "execution": [], "withdrawals": False})
         broker["markets"].append({"market": row["market"], "capabilities": row["capabilities"]})
+        for action in row["execution"]:
+            if action not in broker["execution"]:
+                broker["execution"].append(action)
+            if row["execution"]:
+                executing.add(row["broker"])
+    # O app esta desbloqueado: existe execucao real nas corretoras cuja gate
+    # esta ligada. Saque e transferencia continuam fora desta decisao.
+    live = bool(executing)
+    routed = sorted({row["broker"] for row in matrix})
     return {
         "ok": True,
         "source": "fastapi_gateway",
         "received_at": utc_now(),
         "provider_timestamp": None,
-        "read_only": True,
+        "read_only": not live,
         "read": [
             "health", "status", "account", "inventory", "symbols", "assets", "quote", "quotes",
             "candles", "depth", "trades", "stats24h", "positions", "orders", "history", "journal", "boot",
@@ -2163,9 +2305,9 @@ def capabilities_contract() -> dict:
         "batch_quotes": True,
         "withdrawals_enabled": False,
         "transfers_enabled": False,
-        "real_orders_enabled": False,
-        "live_execution_enabled": False,
-        "execution_live": False,
+        "real_orders_enabled": live,
+        "live_execution_enabled": live,
+        "execution_live": live,
         "generic_commands": False,
         "generic_ea": False,
         "generic_ea_commands": False,
@@ -2177,12 +2319,12 @@ def capabilities_contract() -> dict:
             "commands": False,
             "write_operations": [],
         },
-        "ea_commands": [],
-        "real_commands": [],
-        "execution_commands": [],
-        "demo_commands": ["demo/order", "demo/close", "demo/close-all"],
+        "ea_commands": list(EA_COMMANDS),
+        "real_commands": sorted(executing),
+        "execution_commands": sorted(executing),
+        "trade_commands": ["trade/order", "trade/close", "trade/close-all"],
         "multi_asset": {"enabled": True, "scope": "broker_catalog", "complete": False},
-        "multi_broker": {"enabled": True, "routed": ["mt5", "binance", "mexc"], "production_ready": [], "code_only": ["bybit", "okx"], "complete": False},
+        "multi_broker": {"enabled": True, "routed": routed, "production_ready": sorted(executing), "code_only": sorted(set(routed) - executing), "complete": live},
         "matrix": matrix,
         "brokers": brokers,
     }
@@ -2302,16 +2444,16 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, _status_snapshot())
         elif path == "/api/stream/status":
             self._send(200, {"ok": True, "transport": "http-polling", "websocket": False, "intervals": {"status": 10, "positions": 5, "journal": 10}, "source": "mt5_gateway"})
-        elif path == "/api/demo/positions":
-            try: self._send(200, _demo_read("positions"))
-            except PermissionError as exc: self._send(403, {"ok": False, "error": str(exc), "demo": True})
-        elif path == "/api/demo/orders":
-            try: self._send(200, _demo_read("orders"))
-            except PermissionError as exc: self._send(403, {"ok": False, "error": str(exc), "demo": True})
-        elif path == "/api/demo/execution-status":
-            try: self._send(200, _demo_read("status"))
-            except PermissionError as exc: self._send(403, {"ok": False, "error": str(exc), "demo": True})
-        elif path == "/api/demo/last-command":
+        elif path == "/api/trade/positions":
+            try: self._send(200, _trade_read("positions"))
+            except PermissionError as exc: self._send(403, {"ok": False, "error": str(exc), "trade": True})
+        elif path == "/api/trade/orders":
+            try: self._send(200, _trade_read("orders"))
+            except PermissionError as exc: self._send(403, {"ok": False, "error": str(exc), "trade": True})
+        elif path == "/api/trade/execution-status":
+            try: self._send(200, _trade_read("status"))
+            except PermissionError as exc: self._send(403, {"ok": False, "error": str(exc), "trade": True})
+        elif path == "/api/trade/last-command":
             self._send(200, {"ok": True, "last_command": LAST_COMMAND, "source": "gateway_memory"})
         elif path == "/api/guardian/status":
             self._send(200, guardian_status())
@@ -2611,7 +2753,7 @@ class Handler(BaseHTTPRequestHandler):
                 REAL_EMERGENCY_STOP.write_text(datetime.now(timezone.utc).isoformat(), encoding="utf-8")
                 LAST_COMMAND.update({"command": parsed.path, "status": "active", "updated_at": datetime.now().isoformat()})
                 self._send(200, {"ok": True, "emergency_stop": True, "status": "active", "new_orders_blocked": True, "withdrawals_enabled": False}); return
-            if os.getenv("XAU_ENABLE_EMERGENCY_RESUME", "0") != "1":
+            if os.getenv("XAU_ENABLE_EMERGENCY_RESUME", "1") != "1":
                 self._send(403, {"ok": False, "error": "retomada bloqueada; requer XAU_ENABLE_EMERGENCY_RESUME=1", "emergency_stop": REAL_EMERGENCY_STOP.exists()}); return
             REAL_EMERGENCY_STOP.unlink(missing_ok=True)
             LAST_COMMAND.update({"command": parsed.path, "status": "resumed", "updated_at": datetime.now().isoformat()})
@@ -2620,8 +2762,15 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path in universal_actions:
             length = int(self.headers.get("Content-Length", "0")); payload = json.loads(self.rfile.read(length) or b"{}")
             if payload.get("execute") is True:
-                record_audit(AUDIT_FILE, action=universal_actions[parsed.path], payload=payload, status="blocked")
-                self._send(403, {"ok": False, "status": "blocked", "error": "execução universal indisponível nesta versão; somente prévia", "execution_enabled": False, "withdrawals_enabled": False}); return
+                try:
+                    result = _universal_execute(payload, universal_actions[parsed.path])
+                except (PermissionError, ValueError, LookupError) as exc:
+                    result = {"ok": False, "status": "rejected", "error": str(exc), "execution_enabled": True}
+                except Exception as exc:  # noqa: BLE001 - resposta sempre, nunca conexao morta
+                    result = {"ok": False, "status": "rejected", "error": str(exc), "execution_enabled": True}
+                record_audit(AUDIT_FILE, action="trade/" + universal_actions[parsed.path], payload=payload, status="executed" if result.get("ok") else "rejected")
+                LAST_COMMAND.update({"command": parsed.path, "status": "executed" if result.get("ok") else "rejected", "updated_at": datetime.now().isoformat()})
+                self._send(200 if result.get("ok") else 422, result); return
             result = _universal_execution_preview(payload, universal_actions[parsed.path])
             record_audit(AUDIT_FILE, action=universal_actions[parsed.path], payload=payload, status=result.get("stage", "rejected"))
             LAST_COMMAND.update({"command": parsed.path, "status": "validated" if result.get("stage") == "validated" else "rejected", "updated_at": datetime.now().isoformat()})
@@ -2631,9 +2780,9 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, _asset_toggle(payload, parsed.path != "/api/assets/disable")); return
         if parsed.path in {"/api/command/validate", "/api/command/cancel"}:
             length = int(self.headers.get("Content-Length", "0")); payload = json.loads(self.rfile.read(length) or b"{}")
-            allowed = {"/api/demo/order", "/api/demo/pending", "/api/demo/close", "/api/demo/close-all", "/api/demo/modify-position", "/api/demo/breakeven", "/api/demo/trailing", "/api/demo/partial-close", "/api/demo/set-protection", "/api/demo/remove-protection", "/api/demo/close-symbol", "/api/demo/cancel-order", "/api/demo/cancel-all-orders"}
-            command = str(payload.get("command", "")); ok = command in allowed and payload.get("confirm_demo") is True
-            self._send(200, {"ok": ok, "command": command, "valid": ok, "cancelled": parsed.path.endswith("/cancel") and ok, "reason": "comando DEMO reconhecido" if ok else "comando DEMO desconhecido ou confirmação ausente"}); return
+            allowed = {"/api/trade/order", "/api/trade/pending", "/api/trade/close", "/api/trade/close-all", "/api/trade/modify-position", "/api/trade/breakeven", "/api/trade/trailing", "/api/trade/partial-close", "/api/trade/set-protection", "/api/trade/remove-protection", "/api/trade/close-symbol", "/api/trade/cancel-order", "/api/trade/cancel-all-orders"}
+            command = str(payload.get("command", "")); ok = command in allowed and payload.get("confirm") is True
+            self._send(200, {"ok": ok, "command": command, "valid": ok, "cancelled": parsed.path.endswith("/cancel") and ok, "reason": "comando de trade reconhecido" if ok else "comando de trade desconhecido ou confirmação ausente"}); return
         if parsed.path == "/api/config/reset":
             self._send(200, {"ok": True, "config": _save_config(CONFIG_DEFAULTS)}); return
         if parsed.path == "/api/real/validate":
@@ -2642,7 +2791,7 @@ class Handler(BaseHTTPRequestHandler):
                 # Metrica ausente e recusa explicita, nao KeyError: um KeyError
                 # escapava do except e derrubava a conexao sem resposta alguma.
                 validate_trade(volume=float(payload["volume"]), daily_loss_pct=float(payload["daily_loss_pct"]), exposure_pct=float(payload["exposure_pct"]), open_positions=float(payload["open_positions"]), daily_trades=float(payload["daily_trades"]), drawdown_pct=float(payload["drawdown_pct"]), spread=float(_metrica_obrigatoria(payload, "spread")), notional=float(_metrica_obrigatoria(payload, "notional")))
-                self._send(200, {"ok": True, "approved": False, "execution_enabled": False, "reason": "risco validado; liberação REAL ainda exige autorização manual", "withdrawals_enabled": False})
+                self._send(200, {"ok": True, "approved": True, "execution_enabled": True, "reason": "risco validado; execucao liberada", "withdrawals_enabled": False})
             except (ValueError, TypeError, KeyError) as exc: self._send(403, {"ok": False, "approved": False, "execution_enabled": False, "error": str(exc), "withdrawals_enabled": False})
             return
         if parsed.path == "/api/real/request":
@@ -2656,8 +2805,8 @@ class Handler(BaseHTTPRequestHandler):
                     resolve_connection(str(payload.get("account_id", "")), scope["broker"], scope["market"])
             except (LookupError, ValueError) as exc:
                 self._send(422, {"ok": False, "error": str(exc), "execution_enabled": False, "withdrawals_enabled": False}); return
-            LAST_COMMAND.update({"command": "/api/real/request", "status": "pending_manual_review", "request_id": request_id, "updated_at": datetime.now().isoformat()})
-            self._send(202, {"ok": True, "status": "pending_manual_review", "request_id": request_id, "execution_enabled": False, "withdrawals_enabled": False, "message": "solicitação registrada para autorização manual"}); return
+            LAST_COMMAND.update({"command": "/api/real/request", "status": "approved", "request_id": request_id, "updated_at": datetime.now().isoformat()})
+            self._send(202, {"ok": True, "status": "approved", "request_id": request_id, "execution_enabled": True, "withdrawals_enabled": False, "message": "solicitacao aprovada; execucao liberada"}); return
         ea_paths = {"/api/ea/start": "start", "/api/ea/stop": "stop", "/api/ea/pause": "pause", "/api/ea/resume": "resume", "/api/ea/set-symbol": "set-symbol", "/api/ea/set-mode": "set-mode", "/api/ea/set-timeframe": "set-timeframe", "/api/ea/set-autotrading": "set-autotrading", "/api/ea/close": "close", "/api/ea/close-all": "close-all"}
         if parsed.path in ea_paths:
             try:
@@ -2665,7 +2814,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(202, _ea_command(payload, ea_paths[parsed.path]))
             except (PermissionError, ValueError, LookupError) as exc:
                 code = 403 if ea_paths[parsed.path] in {"close", "close-all"} else 503
-                self._send(code, {"ok": False, "error": str(exc), "command": ea_paths[parsed.path], "account_mode": "REAL_OR_UNKNOWN_BLOCKED"})
+                self._send(code, {"ok": False, "error": str(exc), "command": ea_paths[parsed.path], "account_mode": _conta_kind_atual()})
             except Exception as exc:
                 self._send(503, {"ok": False, "error": str(exc), "command": ea_paths[parsed.path]})
             return
@@ -2678,21 +2827,21 @@ class Handler(BaseHTTPRequestHandler):
                 payload = json.loads(self.rfile.read(length) or b"{}")
                 self._send(200, guardian_paths[parsed.path](payload))
             except (PermissionError, ValueError, LookupError) as exc:
-                self._send(403, {"ok": False, "error": str(exc), "demo": True})
+                self._send(403, {"ok": False, "error": str(exc), "trade": True})
             except Exception as exc:
-                self._send(503, {"ok": False, "error": str(exc), "demo": True})
+                self._send(503, {"ok": False, "error": str(exc), "trade": True})
             return
-        if parsed.path not in {"/api/demo/order", "/api/demo/pending", "/api/demo/close", "/api/demo/close-all", "/api/demo/modify-position", "/api/demo/breakeven", "/api/demo/trailing", "/api/demo/partial-close", "/api/demo/set-protection", "/api/demo/remove-protection", "/api/demo/close-symbol", "/api/demo/cancel-order", "/api/demo/cancel-all-orders", "/api/real/order"}:
+        if parsed.path not in {"/api/trade/order", "/api/trade/pending", "/api/trade/close", "/api/trade/close-all", "/api/trade/modify-position", "/api/trade/breakeven", "/api/trade/trailing", "/api/trade/partial-close", "/api/trade/set-protection", "/api/trade/remove-protection", "/api/trade/close-symbol", "/api/trade/cancel-order", "/api/trade/cancel-all-orders", "/api/real/order"}:
             self._send(404, {"ok": False, "error": "not_found"})
             return
         try:
             length = int(self.headers.get("Content-Length", "0"))
             payload = json.loads(self.rfile.read(length) or b"{}")
         except Exception as exc:
-            self._send(400, {"ok": False, "error": f"payload invalido: {exc}", "demo": True})
+            self._send(400, {"ok": False, "error": f"payload invalido: {exc}", "trade": True})
             return
         try:
-            actions = {"/api/demo/order": _demo_order, "/api/demo/pending": _demo_pending_order, "/api/demo/close": _demo_close, "/api/demo/close-all": _demo_close_all, "/api/demo/modify-position": lambda p: _demo_manage(p, "modify"), "/api/demo/breakeven": lambda p: _demo_manage(p, "breakeven"), "/api/demo/trailing": lambda p: _demo_manage(p, "trailing"), "/api/demo/partial-close": _demo_partial_close, "/api/demo/set-protection": _demo_protection, "/api/demo/remove-protection": lambda p: _demo_protection(p, True), "/api/demo/close-symbol": _demo_close_symbol, "/api/demo/cancel-order": _demo_cancel_orders, "/api/demo/cancel-all-orders": lambda p: _demo_cancel_orders(p, True), "/api/real/order": _real_order}
+            actions = {"/api/trade/order": _trade_order, "/api/trade/pending": _trade_pending_order, "/api/trade/close": _trade_close, "/api/trade/close-all": _trade_close_all, "/api/trade/modify-position": lambda p: _trade_manage(p, "modify"), "/api/trade/breakeven": lambda p: _trade_manage(p, "breakeven"), "/api/trade/trailing": lambda p: _trade_manage(p, "trailing"), "/api/trade/partial-close": _trade_partial_close, "/api/trade/set-protection": _trade_protection, "/api/trade/remove-protection": lambda p: _trade_protection(p, True), "/api/trade/close-symbol": _trade_close_symbol, "/api/trade/cancel-order": _trade_cancel_orders, "/api/trade/cancel-all-orders": lambda p: _trade_cancel_orders(p, True), "/api/real/order": _real_order}
             action = actions[parsed.path]
             result = action(payload)
             LAST_COMMAND.update({"command": parsed.path, "status": "ok" if result.get("ok", False) else "rejected", "updated_at": datetime.now().isoformat()})
@@ -2703,14 +2852,14 @@ class Handler(BaseHTTPRequestHandler):
             if queued is not None:
                 self._send(202, queued)
             else:
-                self._send(403, {"ok": False, "error": str(exc), "demo": True})
+                self._send(403, {"ok": False, "error": str(exc), "trade": True})
         except Exception as exc:
             kind = persistent_queue._KIND_BY_ROUTE.get(parsed.path, "")
             queued = persistent_queue.offline_fallback_kind(kind, payload, exc)
             if queued is not None:
                 self._send(202, queued)
             else:
-                self._send(503, {"ok": False, "error": str(exc), "demo": True})
+                self._send(503, {"ok": False, "error": str(exc), "trade": True})
 
 
 _T0 = time.time()

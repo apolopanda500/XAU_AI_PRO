@@ -52,3 +52,25 @@
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
 }
+
+/* Par do motor: ativo + periodo (a escolha de QUAL modelo roda). Os selects
+   ocupam a mesma grade dos limites para nao virar uma linha a mais de UI. */
+.auto-engine-par {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  margin-bottom: 4px;
+}
+
+.auto-engine-par select {
+  padding: 4px 7px;
+  font-size: 13px;
+  min-height: 28px;
+}
+
+.auto-engine-par-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
+  padding-bottom: 2px;
+}

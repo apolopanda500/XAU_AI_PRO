@@ -62,14 +62,26 @@ def _patch_json(path: Path, version: str) -> bool:
     new, n = re.subn(r'"version"\s*:\s*"[^"]+"', f'"version": "{version}"', text, count=1)
     if n == 0:
         return False
+    if new == text:  # ja estava certo: nao reporta "atualizado" mentindo
+        return False
     path.write_text(new, encoding="utf-8")
     return True
 
 
 def _patch_toml(path: Path, version: str) -> bool:
+    # Todas as ocorrencias, nao so a primeira: pyproject.toml declara a versao
+    # em [tool.poetry] E em [project], e atualizar so uma deixa as duas
+    # divergentes — exatamente o bug que existia na 1.2.4.
     text = path.read_text(encoding="utf-8")
-    new, n = re.subn(r'^version\s*=\s*"[^"]+"', f'version = "{version}"', text, count=1, flags=re.MULTILINE)
+    new, n = re.subn(
+        r'^version\s*=\s*"[^"]+"',
+        f'version = "{version}"',
+        text,
+        flags=re.MULTILINE,
+    )
     if n == 0:
+        return False
+    if new == text:
         return False
     path.write_text(new, encoding="utf-8")
     return True
@@ -85,6 +97,8 @@ def _patch_app_version(path: Path, version: str) -> bool:
         count=1,
     )
     if n == 0:
+        return False
+    if new == text:  # ja estava certo
         return False
     path.write_text(new, encoding="utf-8")
     return True

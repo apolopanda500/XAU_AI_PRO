@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import json
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -23,7 +24,12 @@ def _resolve_models_dir() -> Path:
       1. Variavel de ambiente XAU_AI_PRO_MODELS (maquina de destino / instalador);
       2. Subpasta 'models' junto a este modulo (Python/models);
       3. Fallback: <raiz>/Python/models.
-    Garante que o diretorio exista.
+
+    No bundle congelado o `__file__` fica dentro de `<instalacao>/bridge/_internal`,
+    entao o `mkdir` abaixo criava um diretorio VAZIO dentro de Program Files.
+    Esse dir vazio passava a vencer a resolucao de modelos do gateway e
+    `/api/ai/trained` devolvia `models: []`. No app instalado apenas LEMOS:
+    nada aqui escreve dentro do pacote.
     """
     env = os.getenv("XAU_AI_PRO_MODELS", "").strip()
     if env:
@@ -31,7 +37,8 @@ def _resolve_models_dir() -> Path:
         p.mkdir(parents=True, exist_ok=True)
         return p
     default = Path(__file__).resolve().parent.parent / "Python" / "models"
-    default.mkdir(parents=True, exist_ok=True)
+    if not getattr(sys, "frozen", False):
+        default.mkdir(parents=True, exist_ok=True)
     return default
 
 

@@ -11,7 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 # Arquivo unico por processo: evita itens "pending" deixados por execucoes anteriores.
 os.environ["XAU_QUEUE_FILE"] = str(Path(tempfile.gettempdir()) / f"queue_test_{os.getpid()}.json")
-os.environ["XAU_ENABLE_DEMO_ORDERS"] = "1"
+os.environ["XAU_ENABLE_TRADE_COMMANDS"] = "1"
 Path(os.environ["XAU_QUEUE_FILE"]).unlink(missing_ok=True)
 
 from backend import persistent_queue as q  # noqa: E402
@@ -24,9 +24,9 @@ if emergencia:
 
 def test_fatal_classificacao():
     assert q._is_fatal("posicao DEMO nao encontrada")
-    assert q._is_fatal("somente conta DEMO aceita")
+    assert q._is_fatal("confirm=true obrigatorio")
     assert q._is_fatal("ordens DEMO desabilitadas")
-    assert q._is_fatal("confirm_demo=true obrigatorio")
+    assert q._is_fatal("confirm=true obrigatorio")
     assert q._is_fatal("volume parcial deve ser maior que zero")
     assert not q._is_fatal("connection timeout")
     assert not q._is_fatal("contexto ocupado, tente novamente")

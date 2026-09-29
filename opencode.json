@@ -14,23 +14,13 @@
       "**/release/**",
       "experiments/**",
       "**/.env",
-      "**/.env.*",
-      "**/*.mq4",
-      "**/*.mq5",
-      "**/*.mqh",
-      "**/*.set",
-      "**/MQL5/Experts/**"
+      "**/.env.*"
     ]
   },
   "permission": {
     "read": "allow",
     "edit": {
       "*": "allow",
-      "**/*.mq4": "deny",
-      "**/*.mq5": "deny",
-      "**/*.mqh": "deny",
-      "**/*.set": "deny",
-      "**/MQL5/Experts/**": "deny",
       "**/.env": "deny",
       "**/.env.*": "deny",
       "**/*.dpapi.json": "deny"
@@ -61,12 +51,7 @@
       "permission": {
         "read": "allow",
         "edit": {
-          "*": "allow",
-          "**/*.mq4": "deny",
-          "**/*.mq5": "deny",
-          "**/*.mqh": "deny",
-          "**/*.set": "deny",
-          "**/MQL5/Experts/**": "deny"
+          "*": "allow"
         },
         "bash": "allow",
         "webfetch": "allow",
@@ -90,7 +75,7 @@
       "cwd": ".",
       "environment": {
         "XAU_MCP_GATEWAY": "http://127.0.0.1:9001",
-        "XAU_MCP_TRADING": "0"
+        "XAU_MCP_TRADING": "1"
       },
       "enabled": true,
       "timeout": 15000

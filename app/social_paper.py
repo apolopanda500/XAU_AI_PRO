@@ -92,7 +92,7 @@ def follow_strategy(strategy_id: str, user_id: str | None = None) -> dict[str, A
         ids.add(normalized)
         data[_user_id(user_id)] = sorted(ids)
         _save(data)
-    return {**copy.deepcopy(strategy), "following": True, "execution_mode": "paper_demo", "live_execution": False}
+    return {**copy.deepcopy(strategy), "following": True, "execution_mode": "paper_trade", "live_execution": False}
 
 
 def unfollow_strategy(strategy_id: str, user_id: str | None = None) -> dict[str, Any]:
@@ -103,4 +103,4 @@ def unfollow_strategy(strategy_id: str, user_id: str | None = None) -> dict[str,
         ids.discard(normalized)
         data[_user_id(user_id)] = sorted(ids)
         _save(data)
-    return {"strategy_id": normalized, "following": False, "execution_mode": "paper_demo", "live_execution": False}
+    return {"strategy_id": normalized, "following": False, "execution_mode": "paper_trade", "live_execution": False}

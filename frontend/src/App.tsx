@@ -9,34 +9,26 @@ import QuantumBackground from './components/QuantumBackground';
 import Sidebar from './components/Sidebar';
 import TopNav from './components/TopNav';
 import PortfolioHome from './components/tabs/PortfolioHomeSafe';
-import AutoEnginePanel from './components/AutoEnginePanel';
-import RobotModelPanel from './components/RobotModelPanel';
-import CopilotPanel from './components/CopilotPanel';
-import RobotAssetTable from './components/RobotAssetTableFixed';
-import GuardianManager from './components/GuardianManager';
-import DemoOrderPanel from './components/DemoOrderPanel';
-import UniversalLiveTerminal from './components/UniversalLiveTerminalLatest';
+import RobotTabs from './components/RobotTabs';
 import HistoryTab from './components/tabs/HistoryTab';
 import SystemHealth from './components/SystemHealthOnly';
 import SettingsCore from './components/SettingsCoreSimple';
 import ExitAppButton from './components/ExitAppButton';
-import RiskTab from './components/tabs/RiskTab';
-import AnalyticsTab from './components/tabs/AnalyticsTab';
 import EconomicCalendarTab from './components/tabs/EconomicCalendarTab';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 
 function renderActiveTab(tab: TabType): ReactNode {
   switch (tab) {
     case 'portfolio': return <PortfolioHome />;
-    // Ordem pensada para o uso: primeiro o que orienta a decisão (modelo e
-    // operação automática), depois o que executa (ordem), depois o resultado
-    // (risco e posições). O Mini Terminal fica NO FIM de propósito: ele é
-    // conferência, não comando. No meio da aba ele empurrava a gestão para
-    // baixo da dobra e o operador lia o resultado antes de decidir.
-    case 'robot': return <><RobotModelPanel /><AutoEnginePanel /><DemoOrderPanel /><RiskTab /><GuardianManager /><RobotAssetTable /><CopilotPanel /><UniversalLiveTerminal /></>;
+    // A aba Robô virou cinco sub-abas (Modelo & Sinal | Operação | Ordem |
+    // Ativos | Copiloto) com o Mini Terminal sempre no fim. Cada painel segue
+    // dentro da sua barreira de erro: um painel que falhasse desmontava a
+    // árvore React inteira e a aba ficava branca — o usuário perdia o app sem
+    // saber qual era o culpado.
+    case 'robot': return <RobotTabs />;
     // Performance & Analytics foi fundida no Histórico: as duas telas
     // analisam a mesma coisa — as operações realizadas.
-    case 'history': return <><HistoryTab /><AnalyticsTab /></>;
+    case 'history': return <HistoryTab />;
     case 'system': return <SystemHealth />;
     case 'settings': return <><SettingsCore /><ExitAppButton /></>;
     case 'calendar': return <EconomicCalendarTab />;

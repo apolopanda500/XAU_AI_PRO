@@ -49,7 +49,62 @@ for _caminho in (RAIZ, RAIZ / "Python"):
 
 from Python.ai import train_v2 as t  # noqa: E402
 
-MODELOS_DIR = RAIZ / "Python" / "models"
+
+def _resolver_modelos() -> Path:
+    """Onde os `.pkl` ficam, na fonte e no app instalado.
+
+    Este era o unico caminho (`RAIZ / "Python" / "models"`), e ele so funciona
+    rodando do repositorio. No app instalado o gateway e um binario
+    congelado com PyInstaller, onde `__file__` aponta para dentro do
+    `_internal` — e `RAIZ` vira `<instalacao>/bridge/_internal`. O modelo H1
+    estava no repositorio e NAO no instalador, entao
+    `/api/ai/trained` devolvia `models: []` e a interface mostrava
+    "Nenhum modelo carregavel" mesmo com o modelo treinado e validado.
+
+    Agora sao testados varios candidatos e vence o primeiro que EXISTE e tem
+    artefato de modelo: um diretorio vazio nao pode sequestrar a resolucao.
+    E exatamente o que acontecia no app instalado - `model_registry` criava
+    `<bundle>/Python/models` vazio, esse candidato existia e era testado
+    antes do `C:/Program Files/XAU AI PRO/Python/models` (72 arquivos),
+    entao `/api/ai/trained` voltava `models: []`.
+
+    A variavel de ambiente `XAU_MODELOS_DIR` tem precedencia absoluta, para
+    quem quiser apontar para outro lugar sem rebuild.
+    """
+    override = os.environ.get("XAU_MODELOS_DIR", "").strip()
+    if override:
+        return Path(override)
+
+    def tem_modelos(candidato: Path) -> bool:
+        return any(candidato.glob("*.meta.json")) or any(candidato.glob("*.pkl"))
+
+    candidatos: list[Path] = []
+    meipass = getattr(sys, "_MEIPASS", "")
+    if meipass:
+        candidatos.append(Path(meipass) / "Python" / "models")
+    exe_dir = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else None
+    if exe_dir is not None:
+        candidatos.append(exe_dir / "Python" / "models")
+        candidatos.append(exe_dir.parent / "Python" / "models")
+        candidatos.append(exe_dir / "_internal" / "Python" / "models")
+        candidatos.append(exe_dir.parent / "_internal" / "Python" / "models")
+    candidatos.append(RAIZ / "Python" / "models")
+    existente: Path | None = None
+    for candidato in candidatos:
+        try:
+            if not candidato.is_dir():
+                continue
+            if existente is None:
+                existente = candidato
+            if tem_modelos(candidato):
+                return candidato
+        except OSError:
+            continue
+    if existente is not None:
+        return existente
+    return candidatos[0] if candidatos else RAIZ / "Python" / "models"
+
+MODELOS_DIR = _resolver_modelos()
 
 # Quantas threads de CPU o processo pode usar. O usuario ve esse numero na aba
 # IA; nao e cosmetics, e o limite real de paralelismo do scikit-learn.
@@ -115,16 +170,21 @@ class Inferencia:
 _CACHE: dict[str, Any] = {}
 
 
-def _carregar(timeframe: str) -> tuple[Any | None, dict[str, Any]]:
-    """Carrega .pkl e .meta.json de um timeframe.
+def _carregar(symbol: str, timeframe: str) -> tuple[Any | None, dict[str, Any]]:
+    """Carrega .pkl e .meta.json de um timeframe de um simbolo.
+
+    O artefato e `<SIMBOLO>_<TF>` (XAUUSD_H1, BTCUSD_M15, ...). Antes o
+    caminho era fixo em XAUUSD, entao pedir BTCUSD devolvia o modelo de
+    ouro — sinal de outro ativo apresentado como se fosse do ativo pedido.
 
     O .pkl tem 8 MB e leva ~2 s para desserializar. Recarregar a cada tique
     seria crippling, entao o resultado fica em cache e so e invalidado quando
     o mtime do arquivo muda (retraining).
     """
-    chave = f"modelo:{timeframe}"
-    pkl = MODELOS_DIR / f"XAUUSD_{timeframe}.pkl"
-    meta = MODELOS_DIR / f"XAUUSD_{timeframe}.meta.json"
+    simbolo = str(symbol or "XAUUSD").strip().upper() or "XAUUSD"
+    chave = f"modelo:{simbolo}:{timeframe}"
+    pkl = MODELOS_DIR / f"{simbolo}_{timeframe}.pkl"
+    meta = MODELOS_DIR / f"{simbolo}_{timeframe}.meta.json"
     if not (pkl.exists() and meta.exists()):
         _CACHE[chave] = (None, {})
         return _CACHE[chave]
@@ -189,7 +249,7 @@ def inferir(symbol: str, candles: pd.DataFrame, timeframe: str = "H1") -> Infere
     if candles is None or candles.empty:
         return Inferencia(False, "sem candles recebidos", symbol, timeframe)
 
-    modelo, meta = _carregar(timeframe)
+    modelo, meta = _carregar(symbol, timeframe)
     if modelo is None:
         motivo = meta.get("publish_reason") or "modelo nao publicado ou ausente"
         return Inferencia(False, motivo, symbol, timeframe)
@@ -234,7 +294,7 @@ def inferir(symbol: str, candles: pd.DataFrame, timeframe: str = "H1") -> Infere
             accuracy=metricas.get("accuracy"),
             folds=metricas.get("folds"),
             inferencia_ms=ms,
-            modelo=f"random_forest_XAUUSD_{timeframe}",
+            modelo=f"random_forest_{symbol.upper()}_{timeframe}",
             feature_hash=t.feature_hash(),
         )
     except Exception as exc:  # pragma: no cover
@@ -242,12 +302,20 @@ def inferir(symbol: str, candles: pd.DataFrame, timeframe: str = "H1") -> Infere
 
 
 def listar_modelos() -> list[dict[str, Any]]:
-    """Inventario real dos artefatos, com os metricos do treino."""
+    """Inventario real dos artefatos, com os metricos do treino.
+
+    Percorre TODOS os `<SIMBOLO>_<TF>.meta.json` do diretorio. Antes o glob
+    era `XAUUSD_*`, e os 9 simbolos treinados (BTCUSD, EURUSD, GBPUSD, ...)
+    ficavam invisiveis para a interface mesmo com o .pkl no disco.
+    """
     saida: list[dict[str, Any]] = []
     if not MODELOS_DIR.exists():
         return saida
-    for meta_path in sorted(MODELOS_DIR.glob("XAUUSD_*.meta.json")):
-        tf = meta_path.stem.replace("XAUUSD_", "").replace(".meta", "")
+    for meta_path in sorted(MODELOS_DIR.glob("*.meta.json")):
+        nome = meta_path.name[: -len(".meta.json")]
+        if "_" not in nome:
+            continue
+        simbolo, tf = nome.rsplit("_", 1)
         try:
             with meta_path.open(encoding="utf-8") as f:
                 m = json.load(f)
@@ -257,9 +325,9 @@ def listar_modelos() -> list[dict[str, Any]]:
         folds = metricas.get("folds") or []
         edges = [fo["edge"] for fo in folds if isinstance(fo, dict) and "edge" in fo]
         saida.append({
-            "id": f"XAUUSD_{tf}",
-            "symbol": "XAUUSD",
-            "timeframe": tf,
+            "id": nome,
+            "symbol": str(m.get("symbol") or simbolo).upper(),
+            "timeframe": str(m.get("timeframe") or tf).upper(),
             "publicable": bool(m.get("publicable")),
             "reason": m.get("publish_reason", ""),
             "accuracy": metricas.get("accuracy"),
@@ -277,7 +345,7 @@ def listar_modelos() -> list[dict[str, Any]]:
             "feature_version": m.get("feature_version"),
             "feature_hash": m.get("feature_hash"),
             "algorithm": m.get("algorithm"),
-            "pkl_present": (MODELOS_DIR / f"XAUUSD_{tf}.pkl").exists(),
+            "pkl_present": (MODELOS_DIR / f"{nome}.pkl").exists(),
             "cpu_threads": cpu_threads(),
         })
     return saida

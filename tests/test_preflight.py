@@ -181,7 +181,7 @@ def test_flag_de_dinheiro_real_ligada_bloqueia(monkeypatch):
 def test_flag_de_demo_nao_bloqueia(monkeypatch):
     for flag in pf.FLAGS_DE_EXECUCAO:
         monkeypatch.delenv(flag, raising=False)
-    monkeypatch.setenv("XAU_ENABLE_DEMO_ORDERS", "1")
+    monkeypatch.setenv("XAU_ENABLE_TRADE_COMMANDS", "1")
     resultado = pf.checar_flags_de_execucao()
     assert resultado.estado == pf.ESTADOS["ok"]
     assert "paper/demo" in resultado.detalhe

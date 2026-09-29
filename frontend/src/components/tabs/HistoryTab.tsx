@@ -24,6 +24,7 @@ import { useHistorico, resumir, toNumber, dealDate, type Deal } from '../../lib/
 import '../../theme/history.css';
 // Carregado por último: sobrescreve as celulas de 40px do history.css.
 import '../../theme/history-grid.css';
+import AnalyticsTab from './AnalyticsTab';
 
 const BROKERS: Array<{ value: string; label: string }> = [
   { value: 'all', label: 'Todas' },
@@ -81,7 +82,7 @@ export default function HistoryTab() {
     URL.revokeObjectURL(url);
   };
 
-  return (
+  return (<>
     <main className="history-page quantum-history">
       <div className="page-head">
         <div>
@@ -92,7 +93,7 @@ export default function HistoryTab() {
         <div className="btn-row">
           <button className="btn ghost" onClick={exportCsv} disabled={!rows.length}>Exportar CSV</button>
           <button className="btn primary" type="button" onClick={() => void load()} disabled={loading}>
-            {loading ? 'Lendo…' : 'Atualizar'}
+            {loading ? 'Atualizando…' : 'Atualizar'}
           </button>
         </div>
       </div>
@@ -213,5 +214,10 @@ export default function HistoryTab() {
         </table>
       </div>
     </main>
+
+    {/* Irmao da <main> dentro do .content, como era antes: o Analytics recebe
+        deals/status/loading/recarregar prontos e NAO monta outro hook. */}
+    <AnalyticsTab deals={deals} status={status} loading={loading} recarregar={() => void load()} />
+  </>
   );
 }

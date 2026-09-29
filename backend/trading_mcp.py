@@ -7,7 +7,8 @@ risk_gate, auditoria e emergency-stop ja existentes.
 
 Seguranca (3 freios independentes):
   1. Toda ordem nasce em dry-run (execute=False -> so registra e valida).
-  2. Execucao real exige execute=True na chamada E a env XAU_MCP_TRADING=1.
+  2. Execucao real exige execute=True na chamada. XAU_MCP_TRADING=0 volta a
+     exigir dry-run em toda chamada.
   3. Emergency-stop corta tudo no gateway (independe do MCP).
 
 Execucao: .venv\\Scripts\\python.exe -m backend.trading_mcp
@@ -24,9 +25,10 @@ import urllib.request
 from typing import Any
 
 GATEWAY = os.environ.get("XAU_MCP_GATEWAY", "http://127.0.0.1:9001").rstrip("/")
-TRADING_HABILITADO = os.environ.get("XAU_MCP_TRADING") == "1"
+# Padrao desbloqueado: `XAU_MCP_TRADING=0` volta a exigir dry-run.
+TRADING_HABILITADO = os.environ.get("XAU_MCP_TRADING", "1") == "1"
 PROTOCOL_VERSION = "2024-11-05"
-SERVER_INFO = {"name": "xau-ai-pro-trading", "version": "1.2.3"}
+SERVER_INFO = {"name": "xau-ai-pro-trading", "version": "1.2.4"}
 # Contador monotônico: garante request_id único mesmo com clock de baixa resolução.
 _SEQ = itertools.count(1)
 
@@ -132,7 +134,7 @@ def tool_call(name, args):
     if name == "emergency_stop":
         return _http("/api/universal/emergency-stop", {})
     if name == "emergency_resume":
-        if not TRADING_HABILITADO or os.getenv("XAU_ENABLE_EMERGENCY_RESUME", "0") != "1":
+        if not TRADING_HABILITADO or os.getenv("XAU_ENABLE_EMERGENCY_RESUME", "1") != "1":
             return {"bloqueado": True, "motivo": "retomada exige XAU_MCP_TRADING=1 e XAU_ENABLE_EMERGENCY_RESUME=1"}
         return _http("/api/universal/emergency-resume", {})
     if name == "journal_tail":

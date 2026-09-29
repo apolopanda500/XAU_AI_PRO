@@ -1,4 +1,8 @@
-"""Cliente Binance Spot/Futures somente leitura."""
+"""Cliente Binance Spot/Futures: leitura publica e envio de ordem.
+
+Leitura e escrita usam a mesma assinatura HMAC-SHA256. Nao existe nenhum
+metodo de saque ou transferencia neste modulo.
+"""
 from __future__ import annotations
 
 import hashlib
@@ -6,6 +10,7 @@ import hmac
 import json
 import os
 import time
+from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import Request
 
@@ -14,6 +19,21 @@ from backend.universal_contracts import open_exchange_request, validate_exchange
 
 class BinanceError(RuntimeError):
     pass
+
+
+def _http_detail(exc: HTTPError) -> str:
+    """Corpo do erro da corretora, sem credencial em lugar nenhum."""
+    try:
+        raw = exc.read().decode("utf-8", "replace")[:400]
+    except Exception:
+        return str(exc)
+    try:
+        parsed = json.loads(raw)
+    except ValueError:
+        return raw
+    if isinstance(parsed, dict):
+        return str(parsed.get("msg") or parsed.get("error") or parsed)[:400]
+    return raw
 
 
 class BinanceClient:
@@ -71,6 +91,61 @@ class BinanceClient:
             except (TypeError, ValueError):
                 pass
         return data
+
+    def _post(self, path: str, params: dict[str, object] | None = None, signed: bool = True) -> object:
+        """POST de envio (ordem). Assinatura no corpo form-urlencoded."""
+        payload = dict(params or {})
+        if signed:
+            if not self.configured:
+                raise BinanceError(f"credenciais Binance {self.market} não configuradas")
+            payload["timestamp"] = int(time.time() * 1000)
+            payload["recvWindow"] = 5000
+            body = urlencode(payload)
+            payload["signature"] = hmac.new(self.secret.encode(), body.encode(), hashlib.sha256).hexdigest()
+        url = f"{validate_exchange_base_url(self.base, 'binance')}{path}"
+        headers = {"Accept": "application/json", "Content-Type": "application/x-www-form-urlencoded"}
+        if signed and self.api_key:
+            headers["X-MBX-APIKEY"] = self.api_key
+        request = Request(url, data=urlencode(payload).encode("utf-8"), headers=headers, method="POST")
+        try:
+            with open_exchange_request(request, timeout=15) as response:
+                data = json.loads(response.read().decode("utf-8"))
+        except HTTPError as exc:
+            detail = _http_detail(exc)
+            raise BinanceError(f"Binance {self.market} recusou a ordem (HTTP {exc.code}): {detail}") from exc
+        except BinanceError:
+            raise
+        except Exception as exc:
+            raise BinanceError(f"Binance {self.market} indisponível: {exc}") from exc
+        if isinstance(data, dict) and data.get("code") is not None:
+            try:
+                if int(data["code"]) != 0:
+                    raise BinanceError(str(data))
+            except (TypeError, ValueError):
+                pass
+        return data
+
+    def create_order(self, *, symbol: str, side: str, order_type: str, quantity: float,
+                     price: float | None = None, request_id: str, time_in_force: str = "GTC") -> dict[str, object]:
+        """Envia ordem spot/futures. Sem contraparte de saque em nenhum ramo."""
+        symbol = self._symbol(symbol)
+        kind = str(order_type or "market").lower()
+        if kind not in {"market", "limit"}:
+            raise BinanceError(f"tipo de ordem Binance não suportado: {order_type}")
+        if kind == "limit" and (price is None or float(price) <= 0):
+            raise BinanceError("preço é obrigatório para ordem limit")
+        params: dict[str, object] = {
+            "symbol": symbol,
+            "side": str(side).upper(),
+            "type": kind.upper(),
+            "quantity": quantity,
+            "newClientOrderId": request_id,
+        }
+        if kind == "limit":
+            params["price"] = price
+            params["timeInForce"] = time_in_force
+        data = self._post("/api/v3/order" if self.market == "spot" else "/fapi/v1/order", params, signed=True)
+        return data if isinstance(data, dict) else {"raw": data}
 
     @staticmethod
     def _symbol(symbol: str) -> str:

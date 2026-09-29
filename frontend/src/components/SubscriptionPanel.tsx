@@ -37,7 +37,7 @@ export default function SubscriptionPanel() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [strategies, setStrategies] = useState<Strategy[]>([]);
-  const [status, setStatus] = useState('Carregando planos locais...');
+  const [status, setStatus] = useState('Carregando planos locais…');
   const loadGeneration = useRef(0);
 
   const load = useCallback(async () => {
@@ -66,7 +66,7 @@ export default function SubscriptionPanel() {
 
   const activate = async (planId: string) => {
     loadGeneration.current += 1;
-    setStatus('Ativando plano local...');
+    setStatus('Ativando plano local…');
     try {
       const response = await fetch(`${api}/api/subscriptions/activate`, {
         method: 'POST',
@@ -86,7 +86,7 @@ export default function SubscriptionPanel() {
 
   const follow = async (strategyId: string) => {
     loadGeneration.current += 1;
-    setStatus('Atualizando estratégia paper...');
+    setStatus('Atualizando estratégia paper…');
     try {
       const response = await fetch(`${api}/api/social/follow`, {
         method: 'POST',

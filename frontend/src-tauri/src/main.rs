@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use std::process::{Child, Command};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
+use std::time::Instant;
 
 use serde::Serialize;
 use tauri::path::BaseDirectory;
@@ -14,7 +15,7 @@ use tauri::Manager;
 static OWNED_CHILDREN: OnceLock<Mutex<Vec<Child>>> = OnceLock::new();
 static GATEWAY_TOKEN: OnceLock<String> = OnceLock::new();
 
-const EXPECTED_GATEWAY_BUILD: &str = "xau-ai-pro-1.2.3-universal-20260918";
+const EXPECTED_GATEWAY_BUILD: &str = "xau-ai-pro-1.2.4-universal-20260928";
 
 fn gateway_token() -> Result<String, String> {
     if let Some(token) = GATEWAY_TOKEN.get() {
@@ -143,7 +144,7 @@ pub struct AppDirs {
     pub log_dir: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct HardwareTelemetry {
     pub os: String,
     pub architecture: String,
@@ -160,9 +161,53 @@ pub struct HardwareTelemetry {
     pub source: String,
 }
 
+/// Cache da telemetria.
+///
+/// POR QUE ISTO EXISTE
+/// ===================
+/// A leitura do Windows abre um `powershell.exe` e roda cinco consultas CIM.
+/// A interface polled a cada 2 s: eram 30 processos por minuto, e o app
+/// MORREU — os filhos ficavam orfaos e todas as abas passaram a responder
+/// "gateway indisponivel".
+///
+/// WMI so muda na escala de segundos, entao repetir a leitura varias vezes
+/// por segundo nao produz dado mais fresco: produz carga. O cache garante no
+/// maximo UMA leitura a cada `TELEMETRY_TTL`, e o comando responde na hora
+/// com o ultimo valor.
+static TELEMETRY_CACHE: Mutex<Option<(Instant, HardwareTelemetry)>> = Mutex::new(None);
+
+const TELEMETRY_TTL: Duration = Duration::from_secs(8);
+
+fn hardware_telemetry_cached() -> HardwareTelemetry {
+    if let Ok(guard) = TELEMETRY_CACHE.lock() {
+        if let Some((quando, dados)) = guard.as_ref() {
+            if quando.elapsed() < TELEMETRY_TTL {
+                return dados.clone();
+            }
+        }
+    }
+    let dados = hardware_telemetry_collect();
+    if let Ok(mut guard) = TELEMETRY_CACHE.lock() {
+        *guard = Some((Instant::now(), dados.clone()));
+    }
+    dados
+}
+
 /// Coleta apenas telemetria local. Nao executa ordens, saques ou alteracoes no MT5.
+///
+/// Sincrono de proposito. A versao anterior usava
+/// `tauri::async_runtime::spawn_blocking`, e o PANICAVA quando o app ainda
+/// estava subindo: o processo morria logo depois de "tauri setup executado",
+/// deixando tela branca e os filhos orfaos.
+///
+/// O custo de abertura do powershell ja esta resolvido pelo CACHE de 8s e
+/// pelo pre-aquecimento no boot. Aqui o comando so devolve o cache.
 #[tauri::command]
 fn hardware_telemetry() -> HardwareTelemetry {
+    hardware_telemetry_cached()
+}
+
+fn hardware_telemetry_collect() -> HardwareTelemetry {
     #[cfg(target_os = "windows")]
     {
         let script = r#"$os=Get-CimInstance Win32_OperatingSystem; $cpu=Get-CimInstance Win32_Processor | Select-Object -First 1; $gpu=Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue | Where-Object {$_.Name} | Select-Object -First 1; $tz=Get-CimInstance MSAcpi_ThermalZoneTemperature -ErrorAction SilentlyContinue | Select-Object -First 1; $disk=Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'" | Select-Object -First 1; $load=Get-CimInstance Win32_Processor | Measure-Object -Property LoadPercentage -Average; [pscustomobject]@{os=$os.Caption; arch=$os.OSArchitecture; cpu_name=$cpu.Name; cores=$cpu.NumberOfLogicalProcessors; usage=if($load.Average -ne $null){[math]::Round($load.Average,1)}else{$null}; mem_total=if($os.TotalVisibleMemorySize){[math]::Round($os.TotalVisibleMemorySize/1MB,2)}else{$null}; mem_free=if($os.FreePhysicalMemory){[math]::Round($os.FreePhysicalMemory/1MB,2)}else{$null}; disk_total=if($disk.Size){[math]::Round($disk.Size/1GB,2)}else{$null}; disk_free=if($disk.FreeSpace){[math]::Round($disk.FreeSpace/1GB,2)}else{$null}; temp=if($tz){[math]::Round(($tz.CurrentTemperature/10)-273.15,1)}else{$null}; gpu=if($gpu){$gpu.Name}else{$null}} | ConvertTo-Json -Compress"#;
@@ -389,7 +434,7 @@ fn spawn_bridge(app: &tauri::AppHandle) -> Result<(), String> {
         .env("XAU_GATEWAY_TOKEN", token)
         .env("XAU_EXPECTED_GATEWAY_BUILD", EXPECTED_GATEWAY_BUILD)
         .env("XAU_ENABLE_DEMO_ORDERS", "1")
-        .env("XAU_ENABLE_REAL_ORDERS", "0")
+        .env("XAU_ENABLE_REAL_ORDERS", "1")
         .spawn()
         .map(|child| {
             register_child(child);
@@ -464,6 +509,11 @@ fn main() {
     tauri::Builder::default()
         .setup(|app| {
             log_core("tauri setup executado");
+            // Pre-aquece a telemetria em background: a aba Sistema nunca paga o custo
+            // de abrir o powershell.exe no primeiro clique.
+            std::thread::spawn(|| {
+                let _ = hardware_telemetry_collect();
+            });
             // Inicia o core automaticamente em thread separada (nao bloqueia a UI
             // nem depende da execucao do JavaScript no webview).
             let handle = app.handle().clone();

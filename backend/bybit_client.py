@@ -5,6 +5,7 @@ import hmac
 import json
 import os
 import time
+from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import Request
 
@@ -13,6 +14,21 @@ from backend.universal_contracts import open_exchange_request, validate_exchange
 
 class BybitError(RuntimeError):
     pass
+
+
+def _http_detail(exc: HTTPError) -> str:
+    """Corpo do erro da corretora, sem credencial em lugar nenhum."""
+    try:
+        raw = exc.read().decode("utf-8", "replace")[:400]
+    except Exception:
+        return str(exc)
+    try:
+        parsed = json.loads(raw)
+    except ValueError:
+        return raw
+    if isinstance(parsed, dict):
+        return str(parsed.get("retMsg") or parsed.get("msg") or parsed.get("error") or parsed)[:400]
+    return raw
 
 
 class BybitClient:
@@ -76,6 +92,71 @@ class BybitClient:
                 raise BybitError(str(data.get("retMsg") or data))
             return data.get("result", data)
         return data
+
+    def _post(self, path: str, body: dict[str, object]) -> object:
+        """POST de envio (ordem) com assinatura HMAC sobre o corpo JSON."""
+        if not self.configured:
+            raise BybitError("credenciais Bybit não configuradas")
+        timestamp = str(int(time.time() * 1000))
+        recv_window = "5000"
+        payload = json.dumps(body, separators=(",", ":"))
+        signature = hmac.new(
+            self.secret.encode(),
+            f"{timestamp}{self.api_key}{recv_window}{payload}".encode(),
+            hashlib.sha256,
+        ).hexdigest()
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "X-BAPI-API-KEY": self.api_key,
+            "X-BAPI-TIMESTAMP": timestamp,
+            "X-BAPI-RECV-WINDOW": recv_window,
+            "X-BAPI-SIGN": signature,
+        }
+        url = f"{validate_exchange_base_url(self.base, 'bybit')}{path}"
+        request = Request(url, data=payload.encode("utf-8"), headers=headers, method="POST")
+        try:
+            with open_exchange_request(request, timeout=15) as response:
+                data = json.loads(response.read().decode("utf-8"))
+        except HTTPError as exc:
+            detail = _http_detail(exc)
+            raise BybitError(f"Bybit recusou a ordem (HTTP {exc.code}): {detail}") from exc
+        except BybitError:
+            raise
+        except Exception as exc:
+            raise BybitError(f"Bybit indisponível: {exc}") from exc
+        if isinstance(data, dict):
+            if "retCode" not in data:
+                raise BybitError("resposta Bybit sem retCode")
+            try:
+                ret_code = int(data.get("retCode", 0) or 0)
+            except (TypeError, ValueError):
+                ret_code = -1
+            if ret_code != 0:
+                raise BybitError(str(data.get("retMsg") or data))
+            return data.get("result", data)
+        return data
+
+    def create_order(self, *, symbol: str, side: str, order_type: str, quantity: float,
+                     price: float | None = None, request_id: str) -> dict[str, object]:
+        """Envia ordem spot/linear. Sem contraparte de saque em nenhum ramo."""
+        kind = str(order_type or "market").lower()
+        if kind not in {"market", "limit"}:
+            raise BybitError(f"tipo de ordem Bybit não suportado: {order_type}")
+        if kind == "limit" and (price is None or float(price) <= 0):
+            raise BybitError("preço é obrigatório para ordem limit")
+        body: dict[str, object] = {
+            "category": self.category,
+            "symbol": self._symbol(symbol),
+            "side": "Buy" if str(side).lower() == "buy" else "Sell",
+            "orderType": kind.capitalize(),
+            "qty": str(quantity),
+            "orderLinkId": request_id,
+        }
+        if kind == "limit":
+            body["price"] = str(price)
+        result = self._post("/v5/order/create", body)
+        return result if isinstance(result, dict) else {"raw": result}
 
     @staticmethod
     def _symbol(symbol: str) -> str:

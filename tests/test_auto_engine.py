@@ -224,7 +224,7 @@ class TestOperaQuandoDeve:
         p = chamadas[0]
         assert p["symbol"] == "XAUUSD"
         assert p["side"] == "BUY"
-        assert p["confirm_demo"] is True
+        assert p["confirm"] is True
         assert p["sl"] < p["tp"], "BUY tem SL abaixo e TP acima"
         assert p["volume"] > 0
         assert p["origin"] == "motor_auto"

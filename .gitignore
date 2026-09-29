@@ -41,6 +41,7 @@ build/
 Temp/
 Backup_v120/
 Python/models_backup_*/
+_treino/
 dist/
 *.log
 Logs/*

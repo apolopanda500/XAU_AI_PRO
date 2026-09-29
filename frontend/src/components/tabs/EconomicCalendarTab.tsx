@@ -27,6 +27,59 @@ const CORES_BADGE: Record<ImpactLevel, { bg: string; text: string }> = {
   alto: { bg: '#7f1d1d', text: '#fca5a5' },
 };
 
+export type DiaCalendario = {
+  /** yyyy-mm-dd — serve de key e garante ordem estável. */
+  chave: string;
+  /** "Hoje"/"Amanhã"/"Ontem" quando cabe, senão vazio. */
+  relato: string;
+  /** Data por extenso, em minúsculas (o CSS deixa a inicial maiúscula). */
+  data: string;
+  eventos: EconomicEvent[];
+};
+
+/**
+ * Agrupa os eventos por dia e ordena DO BAIXO PARA O ALTO.
+ *
+ * Antes o agrupamento usava a ordem de chegada da API, que vem agrupada por
+ * país/fonte: o dia 29 aparecia antes do 28 e o rótulo de dia subia fora de
+ * ordem na rolagem. Aqui os eventos são ordenados por horário primeiro —
+ * daí a ordem dos dias e a ordem deles dentro do dia caem sozinhas.
+ */
+export function agruparPorDia(
+  eventos: EconomicEvent[],
+  agora: Date = new Date(),
+): DiaCalendario[] {
+  const ordenados = [...eventos].sort((a, b) => a.horario.getTime() - b.horario.getTime());
+  const grupos = new Map<string, DiaCalendario>();
+
+  for (const evento of ordenados) {
+    const d = evento.horario;
+    const chave = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    let dia = grupos.get(chave);
+    if (!dia) {
+      dia = {
+        chave,
+        relato: relatoDia(d, agora),
+        data: d.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' }),
+        eventos: [],
+      };
+      grupos.set(chave, dia);
+    }
+    dia.eventos.push(evento);
+  }
+
+  return [...grupos.values()];
+}
+
+function relatoDia(d: Date, agora: Date): string {
+  const meioNoite = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const dias = Math.round((meioNoite(d) - meioNoite(agora)) / 86_400_000);
+  if (dias === 0) return 'Hoje';
+  if (dias === 1) return 'Amanhã';
+  if (dias === -1) return 'Ontem';
+  return '';
+}
+
 function CountdownEvento({ evento }: { evento: EconomicEvent }) {
   const [tempoRestante, setTempoRestante] = useState<string>('');
 
@@ -80,17 +133,14 @@ function CountdownEvento({ evento }: { evento: EconomicEvent }) {
   );
 }
 
-function EventoRow({ evento }: { evento: EconomicEvent }) {
+function EventoRow({ evento, passado }: { evento: EconomicEvent; passado: boolean }) {
   const horaFormatada = evento.horario.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   return (
-    <div className="cal-row">
+    <div className={`cal-row${passado ? ' passado' : ''}`}>
       <span className="cal-row-time">{horaFormatada}</span>
       <span className="cal-row-flag" title={evento.nomePais}>{evento.bandeira}</span>
       <div className="cal-row-title">
-        <strong>
-          {evento.titulo}
-          
-        </strong>
+        <strong>{evento.titulo}</strong>
         <span className="cal-row-note">
           <span className={`cal-impact ${evento.impacto}`}>{LABELS_IMPACTO[evento.impacto]}</span>
           {evento.divulgado ? ' divulgado' : ''}
@@ -114,15 +164,8 @@ export function EconomicCalendarTab() {
 
   const { eventos, carregando, erro, ultimaAtualizacao, proximoEventoAlto, refreshManual, totalEventos } = useEconomicData(filtro);
 
-  const eventosPorData = useMemo(() => {
-    const grupos: Record<string, EconomicEvent[]> = {};
-    eventos.forEach((evento) => {
-      const dataKey = evento.horario.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
-      if (!grupos[dataKey]) grupos[dataKey] = [];
-      grupos[dataKey].push(evento);
-    });
-    return grupos;
-  }, [eventos]);
+  // Dias em ordem crescente, eventos em ordem crescente dentro de cada dia.
+  const dias = useMemo(() => agruparPorDia(eventos), [eventos]);
 
   const togglePais = (codigo: string) => {
     setFiltro((prev) => ({
@@ -191,7 +234,7 @@ export function EconomicCalendarTab() {
         <div className="cal-head-actions">
           {ultimaAtualizacao && <span className="muted">Atualizado {ultimaAtualizacao.toLocaleTimeString('pt-BR')}</span>}
           <button className="btn xs ghost" type="button" onClick={refreshManual} disabled={carregando}>
-            {carregando ? 'Carregando…' : 'Atualizar'}
+            {carregando ? 'Atualizando…' : 'Atualizar'}
           </button>
         </div>
       </div>
@@ -258,13 +301,25 @@ export function EconomicCalendarTab() {
       <div className="cal-body">
         {carregando && eventos.length === 0 ? (
           <div className="cal-state">Carregando eventos…</div>
-        ) : Object.entries(eventosPorData).length === 0 ? (
+        ) : dias.length === 0 ? (
           <div className="cal-state">Nenhum evento encontrado.</div>
         ) : (
-          Object.entries(eventosPorData).map(([data, eventosData]) => (
-            <div key={data} className="cal-day">
-              <div className="cal-day-label">{data}</div>
-              {eventosData.map((evento) => <EventoRow key={evento.id} evento={evento} />)}
+          dias.map((dia) => (
+            <div key={dia.chave} className="cal-day">
+              <div className="cal-day-label">
+                {dia.relato && <span className={`cal-day-badge ${dia.relato.toLowerCase()}`}>{dia.relato}</span>}
+                <span className="cal-day-data">{dia.data}</span>
+                <span className="cal-day-count">
+                  {dia.eventos.length} {dia.eventos.length === 1 ? 'evento' : 'eventos'}
+                </span>
+              </div>
+              {dia.eventos.map((evento) => (
+                <EventoRow
+                  key={evento.id}
+                  evento={evento}
+                  passado={evento.horario.getTime() < Date.now()}
+                />
+              ))}
             </div>
           ))
         )}

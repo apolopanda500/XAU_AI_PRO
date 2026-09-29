@@ -9,7 +9,7 @@
 // timeframe não bate com o treino, a tela mostra o motivo. Não há número
 // inventado para preencher espaço.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { HelpTooltip } from '../../components/HelpTooltip';
 import CopilotPanel from '../../components/CopilotPanel';
 import '../copilot.css';
@@ -54,6 +54,24 @@ export default function AIPanel() {
 
   const modelo = modelos.find((m) => m.id === modeloId) ?? null;
   const timeframe = modelo?.timeframe ?? 'H1';
+
+  // Inventario agrupado por simbolo: o treino cobre varios pares, e listar 36
+  // artefatos em sequencia nao deixa ver quais simbolos estao cobertos.
+  const porSimbolo = useMemo(() => {
+    const mapa = new Map<string, ModeloTreinado[]>();
+    for (const m of modelos) {
+      const chave = (m.symbol || 'SEM_SIMBOLO').toUpperCase();
+      const lista = mapa.get(chave);
+      if (lista) lista.push(m);
+      else mapa.set(chave, [m]);
+    }
+    for (const lista of mapa.values()) {
+      lista.sort((a, b) => a.timeframe.localeCompare(b.timeframe));
+    }
+    return [...mapa.entries()].sort(([a], [b]) => a.localeCompare(b));
+  }, [modelos]);
+
+  const totalPublicados = modelos.filter((m) => m.publicable && m.pklPresent).length;
 
   const { sinal, carregando, motivo, disponivel, inferir } = useInferenciaIA(
     timeframe,
@@ -150,7 +168,7 @@ export default function AIPanel() {
       <div className="ai-model-card">
         <div className="ai-model-info">
           <div className="ai-model-name">
-            {modelo ? `XAUUSD ${modelo.timeframe}` : 'Nenhum modelo'}
+            {modelo ? `${modelo.symbol || selectedSymbol} ${modelo.timeframe}` : 'Nenhum modelo'}
           </div>
           <span>
             {modelo?.algorithm ?? '--'} · {modelo?.featureVersion ?? '--'} ·{' '}
@@ -165,11 +183,15 @@ export default function AIPanel() {
             onChange={(e) => setModeloId(e.target.value)}
           >
             {modelos.length === 0 && <option value="">—</option>}
-            {modelos.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.id} · acc {num(m.accuracy, 3)} · edge {pct(m.edge, 3)}
-                {m.publicable ? '' : ' (reprovado)'}
-              </option>
+            {porSimbolo.map(([simbolo, lista]) => (
+              <optgroup key={simbolo} label={simbolo}>
+                {lista.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.timeframe} · acc {num(m.accuracy, 3)} · edge {pct(m.edge, 3)}
+                    {m.publicable ? '' : ' (reprovado)'}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
         </div>
@@ -300,29 +322,58 @@ export default function AIPanel() {
 
       <section className="ai-info-section" aria-label="Inventário de modelos">
         <h4>Inventário de modelos</h4>
+        <p className="muted">
+          {modelos.length} artefatos em {porSimbolo.length} símbolos ·{' '}
+          {totalPublicados} publicados para operar · {cpuThreads} threads de CPU
+        </p>
         {erroCatalogo && <p className="auth-erro">Catálogo: {erroCatalogo}</p>}
-        {modelos.map((m) => (
-          <div className="ai-model-card" key={m.id}>
-            <div className="ai-model-info">
-              <strong>
-                {m.id}{' '}
-                <span className={`chip ${m.publicable && m.pklPresent ? 'ok' : 'warn'}`}>
-                  {m.publicable && m.pklPresent ? 'publicado' : m.publicable ? 'sem artefato' : 'reprovado'}
+        {porSimbolo.map(([simbolo, lista]) => {
+          const prontos = lista.filter((m) => m.publicable && m.pklPresent).length;
+          return (
+            <div className="ai-symbol-block" key={simbolo}>
+              <div className="ai-symbol-head">
+                <span className="ai-symbol-code">{simbolo}</span>
+                <span className={`chip ${prontos > 0 ? 'ok' : 'warn'}`}>
+                  {prontos}/{lista.length}
                 </span>
-              </strong>
-              <span>
-                acc {num(m.accuracy, 4)} · f1 {num(m.f1, 4)} · edge {pct(m.edge, 4)} (min{' '}
-                {pct(m.edgeMin, 0)}) · treino {m.trainSamples ?? '--'} · teste{' '}
-                {m.testSamples ?? '--'}
-              </span>
-              <span>
-                algoritmo {m.algorithm ?? '--'} · features {m.featureVersion ?? '--'} ·{' '}
-                {m.trainDate ? new Date(m.trainDate).toLocaleDateString('pt-BR') : '--'}
-              </span>
-              {!m.publicable && m.reason && <span className="muted">{m.reason}</span>}
+              </div>
+              <div className="ai-symbol-chips">
+                {lista.map((m) => {
+                  const estado = m.publicable && m.pklPresent
+                    ? 'ok'
+                    : m.publicable
+                      ? 'warn'
+                      : 'bad';
+                  const rotulo = m.publicable && m.pklPresent
+                    ? 'pronto'
+                    : m.publicable
+                      ? 'sem artefato'
+                      : 'reprovado';
+                  return (
+                    <button
+                      type="button"
+                      key={m.id}
+                      className={`ai-model-chip is-${estado}${m.id === modeloId ? ' is-selected' : ''}`}
+                      onClick={() => setModeloId(m.id)}
+                      title={`${m.id} · acc ${num(m.accuracy, 4)} · edge ${pct(m.edge, 4)}`}
+                    >
+                      <span className="chip-tf">{m.timeframe}</span>
+                      <span className="chip-state">{rotulo}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {lista.some((m) => !m.publicable && m.reason) && (
+                <p className="muted">
+                  {lista
+                    .filter((m) => !m.publicable && m.reason)
+                    .map((m) => `${m.timeframe}: ${m.reason}`)
+                    .join(' · ')}
+                </p>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
         {modelos.length === 0 && !erroCatalogo && (
           <p className="muted">Nenhum metadado de modelo encontrado.</p>
         )}

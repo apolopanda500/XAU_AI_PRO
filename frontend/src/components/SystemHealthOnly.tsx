@@ -1,4 +1,4 @@
-// Sistema: o que a MAQUINA do usuario esta usando, e o desempenho do app.
+﻿// Sistema: o que a MAQUINA do usuario esta usando, e o desempenho do app.
 //
 // POR QUE SO ISSO
 // ===============
@@ -13,7 +13,20 @@
 // ausencia de dado nao e medida zero.
 //
 // Nada aqui executa ordem, alteracao no MT5 ou escrita em disco.
-import { useEffect, useState } from 'react';
+//
+// POR QUE TEM CACHE AQUI TAMBEM
+// =============================
+// O comando ja guarda 8 s no lado Rust (TELEMETRY_CACHE), mas isso so evita
+// coletas DUPLICAS dentro de uma mesma abertura da aba. Trocar de aba e
+// voltar desmontava o componente: o estado voltava ao zero, a tabela inteira
+// aparecia "--" e uma nova leitura partia do zero — o usuario lia como
+// "recarregou sozinho". O cache de modulo abaixo mantem a ultima leitura
+// viva entre montagens, e o estado de carregamento diz quando o dado ainda
+// nao existe em vez de fingir que tudo esta em "--".
+//
+// O intervalo tambem nao roda com a janela oculta: sem isso o powershell
+// ficava abrindo em segundo plano sem ninguem olhar.
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { apiBase } from '../lib/api';
 import '../theme/system-machine.css';
@@ -34,7 +47,37 @@ type Hardware = {
   source: string;
 };
 
-const REFRESH_MS = 2_000;
+// A leitura no Windows abre um powershell.exe e roda cinco consultas CIM.
+// Com 2s eram 30 processos por minuto e o app MORREU (os filhos ficaram
+// orfaos e todas as abas passaram a dizer "gateway indisponivel"). Alem do
+// cache de 8s no lado Rust, o intervalo aqui tambem e folgado: uso de CPU e
+// temperatura nao mudam em 2s. O gateway e medido separadamente, que e
+// barato e e o que o usuario precisa ver mexer.
+const REFRESH_MS = 10_000;
+// Vida da ultima leitura entre montagens da aba. Igual ao intervalo: o
+// proximo tick ja busca dados novos, mas voltar para a aba mostra a ultima
+// leitura na hora em vez de apagar a tela.
+const CACHE_MS = 10_000;
+
+type Leitura = {
+  hw: Hardware | null;
+  erro: string;
+  lidoEm: string;
+  latencia: number | null;
+  gatewayOk: boolean | null;
+};
+
+// Fora do componente de proposito: sobrevive a montagem/desmontagem da aba.
+let ultimaLeitura: Leitura = { hw: null, erro: '', lidoEm: '', latencia: null, gatewayOk: null };
+let ultimaLeituraEm = 0;
+
+/** Somente para teste: limpa o cache de modulo entre casos. */
+export function limparCacheSistema() {
+  ultimaLeitura = { hw: null, erro: '', lidoEm: '', latencia: null, gatewayOk: null };
+  ultimaLeituraEm = 0;
+}
+
+const cacheFresco = () => Date.now() - ultimaLeituraEm < CACHE_MS;
 
 const gb = (v: number | null | undefined) =>
   v === null || v === undefined || !Number.isFinite(v) ? '--' : `${v.toFixed(1)} GB`;
@@ -56,41 +99,88 @@ function Barra({ usado, total }: { usado: number | null; total: number | null })
 }
 
 export default function SystemHealthOnly() {
-  const [hw, setHw] = useState<Hardware | null>(null);
-  const [erro, setErro] = useState('');
-  const [lidoEm, setLidoEm] = useState<string>('');
+  // Estado inicial vindo do cache: abrir a aba ja mostra o ultimo valor.
+  const [hw, setHw] = useState<Hardware | null>(ultimaLeitura.hw);
+  const [erro, setErro] = useState(ultimaLeitura.erro);
+  const [lidoEm, setLidoEm] = useState(ultimaLeitura.lidoEm);
   // Desempenho do app medido de verdade: quanto tempo o gateway leva para
   // responder a cada leitura. Nao ha como o JavaScript ler a memoria do
   // proprio processo, entao o que e medido aqui e a latencia real, que e o
   // sintoma que o usuario sente quando o app trava.
-  const [latencia, setLatencia] = useState<number | null>(null);
-  const [gatewayOk, setGatewayOk] = useState<boolean | null>(null);
+  const [latencia, setLatencia] = useState<number | null>(ultimaLeitura.latencia);
+  const [gatewayOk, setGatewayOk] = useState<boolean | null>(ultimaLeitura.gatewayOk);
+  // Diz quando ainda nao ha nada para mostrar. Sem isso a cabeca mostrava
+  // "Ao vivo" enquanto a tabela dizia "--" em tudo.
+  const [carregando, setCarregando] = useState(ultimaLeitura.hw === null);
+  const emVoo = useRef(false);
+  const lerRef = useRef<(forcado?: boolean) => void>(() => {});
+
+  const aplicar = useCallback((nova: Leitura) => {
+    ultimaLeitura = nova;
+    ultimaLeituraEm = Date.now();
+    setErro(nova.erro);
+    setLidoEm(nova.lidoEm);
+    setLatencia(nova.latencia);
+    setGatewayOk(nova.gatewayOk);
+    // So re-renderiza a tabela se os numeros mudaram de verdade: um tick que
+    // devolve a mesma leitura nao deve mexer na tela.
+    setHw((atual) => (
+      atual && nova.hw && JSON.stringify(atual) === JSON.stringify(nova.hw) ? atual : nova.hw
+    ));
+    setCarregando(false);
+  }, []);
 
   useEffect(() => {
     let vivo = true;
-    const ler = async () => {
+    const ler = async (forcado = false) => {
+      if (emVoo.current) return;
+      if (!forcado && cacheFresco()) {
+        aplicar(ultimaLeitura);
+        return;
+      }
+      emVoo.current = true;
+      setCarregando(ultimaLeitura.hw === null);
       const t0 = performance.now();
       try {
         const dados = await invoke<Hardware>('hardware_telemetry');
-        if (!vivo) return;
-        setHw(dados);
-        setErro('');
-        setLidoEm(new Date().toLocaleTimeString('pt-BR'));
         const r = await fetch(`${apiBase()}/api/health`, { signal: AbortSignal.timeout(4000) });
-        if (vivo) {
-          setGatewayOk(r.ok);
-          setLatencia(performance.now() - t0);
-        }
+        if (!vivo) return;
+        aplicar({
+          hw: dados,
+          erro: '',
+          lidoEm: new Date().toLocaleTimeString('pt-BR'),
+          latencia: performance.now() - t0,
+          gatewayOk: r.ok,
+        });
       } catch (e) {
         if (!vivo) return;
-        setErro(e instanceof Error ? e.message : 'Falha ao ler a maquina');
-        setLatencia(performance.now() - t0);
+        aplicar({
+          hw: ultimaLeitura.hw,
+          erro: e instanceof Error ? e.message : 'Falha ao ler a maquina',
+          lidoEm: new Date().toLocaleTimeString('pt-BR'),
+          latencia: performance.now() - t0,
+          gatewayOk: null,
+        });
+      } finally {
+        emVoo.current = false;
       }
     };
+    lerRef.current = ler;
     void ler();
-    const t = window.setInterval(ler, REFRESH_MS);
-    return () => { vivo = false; window.clearInterval(t); };
-  }, []);
+    const t = window.setInterval(() => {
+      // Janela oculta nao gasta powershell: o tick de verdade e quando o
+      // usuario volta a olhar (abaixo, visibilitychange).
+      if (document.hidden) return;
+      void ler(true);
+    }, REFRESH_MS);
+    const aoVoltar = () => { if (!document.hidden) void ler(); };
+    document.addEventListener('visibilitychange', aoVoltar);
+    return () => {
+      vivo = false;
+      window.clearInterval(t);
+      document.removeEventListener('visibilitychange', aoVoltar);
+    };
+  }, [aplicar]);
 
   const ramUsada = hw?.memory_total_gb != null && hw.memory_available_gb != null
     ? Math.max(0, hw.memory_total_gb - hw.memory_available_gb)
@@ -108,8 +198,19 @@ export default function SystemHealthOnly() {
           <span className="muted">Leitura real do aparelho e desempenho do app</span>
         </div>
         <div className="btn-row">
-          <span className={`chip ${erro ? 'warn' : 'ok'}`}>{erro ? 'Falha na leitura' : 'Ao vivo'}</span>
+          <span className={`chip ${erro || carregando ? 'warn' : 'ok'}`}>
+            {carregando ? 'Lendo…' : erro ? 'Falha na leitura' : 'Ao vivo'}
+          </span>
           {lidoEm && <span className="muted">{lidoEm}</span>}
+          <button
+            type="button"
+            className="btn xs ghost"
+            onClick={() => lerRef.current(true)}
+            disabled={carregando}
+            aria-label="Atualizar leitura da maquina"
+          >
+            {carregando ? 'Atualizando…' : 'Atualizar'}
+          </button>
         </div>
       </div>
 
@@ -182,16 +283,13 @@ export default function SystemHealthOnly() {
             </tbody>
           </table>
         </div>
-        <p className="sys-note">
-          Celula "--" significa que o sistema nao expoe a informacao, nao que o valor e zero.
-        </p>
       </section>
 
       <section className="card compact-card" aria-labelledby="sys-app">
         <div className="section-head">
           <h2 id="sys-app">Desempenho do app</h2>
           <span className={`chip ${gatewayOk === null ? 'warn' : gatewayOk ? 'ok' : 'danger'}`}>
-            {gatewayOk === null ? 'sem leitura' : gatewayOk ? 'gateway ok' : 'gateway sem resposta'}
+            {gatewayOk === null ? 'Sem leitura' : gatewayOk ? 'Gateway ok' : 'Gateway sem resposta'}
           </span>
         </div>
         <div className="table-scroll">

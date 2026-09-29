@@ -43,12 +43,27 @@ export default function RiskTab() {
   const posicoes = e?.open_positions ?? null;
   const operacoes = e?.daily_trades ?? null;
 
+  // Limites vindos do risk_gate, nunca fixos aqui. A versao anterior da tabela
+  // escrevia "2%", "5%", "15%", "5" e "20" no proprio arquivo: se o
+  // risk_gate mudasse o limite, a tela continuaria mostrando o numero velho
+  // e o operador veria uma regra que nao existe.
+  const lim = (e?.limits ?? {}) as Record<string, unknown>;
+  const limiteNum = (chave: string, fallback: number) => {
+    const v = Number(lim[chave]);
+    return Number.isFinite(v) && v > 0 ? v : fallback;
+  };
+  const maxPerda = limiteNum('max_daily_loss_pct', 2);
+  const maxExpo = limiteNum('max_exposure_pct', 5);
+  const maxDD = limiteNum('max_drawdown_pct', 15);
+  const maxPos = limiteNum('max_positions', 5);
+  const maxOps = limiteNum('max_daily_trades', 20);
+
   const linhas: Linha[] = [
-    { regra: 'Perda diaria', medido: `${num(perda)}%`, limite: '2,0%', pct: perda ?? 0, critico: 2, severidade: nivel(perda ?? 0, 2, 1) },
-    { regra: 'Exposicao', medido: `${num(exposicao)}%`, limite: '5,0%', pct: exposicao ?? 0, critico: 5, severidade: nivel(exposicao ?? 0, 5, 2.5) },
-    { regra: 'Drawdown', medido: `${num(drawdown)}%`, limite: '15,0%', pct: drawdown ?? 0, critico: 15, severidade: nivel(drawdown ?? 0, 15, 8) },
-    { regra: 'Posicoes abertas', medido: num(posicoes, 0), limite: '5', pct: (posicoes ?? 0) / 5 * 100, critico: 100, severidade: nivel((posicoes ?? 0) / 5 * 100, 100, 80) },
-    { regra: 'Operacoes no dia', medido: num(operacoes, 0), limite: '20', pct: (operacoes ?? 0) / 20 * 100, critico: 100, severidade: nivel((operacoes ?? 0) / 20 * 100, 100, 80) },
+    { regra: 'Perda diaria', medido: `${num(perda)}%`, limite: `${maxPerda}%`, pct: perda ?? 0, critico: maxPerda, severidade: nivel(perda ?? 0, maxPerda, maxPerda / 2) },
+    { regra: 'Exposicao', medido: `${num(exposicao)}%`, limite: `${maxExpo}%`, pct: exposicao ?? 0, critico: maxExpo, severidade: nivel(exposicao ?? 0, maxExpo, maxExpo / 2) },
+    { regra: 'Drawdown', medido: `${num(drawdown)}%`, limite: `${maxDD}%`, pct: drawdown ?? 0, critico: maxDD, severidade: nivel(drawdown ?? 0, maxDD, maxDD * 0.53) },
+    { regra: 'Posicoes abertas', medido: num(posicoes, 0), limite: String(maxPos), pct: (posicoes ?? 0) / maxPos * 100, critico: 100, severidade: nivel((posicoes ?? 0) / maxPos * 100, 100, 80) },
+    { regra: 'Operacoes no dia', medido: num(operacoes, 0), limite: String(maxOps), pct: (operacoes ?? 0) / maxOps * 100, critico: 100, severidade: nivel((operacoes ?? 0) / maxOps * 100, 100, 80) },
   ];
 
   const killAtivo = real.kill.status === 'ativo';
@@ -67,7 +82,9 @@ export default function RiskTab() {
           {killAtivo
             ? <button className="btn xs danger" onClick={() => executar('resume')} disabled={real.kill.busy}>Retomar execucao</button>
             : <button className="btn xs warning" onClick={() => executar('stop')} disabled={real.kill.busy}>Parar execucao</button>}
-          <button className="btn xs ghost" onClick={() => void real.refresh()} disabled={real.carregando}>Atualizar</button>
+          <button className="btn xs ghost" onClick={() => void real.refresh()} disabled={real.carregando}>
+            {real.carregando ? 'Atualizando…' : 'Atualizar'}
+          </button>
         </div>
       </div>
 
@@ -103,9 +120,12 @@ export default function RiskTab() {
                     />
                   </span>
                 </td>
-                <td><span className={`chip ${l.severidade}`}>{l.severidade === 'danger' ? 'critico' : l.severidade === 'warn' ? 'atencao' : 'ok'}</span></td>
+                <td><span className={`chip ${l.severidade}`}>{l.severidade === 'danger' ? 'crítico' : l.severidade === 'warn' ? 'atenção' : 'normal'}</span></td>
               </tr>
             ))}
+            {!linhas.length && (
+              <tr><td colSpan={5}>Nenhum limite devolvido pelo gateway.</td></tr>
+            )}
           </tbody>
         </table>
       </div>

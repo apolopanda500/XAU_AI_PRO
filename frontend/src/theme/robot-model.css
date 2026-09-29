@@ -13,6 +13,12 @@
   min-width: 0;
 }
 
+/* O ativo e uma lista curta; dar o mesmo peso que a de modelos escondia a
+   escolha que o operador mais troca. */
+.robot-model .rm-row .field.rm-symbol {
+  flex: 0 1 150px;
+}
+
 .rm-signal {
   display: flex;
   align-items: center;

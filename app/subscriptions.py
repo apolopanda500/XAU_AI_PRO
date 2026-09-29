@@ -238,7 +238,7 @@ def get_subscription(user_id: str | None = None) -> dict[str, Any]:
             "plan": copy.deepcopy(plan),
             "entitlements": copy.deepcopy(plan["entitlements"]) if effective else {},
             "limits": copy.deepcopy(plan["limits"]) if effective else {"workspaces": 1, "alerts": 0, "ai_signals_per_day": 0, "paper_strategies": 0},
-            "execution_mode": "paper_demo",
+            "execution_mode": "paper_trade",
             "live_execution": False,
             "withdrawals_enabled": False,
             "transfers_enabled": False,

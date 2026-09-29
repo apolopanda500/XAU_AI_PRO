@@ -57,7 +57,7 @@ async function waitForGateway() {
       };
       if (response.ok && payload.ok === true
         && payload.source === 'mt5_gateway'
-        && payload.gateway_build === 'xau-ai-pro-1.2.3-universal-20260918') return;
+        && payload.gateway_build === 'xau-ai-pro-1.2.4-universal-20260928') return;
       retry = false;
       throw new Error('identidade do gateway local invalida');
     } catch (error) {

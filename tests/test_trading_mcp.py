@@ -52,9 +52,11 @@ def test_place_order_nasce_dry_run(http_stub):
     assert payload["execute"] is False  # freio 1: toda ordem nasce dry-run
 
 
-def test_place_order_bloqueado_sem_env(http_stub):
+def test_place_order_bloqueado_sem_env(http_stub, monkeypatch):
+    # Freio 2: com XAU_MCP_TRADING=0 o MCP nao manda ordem nenhuma.
+    monkeypatch.setattr(mcp, "TRADING_HABILITADO", False)
     resultado = mcp.tool_call("place_order", {"symbol": "XAUUSD", "execute": True})
-    assert resultado.get("bloqueado") is True  # freio 2: exige XAU_MCP_TRADING=1
+    assert resultado.get("bloqueado") is True
     assert not http_stub  # nenhuma ordem saiu do MCP
 
 
@@ -73,11 +75,12 @@ def test_request_id_unico_por_chamada(http_stub):
 
 
 def test_close_position_respeita_travas(http_stub, monkeypatch):
+    monkeypatch.setattr(mcp, "TRADING_HABILITADO", False)
     mcp.tool_call("close_position", {"ticket": 1, "symbol": "XAUUSD"})
     _, payload = http_stub[-1]
-    assert payload["execute"] is False  # dry-run por padrão
+    assert payload["execute"] is False  # dry-run por padrǜo
     resultado = mcp.tool_call("close_position", {"ticket": 1, "symbol": "XAUUSD", "execute": True})
-    assert resultado.get("bloqueado") is True  # sem env, bloqueia
+    assert resultado.get("bloqueado") is True  # com XAU_MCP_TRADING=0, bloqueia
     monkeypatch.setattr(mcp, "TRADING_HABILITADO", True)
     mcp.tool_call("close_position", {"ticket": 1, "symbol": "XAUUSD", "execute": True})
     _, payload = http_stub[-1]
@@ -89,6 +92,8 @@ def test_ferramenta_desconhecida(http_stub):
 
 
 def test_emergency_resume_bloqueado_sem_trava(http_stub, monkeypatch):
+    monkeypatch.setattr(mcp, "TRADING_HABILITADO", False)
+    monkeypatch.setenv("XAU_ENABLE_EMERGENCY_RESUME", "0")
     resultado = mcp.tool_call("emergency_resume", {})
     assert resultado.get("bloqueado") is True
     assert not http_stub

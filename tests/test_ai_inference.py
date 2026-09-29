@@ -71,11 +71,18 @@ def test_resultado_indisponivel_nao_tem_probabilidade():
 def test_listar_modelos_traz_metricos_reais():
     modelos = ai.listar_modelos()
     assert modelos, "deveria haver metadados de modelo no repositorio"
+    simbolos = set()
     for m in modelos:
-        assert m["symbol"] == "XAUUSD"
+        # O catalogo cobre todos os simbolos treinados (9), nao so XAUUSD.
+        # O que nao pode e vazio ou sem simbolo: a interface precisa saber
+        # qual ativo cada artefato decide.
+        assert m["symbol"], m
+        simbolos.add(m["symbol"])
+        assert "_" in m["id"] and m["id"].startswith(m["symbol"]), m
         assert "accuracy" in m and "edge" in m
         assert m["edge_min"] is not None
         assert isinstance(m["publicable"], bool)
+    assert len(simbolos) >= 2, f"catalogo deveria cobrir varios simbolos: {simbolos}"
 
 
 def test_modelo_publicado_tem_edge_acima_do_minimo():

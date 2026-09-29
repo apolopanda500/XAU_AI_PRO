@@ -19,6 +19,29 @@ export type TabType =
 
 export type ThemeName = 'dark' | 'xau_dark' | 'btc_dark' | 'light' | 'ocean_dark' | 'emerald_dark' | 'rose_dark' | 'violet_dark';
 
+// Sub-aba ativa dentro da aba Robo. Persiste para que sair e voltar nao
+// empurre o operador de volta para o topo da pilha.
+//
+// QUATRO, NAO CINCO
+// =================
+// A aba tinha Modelo & Sinal | Operação | Ordem | Ativos | Copiloto. Ordem e
+// Ativos viraram uma tela so (Mesa) porque as duas falavam do mesmo ativo
+// escolhido, e Operação ja era um saco com tres paineis dentro. Sobram quatro
+// perguntas que o operador realmente faz: qual o sinal, se o motor esta
+// ligado, mandar ordem, pedir ajuda.
+export type RobotSub = 'sinal' | 'automacao' | 'mesa' | 'ea' | 'copiloto';
+export const ROBOT_SUBS: RobotSub[] = ['sinal', 'automacao', 'mesa', 'ea', 'copiloto'];
+
+// Nomes antigos persistidos no localStorage de quem usou a versao de cinco
+// sub-abas. Sem este mapa, trocar de versao jogava o operador na primeira aba.
+// Exportado porque o teste de RobotTabs fixa a correspondencia.
+export const LEGADO_ROBOT_SUB: Record<string, RobotSub> = {
+  modelo: 'sinal',
+  ativos: 'sinal',
+  operacao: 'automacao',
+  ordem: 'mesa',
+};
+
 export interface Quote {
   broker?: string;
   market?: string;
@@ -173,6 +196,8 @@ interface AppState {
   addQuote: (quote: Quote) => void;
   selectedSymbol: string;
   setSelectedSymbol: (symbol: string) => void;
+  robotSub: RobotSub;
+  setRobotSub: (sub: RobotSub) => void;
   // Lista de interesse do usuário. Persiste mesmo que nenhuma corretora esteja conectada.
   marketWatchlist: string[];
   setMarketWatchlist: (symbols: string[]) => void;
@@ -219,6 +244,8 @@ export const useAppStore = create<AppState>()(
       // O produto é universal; XAUUSD é apenas uma opção do catálogo.
       selectedSymbol: '',
       setSelectedSymbol: (symbol) => set({ selectedSymbol: symbol }),
+      robotSub: 'sinal',
+      setRobotSub: (sub) => set({ robotSub: sub }),
       marketWatchlist: normalizeSymbols(DEFAULT_SYMBOLS),
       setMarketWatchlist: (symbols) => set({ marketWatchlist: normalizeSymbols(symbols) }),
       subscribeSymbols: [],
@@ -252,6 +279,7 @@ export const useAppStore = create<AppState>()(
       partialize: (state) => ({
         activeTab: state.activeTab,
         selectedSymbol: state.selectedSymbol,
+        robotSub: state.robotSub,
         marketWatchlist: state.marketWatchlist,
         subscribeSymbols: state.subscribeSymbols,
         settings: state.settings,
@@ -271,6 +299,14 @@ export const useAppStore = create<AppState>()(
           // Compatibilidade segura: versoes antigas podiam persistir auto-connect=true.
           // A inicializacao do MT5 exige acao explicita do usuario.
           settings: { ...DEFAULT_SETTINGS, ...(p.settings ?? {}), marketAutoRefresh: true, mt5AutoConnect: false },
+          // Valor persistido de uma versao antiga ou corrompido cai na primeira
+          // sub-aba; os nomes da versao de cinco viram os quatro novos.
+          robotSub: (() => {
+            const salvo = String(p.robotSub ?? '');
+            const legado = LEGADO_ROBOT_SUB[salvo] as RobotSub | undefined;
+            if (legado) return legado;
+            return ROBOT_SUBS.includes(salvo as RobotSub) ? (salvo as RobotSub) : 'sinal';
+          })(),
         } as AppState;
       },
     },

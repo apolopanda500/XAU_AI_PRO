@@ -122,6 +122,17 @@ describe('a tela mostra metricas reais do modelo', () => {
     const aviso = TAB_RAW.replace(/\s+/g, ' ');
     expect(aviso).toMatch(/Stop Loss, Take Profit e volume n[aã]o v[eê]m do modelo/);
   });
+
+  it('agrupa o inventario por simbolo em vez de listar tudo em sequencia', () => {
+    expect(TAB).toContain('porSimbolo');
+    expect(TAB).toContain('ai-symbol-block');
+    expect(TAB).toContain('optgroup');
+  });
+
+  it('o cabecalho usa o simbolo do modelo, nao XAUUSD fixo', () => {
+    expect(TAB).toContain('modelo.symbol');
+    expect(TAB).not.toContain('XAUUSD ${modelo.timeframe}');
+  });
 });
 
 describe('indicadores tecnicos sao honestos', () => {

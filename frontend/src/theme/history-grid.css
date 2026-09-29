@@ -2,10 +2,17 @@
    O `.tbl` global usa celulas de 40px e fonte herdada; numa lista de hundreds
    de operacoes isso vira uma lista rolagem infinita sem leitura util. Aqui a
    linha cai para 30px, numeros ficam em coluna tabular e as datas ganham
-   largura fixa para nao dancar a cada linha. */
+   largura fixa para nao dançar a cada linha.
+
+   `.dense-grid` e a MESMA regra com outro nome: as tabelas do Robô (ativos e
+   motor de operação) usam as mesmas medidas, para a tela nao trocar de
+   densidade ao mudar de aba. `.history-grid` fica como apelido do Histórico,
+   que e onde a classe nasceu. */
 
 .history-grid th,
-.history-grid td {
+.dense-grid th,
+.history-grid td,
+.dense-grid td {
   padding: 5px 10px;
   font-size: 12.5px;
   line-height: 1.45;
@@ -13,7 +20,8 @@
   white-space: nowrap;
 }
 
-.history-grid thead th {
+.history-grid thead th,
+.dense-grid thead th {
   font-size: 10.5px;
   font-weight: 600;
   text-transform: uppercase;
@@ -26,7 +34,8 @@
   background: var(--surface, #0f172a);
 }
 
-.history-grid .num {
+.history-grid .num,
+.dense-grid .num {
   text-align: right;
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
@@ -35,6 +44,7 @@
 }
 
 .history-grid td.mono,
+.dense-grid td.mono,
 .history-grid .history-when {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;

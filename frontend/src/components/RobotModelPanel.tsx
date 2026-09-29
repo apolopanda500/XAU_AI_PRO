@@ -11,9 +11,10 @@
 // A confianca vem de `predict_proba` do modelo publicado. O edge e a accuracy
 // vem do .meta.json do treino. Se o .pkl nao existe, o modelo nao entra na
 // lista — um modelo "publicavel" sem artefato falharia ao carregar.
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { apiBase } from '../lib/api';
 import { useAppStore } from '../hooks/useAppStore';
+import { SIMBOLO_PRINCIPAL } from '../lib/constants';
 import { notify } from '../lib/notify';
 import '../theme/robot-model.css';
 
@@ -32,6 +33,7 @@ function pct(v: number | null | undefined, casas = 1): string {
 
 export default function RobotModelPanel() {
   const selectedSymbol = useAppStore((s) => s.selectedSymbol);
+  const setSelectedSymbol = useAppStore((s) => s.setSelectedSymbol);
   const [modelos, setModelos] = useState<Modelo[]>([]);
   const [modeloId, setModeloId] = useState('');
   const [threads, setThreads] = useState(0);
@@ -39,7 +41,34 @@ export default function RobotModelPanel() {
   const [ocupado, setOcupado] = useState(false);
   const [erroLista, setErroLista] = useState('');
 
-  const simbolo = (selectedSymbol || 'XAUUSD').toUpperCase();
+  // POR QUE TEM SELETOR DE ATIVO
+  // ============================
+  // `/api/ai/predict` le APENAS `symbol` + `timeframe` e IGNORA `model_id`
+  // (fastapi_gateway.py). Com o botao antigo mandando
+  // `symbol = selectedSymbol || 'XAUUSD'`, escolher BTCUSD_H4 ainda enviava
+  // XAUUSD: a previsao saia do modelo errado ou falhava, e o painel so
+  // parecia funcionar em XAUUSD. Agora o ativo vem da lista que TEM modelo
+  // no disco (os 9 simbolos treinados), e o modelo e filtrado por ele.
+  const simbolos = useMemo(() => {
+    const unicos = [...new Set(modelos.map((m) => m.symbol))];
+    unicos.sort((a, b) => {
+      if (a === SIMBOLO_PRINCIPAL) return -1;
+      if (b === SIMBOLO_PRINCIPAL) return 1;
+      return a.localeCompare(b);
+    });
+    return unicos;
+  }, [modelos]);
+
+  const simbolo = useMemo(() => {
+    const atual = (selectedSymbol || '').toUpperCase();
+    if (atual && (simbolos.length === 0 || simbolos.includes(atual))) return atual;
+    return simbolos[0] ?? 'XAUUSD';
+  }, [selectedSymbol, simbolos]);
+
+  const visiveis = useMemo(
+    () => modelos.filter((m) => m.symbol === simbolo),
+    [modelos, simbolo],
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -58,12 +87,29 @@ export default function RobotModelPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Trocar de ativo muda a lista de modelos; o modelo escolhido nao pode
+  // sobreviver de um ativo para o outro, senao o `timeframe` calculado
+  // continuaria vindo de um modelo que nao e mais o exibido.
+  useEffect(() => {
+    if (!visiveis.length) return;
+    if (!visiveis.some((m) => m.id === modeloId)) {
+      setModeloId(visiveis[0].id);
+      setPrevisao(null);
+    }
+  }, [visiveis, modeloId]);
+
+  const escolhido = useMemo(
+    () => modelos.find((m) => m.id === modeloId) ?? null,
+    [modelos, modeloId],
+  );
+
   const prever = useCallback(async () => {
     if (!modeloId || ocupado) return;
     setOcupado(true);
     try {
-      const tf = modeloId.split('_')[1] ?? 'H1';
-      const r = await fetch(`${API}/api/ai/predict?model_id=${encodeURIComponent(modeloId)}&symbol=${encodeURIComponent(simbolo)}&timeframe=${tf}`);
+      // O backend resolve o modelo por (symbol, timeframe), nao pelo id.
+      const tf = escolhido?.timeframe ?? modeloId.split('_')[1] ?? 'H1';
+      const r = await fetch(`${API}/api/ai/predict?symbol=${encodeURIComponent(simbolo)}&timeframe=${encodeURIComponent(tf)}`);
       const d = (await r.json()) as Previsao;
       setPrevisao(d);
       const ok = d.disponivel ?? d.available;
@@ -73,9 +119,7 @@ export default function RobotModelPanel() {
     } finally {
       setOcupado(false);
     }
-  }, [modeloId, simbolo, ocupado]);
-
-  const escolhido = modelos.find((m) => m.id === modeloId) ?? null;
+  }, [modeloId, escolhido, simbolo, ocupado]);
   const sinal = previsao?.signal ?? '—';
   const classe = sinal === 'BUY' ? 'pos' : sinal === 'SELL' ? 'neg' : '';
   const disponivel = previsao ? (previsao.disponivel ?? previsao.available) : false;
@@ -91,15 +135,27 @@ export default function RobotModelPanel() {
       </div>
 
       <div className="rm-row">
+        <label className="field rm-symbol">
+          <span>Ativo</span>
+          <select
+            aria-label="Ativo do robo"
+            value={simbolo}
+            disabled={!simbolos.length}
+            onChange={(e) => { setSelectedSymbol(e.target.value.toUpperCase()); setPrevisao(null); }}
+          >
+            {!simbolos.length && <option value={simbolo}>{simbolo}</option>}
+            {simbolos.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </label>
         <label className="field">
           <span>Modelo</span>
-          <select aria-label="Modelo do robo" value={modeloId} onChange={(e) => { setModeloId(e.target.value); setPrevisao(null); }} disabled={!modelos.length}>
-            {!modelos.length && <option value="">Nenhum modelo carregavel</option>}
-            {modelos.map((m) => <option key={m.id} value={m.id}>{m.symbol} {m.timeframe} · acc {pct(m.accuracy)} · edge {pct(m.edge)}</option>)}
+          <select aria-label="Modelo do robo" value={modeloId} onChange={(e) => { setModeloId(e.target.value); setPrevisao(null); }} disabled={!visiveis.length}>
+            {!visiveis.length && <option value="">Nenhum modelo carregavel para {simbolo}</option>}
+            {visiveis.map((m) => <option key={m.id} value={m.id}>{m.timeframe} · acc {pct(m.accuracy)} · edge {pct(m.edge)}</option>)}
           </select>
         </label>
         <button className="btn sm primary" type="button" onClick={() => void prever()} disabled={!modeloId || ocupado}>
-          {ocupado ? 'Calculando...' : `Prever ${simbolo}`}
+            {ocupado ? 'Calculando…' : `Prever ${simbolo}`}
         </button>
       </div>
 

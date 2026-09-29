@@ -113,7 +113,7 @@ def reconcile(mt5, max_age_sec: float = 86400.0) -> dict:
         intent_id = str(event.get("intent_id"))
         if not any(row.get("intent_id") == intent_id and row.get("status") == "unknown"
                    for row in _read_events()):
-            record_intent(event.get("kind", "demo_order"), data,
+            record_intent(event.get("kind", "trade_order"), data,
                           intent_id=intent_id, status="unknown",
                           extra={"evidence": "atribuicao nao comprovada; verificar manualmente"})
             unknown += 1

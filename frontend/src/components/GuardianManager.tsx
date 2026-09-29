@@ -76,19 +76,19 @@ export default function GuardianManager() {
 
   const activate = async () => {
     const tk = num(ticket);
-    if (tk <= 0) { setStatus('Informe o ticket da posição DEMO.'); return; }
-    if (!window.confirm(`Ativar guardian DEMO para o ticket ${tk}? O motor passa a gerenciar SL/parciais automaticamente.`)) return;
+    if (tk <= 0) { setStatus('Informe o ticket da posição.'); return; }
+    if (!window.confirm(`Ativar guardian para o ticket ${tk}? O motor passa a gerenciar SL/parciais automaticamente.`)) return;
     const partials = [[p1t, p1v], [p2t, p2v], [p3t, p3v]]
       .map(([t, v]) => ({ trigger: num(t), volume: num(v) }))
       .filter((p) => p.trigger > 0 && p.volume > 0);
     const d = await setBusy.run({
-      ticket: tk, request_id: requestId(), confirm: true, confirm_demo: true,
+      ticket: tk, request_id: requestId(), confirm: true,
       breakeven: rule.breakeven, trailing: rule.trailing, partials,
       profit_lock: rule.profit_lock, time_exit: rule.time_exit,
     });
     if (d?.ok) {
       setStatus(`Guardian ativo para o ticket ${tk}.`);
-      void notify('Guardian ativo', `Ticket ${tk} sob gestão contínua (DEMO).`);
+      void notify('Guardian ativo', `Ticket ${tk} sob gestão contínua.`);
     } else {
       setStatus(`Recusado · ${String(d?.error ?? 'erro desconhecido')}`);
       void notify('Guardian recusado', String(d?.error ?? 'erro desconhecido'));
@@ -98,7 +98,7 @@ export default function GuardianManager() {
 
   const removeRule = async (tk: string) => {
     if (!window.confirm(`Remover regra do guardian para ${tk}? A posição continua aberta.`)) return;
-    const d = await removeBusy.run({ ticket: num(tk), confirm: true, confirm_demo: true });
+    const d = await removeBusy.run({ ticket: num(tk), confirm: true });
     setStatus(d?.ok ? `Regra ${tk} removida.` : `Recusado · ${String(d?.error ?? 'erro desconhecido')}`);
     void guardian.refetch();
   };

@@ -65,7 +65,9 @@ SCRIPTS_BLOQUEADOS = (
     "setup-vercel.bat",
 )
 
-# Flags de dinheiro real: nunca ligadas sem decisao explicita e separada.
+# Flags de execucao: o app nasce desbloqueado (padrao de codigo = aberto).
+# Aqui so se reporta o que foi ligado/desligado EXPLICITAMENTE na variavel de
+# ambiente, porque e a unica coisa que o console declara contra o padrao.
 FLAGS_DE_EXECUCAO = (
     "XAU_ENABLE_REAL_ORDERS",
     "XAU_MCP_TRADING",
@@ -73,7 +75,7 @@ FLAGS_DE_EXECUCAO = (
 )
 
 # Flags de paper/demo: legais no dia a dia, apenas informative.
-FLAGS_DE_DEMO = ("XAU_ENABLE_DEMO_ORDERS",)
+FLAGS_DE_DEMO = ("XAU_ENABLE_TRADE_COMMANDS",)
 
 ESTADOS = {"ok": "OK", "aviso": "AVISO", "falha": "FALHA", "pulado": "pulado"}
 
@@ -253,14 +255,14 @@ def checar_flags_de_execucao() -> Resultado:
     ligadas = [f for f in FLAGS_DE_EXECUCAO if os.getenv(f) == "1"]
     if ligadas:
         return Resultado(
-            "flags de dinheiro real", ESTADOS["falha"], f"ligadas: {', '.join(ligadas)}",
-            "por padrao todas devem estar desligadas; ligue apenas em etapa explicita e separada",
+            "flags de execucao", ESTADOS["falha"], f"explicitas: {', '.join(ligadas)}",
+            "o padrao do codigo e aberto; declare a flag so quando quiser divergir do padrao",
         )
     demos = [f for f in FLAGS_DE_DEMO if os.getenv(f) == "1"]
-    detalhe = "todas desligadas"
+    detalhe = "nenhuma flag explicita (padrao de codigo aberto)"
     if demos:
-        detalhe = f"dinheiro real desligado; paper/demo ligado: {', '.join(demos)}"
-    return Resultado("flags de dinheiro real", ESTADOS["ok"], detalhe)
+        detalhe = f"padrao aberto; paper/demo declarado: {', '.join(demos)}"
+    return Resultado("flags de execucao", ESTADOS["ok"], detalhe)
 
 
 def checar_versao() -> Resultado:

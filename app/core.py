@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-    Nucleo do app XAU_AI_PRO v1.2.3 com design PRO estilo TradingView/Binance.
+    Nucleo do app XAU_AI_PRO v1.2.4 com design PRO estilo TradingView/Binance.
 """
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ class XAUAProApp:
         ensure_paths()
         self.cfg = get_config()
         self.root = tk.Tk()
-        self.root.title("XAU AI PRO v1.2.3 - Trading Desk")
+        self.root.title("XAU AI PRO v1.2.4 - Trading Desk")
         self.root.configure(bg=Theme.BG)
 
         # Centraliza a janela

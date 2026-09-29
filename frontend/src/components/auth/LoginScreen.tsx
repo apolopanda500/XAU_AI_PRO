@@ -191,7 +191,7 @@ export default function LoginScreen({ onAutenticado }: Props) {
         <div className="auth-actions">
           <span className="muted">Sessao com validade limitada</span>
           <button className="btn primary" type="submit" disabled={enviando || !email || !senha}>
-            {enviando ? 'Entrando...' : 'Entrar'}
+            {enviando ? 'Entrando…' : 'Entrar'}
           </button>
         </div>
       </form>

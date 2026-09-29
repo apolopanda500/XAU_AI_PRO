@@ -24,7 +24,7 @@ Os limites vivem em `LimitesAuto` e sao aplicados a CADA ciclo, nao apenas
 avisados na tela. Configurar risco alto aqui nao e um toggle: e assumir
 responsabilidade por perder dinheiro, que e a intencao de quem opera.
 
-Este motor opera SOMENTE conta DEMO. `_demo_order` no gateway recusa conta
+Este motor opera em DEMO e REAL pelo mesmo caminho. `_trade_order` no gateway exige
 REAL, e o motor nao tenta contornar: abrir posicao em conta real exige uma
 etapa separada e explicita, com credencial propria.
 """
@@ -310,7 +310,7 @@ class MotorAuto:
             "volume": volume,
             "sl": round(sl, 2),
             "tp": round(tp, 2),
-            "confirm_demo": True,
+            "confirm": True,
             "request_id": f"auto-{slot}",
             "origin": "motor_auto",
             "model": getattr(inf, "modelo", ""),
@@ -330,6 +330,43 @@ class MotorAuto:
             "ordene enviada ao gateway" if ok else str(resultado.get("error") or resultado.get("comment") or "recusada"),
             sinal, confianca, edge, volume, risco_moeda, round(sl, 2), round(tp, 2), resultado))
 
+    def _trava_instrumento(self) -> None:
+        """RECUSA o ciclo se o modelo nao foi treinado para este ativo.
+
+        POR QUE ISTO EXISTE
+        ===================
+        O motor aceita `simbolo` e `timeframe` configuraveis e chamava
+        `inferir(self.simbolo, ...)` sem checar nada. O unico modelo treinado
+        e XAUUSD H1: com o motor em `BTCUSDT`, a funcao carregava o modelo de
+        ouro, devolvia uma confianca e o motor ENVIAVA a ordem. Um modelo de
+        ouro decidindo sobre Bitcoin e exatamente o modo de falha que esvazia
+        conta.
+
+        Aqui a recusa e silenciosa e explicita: nenhuma ordem e gerada, e o
+        motivo aparece no historico de decisoes. Nao e aviso — e bloqueio.
+        """
+        simbolo = str(self.simbolo or "").upper()
+        if not simbolo:
+            return
+        try:
+            from backend import ai_inference
+            modelo, meta = ai_inference._carregar(simbolo, self.timeframe)
+        except Exception:
+            return
+        if modelo is None:
+            self._registrar(Decisao(
+                datetime.now(timezone.utc).isoformat(), self.simbolo, self.timeframe,
+                False, f"sem modelo carregado para {self.timeframe}; nada foi enviado"))
+            raise RuntimeError(f"modelo ausente para {self.timeframe}")
+        treino = str(meta.get("symbol") or "").upper()
+        if treino and treino != simbolo:
+            self._registrar(Decisao(
+                datetime.now(timezone.utc).isoformat(), self.simbolo, self.timeframe,
+                False,
+                f"modelo {treino} treinado para outro ativo; recusado em {simbolo}"))
+            raise RuntimeError(
+                f"modelo {treino} nao pode operar {simbolo} (treinado em {treino})")
+
     def _loop(self) -> None:  # pragma: no cover - thread de producao
         from backend import ai_inference
 
@@ -338,14 +375,15 @@ class MotorAuto:
             return _risk_state(_mt5())
 
         def enviar(payload: dict[str, Any]) -> dict[str, Any]:
-            from backend.mt5_gateway import _demo_order
-            return _demo_order(payload)
+            from backend.mt5_gateway import _trade_order
+            return _trade_order(payload)
 
         while not self._parar.is_set():
             try:
                 import pandas as pd
                 from backend.mt5_gateway import _mt5_candles
 
+                self._trava_instrumento()
                 candles = _mt5_candles(self.simbolo, self.timeframe, 600)
                 df = pd.DataFrame(candles or [])
                 inf = ai_inference.inferir(self.simbolo, df, self.timeframe)

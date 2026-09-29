@@ -2,9 +2,9 @@
 """Integracao HTTP da fila persistente offline (Fase 4) - Handler direto, sem servidor.
 
 Valida de ponta a ponta, sem terminal MT5 instalado:
-  - /api/demo/close com terminal offline  -> 202 + comando enfileirado
-  - /api/demo/close com terminal online   -> 403 (erro real, NAO enfileira)
-  - /api/demo/order (ordem)               -> 403 e NUNCA enfileira
+  - /api/trade/close com terminal offline  -> 202 + comando enfileirado
+  - /api/trade/close com terminal online   -> 403 (erro real, NAO enfileira)
+  - /api/trade/order (ordem)               -> 403 e NUNCA enfileira
   - GET /api/queue/status                 -> 200 com contagens
 
 Uso: .venv/Scripts/python.exe tests/test_queue_gateway_integration.py
@@ -27,7 +27,7 @@ from conftest import TOKEN_DE_TESTE
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 _ENV_KEYS = ("APPDATA", "XAU_MT5_COMMON_FILES", "XAU_APP_CONFIG", "XAU_AUDIT_FILE",
-             "XAU_REAL_EMERGENCY_FILE", "XAU_QUEUE_FILE", "XAU_ENABLE_DEMO_ORDERS",
+             "XAU_REAL_EMERGENCY_FILE", "XAU_QUEUE_FILE", "XAU_ENABLE_TRADE_COMMANDS",
              "XAU_RATE_LIMIT", "XAU_RATE_LIMIT_CMD")
 
 
@@ -45,7 +45,7 @@ def _setup(tmp: str) -> None:
     os.environ["XAU_AUDIT_FILE"] = str(Path(tmp) / "audit.jsonl")
     os.environ["XAU_REAL_EMERGENCY_FILE"] = str(Path(tmp) / "STOP")
     os.environ["XAU_QUEUE_FILE"] = str(Path(tmp) / "command_queue.json")
-    os.environ["XAU_ENABLE_DEMO_ORDERS"] = "1"
+    os.environ["XAU_ENABLE_TRADE_COMMANDS"] = "1"
     os.environ["XAU_RATE_LIMIT"] = "1000"
     os.environ["XAU_RATE_LIMIT_CMD"] = "1000"
     # Fail-closed: o gateway exige token. Sem ele os handlers caem em 401.
@@ -102,7 +102,7 @@ def _json_out(handler) -> dict:
 
 
 def _assert_offline_close_enfileira_202():
-    handler, status = _make_handler("/api/demo/close", b'{"ticket": 123}')
+    handler, status = _make_handler("/api/trade/close", b'{"ticket": 123}')
     _Ctx.gw.Handler.do_POST(handler)
     assert status == [202], f"status inesperado {status}: {_json_out(handler)}"
     data = _json_out(handler)
@@ -119,7 +119,7 @@ def test_offline_close_enfileira_202(queue_gateway_context):
 def _assert_terminal_online_nao_enfileira():
     _Ctx.fake.terminal_info = lambda: types.SimpleNamespace(connected=True)
     antes = _Ctx.pq.queue_status()["count"]
-    handler, status = _make_handler("/api/demo/close", b'{"ticket": 456}')
+    handler, status = _make_handler("/api/trade/close", b'{"ticket": 456}')
     _Ctx.gw.Handler.do_POST(handler)
     assert status == [403], f"status inesperado {status}: {_json_out(handler)}"
     assert _Ctx.pq.queue_status()["count"] == antes
@@ -130,7 +130,7 @@ def test_terminal_online_nao_enfileira(queue_gateway_context):
 
 
 def _assert_ordem_nunca_enfileira():
-    handler, status = _make_handler("/api/demo/order", b"{}")
+    handler, status = _make_handler("/api/trade/order", b"{}")
     _Ctx.gw.Handler.do_POST(handler)
     assert status == [403], f"status inesperado {status}: {_json_out(handler)}"
     resumo = _Ctx.pq.queue_status()

@@ -1,7 +1,8 @@
-"""Cliente MEXC Spot/Futures em modo somente leitura.
+"""Cliente MEXC Spot/Futures: leitura publica e envio de ordem.
 
-Nenhum método deste módulo envia, cancela ou modifica ordens.
-As credenciais são lidas exclusivamente do ambiente local.
+Leitura e escrita usam a mesma assinatura HMAC-SHA256. Nenhum metodo deste
+modulo envia, cancela ou modifica ordem fora de ``create_order``; nao existe
+contraparte de saque ou transferencia.
 """
 from __future__ import annotations
 
@@ -10,6 +11,7 @@ import hmac
 import json
 import os
 import time
+from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import Request
 
@@ -18,6 +20,21 @@ from backend.universal_contracts import open_exchange_request, validate_exchange
 
 class MexcError(RuntimeError):
     pass
+
+
+def _http_detail(exc: HTTPError) -> str:
+    """Corpo do erro da corretora, sem credencial em lugar nenhum."""
+    try:
+        raw = exc.read().decode("utf-8", "replace")[:400]
+    except Exception:
+        return str(exc)
+    try:
+        parsed = json.loads(raw)
+    except ValueError:
+        return raw
+    if isinstance(parsed, dict):
+        return str(parsed.get("msg") or parsed.get("error") or parsed)[:400]
+    return raw
 
 
 class MexcClient:
@@ -64,6 +81,97 @@ class MexcClient:
         if isinstance(data, dict) and data.get("code") not in (None, 0, 200, "0", "200"):
             raise MexcError(f"MEXC {self.market} rejeitou consulta: {data}")
         return data
+
+    def _post_form(self, path: str, params: dict[str, object]) -> object:
+        """POST spot assinado por query (mesmo esquema do GET assinado)."""
+        payload = dict(params)
+        payload["timestamp"] = int(time.time() * 1000)
+        encoded = urlencode(payload)
+        payload["signature"] = hmac.new(self.api_secret.encode(), encoded.encode(), hashlib.sha256).hexdigest()
+        url = f"{validate_exchange_base_url(self.base_url, 'mexc')}{path}"
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "X-MEXC-APIKEY": self.api_key,
+        }
+        request = Request(url, data=urlencode(payload).encode("utf-8"), headers=headers, method="POST")
+        return self._read(request, path)
+
+    def _post_json(self, path: str, body: dict[str, object]) -> object:
+        """POST futures assinado no cabecalho (ApiKey/Request-Time/Signature)."""
+        timestamp = int(time.time() * 1000)
+        payload = json.dumps(body, separators=(",", ":"))
+        base = validate_exchange_base_url(self.base_url, "mexc")
+        signed_text = f"{self.api_key}{timestamp}{payload}"
+        signature = hmac.new(self.api_secret.encode(), signed_text.encode(), hashlib.sha256).hexdigest()
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "ApiKey": self.api_key,
+            "Request-Time": str(timestamp),
+            "Signature": signature,
+            "Recv-Window": "5000",
+        }
+        request = Request(f"{base}{path}", data=payload.encode("utf-8"), headers=headers, method="POST")
+        return self._read(request, path)
+
+    def _read(self, request: Request, path: str) -> object:
+        try:
+            with open_exchange_request(request, timeout=15) as response:
+                data = json.loads(response.read().decode("utf-8"))
+        except HTTPError as exc:
+            detail = _http_detail(exc)
+            raise MexcError(f"MEXC recusou a ordem em {path} (HTTP {exc.code}): {detail}") from exc
+        except MexcError:
+            raise
+        except Exception as exc:
+            raise MexcError(f"MEXC indisponível: {exc}") from exc
+        if isinstance(data, dict) and data.get("code") not in (None, 0, 200, "0", "200"):
+            raise MexcError(f"MEXC rejeitou {path}: {data}")
+        if isinstance(data, dict) and data.get("success") is False:
+            raise MexcError(f"MEXC rejeitou {path}: {data}")
+        return data
+
+    def create_order(self, *, symbol: str, side: str, order_type: str, quantity: float,
+                     price: float | None = None, request_id: str) -> dict[str, object]:
+        """Envia ordem spot ou de futuros. Sem contraparte de saque."""
+        kind = str(order_type or "market").lower()
+        if kind not in {"market", "limit"}:
+            raise MexcError(f"tipo de ordem MEXC não suportado: {order_type}")
+        if kind == "limit" and (price is None or float(price) <= 0):
+            raise MexcError("preço é obrigatório para ordem limit")
+        symbol = self._symbol(symbol)
+
+        if self.market == "spot":
+            params: dict[str, object] = {
+                "symbol": symbol,
+                "side": str(side).upper(),
+                "type": kind.upper(),
+                "quantity": quantity,
+                "newClientOrderId": request_id,
+            }
+            if kind == "limit":
+                params["price"] = price
+            data = self._post_form("/api/v3/order", params)
+            return data if isinstance(data, dict) else {"raw": data}
+
+        body: dict[str, object] = {
+            "symbol": symbol,
+            "side": 1 if str(side).lower() == "buy" else 3,
+            "type": 1 if kind == "limit" else 5,
+            "openType": 2,
+            "positionMode": 2,
+            "vol": quantity,
+            "price": price if kind == "limit" else 0,
+            "externalOid": request_id,
+        }
+        data = self._post_json("/api/v1/private/order/create", body)
+        if isinstance(data, dict):
+            inner = data.get("data")
+            if isinstance(inner, dict):
+                return {**inner, "orderId": inner.get("orderId") or inner.get("order_id") or ""}
+            return data
+        return {"raw": data}
 
     @staticmethod
     def _symbol(symbol: str) -> str:

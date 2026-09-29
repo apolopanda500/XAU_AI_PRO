@@ -4,6 +4,10 @@ from PyInstaller.utils.hooks import collect_dynamic_libs
 
 datas = []
 binaries = []
+# Docs/version.json e o que define GATEWAY_BUILD. Sem ele no pacote o gateway
+# congelado cai no fallback hardcoded e o frontend recusa o bootstrap por
+# identidade de build divergente.
+datas.append(("Docs/version.json", "Docs"))
 datas += collect_data_files('MetaTrader5')
 binaries += collect_dynamic_libs('MetaTrader5')
 numpy_binaries = collect_dynamic_libs('numpy')

@@ -1,10 +1,10 @@
 /**
- * O sufixo `?raw` é interpretado pelo Vite/Vitest, mas não pelo `tsc`, que vê
- * um caminho de arquivo literal. Esta declaração ensina o TypeScript que
- * qualquer `*.?raw` é um módulo que exporta o código-fonte como string —
- * que é exatamente o que o bundler entrega.
+ * Tipagens do ambiente Vite: `import.meta.glob`, `import.meta.env` e o
+ * sufixo `?raw`.
+ *
+ * O `?raw` é interpretado pelo Vite/Vitest, mas não pelo `tsc`, que vê um
+ * caminho de arquivo literal. A declaração de `*?raw` vem do próprio
+ * `vite/client`, que também ensina o TypeScript o glob de import — usado
+ * pelos testes que leem o código-fonte dos componentes como string.
  */
-declare module '*?raw' {
-  const conteudo: string;
-  export default conteudo;
-}
+/// <reference types="vite/client" />

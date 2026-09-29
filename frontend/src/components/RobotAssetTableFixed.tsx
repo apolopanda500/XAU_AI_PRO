@@ -59,7 +59,6 @@ export default function RobotAssetTableFixed() {
   const [quoteError, setQuoteError] = useState<string | null>(null);
   const [quoteBusy, setQuoteBusy] = useState(false);
   const [onlyTradable, setOnlyTradable] = useState(false);
-  const [auto, setAuto] = useState(false);
   const [tick, setTick] = useState(0);
   const busyRef = useRef(false);
 
@@ -93,6 +92,15 @@ export default function RobotAssetTableFixed() {
     return onlyTradable ? base.filter((s) => isTradable(catalog.rows.find((r) => r.symbol === s)!)) : base;
   }, [catalog.rows, onlyTradable]);
 
+  // Quantos do catalogo vieram com preco de verdade. A MEXC devolve 1898 e a
+  // OKX 1415 ativos: despejar isso na tela e poluir. O contador diz quantos
+  // existem e quantos tem cotacao, e a coluna Fonte mostra de onde veio
+  // cada preco.
+  const cotados = symbols.filter((s) => {
+    const q = porSimbolo.get(s);
+    return Boolean(q && ((Number.isFinite(q.bid) && q.bid > 0) || (Number.isFinite(q.ask) && q.ask > 0)));
+  }).length;
+
   const lerQuotes = useCallback(async () => {
     if (busyRef.current || !symbols.length) return;
     busyRef.current = true;
@@ -105,7 +113,16 @@ export default function RobotAssetTableFixed() {
       const r = await fetch(`${apiBase()}${path}`, { signal: AbortSignal.timeout(12000) });
       const body = await r.json().catch(() => ({}));
       if (!r.ok) {
-        setQuoteError((body as { error?: string })?.error || `HTTP ${r.status}`);
+        // Sem credencial, indisponibilidade é por broker: a API publica dela
+        // nao respondeu (ou nao resolve nesta rede). Dizer "HTTP 503" nao
+        // ajuda o operador a decidir; dizer qual corretora e por que ajuda.
+        const motivo = (body as { error?: string })?.error || `HTTP ${r.status}`;
+        const semInternet = /getaddrinfo|name or service not known|timed out|11002|unreachable/i.test(motivo);
+        setQuoteError(
+          semInternet
+            ? `${brokerLabel(broker)}: API publica nao alcancavel nesta rede. O nome do ativo e as regras de ordem continuam vindo da corretora.`
+            : `${brokerLabel(broker)}: ${motivo}`,
+        );
         return;
       }
       const data = body as { quotes?: unknown[]; errors?: unknown[] };
@@ -175,40 +192,41 @@ export default function RobotAssetTableFixed() {
 
   return (
     <div className="robot-operations">
-      <div className="page-head">
-        <div>
-          <h1>Robô</h1>
-          <span className="muted">Catálogo e cotações vindos da corretora selecionada</span>
-        </div>
-        <div className="btn-row">
-          <select value={broker} onChange={(e) => trocarBroker(e.target.value)} aria-label="Origem">
-            {BROKERS.map((item) => (
-              <option key={item.id} value={item.id}>{item.label}</option>
-            ))}
-          </select>
-          <select value={market} onChange={(e) => { setMarket(e.target.value); setSelected(''); }} aria-label="Mercado">
-            {(MARKETS_BY_BROKER[broker] ?? []).map((value) => (
-              <option key={value} value={value}>{MARKET_LABELS[value] ?? value}</option>
-            ))}
-          </select>
-        </div>
-      </div>
-
+      {/* Sem page-head proprio: dentro da aba Robo o cabecalho "Robô" ja vem
+          do RobotTabs. Um segundo <h1>Robô</h1> aqui era cabecalho repetido,
+          e os selects de origem/mercado fazem parte do card, nao da pagina. */}
       <div className="card compact-card">
         <div className="section-head">
           <div>
             <h2>Ativos da corretora</h2>
             <span className="muted">
-              {brokerLabel(broker)} · {MARKET_LABELS[market] ?? market} · {symbols.length} ativos
+              {brokerLabel(broker)} · {MARKET_LABELS[market] ?? market} · {symbols.length} no catalogo
+              {cotados ? ` · ${cotados} com cotacao ao vivo` : ' · aguardando cotacao'}
               {catalog.source ? ` · fonte ${catalog.source}` : ''}
             </span>
           </div>
           <div className="btn-row">
+            <select value={broker} onChange={(e) => trocarBroker(e.target.value)} aria-label="Origem">
+              {BROKERS.map((item) => (
+                <option key={item.id} value={item.id}>{item.label}</option>
+              ))}
+            </select>
+            <select value={market} onChange={(e) => { setMarket(e.target.value); setSelected(''); }} aria-label="Mercado">
+              {(MARKETS_BY_BROKER[broker] ?? []).map((value) => (
+                <option key={value} value={value}>{MARKET_LABELS[value] ?? value}</option>
+              ))}
+            </select>
             <label className="chip" style={{ cursor: 'pointer' }}>
               <input type="checkbox" checked={onlyTradable} onChange={(e) => setOnlyTradable(e.target.checked)} />
               apenas operáveis
             </label>
-            <button type="button" className="btn sm primary" onClick={() => setTick((t) => t + 1)} disabled={quoteBusy}>
+            <button
+              type="button"
+              className="btn sm primary"
+              onClick={() => setTick((t) => t + 1)}
+              disabled={quoteBusy || !symbols.length}
+              title={symbols.length ? undefined : 'Sem ativos no catalogo desta corretora/mercado para consultar.'}
+            >
               {quoteBusy ? 'Atualizando…' : 'Atualizar agora'}
             </button>
           </div>
@@ -219,7 +237,7 @@ export default function RobotAssetTableFixed() {
         {catalog.loading && <div className="hint">Carregando catálogo…</div>}
 
         <div className="table-scroll">
-          <table className="tbl compact-table">
+          <table className="tbl compact-table dense-grid">
             <thead>
               <tr>
                 <th>Usar</th><th>Ativo</th><th>Mercado</th><th className="num">Preço</th>
@@ -269,7 +287,7 @@ export default function RobotAssetTableFixed() {
         </div>
 
         {!catalog.loading && !symbols.length && (
-          <div className="empty-state">
+          <div className="placeholder" role="status">
             A corretora não expôs ativos para {brokerLabel(broker)} em {MARKET_LABELS[market] ?? market}.
           </div>
         )}
@@ -277,22 +295,10 @@ export default function RobotAssetTableFixed() {
           <p className="hint">Exibindo e consultando os {MAX_BATCH} primeiros ativos do catálogo.</p>
         )}
       </div>
-
-      <div className="card compact-card">
-        <div className="section-head">
-          <div>
-            <h2>Ticket operacional</h2>
-            <span className="muted">{selected || 'Selecione um ativo'} · confirmação manual</span>
-          </div>
-          <span className="chip warn">Protegido</span>
-        </div>
-        <div className="btn-row">
-          <button type="button" className={`btn sm ${auto ? 'primary' : 'ghost'}`} onClick={() => setAuto((v) => !v)}>
-            Robô automático: {auto ? 'ON' : 'OFF'}
-          </button>
-          <span className="chip">{brokerLabel(broker)} · {MARKET_LABELS[market] ?? market}</span>
-        </div>
-      </div>
+      {/* O "Ticket operacional" que fechava este bloco tinha um botão
+          "Robô automático: ON/OFF" ligado a NADA — era useState local, sem
+          chamada de API — e competia com o Ligar/Desligar real da sub-aba
+          Automação. Removido: quem liga o motor é o AutoEnginePanel. */}
     </div>
   );
 }

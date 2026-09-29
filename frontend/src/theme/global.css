@@ -875,6 +875,12 @@ a {
 .chip.warn  { color: var(--warn); border-color: var(--warn); }
 .chip.danger{ color: var(--danger); border-color: var(--danger); }
 .chip.primary { color: var(--primary); border-color: var(--primary); }
+/* Vocabulario do chip de status: cinco tons, todos aqui. `neutral` e `mt5`
+   moravam em theme/history.css, ou seja, o Copiloto (aba Robô) usava um tom
+   definido por outro componente e so funcionava porque o Histórico e
+   importado em todo arranque. O vocabulario passa a ser de um lugar so. */
+.chip.neutral { background: rgba(148,163,184,.15); color: #cbd5e1; border-color: rgba(148,163,184,.35); }
+.chip.mt5 { background: rgba(240,166,32,.16); color: #f0a620; border-color: rgba(240,166,32,.4); }
 
 /* ---------- Barra de progresso ---------- */
 .progress {
@@ -1301,6 +1307,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,su
 .portfolio-page{display:flex;flex-direction:column;gap:14px}.metrics-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.metric-card{display:flex;flex-direction:column;gap:4px;padding:14px 16px}.metric-card strong{font-size:20px;line-height:1.2}.metric-card small{color:var(--muted,#8b95a7);font-size:11px}.warn-text{color:#f0b35b}.section-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.section-title h2{margin:0 0 3px}@media(max-width:900px){.metrics-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:520px){.metrics-grid{grid-template-columns:1fr}}
 .robot-operations{display:flex;flex-direction:column;gap:14px}.order-ticket-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin:12px 0}.order-ticket-grid .field{min-width:0}@media(max-width:1000px){.order-ticket-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:560px){.order-ticket-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .history-page{display:flex;flex-direction:column;gap:14px}.history-filters{display:grid;grid-template-columns:1fr 1.3fr 1.4fr auto;gap:10px;align-items:end}.history-count{display:flex;flex-direction:column;gap:4px;padding:8px 14px;border-left:1px solid var(--border,#2b3442)}.history-count strong{font-size:20px}@media(max-width:800px){.history-filters{grid-template-columns:repeat(2,minmax(0,1fr))}.history-count{border-left:0}}
+/* Performance & Analytics mora logo abaixo do Historico e precisa do MESMO
+   empilhamento (era a unica secao da app sem display:flex: os filhos ficavam
+   em bloco e os cards encostavamos). */
+.analytics-page{display:flex;flex-direction:column;gap:14px}
 .settings-page{display:flex;flex-direction:column;gap:14px}.settings-tabs{display:flex;gap:8px;flex-wrap:wrap}.settings-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:12px 0}.settings-checks{display:flex;gap:18px;flex-wrap:wrap;margin:14px 0}.settings-checks label{display:flex;gap:7px;align-items:center}@media(max-width:700px){.settings-grid{grid-template-columns:1fr}}
 .asset-selection{margin-top:0}.asset-groups{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:12px 0}.asset-groups fieldset{border:1px solid var(--border,#2b3442);border-radius:8px;padding:10px;min-width:0}.asset-groups legend{padding:0 5px;font-size:11px;font-weight:700}.asset-groups label{display:flex;gap:7px;align-items:center;padding:5px 0;font-size:12px}.asset-groups label small{display:block;color:var(--muted,#8b95a7);margin-left:auto;font-size:10px;text-align:right}.asset-groups input{accent-color:#38bdf8}@media(max-width:900px){.asset-groups{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:520px){.asset-groups{grid-template-columns:1fr}}
 .compact-log{max-height:150px;min-height:0;overflow-y:auto}.robot-operations+.card .compact-log{max-height:150px}
@@ -1572,6 +1582,73 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,su
   color: var(--muted, #8a94a6);
   margin-bottom: 6px;
 }
+
+/* Inventario agrupado por simbolo: uma linha por par treinado. */
+.ai-panel .ai-symbol-block {
+  border: 1px solid var(--border, rgba(55, 198, 255, 0.2));
+  border-radius: 8px;
+  background: var(--panel, rgba(20, 26, 40, 0.8));
+  padding: 8px 10px;
+  margin-bottom: 8px;
+}
+.ai-panel .ai-symbol-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 7px;
+}
+.ai-panel .ai-symbol-code {
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: .04em;
+  color: var(--gold, #f0b90b);
+}
+.ai-panel .ai-symbol-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ai-panel .ai-model-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  min-width: 74px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border, rgba(55, 198, 255, 0.2));
+  background: rgba(255, 255, 255, 0.03);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  transition: border-color .15s ease, background .15s ease;
+}
+.ai-panel .ai-model-chip:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+.ai-panel .ai-model-chip .chip-tf {
+  font-weight: 700;
+  font-size: 12px;
+  font-family: var(--mono, monospace);
+}
+.ai-panel .ai-model-chip .chip-state {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  color: var(--muted, #8a94a6);
+}
+.ai-panel .ai-model-chip.is-ok { border-color: var(--ok, #4caf50); }
+.ai-panel .ai-model-chip.is-ok .chip-state { color: var(--ok, #4caf50); }
+.ai-panel .ai-model-chip.is-warn { border-color: var(--warn, #ff9800); }
+.ai-panel .ai-model-chip.is-warn .chip-state { color: var(--warn, #ff9800); }
+.ai-panel .ai-model-chip.is-bad { border-color: var(--danger, #f44336); }
+.ai-panel .ai-model-chip.is-bad .chip-state { color: var(--danger, #f44336); }
+.ai-panel .ai-model-chip.is-selected {
+  outline: 2px solid var(--gold, #f0b90b);
+  outline-offset: 1px;
+  background: rgba(240, 185, 11, 0.12);
+}
 .ai-panel .ai-model-description {
   font-size: 13px;
   color: var(--muted, #8a94a6);
@@ -1608,3 +1685,238 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,su
 .ai-panel.disabled .ai-signal-card {
   opacity: 0.5;
 }
+
+/* ---------- Marca XAU no card de execucao ----------
+   O card de ordem e a cara do app: identidade XAU dourada, simbolos e
+   botoes com seta. Icones sao SVG inline — o repo nao usa biblioteca de
+   icones e nada aqui cria dependencia nova. */
+:root {
+  --gold: #f0b90b;
+  --gold-2: #ffde59;
+  --gold-line: rgba(240, 185, 11, .45);
+  --gold-soft: rgba(240, 185, 11, .14);
+}
+
+.order-panel { position: relative; }
+
+.order-panel .xau-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.order-panel .xau-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* Selo dourado com o lingote: chama a olhada no topo do card. */
+.order-panel .xau-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(240, 185, 11, .28), rgba(255, 222, 89, .08));
+  border: 1px solid var(--gold-line);
+  color: var(--gold-2);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  box-shadow: 0 0 16px rgba(240, 185, 11, .22);
+}
+.order-panel .xau-badge svg {
+  filter: drop-shadow(0 0 5px rgba(240, 185, 11, .8));
+}
+
+/* O nome do ativo em ouro — o "XAU" que o operador procura. */
+.order-panel .xau-symbol {
+  background: linear-gradient(90deg, var(--gold-2), var(--gold));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-weight: 800;
+  letter-spacing: .5px;
+  text-shadow: 0 0 22px rgba(240, 185, 11, .35);
+}
+.order-panel h2 { display: flex; align-items: center; gap: 8px; }
+
+/* Chips de sessao e conta, com ponto de status pulsante. */
+.order-panel .xau-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border, #26314a);
+  background: var(--panel2, #1c2437);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .3px;
+  color: var(--muted, #8b94ab);
+}
+.order-panel .xau-chip svg { opacity: .85; }
+.order-panel .xau-chip.is-real {
+  border-color: var(--gold-line);
+  background: var(--gold-soft);
+  color: var(--gold-2);
+}
+.order-panel .xau-chip.is-demo {
+  border-color: rgba(34, 197, 94, .5);
+  background: rgba(34, 197, 94, .12);
+  color: #86efac;
+}
+.order-panel .xau-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
+  animation: xau-pulse 1.8s ease-in-out infinite;
+}
+@keyframes xau-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
+/* Botao Comprar / Vender: seta grande + rotulo em duas linhas. */
+.order-panel .btn.quick-buy,
+.order-panel .btn.quick-sell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-transform: uppercase;
+  letter-spacing: .8px;
+  position: relative;
+  overflow: hidden;
+}
+.order-panel .btn.quick-buy svg,
+.order-panel .btn.quick-sell svg { flex: none; }
+.order-panel .quick-label { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.15; }
+.order-panel .quick-label b { font-size: 16px; font-weight: 800; }
+.order-panel .quick-label small { font-size: 10px; font-weight: 600; letter-spacing: 1.2px; opacity: .78; }
+.order-panel .btn.quick-buy::after,
+.order-panel .btn.quick-sell::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, .22) 50%, transparent 70%);
+  transform: translateX(-120%);
+  transition: transform .5s ease;
+}
+.order-panel .btn.quick-buy:hover:not(:disabled)::after,
+.order-panel .btn.quick-sell:hover:not(:disabled)::after { transform: translateX(120%); }
+
+/* Titulos de secao com icone dourado. */
+.order-panel .xau-section {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 1.1px;
+  text-transform: uppercase;
+  color: var(--gold-2);
+  margin-top: 16px;
+  padding-bottom: 5px;
+  border-bottom: 1px dashed var(--gold-line);
+}
+
+/* Botoes de gestao ganham icone; hover levanta a borda dourada. */
+.order-panel .btn.ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.order-panel .btn.ghost:hover:not(:disabled) { border-color: var(--gold-line); }
+
+/* Barra de risco: lembra o operador de SL/TP antes de apertar. */
+.order-panel .xau-guard {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 8px 11px;
+  border-radius: var(--radius-sm, 6px);
+  border: 1px solid var(--gold-line);
+  background: var(--gold-soft);
+  color: var(--gold-2);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.order-panel .xau-guard svg { flex: none; }
+
+/* Tira de resultado: sucesso em verde, recusa em vermelho, com icone. */
+.order-panel .xau-result {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 9px 11px;
+  border-radius: var(--radius-sm, 6px);
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid;
+  line-height: 1.5;
+}
+.order-panel .xau-result.is-ok {
+  border-color: rgba(34, 197, 94, .55);
+  background: rgba(34, 197, 94, .12);
+  color: #86efac;
+}
+.order-panel .xau-result.is-neg {
+  border-color: rgba(239, 68, 68, .55);
+  background: rgba(239, 68, 68, .12);
+  color: #fecaca;
+}
+.order-panel .xau-result svg { flex: none; margin-top: 2px; }
+
+/* Botao dourado "Retomar execucao" (estado de emergencia). */
+.order-panel .btn.xau-resume {
+  background: linear-gradient(180deg, rgba(240, 185, 11, .30), rgba(240, 185, 11, .12));
+  border: 1px solid var(--gold-line);
+  color: var(--gold-2);
+  font-weight: 800;
+  letter-spacing: .6px;
+  text-transform: uppercase;
+}
+.order-panel .btn.xau-resume:hover:not(:disabled) {
+  border-color: var(--gold);
+  box-shadow: 0 0 18px rgba(240, 185, 11, .35);
+}
+
+/* ---------- Entrada rapida (padrao robos automaticos) ----------
+   Dois botoes grandes de compra/venda, sempre visiveis, que usam
+   volume/SL/TP dos campos do proprio painel. Nao abrem posicao
+   sem SL e TP: continuam presos a `canSend`. */
+.order-panel .btn.quick-buy {
+  background: linear-gradient(180deg, rgba(34,197,94,.30), rgba(34,197,94,.14));
+  border: 1px solid rgba(34,197,94,.75);
+  color: #eafff1;
+}
+.order-panel .btn.quick-buy:hover:not(:disabled) { border-color: var(--ok); box-shadow: 0 0 16px rgba(34,197,94,.28); }
+.order-panel .btn.quick-sell {
+  background: linear-gradient(180deg, rgba(239,68,68,.30), rgba(239,68,68,.14));
+  border: 1px solid rgba(239,68,68,.75);
+  color: #ffefef;
+}
+.order-panel .btn.quick-sell:hover:not(:disabled) { border-color: var(--danger); box-shadow: 0 0 16px rgba(239,68,68,.28); }
+.order-panel .btn.quick-buy:disabled,
+.order-panel .btn.quick-sell:disabled { opacity: .45; }
+
+/* ---------- Parada de emergencia ----------
+   Unico botao vermelho cheio do app. Fica disponivel em qualquer
+   modo de conta, porque parar sempre e seguro. */
+.order-panel .btn.emergency-stop {
+  background: linear-gradient(180deg, #dc2626, #991b1b);
+  border: 1px solid #ff6b6b;
+  color: #fff;
+  text-transform: uppercase;
+  box-shadow: 0 0 18px rgba(220,38,38,.35);
+}
+.order-panel .btn.emergency-stop:hover:not(:disabled) {
+  background: linear-gradient(180deg, #ef4444, #b91c1c);
+  box-shadow: 0 0 26px rgba(239,68,68,.55);
+}
+.order-panel .btn.emergency-stop:disabled { opacity: .6; }
+.btn.ghost.danger { color: var(--danger); border-color: rgba(239,68,68,.45); }
+.btn.ghost.danger:hover:not(:disabled) { background: rgba(239,68,68,.14); border-color: var(--danger); }

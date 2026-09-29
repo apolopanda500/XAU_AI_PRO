@@ -466,7 +466,7 @@ def responder_conta(ctx: Contexto, _pergunta: str) -> str:
         linhas.append(
             f"- login {conta.get('login', '?')} · servidor {conta.get('server', '?')}\n"
             f"- modo: {conta.get('trade_mode', '?')} "
-            f"({'DEMO' if conta.get('trade_mode') == 0 else 'REAL ou desconhecido'})\n"
+            f"({'DEMO' if conta.get('trade_mode') == 1 else 'REAL' if conta.get('trade_mode') == 0 else 'desconhecido'})\n"
             f"- moeda {conta.get('currency', '?')}"
         )
     else:

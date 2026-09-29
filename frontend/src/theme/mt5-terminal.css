@@ -84,3 +84,10 @@
 .mt-footer-actions .muted {
   font-size: 11.5px;
 }
+
+/* Celula do motor automatico na faixa de conta: verde quando ligado, para o
+   operador ver de relance que o motor esta rodando (mesma leitura de cor do
+   chip "Operando" da sub-aba Automação). */
+.mt-status-strip .auto-on {
+  color: var(--success, #34d399);
+}

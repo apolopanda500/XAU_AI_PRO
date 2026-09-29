@@ -22,8 +22,8 @@
 .acum-table-card td:nth-child(3).acum-neg { text-shadow: 0 0 10px currentColor; }
 .acum-table-card tbody tr:has(td.acum-pos) { box-shadow: inset 3px 0 #35d28f; }
 .acum-table-card tbody tr:has(td.acum-neg) { box-shadow: inset 3px 0 #ff5c74; }
-.chip.mt5 { background: rgba(240,166,32,.16); color: #f0a620; border-color: rgba(240,166,32,.4); }
-.chip.neutral { background: rgba(148,163,184,.15); color: #cbd5e1; border-color: rgba(148,163,184,.35); }
+/* `.chip.mt5` e `.chip.neutral` foram para theme/global.css junto com os
+   demais tons: o vocabulario do chip de status e de um lugar so. */
 .sel-chip { display: inline-flex; align-items: center; gap: 8px; background: var(--panel-2, rgba(255,255,255,.04)); border: 1px solid var(--border, rgba(255,255,255,.1)); border-radius: 999px; padding: 4px 12px; font-size: 12px; cursor: pointer; user-select: none; }
 .sel-chip input { accent-color: var(--accent, #f0a620); }
 .sel-chip .sum { color: var(--muted, #8b93a7); font-variant-numeric: tabular-nums; }

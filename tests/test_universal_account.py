@@ -99,17 +99,26 @@ def test_binance_quote_combines_book_and_stats(monkeypatch):
     }
 
 
-def test_capability_matrix_is_single_and_fail_closed():
+def test_capability_matrix_is_single_and_fail_closed(monkeypatch):
     matrix = capability_matrix()
     assert {row["broker"] for row in matrix} == {"mt5", "binance", "mexc", "bybit", "okx"}
-    assert all(row["execution"] == [] for row in matrix)
+    # App desbloqueado: toda corretora ativa expoe execucao e sai de somente-leitura.
+    assert all(row["execution"] for row in matrix)
     assert all(row["withdrawals"] is False for row in matrix)
-    # Bybit e OKX passaram a active em 2026-09-26: os clientes responderam a API
-    # publica real (catalogo, ticker, klines, depth, trades). Execucao continua
-    # desligada em todas as corretoras.
     assert all(row["status"] == "active" for row in matrix)
-    assert all(row["read_only"] is True for row in matrix)
+    assert all(row["read_only"] is False for row in matrix)
     assert all(row["transfers"] is False for row in matrix)
+
+    # A gate continua sendo a etapa explicita: desligada, a corretora volta a
+    # ser somente leitura sem mudar uma linha de codigo.
+    for gate in ("XAU_ENABLE_MT5_EXECUTION", "XAU_ENABLE_BINANCE_EXECUTION",
+                 "XAU_ENABLE_MEXC_EXECUTION", "XAU_ENABLE_BYBIT_EXECUTION",
+                 "XAU_ENABLE_OKX_EXECUTION"):
+        monkeypatch.setenv(gate, "0")
+    degraded = capability_matrix()
+    assert all(row["execution"] == [] for row in degraded)
+    assert all(row["read_only"] is True for row in degraded)
+    assert all(row["withdrawals"] is False for row in degraded)
 
 
 def test_planned_brokers_stay_out_of_the_matrix():
