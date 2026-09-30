@@ -28,7 +28,12 @@ GLOBAL_CSS = FRONT_SRC / "theme" / "global.css"
 # do escopo aprovado): são poupados até essa limpeza acontecer.
 NAO_MONTADOS = {"AIControlTab.tsx", "StrategyTesterTab.tsx"}
 
-TONS = re.compile(r"'(ok|warn|danger|neutral|primary|mt5)'")
+# Aceita as duas formas de aspas: o tom aparece como `'ok'` em expressao de
+# template literal (``chip ${cond ? 'ok' : 'warn'}``) e como `primary` dentro
+# de `className="btn sm primary"`. Antes so as aspas simples eram vistas, e o
+# tom de botao nunca entrava na contagem.
+TONS = re.compile(r"'(ok|warn|danger|neutral|primary|mt5)'|\b(ok|warn|danger|neutral|primary|mt5)\b")
+TON_GRUPO = 2  # o grupo 1 cobre as aspas simples, o grupo 2 as sem aspas
 RETICENCIAS_ASCII = re.compile(r"\.\.\.'")
 
 
@@ -41,19 +46,48 @@ def _tsx() -> list[Path]:
 
 
 def test_tom_de_chip_usado_existe_no_css_global():
-    """Todo tom aplicado via `chip ${...}` tem regra em theme/global.css."""
-    usados: set[str] = set()
+    """Todo tom aplicado via `chip ...` ou `btn ...` tem regra em theme/global.css.
+
+    O scanner olhava so linhas com "chip", e a linha do botao "Aplicar" e
+    `className="btn sm primary"` — o tom `primary` existia e era usado, mas
+    nao entrava na contagem. Depois da limpeza de 2026-09-29 (que removeu
+    ~2.000 linhas de componente morto) nenhum outro `chip primary` sobrou, e
+    o teste passou a falhar por causa do proprio scanner, nao por estilo
+    faltando. Agora os dois prefixos sao lidos.
+    """
+    usados: dict[str, str] = {}
     for arquivo in _tsx():
         for linha in _le(arquivo).splitlines():
+            # `chip mt5` e tom de chip; `btn primary` e tom de botao. Um
+            # mesmo nome de tom nas duas familias nao e a mesma regra: `mt5`
+            # so existe como `.chip.mt5` e nao como `.btn.mt5`. Por isso o
+            # prefixo precisa sair da propria linha, e nao de uma busca ampla.
             if "chip" in linha:
-                usados.update(TONS.findall(linha))
+                for _, tom in TONS.findall(linha):
+                    usados.setdefault(f"chip.{tom}", "chip")
+            if "btn" in linha:
+                # `className="btn ..."` e classe; `broker === 'mt5'` e um valor
+                # comparado dentro de um handler e nao vira tom de botao. O
+                # nome do tom so conta quando vem da propria lista de classes.
+                classes = re.search(r'className\s*=\s*"([^"]*)"', linha)
+                if not classes:
+                    continue
+                for _, tom in TONS.findall(classes.group(1)):
+                    usados.setdefault(f"btn.{tom}", "btn")
 
     # Se o scanner parar de enxergar, o teste tem de ser consertado — não
-    # deixado passar em silêncio com um conjunto vazio.
+    # deixado passar em silêncio com um conjunto vazio. O piso e 5 porque e
+    # o menor conjunto que ainda prova as duas familias: 4 tons de chip
+    # (ok/warn/danger/neutral) e pelo menos um de botao (primary).
     assert len(usados) >= 5, f"scanner de tons quebrou: {sorted(usados)}"
+    assert any(k.startswith("btn.") for k in usados), (
+        f"nenhum tom de botao lido; o scanner so esta vendo chip: {sorted(usados)}"
+    )
 
+    # `usados` ja guarda a chave completa no formato que o CSS usa
+    # (`.chip.ok`, `.btn.primary`), entao a busca e literal.
     css = _le(GLOBAL_CSS)
-    faltando = sorted(tom for tom in usados if f".chip.{tom}" not in css)
+    faltando = sorted(seletor for seletor in usados if f".{seletor}" not in css)
     assert not faltando, f"tons usados sem regra em global.css: {faltando}"
 
 

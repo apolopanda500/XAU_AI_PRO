@@ -41,6 +41,13 @@ $allowed = @(
 )
 if ($BuildArtifacts) {
     $allowed += @('build', 'dist', 'core\target', 'frontend\src-tauri\target', 'Temp\cargo-target')
+    # Os instaladores ja assinados e publicados ficam em `release\<versao>\`.
+    # Ja o `target\release\bundle\` e o diretorio de TRABALHO do bundler: ele
+    # reconstroi MSI e NSIS do zero a cada `tauri build`, e os arquivos velhos
+    # ali ocupam ~500 MB sem valor (a copia assinada esta em `release/`). Sem
+    # esta entrada, a limpeza nao recupera espaco justo quando o disco e o
+    # recurso escasso para o build completo.
+    $allowed += @('frontend\src-tauri\target\release\bundle')
 }
 if ($DebugCache) {
     # Cache de compilacao de depuracao: nunca e necessario para build, teste ou

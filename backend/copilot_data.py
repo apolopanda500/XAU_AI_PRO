@@ -334,7 +334,7 @@ def resumo_do_ambiente() -> dict[str, Any]:
     return saida
 
 
-def leitura_do_mercado(symbol: str = "XAUUSD", timeframe: str = "H1") -> dict[str, Any]:
+def leitura_do_mercado(symbol: str = "", timeframe: str = "") -> dict[str, Any]:
     """Cotacao + 24h + leitura de tendencia dos candles. Sem previsao."""
     saida: dict[str, Any] = {
         "symbol": symbol,
@@ -493,7 +493,7 @@ def relatorio_ambiente() -> str:
     return "\n".join(l)
 
 
-def relatorio_mercado(symbol: str = "XAUUSD", timeframe: str = "H1") -> str:
+def relatorio_mercado(symbol: str = "", timeframe: str = "") -> str:
     """Leitura de mercado. Descritiva, nunca previsao."""
     m = leitura_do_mercado(symbol, timeframe)
     l: list[str] = [f"**{symbol} {timeframe}** _(leitura ao vivo)_\n"]

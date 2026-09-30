@@ -165,10 +165,83 @@ def reamostrar(df: pd.DataFrame, timeframe: str) -> pd.DataFrame:
         .dropna(subset=["Open", "High", "Low", "Close"])
         .reset_index()
     )
-    for coluna in ("Spread", "ATR", "ADX", "RSI"):
+    # ATR, ADX e RSI sao DERIVADOS quando a fonte nao os traz. A inferencia ao
+    # vivo recebe candles crus do MT5 (High/Low/Close), que nunca trazem ATR;
+    # ate 2026-09-29 a linha abaixo zerava a coluna, e o motor automatico
+    # recusava o ciclo com "sem ATR ou preco real para dimensionar protecao"
+    # mesmo com o preco carregado. O ATR existe na propria serie: e o
+    # Average True Range de Wilder sobre High/Low/Close, e e exatamente o que
+    # o SL/TP em multiplos de ATR precisa.
+    #
+    # So o Spread continua 0.0 quando ausente: ele nao é derivavel de OHLC e
+    # serve so para leitura de custo.
+    for coluna in ("Spread",):
         if coluna not in agrupado.columns:
             agrupado[coluna] = 0.0
+
+    for coluna, derivadora in (
+        ("ATR", _atr_de_wilder),
+        ("ADX", _adx_de_wilder),
+        ("RSI", _rsi_de_wilder),
+    ):
+        if coluna in agrupado.columns and agrupado[coluna].abs().sum() > 0:
+            continue  # a fonte trouxe; respeita o valor dela
+        derivadora(agrupado)
     return agrupado
+
+
+def _atr_de_wilder(df: pd.DataFrame, periodo: int = 14) -> None:
+    """Escreve `ATR` na serie, em preco, pelo metodo de Wilder."""
+    alto = df["High"].astype(float)
+    baixo = df["Low"].astype(float)
+    anterior = df["Close"].astype(float).shift(1)
+    verdadeiro_max = pd.concat([alto, baixo], axis=1).max(axis=1)
+    verdadeiro_min = pd.concat([alto, baixo], axis=1).min(axis=1)
+    # A primeira linha nao tem fechamento anterior: True Range = faixa do dia.
+    tr = pd.concat(
+        [(alto - baixo), (verdadeiro_max - anterior).abs(), (verdadeiro_min - anterior).abs()],
+        axis=1,
+    ).max(axis=1)
+    tr.iloc[0] = alto.iloc[0] - baixo.iloc[0] if len(tr) else 0.0
+    media = tr.ewm(alpha=1.0 / periodo, adjust=False, min_periods=1).mean()
+    df["ATR"] = media.where(tr.rolling(periodo, min_periods=1).count() >= 1, tr)
+
+
+def _rsi_de_wilder(df: pd.DataFrame, periodo: int = 14) -> None:
+    """Escreve `RSI` na serie, em escala 0-100."""
+    delta = df["Close"].astype(float).diff()
+    ganho = delta.clip(lower=0.0)
+    perda = -delta.clip(upper=0.0)
+    media_ganho = ganho.ewm(alpha=1.0 / periodo, adjust=False, min_periods=1).mean()
+    media_perda = perda.ewm(alpha=1.0 / periodo, adjust=False, min_periods=1).mean()
+    # RSI = 100 quando so ha ganho; 0 quando so ha perda; 50 sem movimento.
+    forca = media_ganho / media_perda.replace(0.0, float("nan"))
+    rsi = 100.0 - (100.0 / (1.0 + forca))
+    df["RSI"] = rsi.where(media_perda.ne(0.0), 100.0).where(media_ganho.ne(0.0) | media_perda.ne(0.0), 50.0).fillna(50.0)
+
+
+def _adx_de_wilder(df: pd.DataFrame, periodo: int = 14) -> None:
+    """Escreve `ADX` na serie (forca de tendencia, 0-100)."""
+    alto = df["High"].astype(float)
+    baixo = df["Low"].astype(float)
+    mais_alto = alto.diff()
+    mais_baixo = -baixo.diff()
+    plus_dm = mais_alto.where((mais_alto > mais_baixo) & (mais_alto > 0), 0.0).fillna(0.0)
+    minus_dm = mais_baixo.where((mais_baixo > mais_alto) & (mais_baixo > 0), 0.0).fillna(0.0)
+    tr = pd.concat([
+        alto - baixo,
+        (alto - df["Close"].astype(float).shift(1)).abs(),
+        (baixo - df["Close"].astype(float).shift(1)).abs(),
+    ], axis=1).max(axis=1)
+    tr.iloc[0] = alto.iloc[0] - baixo.iloc[0] if len(tr) else 0.0
+    suavizar = lambda s: s.ewm(alpha=1.0 / periodo, adjust=False, min_periods=1).mean()
+    atr_ = suavizar(tr).replace(0.0, float("nan"))
+    plus_di = 100.0 * suavizar(plus_dm) / atr_
+    minus_di = 100.0 * suavizar(minus_dm) / atr_
+    soma = plus_di + minus_di
+    # DX = |+DI - -DI| / (+DI + -DI); sem denominador, DX = 0 (sem tendencia).
+    dx = ((plus_di - minus_di).abs() / soma.replace(0.0, float("nan"))).fillna(0.0)
+    df["ADX"] = suavizar(dx)
 
 
 # ------------------------------------------------------- features derivadas

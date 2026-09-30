@@ -14,7 +14,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { apiBase } from '../lib/api';
 import { useAppStore } from '../hooks/useAppStore';
-import { SIMBOLO_PRINCIPAL } from '../lib/constants';
 import { notify } from '../lib/notify';
 import '../theme/robot-model.css';
 
@@ -51,18 +50,14 @@ export default function RobotModelPanel() {
   // no disco (os 9 simbolos treinados), e o modelo e filtrado por ele.
   const simbolos = useMemo(() => {
     const unicos = [...new Set(modelos.map((m) => m.symbol))];
-    unicos.sort((a, b) => {
-      if (a === SIMBOLO_PRINCIPAL) return -1;
-      if (b === SIMBOLO_PRINCIPAL) return 1;
-      return a.localeCompare(b);
-    });
+    unicos.sort((a, b) => a.localeCompare(b));
     return unicos;
   }, [modelos]);
 
   const simbolo = useMemo(() => {
     const atual = (selectedSymbol || '').toUpperCase();
     if (atual && (simbolos.length === 0 || simbolos.includes(atual))) return atual;
-    return simbolos[0] ?? 'XAUUSD';
+    return simbolos[0] ?? '';
   }, [selectedSymbol, simbolos]);
 
   const visiveis = useMemo(

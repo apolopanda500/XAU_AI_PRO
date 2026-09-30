@@ -206,8 +206,9 @@ class LearningEngine:
             result = {"ok": False, "error": "model_manager.py nao encontrado", "time": datetime.now().isoformat()}
             self._update_status(state="error", message=result["error"])
             return result
-        symbols = [s.upper() for s in (symbols or ["XAUUSD"])]
-        timeframes = [(t.upper() if isinstance(t, str) else t) for t in (timeframes or ["M5"])]
+        from app.market_symbols import DEFAULT_TIMEFRAME, default_symbol_fallback
+        symbols = [s.upper() for s in (symbols or [default_symbol_fallback()]) if s]
+        timeframes = [(t.upper() if isinstance(t, str) else t) for t in (timeframes or [DEFAULT_TIMEFRAME])]
         args = [_python_exe(), str(script), "--symbols", ",".join(symbols), "--timeframes", ",".join(timeframes)]
         try:
             proc = subprocess.run(

@@ -96,7 +96,7 @@ class RobotTab:
         self.entry_symbol = tk.Entry(form, width=12, bg=Theme.PANEL, fg=Theme.TEXT,
                                      insertbackground=Theme.TEXT, relief="flat",
                                      highlightbackground=Theme.BORDER, highlightthickness=1)
-        self.entry_symbol.insert(0, get_config().get("trading", "default_symbol", default="XAUUSD"))
+        self.entry_symbol.insert(0, get_config().get("trading", "default_symbol", default=""))
         self.entry_symbol.grid(row=0, column=1, padx=4)
         tk.Label(form, text="Lote", bg=Theme.CARD, fg=Theme.TEXT_SECONDARY).grid(row=0, column=2, padx=4)
         self.entry_volume = tk.Entry(form, width=10, bg=Theme.PANEL, fg=Theme.TEXT,

@@ -154,10 +154,7 @@ function EventoRow({ evento, passado }: { evento: EconomicEvent; passado: boolea
 }
 
 export function EconomicCalendarTab() {
-  const [copilotPrompt, setCopilotPrompt] = useState('Quais eventos podem aumentar a volatilidade do XAUUSD e quais cuidados devo tomar?');
-  const [copilotReply, setCopilotReply] = useState('');
-  const [copilotLoading, setCopilotLoading] = useState(false);
-  const [copilotError, setCopilotError] = useState('');
+  // Estados do copiloto removidos em 2026-09-29 (ver o bloco dele no JSX).
   const [filtro, setFiltro] = useState<FiltroCalendario>({
     paises: [], impactos: [], dataInicio: null, dataFim: null,
   });
@@ -182,37 +179,6 @@ export function EconomicCalendarTab() {
   };
 
   const limparFiltros = () => { setFiltro({ paises: [], impactos: [], dataInicio: null, dataFim: null }); };
-
-  const consultarCopiloto = async () => {
-    if (!copilotPrompt.trim() || !eventos.length) return;
-    setCopilotLoading(true); setCopilotError('');
-    // Este bloco chamava um LLM EXTERNO na Vercel
-    // (xau-ai-pro-api-apolopanda500.vercel.app/api/chat) e ainda montava o
-    // contexto com campos que a agenda real nao devolve (titulo, anterior,
-    // consenso, real) — os eventos usam title/note/impact/when. Resultado:
-    // chamada paga a um servico de terceiros com contexto vazio.
-    // Agora usa o copiloto local, que tem intencao `agenda` e le a mesma
-    // agenda real do gateway.
-    const contexto = eventos.slice(0, 40).map((evento) => ({
-      quando: evento.horario.toISOString(), titulo: evento.titulo,
-      moeda: evento.codigoPais, impacto: evento.impacto,
-      consenso: evento.consenso, anterior: evento.anterior, real: evento.real,
-    }));
-    try {
-      const response = await fetch(`${apiBase()}/api/copilot/perguntar`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          pergunta: copilotPrompt,
-          contexto: { eventos: contexto, fonte: 'agenda economica real do app' },
-        }),
-        signal: AbortSignal.timeout(15000),
-      });
-      const data = await response.json() as { resposta?: string; reply?: string; error?: string };
-      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
-      setCopilotReply(data.resposta || data.reply || 'O copiloto não retornou uma análise.');
-    } catch (error) { setCopilotError(error instanceof Error ? error.message : 'Copiloto indisponível'); }
-    finally { setCopilotLoading(false); }
-  };
 
   if (erro) {
     return (
@@ -265,29 +231,14 @@ export function EconomicCalendarTab() {
         </div>
       </div>
 
-      <div className="card compact-card cal-copilot">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-          <div>
-            <h3>Copiloto econômico</h3>
-            <span className="muted">Responde só com os eventos reais carregados</span>
-          </div>
-          <span className="chip warn">Somente leitura</span>
-        </div>
-        <div className="cal-copilot-row">
-          <input
-            value={copilotPrompt}
-            onChange={(event) => setCopilotPrompt(event.target.value)}
-            onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void consultarCopiloto(); } }}
-            placeholder="Pergunte sobre risco, volatilidade ou agenda…"
-          />
-          <button className="btn sm primary" type="button" onClick={() => void consultarCopiloto()} disabled={copilotLoading || !eventos.length}>
-            {copilotLoading ? 'Analisando…' : 'Analisar'}
-          </button>
-        </div>
-        {copilotError && <div className="hint neg" role="alert" style={{ marginTop: 8 }}>Copiloto indisponível: {copilotError}</div>}
-        {copilotReply && <div className="cal-copilot-reply">{copilotReply}</div>}
-        <p className="hint" style={{ margin: '8px 0 0' }}>O copiloto não envia ordens, não altera o EA e não movimenta ativos.</p>
-      </div>
+      {/* O copiloto economically foi removido desta aba em 2026-09-29.
+
+          Ele nao e IA: `backend/copilot.py` classifica a pergunta por REGEX
+          (10 padroes em `INTENCOES`) e devolve um template preenchido com o
+          estado do sistema. Nao existe chamada a modelo de linguagem, chave de
+          API nem learned de nada. Prometer "analista" aqui era rotulo sem
+          lastro, e a agenda economica e uma tela de leitura: o operador quer
+          ver o evento, o impacto e quanto tempo falta, nao um paragrafo. */}
 
       <div className="cal-columns">
         <span className="num">Hora</span>

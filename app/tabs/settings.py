@@ -175,7 +175,7 @@ class SettingsTab:
             "GPU dedicada (opcional, acelera treino IA) | monitor 1080p+.\n"
             "----------------------------------------------------------------\n"
             "MT5: conta demo antes do real | alavancagem conforme o risco |\n"
-            "AutoTrading liberado no terminal | EA anexado no XAUUSD M5 (F1: instancia unica).\n"
+            "AutoTrading liberado no terminal | EA anexado no simbolo/timeframe ativos (F1: instancia unica).\n"
             "Suporte: aba Conexoes (Integracoes) + Logs/Auditoria + Docs do instalador."
         )
         tk.Label(req_card.body, text=req_text, bg=Theme.CARD, fg=Theme.TEXT_SECONDARY,

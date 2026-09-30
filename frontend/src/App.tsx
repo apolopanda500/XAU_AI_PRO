@@ -12,7 +12,7 @@ import PortfolioHome from './components/tabs/PortfolioHomeSafe';
 import RobotTabs from './components/RobotTabs';
 import HistoryTab from './components/tabs/HistoryTab';
 import SystemHealth from './components/SystemHealthOnly';
-import SettingsCore from './components/SettingsCoreSimple';
+import SettingsCore from './components/SettingsCore';
 import ExitAppButton from './components/ExitAppButton';
 import EconomicCalendarTab from './components/tabs/EconomicCalendarTab';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
@@ -20,11 +20,11 @@ import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 function renderActiveTab(tab: TabType): ReactNode {
   switch (tab) {
     case 'portfolio': return <PortfolioHome />;
-    // A aba Robô virou cinco sub-abas (Modelo & Sinal | Operação | Ordem |
-    // Ativos | Copiloto) com o Mini Terminal sempre no fim. Cada painel segue
-    // dentro da sua barreira de erro: um painel que falhasse desmontava a
-    // árvore React inteira e a aba ficava branca — o usuário perdia o app sem
-    // saber qual era o culpado.
+    // A aba Operar tem quatro sub-abas (Operar | Sinal | EA | Copiloto) e
+    // abre na primeira: motor automatico, posicoes ao vivo e ordem manual.
+    // Cada painel segue dentro da sua barreira de erro: um painel que
+    // falhasse desmontava a arvore React inteira e a aba ficava branca - o
+    // usuario perdia o app sem saber qual era o culpado.
     case 'robot': return <RobotTabs />;
     // Performance & Analytics foi fundida no Histórico: as duas telas
     // analisam a mesma coisa — as operações realizadas.

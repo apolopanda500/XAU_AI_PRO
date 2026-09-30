@@ -707,11 +707,11 @@ class ChartsTab:
         row1 = tk.Frame(self.frame, bg=Theme.BG)
         row1.pack(fill="x", padx=24, pady=(8, 4))
         tk.Label(row1, text="Ativo", bg=Theme.BG, fg=Theme.TEXT_SECONDARY).pack(side="left")
-        self.sym_var = tk.StringVar(value="XAUUSD")
+        self.sym_var = tk.StringVar(value="")
         tk.Entry(row1, textvariable=self.sym_var, width=10, bg=Theme.PANEL, fg=Theme.TEXT,
                  insertbackground=Theme.TEXT, relief="flat").pack(side="left", padx=(4, 12))
         tk.Label(row1, text="Timeframe", bg=Theme.BG, fg=Theme.TEXT_SECONDARY).pack(side="left")
-        self.tf_var = tk.StringVar(value="M5")
+        self.tf_var = tk.StringVar(value="")
         for tf in TFORDER:
             tk.Radiobutton(row1, text=tf, variable=self.tf_var, value=tf, bg=Theme.BG,
                            fg=Theme.TEXT_SECONDARY, selectcolor=Theme.PANEL,

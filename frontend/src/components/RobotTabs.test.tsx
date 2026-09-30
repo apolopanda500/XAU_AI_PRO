@@ -1,28 +1,29 @@
 // @vitest-environment jsdom
-// Sub-abas da aba Robô.
+// A aba ROBÔ virou UMA SÓ em 2026-09-29.
 //
-// Antes a aba devolvia oito painéis empilhados num único scroll; depois
-// viraram cinco; depois quatro; agora cinco de novo, com EA proprio — Ordem e
-// Ativos falavam do mesmo ativo, mas o Expert Advisor e outra responsabilidade
-// (inventario do terminal + heartbeat + comando). O teste garante (a) que as
-// cinco seções existem, (b) que só a ativa fica visível e (c) que os painéis
-// escondidos CONTINUAM MONTADOS — desmontar jogaria fora a conversa do
-// Copiloto e a seleção de ativo.
+// Antes: oito painéis num scroll, depois cinco, depois quatro, depois cinco com
+// EA próprio. Cada mudança reorganizava o mesmo conteúdo.
+//
+// Agora: uma sub-aba, "Operar", com a mesa inteira na ordem em que se opera —
+// automático, posições ao vivo, risco, ordem manual e guardian. "Sinal" e "EA"
+// saíram porque obrigavam a trocar de tela para responder "qual ativo e modelo?"
+// e "quanto posso arriscar?", que são a mesma pergunta.
+//
+// O que este teste garante:
+//   (a) existe uma única sub-aba;
+//   (b) os cinco painéis ficam MONTADOS juntos — desmontar jogaria fora a
+//       seleção de ativo e qualquer leitura em andamento.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 
-vi.mock('./RobotModelPanel', () => ({ default: () => <div data-testid="painel-modelo" /> }));
 vi.mock('./AutoEnginePanel', () => ({ default: () => <div data-testid="painel-auto" /> }));
 vi.mock('./OrderPanel', () => ({ default: () => <div data-testid="painel-ordem" /> }));
-vi.mock('./EAPanel', () => ({ default: () => <div data-testid="painel-ea" /> }));
 vi.mock('./tabs/RiskTab', () => ({ default: () => <div data-testid="painel-risco" /> }));
 vi.mock('./GuardianManager', () => ({ default: () => <div data-testid="painel-guardian" /> }));
-vi.mock('./RobotAssetTableFixed', () => ({ default: () => <div data-testid="painel-ativos" /> }));
-vi.mock('./CopilotPanel', () => ({ default: () => <div data-testid="painel-copiloto" /> }));
-vi.mock('./UniversalLiveTerminalLatest', () => ({ default: () => <div data-testid="painel-mini" /> }));
+vi.mock('./UniversalLiveTerminal', () => ({ default: () => <div data-testid="painel-mini" /> }));
 
 const { default: RobotTabs } = await import('./RobotTabs');
-const { useAppStore, ROBOT_SUBS } = await import('../hooks/useAppStore');
+const { useAppStore, ROBOT_SUBS, LEGADO_ROBOT_SUB } = await import('../hooks/useAppStore');
 
 const visivel = (id: string) => {
   const painel = document.getElementById(id);
@@ -30,68 +31,40 @@ const visivel = (id: string) => {
   return painel as HTMLElement;
 };
 
-describe('RobotTabs — sub-abas', () => {
+describe('RobotTabs — sub-aba unica', () => {
   beforeEach(() => {
-    useAppStore.setState({ robotSub: 'sinal' });
+    useAppStore.setState({ robotSub: 'operar' });
   });
   afterEach(() => cleanup());
 
-  it('oferece as cinco seções aprovadas, nesta ordem', () => {
+  it('oferece uma unica sub-aba, "Operar"', () => {
     render(<RobotTabs />);
-    const tablist = screen.getByRole('tablist', { name: 'Seções do Robô' });
+    const tablist = screen.getByRole('tablist', { name: 'Seções de operação' });
     const abas = Array.from(tablist.querySelectorAll('[role="tab"]')).map((b) => b.textContent);
-    expect(abas).toEqual(['Sinal', 'Automação', 'Mesa', 'EA', 'Copiloto']);
-    expect(ROBOT_SUBS).toEqual(['sinal', 'automacao', 'mesa', 'ea', 'copiloto']);
+    expect(abas).toEqual(['Operar']);
+    expect(ROBOT_SUBS).toEqual(['operar']);
   });
 
-  it('mostra só a seção ativa e mantém as demais montadas', () => {
+  it('a mesa inteira esta montada na mesma tela', () => {
     render(<RobotTabs />);
-    expect(screen.getByTestId('painel-modelo')).toBeTruthy();
-    expect(visivel('robot-panel-sinal').hidden).toBe(false);
-    expect(visivel('robot-panel-mesa').hidden).toBe(true);
-    expect(visivel('robot-panel-copiloto').hidden).toBe(true);
-    // Montados, so escondidos.
-    expect(screen.getByTestId('painel-ativos')).toBeTruthy();
-    expect(screen.getByTestId('painel-copiloto')).toBeTruthy();
-    expect(screen.getByTestId('painel-risco')).toBeTruthy();
-    expect(screen.getByTestId('painel-ordem')).toBeTruthy();
-    expect(screen.getByTestId('painel-ea')).toBeTruthy();
-  });
-
-  it('troca de seção e registra no store (persistindo a volta)', () => {
-    render(<RobotTabs />);
-    fireEvent.click(screen.getByRole('tab', { name: 'Mesa' }));
-    expect(useAppStore.getState().robotSub).toBe('mesa');
-    expect(visivel('robot-panel-mesa').hidden).toBe(false);
-    expect(visivel('robot-panel-sinal').hidden).toBe(true);
-    expect(screen.getByRole('tab', { name: 'Mesa' }).getAttribute('aria-selected')).toBe('true');
-    expect(screen.getByRole('tab', { name: 'Sinal' }).getAttribute('aria-selected')).toBe('false');
-  });
-
-  it('Sinal junta modelo e ativos; Automação junta motor, risco e guardian', () => {
-    render(<RobotTabs />);
-    expect(screen.getByTestId('painel-modelo')).toBeTruthy();
-    expect(screen.getByTestId('painel-ativos')).toBeTruthy();
-
-    fireEvent.click(screen.getByRole('tab', { name: 'Automação' }));
+    expect(visivel('robot-panel-operar').hidden).toBe(false);
+    // Ordem de operacao: decide -> acompanha -> envia -> protege.
+    // O Risco saiu daqui em 2026-09-29: ele trazia a parada de emergencia,
+    // que ja existia tambem no OrderPanel. Dois botoes de corte na mesma tela
+    // e o risco real de o operador clicar no errado; ficou so o do OrderPanel.
     expect(screen.getByTestId('painel-auto')).toBeTruthy();
-    expect(screen.getByTestId('painel-risco')).toBeTruthy();
-    expect(screen.getByTestId('painel-guardian')).toBeTruthy();
-    // Conferência, não comando: sempre visível, em qualquer sub-aba.
     expect(screen.getByTestId('painel-mini')).toBeTruthy();
+    expect(screen.getByTestId('painel-ordem')).toBeTruthy();
+    expect(screen.getByTestId('painel-guardian')).toBeTruthy();
+    // E o Risco NAO esta mais aqui.
+    expect(screen.queryByTestId('painel-risco')).toBeNull();
   });
 
-  it('abre na última seção usada quando o store já tem valor', () => {
-    useAppStore.setState({ robotSub: 'copiloto' });
-    render(<RobotTabs />);
-    expect(visivel('robot-panel-copiloto').hidden).toBe(false);
-    expect(screen.getByRole('tab', { name: 'Copiloto' }).getAttribute('aria-selected')).toBe('true');
-  });
-
-  it('nome antigo persistido (5 sub-abas) cai na sub-aba nova correspondente', async () => {
-    const { LEGADO_ROBOT_SUB } = await import('../hooks/useAppStore');
-    expect(LEGADO_ROBOT_SUB.ordem).toBe('mesa');
-    expect(LEGADO_ROBOT_SUB.ativos).toBe('sinal');
-    expect(LEGADO_ROBOT_SUB.operacao).toBe('automacao');
+  it('todo nome de sub-aba antigo cai em "operar"', () => {
+    // Quem usou a versao de cinco ou de quatro sub-abas tem 'sinal'/'ea' no
+    // localStorage; sem o mapa, a tela abriria vazia.
+    for (const nome of ['sinal', 'ea', 'copiloto', 'mesa', 'automacao', 'ativos', 'modelo']) {
+      expect(LEGADO_ROBOT_SUB[nome]).toBe('operar');
+    }
   });
 });

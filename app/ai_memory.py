@@ -32,11 +32,11 @@ CREATE INDEX IF NOT EXISTS idx_mem_ts ON memories(ts);
 """
 
 FACTS_DEFAULT = [
-    "XAUUSD e negociado em USD por onca troy; liquidez alta em Londres e NY.",
-    "O EA usa predicoes do pipeline Python (XGBoost) salvas em MQL5/Files/Data.",
+    "Metais sao cotados em USD por onca troy; liquidez alta em Londres e NY.",
+    "O EA usa predicoes do pipeline Python salvas em MQL5/Files/Data.",
     "Aporte de risco controlado por RiskPercent, MaxDailyLossPercent e MaxDrawdownPercent.",
-    "Regioes de alta liquidez do ouro: 03:00-05:00 e 09:00-12:00 (horario de Brasilia).",
-    "Fatos de mercado: ouro tende a subir com juros reais caindo e stress global.",
+    "Regioes de alta liquidez: abertura de Londres e NY (horario de Brasilia).",
+    "Fatos de mercado: ativos refgio tendem a subir com juros reais caindo e stress global.",
 ]
 
 
@@ -179,7 +179,7 @@ def _ctx_answer(q: str) -> str:
 
 def _data_answer(q: str) -> str:
     if any(w in q for w in ("mercado", "cotacao", "preco", "ouro")):
-        return "Dados disponiveis: cotacoes XAUUSD via MT5/MarketData, predicoes em Files/Data, calendario economico."
+        return "Dados disponiveis: cotacoes do ativo selecionado via MT5/MarketData, predicoes em Files/Data, calendario economico."
     if any(w in q for w in ("posicao", "trade", "lucro")):
         return "Dados: posicoes abertas, historico de deals e saldo disponiveis via MT5Robot/MT5 sync."
     return "Dados disponiveis: dashboard com predicao, dataset, feedbacks, sala e historico do robo."

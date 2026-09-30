@@ -24,7 +24,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { apiBase } from '../lib/api';
 import { notify } from '../lib/notify';
 import { useAutoState } from '../hooks/queries';
-import { SIMBOLO_PRINCIPAL } from '../lib/constants';
 import '../theme/auto-engine.css';
 
 const API = `${apiBase()}`;
@@ -80,18 +79,22 @@ export default function AutoEnginePanel() {
   });
   const [status, setStatus] = useState('');
   const [ocupado, setOcupado] = useState(false);
+  // 'auto' = o motor decide; 'manual' = o operador decide. Uma mao por vez.
+  // O modo nasce do motor ligado: se ele ja estava operando, o operador esta
+  // vendo o automatico, e trocar para manual tem de desligar o motor — nunca
+  // deixar os dois decidindo a mesma conta.
+  const [modo, setModo] = useState<'auto' | 'manual'>('auto');
 
   // Mesma queryKey do Mini Terminal: um polling so para /api/auto/state,
   // compartilhado entre a sub-aba e a faixa de conferencia.
   const autoQ = useAutoState();
   const estado = (autoQ.data as Estado | undefined) ?? null;
 
-  // Pares que TEM modelo carregavel. Sem isto o operador escolheria BTCUSD H4
-  // e o motor ligaria para depois recusar todo ciclo em `_trava_instrumento`.
+  // Pares que TEM modelo carregavel. Sem isto o operador escolheria um ativo
+  // sem modelo e o motor ligaria para depois recusar todo ciclo.
   const [modelos, setModelos] = useState<Modelo[]>([]);
-  const [simbolo, setSimbolo] = useState(SIMBOLO_PRINCIPAL);
-  const [timeframe, setTimeframe] = useState('H1');
-  const iniciadoRef = useRef(false);
+  const [simbolo, setSimbolo] = useState('');
+  const [timeframe, setTimeframe] = useState('');
 
   useEffect(() => {
     const controller = new AbortController();
@@ -112,11 +115,7 @@ export default function AutoEnginePanel() {
 
   const simbolos = useMemo(() => {
     const unicos = [...new Set(pares.map((p) => p.simbolo))];
-    unicos.sort((a, b) => {
-      if (a === SIMBOLO_PRINCIPAL) return -1;
-      if (b === SIMBOLO_PRINCIPAL) return 1;
-      return a.localeCompare(b);
-    });
+    unicos.sort((a, b) => a.localeCompare(b));
     return unicos;
   }, [pares]);
 
@@ -125,18 +124,40 @@ export default function AutoEnginePanel() {
     [pares, simbolo],
   );
 
-  // O par escolhido nasce do que o motor ja esta operando. Depois disso quem
-  // manda e o operador: o polling nao pode voltar o select para o valor antigo
-  // enquanto ele esta escolhendo outro ativo.
+  // OS CAMPOS DO OPERADOR NAO VOLTAM DO POLLING (2026-09-29).
+  //
+  // `useAutoState` refetcha a cada 5 s. Antes, os dois efeitos abaixo
+  // reescreviam `simbolo`, `timeframe` e os dez limites a cada resposta: o
+  // operador digitava 60, o polling chegava e devolvia 55. Na pratica os campos
+  // ficavam presos e as ordens saiam com um limite que ninguem tinha escolhido.
+  // O sintoma era "os comandos nao funcionam" e "a confianca fica em 55".
+  //
+  // Regra agora: o servidor preenche os campos UMA vez, no primeiro snapshot.
+  // Depois disso quem manda e o operador — ate ele apertar "Aplicar".
+  const [sujo, setSujo] = useState(false);
+  const aplicadoRef = useRef(false);
+
   useEffect(() => {
-    if (iniciadoRef.current || !estado) return;
+    if (!estado || sujo || aplicadoRef.current) return;
     if (estado.simbolo) setSimbolo(String(estado.simbolo).toUpperCase());
     if (estado.timeframe) setTimeframe(String(estado.timeframe).toUpperCase());
-    iniciadoRef.current = true;
-  }, [estado]);
+    const l = estado.limites;
+    if (l) {
+      setLimites((atual) => {
+        const seguinte = { ...atual };
+        for (const campo of CAMPOS) {
+          const v = l[campo.chave];
+          if (typeof v === 'number' && !Number.isNaN(v)) seguinte[campo.chave] = v;
+        }
+        return seguinte;
+      });
+    }
+  }, [estado?.updated_at, estado, sujo]);
 
-  // A lista de modelos chega depois do estado. Se o par do motor nao existir
-  // mais no disco, cai no primeiro disponivel em vez de deixar select invalido.
+  // O par so pode vir da lista de modelos COM modelo carregavel. Se o motor
+  // esta em um par reprovado (XAUUSD M15 tem edge 0.0498 contra minimo 0.0500),
+  // o select cai no primeiro valido em vez de deixar o operador escolher algo
+  // que o motor vai recusar com "modelo ausente".
   useEffect(() => {
     if (!simbolos.length) return;
     setSimbolo((atual) => (simbolos.includes(atual) ? atual : simbolos[0]));
@@ -147,26 +168,17 @@ export default function AutoEnginePanel() {
     setTimeframe((atual) => (periodos.includes(atual) ? atual : periodos[0]));
   }, [periodos]);
 
+  // Marcar "o operador mexeu" e o que tira o painel da sombra do servidor.
+  const marcar = <T extends keyof Limites>(campo: T, valor: Limites[T]) => {
+    setSujo(true);
+    setLimites((l) => ({ ...l, [campo]: valor }));
+  };
+
   // Sem poll proprio: `useAutoState` ja refetcha a cada 5s, junto com o Mini
   // Terminal. Aqui so traduzimos a falha em texto para o operador.
   useEffect(() => {
     if (autoQ.isError && !estado) setStatus('Gateway indisponivel');
   }, [autoQ.isError, estado]);
-
-  // Os limites mudam no painel; o estado so e sobrescrito enquanto o operador
-  // nao digitou nada, para o polling nao apagar o que esta sendo editado.
-  useEffect(() => {
-    const l = estado?.limites;
-    if (!l) return;
-    setLimites((atual) => {
-      const seguinte = { ...atual };
-      for (const campo of CAMPOS) {
-        const v = l[campo.chave];
-        if (typeof v === 'number' && !Number.isNaN(v)) seguinte[campo.chave] = v;
-      }
-      return seguinte;
-    });
-  }, [estado?.updated_at]);
 
   const enviar = async (caminho: string, corpo?: Record<string, unknown>) => {
     if (ocupado) return;
@@ -220,14 +232,49 @@ export default function AutoEnginePanel() {
     <section className="card compact-card auto-engine" aria-labelledby="auto-engine-title">
       <div className="section-head">
         <div>
-          <h2 id="auto-engine-title">Operacao automatica</h2>
-          <span className="muted">O motor avalia o modelo e envia ordens sozinho, dentro dos limites abaixo</span>
+          <h2 id="auto-engine-title">Operacao</h2>
+          <span className="muted">Manual a mao ou automatico — os dois no mesmo lugar, com o mesmo par de ativo</span>
         </div>
         <div className="btn-row">
-          <span className={`chip ${ativo ? 'ok' : 'warn'}`}>{ativo ? 'Operando' : 'Parado'}</span>
+          <span className={`chip ${ativo ? 'ok' : 'warn'}`}>{ativo ? 'Automatico operando' : 'Automatico parado'}</span>
           <span className="chip">{estado?.simbolo ?? '--'} {estado?.timeframe ?? ''}</span>
           <span className="chip">ciclo {estado?.ciclo ?? 0}</span>
         </div>
+      </div>
+
+      {/* DUAS MAIOS NA MESMA MESA (2026-09-29).
+
+          Antes o operador tinha duas telas: o painel do motor automatico e, duas
+          sub-abas abaixo, o `OrderPanel` da ordem manual. Para mandar uma ordem
+          na mao ele trocava de contexto; para ligar o motor, voltava. As duas
+          coisas usam o MESMO par de ativo — e nada na tela dizia isso.
+
+          Aqui o manual vem logo abaixo dos controles, com o par que ja esta
+          selecionado acima. Quem aperta "Operar manualmente" desliga o motor
+          primeiro: os dois nao devem decidir a mesma conta ao mesmo tempo. */}
+
+      <div className="auto-engine-modes" role="group" aria-label="Modo de operacao">
+        <button
+          type="button"
+          className={`btn sm ${modo === 'manual' ? 'primary' : ''}`}
+          aria-pressed={modo === 'manual'}
+          onClick={() => setModo('manual')}
+        >
+          Operar na mao
+        </button>
+        <button
+          type="button"
+          className={`btn sm ${modo === 'auto' ? 'primary' : ''}`}
+          aria-pressed={modo === 'auto'}
+          onClick={() => setModo('auto')}
+        >
+          Deixar o motor
+        </button>
+        <span className="muted">
+          {modo === 'manual'
+            ? 'Voce envia a ordem. O motor fica parado.'
+            : 'O motor avalia a cada intervalo. A ordem manual e bloqueada.'}
+        </span>
       </div>
 
       {/* O MOTOR OPERA UM PAR POR VEZ: escolher ativo + periodo e escolher
@@ -239,7 +286,7 @@ export default function AutoEnginePanel() {
             aria-label="Ativo do motor automatico"
             value={simbolo}
             disabled={!simbolos.length}
-            onChange={(e) => setSimbolo(e.target.value.toUpperCase())}
+            onChange={(e) => { setSujo(true); setSimbolo(e.target.value.toUpperCase()); }}
           >
             {!simbolos.length && <option value={simbolo}>{simbolo}</option>}
             {simbolos.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -251,7 +298,7 @@ export default function AutoEnginePanel() {
             aria-label="Periodo do motor automatico"
             value={timeframe}
             disabled={!periodos.length}
-            onChange={(e) => setTimeframe(e.target.value.toUpperCase())}
+            onChange={(e) => { setSujo(true); setTimeframe(e.target.value.toUpperCase()); }}
           >
             {!periodos.length && <option value={timeframe}>{timeframe}</option>}
             {periodos.map((t) => <option key={t} value={t}>{t}</option>)}
@@ -272,7 +319,7 @@ export default function AutoEnginePanel() {
               type="number"
               step={campo.passo}
               value={String(limites[campo.chave])}
-              onChange={(e) => setLimites((l) => ({ ...l, [campo.chave]: num(e.target.value) }))}
+              onChange={(e) => marcar(campo.chave, num(e.target.value))}
             />
           </label>
         ))}

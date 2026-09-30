@@ -1,4 +1,4 @@
-// Hook WebSocket do protocolo v1 (XAU AI PRO Core).
+﻿// Hook WebSocket do protocolo v1 (XAU AI PRO Core).
 // Handshake Hello, heartbeat com latencia e reconexao com backoff.
 
 import { useEffect, useRef, useCallback } from 'react';
@@ -9,16 +9,14 @@ import {
   WS_PING_INTERVAL_MS,
   type WsMessageV1,
 } from '../lib/protocol';
-import { DEFAULT_SYMBOLS, normalizeSymbols } from '../lib/constants';
+import { normalizeSymbols } from '../lib/constants';
 
 const getWsUrl = (): string => wsUrl();
 const nowMs = (): number => Date.now();
 
-// Símbolos ativos: watchlist informada pelo painel ou o padrão do protocolo.
-const desiredSymbols = (): string[] => {
-  const wanted = useAppStore.getState().subscribeSymbols;
-  return wanted.length ? wanted : [...DEFAULT_SYMBOLS];
-};
+// Simbolos ativos: somente a watchlist escolhida pelo operador. Sem fallback
+// fixo - o Core nao deve receber um portfolio que o usuario nao pediu.
+const desiredSymbols = (): string[] => useAppStore.getState().subscribeSymbols;
 
 const newRequestId = (): string =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -85,7 +83,7 @@ export function useMarketWebSocket() {
           retryRef.current = 0;
           setWsConnected(true);
           {
-            // Subscribe dinâmico: watchlist atual (ou padrão do protocolo) no handshake.
+            // Subscribe dinamico: a watchlist atual no handshake.
             const symbols = desiredSymbols();
             subscribedRef.current = symbols;
             ws.send(JSON.stringify({ type: 'Subscribe', symbols }));

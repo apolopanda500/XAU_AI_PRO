@@ -47,7 +47,7 @@ function lerPreco(valor: unknown, padrao: number): number {
   return Number.isFinite(n) ? n : padrao;
 }
 
-export default function RobotAssetTableFixed() {
+export default function RobotAssetTable() {
   const addQuote = useAppStore((s) => s.addQuote);
   const quotes = useAppStore((s) => s.quotes);
   const selected = useAppStore((s) => s.selectedSymbol);

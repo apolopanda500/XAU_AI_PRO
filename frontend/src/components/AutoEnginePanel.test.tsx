@@ -1,9 +1,9 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 // Painel de operação automática.
 //
 // O motor já aceitava `simbolo` e `timeframe` em `/api/auto/config`
 // (auto_engine.MotorAuto.configurar) e o painel nunca mandava: a tela ficava
-// presa em XAUUSD H1 sem nenhuma opção. Aqui se fixa que (a) só aparecem pares
+// presa em um unico par e período sem nenhuma opção. Aqui se fixa que (a) só aparecem pares
 // COM modelo no disco — `_trava_instrumento()` recusa ciclo sem modelo, então
 // um par sem `.pkl` deixaria o motor "ligado" que nunca opera —, (b) Aplicar
 // manda ativo + período junto com os limites e (c) sobram três comandos
@@ -15,7 +15,7 @@ const E = vi.hoisted(() => ({
   data: {
     ativo: false,
     ciclo: 3,
-    simbolo: 'XAUUSD',
+    simbolo: 'ATIVOA',
     timeframe: 'H1',
     threads: 4,
     limites: {},
@@ -30,10 +30,10 @@ vi.mock('../hooks/queries', () => ({
 vi.mock('../lib/notify', () => ({ notify: vi.fn() }));
 
 const MODELOS = [
-  { id: 'XAUUSD_H1', symbol: 'XAUUSD', timeframe: 'H1', pkl_present: true },
-  { id: 'XAUUSD_H4', symbol: 'XAUUSD', timeframe: 'H4', pkl_present: true },
-  { id: 'BTCUSD_H1', symbol: 'BTCUSD', timeframe: 'H1', pkl_present: true },
-  { id: 'EURUSD_H1', symbol: 'EURUSD', timeframe: 'H1', pkl_present: true },
+  { id: 'ATIVO_A_60', symbol: 'ATIVOA', timeframe: 'H1', pkl_present: true },
+  { id: 'ATIVO_A_240', symbol: 'ATIVOA', timeframe: 'H4', pkl_present: true },
+  { id: 'ATIVOB_60', symbol: 'ATIVOB', timeframe: 'H1', pkl_present: true },
+  { id: 'ATIVOC_60', symbol: 'ATIVOC', timeframe: 'H1', pkl_present: true },
   { id: 'GBPUSD_H1', symbol: 'GBPUSD', timeframe: 'H1', pkl_present: false },
 ];
 
@@ -70,14 +70,14 @@ describe('AutoEnginePanel — par, comandos e config', () => {
     vi.unstubAllGlobals();
   });
 
-  it('lista só os ativos que têm modelo, com XAUUSD na frente', async () => {
+  it('lista so os ativos que tem modelo, em ordem alfabetica', async () => {
     render(<AutoEnginePanel />);
     const sel = await screen.findByLabelText('Ativo do motor automatico') as HTMLSelectElement;
     await waitFor(() => expect(sel.options.length).toBe(3));
-    expect(sel.value).toBe('XAUUSD');
+    expect(sel.value).toBe('ATIVOA');
     // GBPUSD tem `.pkl_present: false`: fica de fora, senão o motor liga e
     // nunca opera.
-    expect([...sel.options].map((o) => o.value)).toEqual(['XAUUSD', 'BTCUSD', 'EURUSD']);
+    expect([...sel.options].map((o) => o.value)).toEqual(['ATIVOA', 'ATIVOB', 'ATIVOC']);
   });
 
   it('o período acompanha o ativo escolhido', async () => {
@@ -88,7 +88,7 @@ describe('AutoEnginePanel — par, comandos e config', () => {
     const periodo = screen.getByLabelText('Periodo do motor automatico') as HTMLSelectElement;
     expect([...periodo.options].map((o) => o.value)).toEqual(['H1', 'H4']);
 
-    fireEvent.change(sel, { target: { value: 'BTCUSD' } });
+    fireEvent.change(sel, { target: { value: 'ATIVOB' } });
     await waitFor(() => {
       const p = screen.getByLabelText('Periodo do motor automatico') as HTMLSelectElement;
       expect([...p.options].map((o) => o.value)).toEqual(['H1']);
@@ -100,12 +100,12 @@ describe('AutoEnginePanel — par, comandos e config', () => {
     const sel = await screen.findByLabelText('Ativo do motor automatico') as HTMLSelectElement;
     await waitFor(() => expect(sel.options.length).toBe(3));
 
-    fireEvent.change(sel, { target: { value: 'BTCUSD' } });
+    fireEvent.change(sel, { target: { value: 'ATIVOB' } });
     fireEvent.click(screen.getByRole('button', { name: 'Aplicar' }));
 
     await waitFor(() => expect(chamadas.some((c) => c.url.includes('/api/auto/config'))).toBe(true));
     const config = chamadas.find((c) => c.url.includes('/api/auto/config'));
-    expect(config?.body.simbolo).toBe('BTCUSD');
+    expect(config?.body.simbolo).toBe('ATIVOB');
     expect(config?.body.timeframe).toBe('H1');
     expect(config?.body.banca).toBe(20);
     expect(config?.body.risco_por_trade_pct).toBe(1);
@@ -121,7 +121,12 @@ describe('AutoEnginePanel — par, comandos e config', () => {
     expect(nomes).toContain('Aplicar');
     expect(nomes).toContain('Ligar');
     expect(nomes).toContain('Desligar');
-    expect(nomes).toHaveLength(3);
+    // 5 botoes: os 3 de comando (Aplicar, Ligar, Desligar) mais os 2 de modo
+    // de operacao (Operar na mao / Deixar o motor), que chegaram em
+    // 2026-09-29 para fundir o manual dentro do automatico.
+    expect(nomes).toHaveLength(5);
+    expect(nomes).toContain('Operar na mao');
+    expect(nomes).toContain('Deixar o motor');
     expect(document.body.textContent).not.toContain('Rodar um ciclo');
   });
 
@@ -129,7 +134,10 @@ describe('AutoEnginePanel — par, comandos e config', () => {
     E.data.ativo = true;
     render(<AutoEnginePanel />);
 
-    expect(screen.getByText('Operando')).toBeTruthy();
+    // O rotulo do motor ficou "Automatico operando" (era "Operando") em
+    // 2026-09-29: com os dois modos na mesma tela, "Operando" sozinho era
+    // ambigo — parecia que a ordem manual tambem estava operando.
+    expect(screen.getByText('Automatico operando')).toBeTruthy();
     expect((screen.getByRole('button', { name: 'Ligar' }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole('button', { name: 'Desligar' }) as HTMLButtonElement).disabled).toBe(false);
   });

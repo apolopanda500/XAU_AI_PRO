@@ -191,7 +191,7 @@ class ToolsTab:
         self.alert_sym = tk.Entry(alerts_form, width=9, bg=Theme.PANEL, fg=Theme.TEXT,
                                   insertbackground=Theme.TEXT, relief="flat",
                                   highlightbackground=Theme.BORDER, highlightthickness=1)
-        self.alert_sym.insert(0, "XAUUSD")
+        self.alert_sym.insert(0, "")
         self.alert_sym.pack(side="left", padx=4)
         tk.Label(alerts_form, text="Preco", bg=Theme.CARD, fg=Theme.TEXT_SECONDARY).pack(side="left", padx=4)
         self.alert_price = tk.Entry(alerts_form, width=10, bg=Theme.PANEL, fg=Theme.TEXT,
@@ -467,7 +467,10 @@ class ToolsTab:
     # Alertas de preco
     # ------------------------------------------------------------------
     def _add_alert(self) -> None:
-        symbol = (self.alert_sym.get().strip() or "XAUUSD").upper()
+        symbol = (self.alert_sym.get().strip() or "").upper()
+        if not symbol:
+            self.on_status("Informe o simbolo do alerta")
+            return
         try:
             price = float(self.alert_price.get().strip())
             if price <= 0:

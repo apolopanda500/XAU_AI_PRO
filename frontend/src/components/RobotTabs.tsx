@@ -32,33 +32,21 @@
 import type { ReactNode } from 'react';
 import { useAppStore, ROBOT_SUBS, type RobotSub } from '../hooks/useAppStore';
 import ErrorBoundary from './ErrorBoundary';
-import RobotModelPanel from './RobotModelPanel';
 import AutoEnginePanel from './AutoEnginePanel';
 import OrderPanel from './OrderPanel';
-import EAPanel from './EAPanel';
 import RiskTab from './tabs/RiskTab';
 import GuardianManager from './GuardianManager';
-import RobotAssetTable from './RobotAssetTableFixed';
-import CopilotPanel from './CopilotPanel';
-import UniversalLiveTerminal from './UniversalLiveTerminalLatest';
+import UniversalLiveTerminal from './UniversalLiveTerminal';
 import '../theme/robot-subtabs.css';
 // Densidade das tabelas do Histórico, aplicada também às do Robô (M3).
 import '../theme/history-grid.css';
 
 const ROTULOS: Record<RobotSub, string> = {
-  sinal: 'Sinal',
-  automacao: 'Automação',
-  mesa: 'Mesa',
-  ea: 'EA',
-  copiloto: 'Copiloto',
+  operar: 'Operar',
 };
 
 const RESUMOS: Record<RobotSub, string> = {
-  sinal: 'Ativo com cotação, modelo treinado e previsão do próximo candle.',
-  automacao: 'Motor automático, limites de risco e proteção de posição.',
-  mesa: 'Ticket manual à mão: volume, SL, TP e a parada de emergência.',
-  ea: 'Expert Advisors no terminal: inventário, heartbeat e comandos.',
-  copiloto: 'Conversa com o analista e achados sobre o código do EA.',
+  operar: 'Automático, posições e ordem manual — a mesa inteira num lugar só.',
 };
 
 function Secao({ nome, children }: { nome: string; children: ReactNode }) {
@@ -69,23 +57,33 @@ export default function RobotTabs() {
   const sub = useAppStore((s) => s.robotSub);
   const setSub = useAppStore((s) => s.setRobotSub);
 
+  // UMA ABA SO PARA OPERAR (2026-09-29).
+  //
+  // "Sinal" e "EA" saíram como sub-abas porque separadas obrigavam o operador a
+  // trocar de tela para responder "qual ativo e modelo?" e "quanto posso
+  // arriscar?" — duas perguntas que precisam da MESMA resposta, na mesma hora.
+  //
+  // O `RiskTab` saiu daqui por outro motivo: ele trazia a PARADA DE
+  // EMERGENCIA, que ja existia tambem no `OrderPanel`. Dois botoes de corte
+  // na mesma tela, em lados opostos, e o risco real de o operador clicar no
+  // errado. A parada de emergencia continua no `OrderPanel` (que e onde se
+  // envia a ordem) e no risco, mas como leitura — o corte de verdade e o
+  // botao unico do OrderPanel.
+  //
+  // Ordem da mesa, na sequencia em que se opera:
+  //   1. automatico  — liga o motor e escolhe ativo/modelo
+  //   2. posições    — o que esta aberto agora (conferencia, sempre visivel)
+  //   3. ordem       — compra/venda a mao
+  //   4. guardian    — protecao e trailing
   const paineis: Record<RobotSub, ReactNode> = {
-    sinal: (
-      <>
-        <Secao nome="Modelo e sinal"><RobotModelPanel /></Secao>
-        <Secao nome="Ativos da corretora"><RobotAssetTable /></Secao>
-      </>
-    ),
-    automacao: (
+    operar: (
       <>
         <Secao nome="Operação automática"><AutoEnginePanel /></Secao>
-        <Secao nome="Risco"><RiskTab /></Secao>
+        <Secao nome="Posições ao vivo"><UniversalLiveTerminal /></Secao>
+        <Secao nome="Ordem manual"><OrderPanel /></Secao>
         <Secao nome="Guardian"><GuardianManager /></Secao>
       </>
     ),
-    mesa: <Secao nome="Execução"><OrderPanel /></Secao>,
-    ea: <Secao nome="Expert Advisors"><EAPanel /></Secao>,
-    copiloto: <Secao nome="Copiloto"><CopilotPanel /></Secao>,
   };
 
   return (
@@ -93,10 +91,10 @@ export default function RobotTabs() {
       <div className="page-head">
         <div>
           <span className="eyebrow">OPERAÇÃO</span>
-          <h1>Robô</h1>
+          <h1>ROBÔ</h1>
           <span className="muted">{RESUMOS[sub]}</span>
         </div>
-        <div className="btn-row robot-subtabs" role="tablist" aria-label="Seções do Robô">
+        <div className="btn-row robot-subtabs" role="tablist" aria-label="Seções de operação">
           {ROBOT_SUBS.map((id) => (
             <button
               key={id}
@@ -126,8 +124,6 @@ export default function RobotTabs() {
           {paineis[id]}
         </div>
       ))}
-
-      <ErrorBoundary nome="Mini Terminal"><UniversalLiveTerminal /></ErrorBoundary>
     </main>
   );
 }

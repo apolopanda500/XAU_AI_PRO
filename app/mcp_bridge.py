@@ -40,8 +40,12 @@ def bridge_sequential_to_db(thought: str, query: str | None = None) -> dict[str,
     return {"ok": bool(steps) and all(step.get("ok") for step in steps), "steps": steps, "ts": time.time()}
 
 
-def bridge_market_to_memory(symbol: str = "XAUUSD") -> dict[str, Any]:
+def bridge_market_to_memory(symbol: str = "") -> dict[str, Any]:
     """Pipeline: cotacao (TradingView/AlphaVantage/MT5) -> memoria."""
+    from app.market_symbols import default_symbol_fallback
+    symbol = symbol or default_symbol_fallback()
+    if not symbol:
+        return {"ok": False, "steps": [], "quote": None, "ts": time.time(), "error": "simbolo nao informado"}
     steps: list[dict[str, Any]] = []
     quote = None
 
@@ -84,7 +88,12 @@ def bridge_market_to_memory(symbol: str = "XAUUSD") -> dict[str, Any]:
     return {"ok": quote is not None, "steps": steps, "quote": quote, "ts": time.time()}
 
 
-def bridge_analysis_pipeline(thought: str, symbol: str = "XAUUSD") -> dict[str, Any]:
+def bridge_analysis_pipeline(thought: str, symbol: str = "") -> dict[str, Any]:
+    """Pipeline completa: pensamento + cotacao + sincronizacao MT5 + memoria."""
+    from app.market_symbols import default_symbol_fallback
+    symbol = symbol or default_symbol_fallback()
+    if not symbol:
+        return {"ok": False, "steps": [], "ts": time.time(), "error": "simbolo nao informado"}
     """Pipeline completa: pensamento + cotacao + sincronizacao MT5 + memoria."""
     steps: list[dict[str, Any]] = [{"server": "agent_reasoning", "ok": True, "result": thought}]
     r_mkt = bridge_market_to_memory(symbol)

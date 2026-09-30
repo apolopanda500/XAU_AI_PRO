@@ -38,36 +38,11 @@ from app.components.button import ProButton
 from app.tabs.charts import ChartCanvas
 from app.data.assets import (get_default_symbols, search_assets, get_categories,
                              get_assets_by_category, get_tv_symbol, get_asset)
+from app.market_symbols import default_symbol_fallback
 
-DEFAULT_SYMBOLS = [
-    # Foco operacional do robo (F1: instancia unica, 11 simbolos oficiais)
-    "XAUUSD",
-    "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "NZDUSD",
-    "USDCHF", "USDBRL", "USDSEK", "USDCNH",
-    # Metais e energia (cobertura ouro/prata/petroleo)
-    "XAGUSD", "XPTUSD", "XPDUSD", "WTI", "BRENT", "USOIL", "UKOIL", "NG",
-    # Forex majors/crosses liquidos
-    "EURGBP", "EURJPY", "GBPJPY", "AUDJPY", "CADJPY", "AUDNZD", "USDMXN",
-    # Cripto principais (MT5 + fallback exchange)
-    "BTCUSD", "ETHUSD", "BNBUSD", "SOLUSD", "XRPUSD", "DOGEUSD", "ADAUSD",
-    "LTCUSD", "LINKUSD", "DOTUSD",
-    # Indices globais
-    "SPX500", "NAS100", "US30", "DAX40", "FTSE100", "NIKKEI225",
-    "BOVESPA", "US500", "US100",
-    # Acoes EUA + Brasil (day-trade e swing)
-    "AAPL", "MSFT", "NVDA", "TSLA", "GOOGL", "AMZN", "META",
-    "PETR4", "VALE3", "ITUB4", "BBDC4", "WEGE3",
-]
+DEFAULT_SYMBOLS: list[str] = []
 
-# Mapeamento para TradingView (simbolo do app -> feed corretora/exchange).
-TV_SYMBOL_MAP = {
-    "XAUUSD": "OANDA:XAUUSD", "XAUUSDC": "OANDA:XAUUSD", "GOLD": "OANDA:XAUUSD",
-    "BTCUSD": "BINANCE:BTCUSDT", "BTCUSDC": "BINANCE:BTCUSDT",
-    "ETHUSD": "BINANCE:ETHUSDT", "ETHUSDC": "BINANCE:ETHUSDT",
-    "EURUSD": "OANDA:EURUSD", "GBPUSD": "OANDA:GBPUSD", "USDJPY": "OANDA:USDJPY",
-    "AUDUSD": "OANDA:AUDUSD", "USDCAD": "OANDA:USDCAD", "NZDUSD": "OANDA:NZDUSD",
-    "USDCHF": "OANDA:USDCHF", "US30": "TVC:DJI", "SPX500": "TVC:SPX",
-    "NAS100": "TVC:NDX", "GER40": "XETR:DAX", "UK100": "TVC:UKX",
+TV_SYMBOL_MAP: dict[str, str] = {
 }
 
 
@@ -97,7 +72,7 @@ class TradingViewMarket(tk.Frame):
         self._running = False
         self._busy = False
         self._quotes: dict = {}
-        self._selected = "XAUUSD"
+        self._selected = default_symbol_fallback()
         self._watch_vars = {}
         self._symbols: list[str] = []
         # Cola thread-safe worker -> hilo principal (Tkinter).
@@ -265,8 +240,9 @@ class TradingViewMarket(tk.Frame):
         chart_head.pack(fill="x", pady=(10, 2))
         tk.Label(chart_head, text="Grafico", bg=Theme.CARD, fg=Theme.TEXT_SECONDARY,
                  font=(Theme.FONT_FAMILY, 8)).pack(side="left")
-        self.chart_tf_var = tk.StringVar(value="M5")
-        for _tf in ("M1", "M5", "M15", "H1", "H4", "D1"):
+        from app.market_symbols import DEFAULT_TIMEFRAME, TIMEFRAMES as _TFS
+        self.chart_tf_var = tk.StringVar(value="")
+        for _tf in [t for t in _TFS if t != "MN1"]:
             tk.Radiobutton(chart_head, text=_tf, variable=self.chart_tf_var, value=_tf,
                            bg=Theme.CARD, fg=Theme.TEXT_MUTED, selectcolor=Theme.PANEL,
                            activebackground=Theme.CARD, activeforeground=Theme.TEXT,
@@ -448,9 +424,11 @@ class TradingViewMarket(tk.Frame):
         finally:
             self._busy = False
 
-    def _collect_candles(self, symbol: str, timeframe: str = "M5", limit: int = 80) -> list[dict]:
+    def _collect_candles(self, symbol: str, timeframe: str = "", limit: int = 80) -> list[dict]:
         """Candles do simbolo via MT5 local (best-effort, worker thread)."""
-        base = symbol[:-1] if symbol[-1:].upper() == "C" and len(symbol) > 4 else symbol
+        from app.market_symbols import DEFAULT_TIMEFRAME, base_symbol
+        timeframe = timeframe or DEFAULT_TIMEFRAME
+        base = base_symbol(symbol)
         try:
             from app.mt5_lock import mt5_lock
             import MetaTrader5 as mt5
@@ -461,7 +439,7 @@ class TradingViewMarket(tk.Frame):
                 if not mt5.initialize():
                     return []
                 mt5.symbol_select(base, True)
-                rates = mt5.copy_rates_from_pos(base, tfmap.get(timeframe, mt5.TIMEFRAME_M5), 0, limit)
+                rates = mt5.copy_rates_from_pos(base, tfmap.get(timeframe) or mt5.TIMEFRAME_M5, 0, limit)
             if rates is None or not len(rates):
                 return []
             from datetime import datetime

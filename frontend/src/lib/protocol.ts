@@ -1,4 +1,4 @@
-// Contrato TypeScript do protocolo v1 — espelho de core/src/protocol/mod.rs.
+﻿// Contrato TypeScript do protocolo v1 — espelho de core/src/protocol/mod.rs.
 // Gerado manualmente; qualquer mudança no Rust exige atualização aqui.
 // Envelope: `{ "protocol": "xau-ai-pro/1", "type": "<Variante>", ... }`
 
@@ -6,10 +6,10 @@ export const PROTOCOL_VERSION = '1.0.0';
 export const PROTOCOL_ENVELOPE = 'xau-ai-pro/1';
 export const WS_PING_INTERVAL_MS = 30000;
 
-// Lista canonica unica: ver lib/constants.ts. Antes esta lista era repetida
-// aqui, em hooks/useAppStore.ts e em components/tabs/MarketTab.tsx, e a copia
-// local comecava em BTCUSDT — num produto chamado XAU AI PRO.
-export { DEFAULT_SYMBOLS } from './constants';
+// Nao existe lista de simbolos no protocolo. O Core nao recebe um portfolio
+// fixo: o cliente assina o que o operador escolher na watchlist. Antes esta
+// lista era repetida aqui, em hooks/useAppStore.ts e em MarketTab.tsx, e
+// nenhuma das copias era a verdade.
 
 export type ClientKind = 'react' | 'ea_mt5' | 'cli' | 'unknown';
 

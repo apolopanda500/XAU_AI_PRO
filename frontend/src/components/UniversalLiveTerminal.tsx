@@ -16,7 +16,7 @@ type Account = { login?: number | string; name?: string; server?: string; curren
 // podiam resolver o mesmo par para mercados diferentes.
 import { escopoAtivo as activeAccount } from '../lib/escopoAtivo';
 
-export default function UniversalLiveTerminalLatest() {
+export default function UniversalLiveTerminal() {
   const statusQ = useCoreStatus();
   const accountQ = useAccount();
   const positionsQ = usePositions();
@@ -29,6 +29,9 @@ export default function UniversalLiveTerminalLatest() {
   // prova de que "ativar automático" teve efeito, sem abrir a configuração.
   const auto = autoQ.data;
   const autoAtivo = Boolean(auto?.ativo);
+  // A decisao mais recente do motor: o historico vem do mais novo para o mais
+  // velho (ver `MotorAuto._registrar`), entao o indice 0 e o ultimo ciclo.
+  const ultimaDecisao = Array.isArray(auto?.decisoes) ? auto.decisoes[0] : undefined;
 
   // O modo da conta (DEMO/REAL) aparece AQUI e em mais lugar nenhum da
   // interface: o Mini Terminal ja mostra saldo, patrimonio e posicoes, entao
@@ -156,6 +159,43 @@ export default function UniversalLiveTerminalLatest() {
             : (autoQ.isError ? 'sem leitura' : 'Desligado')}
         </strong>
       </span>
+      {/* O QUE O MOTOR ESTA FAZENDO AGORA (2026-09-29).
+
+          O painel de cima so dizia "Ligado". O operador nao tinha como saber,
+          sem abrir outra aba, qual modelo estava rodando nem o que ele
+          respondeu no ultimo ciclo. Ligar o automatico e ficar olhando um
+          "Ligado" sem sinal algum e indistinguivel de um motor que ligou e
+          nao faz nada — que era exatamente o bug do "erro no ciclo".
+
+          Aqui o par vem do proprio motor, o modelo vem do nome do artefato e
+          a ultima decisao vem do historico que `ciclo_unico` ja gravava. */}
+      {autoAtivo && (
+        <span title="Modelo e última decisão do ciclo em execução">
+          <em>Modelo</em>
+          <strong>
+            {auto?.simbolo && auto?.timeframe
+              ? `random_forest_${auto.simbolo}_${auto.timeframe}`
+              : '—'}
+          </strong>
+        </span>
+      )}
+      {autoAtivo && ultimaDecisao && (
+        <span title="Última decisão do motor automático">
+          <em>Último sinal</em>
+          <strong className={
+            /buy|compra/i.test(String(ultimaDecisao.side ?? '')) ? 'ok'
+              : /sell|venda/i.test(String(ultimaDecisao.side ?? '')) ? 'warn' : ''}>
+            {ultimaDecisao.side || ultimaDecisao.acao || 'NEUTRAL'}
+            {typeof ultimaDecisao.confianca === 'number' ? ` ${ultimaDecisao.confianca.toFixed(0)}%` : ''}
+          </strong>
+        </span>
+      )}
+      {autoAtivo && ultimaDecisao?.motivo && (
+        <span title="Por que o motor decidiu isso">
+          <em>Motivo</em>
+          <strong className="muted">{ultimaDecisao.motivo}</strong>
+        </span>
+      )}
     </div>
 
     <div className="table-scroll"><table className="tbl compact-table positions-table mt5-table">

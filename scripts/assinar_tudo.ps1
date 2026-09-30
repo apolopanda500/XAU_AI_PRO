@@ -133,14 +133,30 @@ function Invoke-WindowsSigning {
     # Layout separado: aceita 'release\1.2.3' ou 'release\1.2.3\windows'
     if (Test-Path (Join-Path $root 'windows')) { $root = Join-Path $root 'windows' }
 
+    # Os nomes dos instaladores carregam a versao no proprio arquivo. ate
+    # 2026-09-29 eles estavam fixos em 1.2.3 aqui, entao uma release nova
+    # abortava com "artefato ausente" mesmo com os arquivos corretamente
+    # gerados: o script procurava o nome da versao antiga. A versao vem do
+    # arquivo VERSION da raiz, que e a fonte usada por `sync_version.py` e
+    # pelo `release_production.cmd`.
+    $versao = '0.0.0'
+    $arquivoVersao = Join-Path $Repo 'VERSION'
+    if (Test-Path -LiteralPath $arquivoVersao) {
+        $versao = (Get-Content -LiteralPath $arquivoVersao -Raw).Trim()
+    }
+    if ($versao -notmatch '^\d+\.\d+\.\d+') {
+        throw "VERSION invalido em $arquivoVersao : '$versao'"
+    }
+    Write-Host "  versao da release: $versao"
+
     $alvos = @(
         'pyinstaller-XAU_AI_PRO\XAU_AI_PRO.exe',
         'xau-ai-pro-core.exe',
         'bridge\mt5-gateway.exe',
         'tauri\XAU AI PRO.exe',
-        'tauri\XAU AI PRO_1.2.3_x64_en-US.msi',
-        'tauri\XAU AI PRO_1.2.3_x64-setup.exe',
-        'XAU_AI_PRO_Setup_1.2.3.exe'
+        "tauri\XAU AI PRO_${versao}_x64_en-US.msi",
+        "tauri\XAU AI PRO_${versao}_x64-setup.exe",
+        "XAU_AI_PRO_Setup_${versao}.exe"
     ) | ForEach-Object { Join-Path $root $_ }
 
     # Falha barulhenta: pular um artefato em silencio produz uma release

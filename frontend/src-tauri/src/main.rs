@@ -421,6 +421,18 @@ fn core_atual_ativo() -> bool {
             == Some(env!("CARGO_PKG_VERSION"))
 }
 
+/// Le uma flag de execucao do AMBIENTE, com padrao fail-closed.
+///
+/// Ate 2026-09-29 o `.env("XAU_ENABLE_REAL_ORDERS", "1")` estava fixo em
+/// codigo compilado: dinheiro real ligado dentro do binario, sem forma de o
+/// operador desligar, e em conflito com o documento que dizia `0`. A decisao
+/// passa a ser do ambiente e auditavel. Saque e transferencia nao entram aqui:
+/// nenhuma flag os habilita, e o gateway mantem `withdrawals_enabled` e
+/// `transfers` em `false`.
+fn flag(nome: &str, padrao: &str) -> String {
+    std::env::var(nome).unwrap_or_else(|_| padrao.to_string())
+}
+
 fn spawn_bridge(app: &tauri::AppHandle) -> Result<(), String> {
     if bridge_atual_ativo() {
         return Ok(());
@@ -433,12 +445,18 @@ fn spawn_bridge(app: &tauri::AppHandle) -> Result<(), String> {
         .current_dir(path.parent().unwrap())
         .env("XAU_GATEWAY_TOKEN", token)
         .env("XAU_EXPECTED_GATEWAY_BUILD", EXPECTED_GATEWAY_BUILD)
-        .env("XAU_ENABLE_DEMO_ORDERS", "1")
-        .env("XAU_ENABLE_REAL_ORDERS", "1")
+        .env("XAU_ENABLE_DEMO_ORDERS", &flag("XAU_ENABLE_DEMO_ORDERS", "1"))
+        .env("XAU_ENABLE_REAL_ORDERS", &flag("XAU_ENABLE_REAL_ORDERS", "0"))
         .spawn()
         .map(|child| {
             register_child(child);
-            log_core("bridge MT5 spawnado com sucesso");
+            if flag("XAU_ENABLE_REAL_ORDERS", "0") == "1" {
+                // Fica no log porque e a unica diferenca entre operar em conta
+                // de teste e operar com dinheiro do cliente.
+                log_core("ATENCAO: XAU_ENABLE_REAL_ORDERS=1 - ordens reais habilitadas");
+            } else {
+                log_core("bridge MT5 spawnado com ordens reais DESLIGADAS");
+            }
         })
         .map_err(|e| format!("falha ao iniciar bridge MT5: {}", e))
 }

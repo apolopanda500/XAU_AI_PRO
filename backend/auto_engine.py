@@ -117,7 +117,23 @@ class Decisao:
 
 
 class MotorAuto:
-    """Estado e ciclo do motor. Thread unica, com trava de concorrencia."""
+    """Estado e ciclo do motor. Thread unica, com trava de concorrencia.
+
+    MULTI-CORRETORA (2026-09-29)
+    ===========================
+    Ate aqui o motor so tinha `simbolo` e `timeframe` e chamava `_trade_order`
+    do MT5 direto — a unica saida era o terminal. Os cinco adaptadores de
+    execucao (mt5, binance, mexc, bybit, okx) ja existiam em
+    `backend/*_execution.py`, e o `UniversalRouter.adapter_for` ja sabia
+    escolher entre eles por corretora e mercado; o motor simplesmente nao
+    usava esse caminho.
+
+    Agora `broker` e `market` sao estado do motor, validados contra o
+    catalogo de `broker_registry`. `market` vem de `MT5_MARKETS`
+    (forex, metals, indices, stocks, commodities, bonds, crypto-spot,
+    crypto-futures, other) para o MT5 e de `EXCHANGE_MARKETS`
+    (crypto-spot, crypto-futures) para as exchanges.
+    """
 
     def __init__(self) -> None:
         self._lock = threading.RLock()
@@ -125,8 +141,12 @@ class MotorAuto:
         self._parar = threading.Event()
         self.limites = LimitesAuto()
         self.ativo = False
-        self.simbolo = "XAUUSD"
-        self.timeframe = "H1"
+        self.simbolo = ""
+        self.timeframe = ""
+        # Corretora e classe de mercado do par que o motor opera. Vazio
+        # significa MT5/forex, o unico caminho que funcionava ate aqui.
+        self.broker = ""
+        self.market = ""
         self.decisoes: list[Decisao] = []
         self.ciclo = 0
         # request_id por decisao, para idempotencia: o mesmo ciclo nao pode
@@ -141,6 +161,8 @@ class MotorAuto:
                 "ativo": self.ativo,
                 "simbolo": self.simbolo,
                 "timeframe": self.timeframe,
+                "broker": self.broker or "mt5",
+                "market": self.market or "forex",
                 "ciclo": self.ciclo,
                 "limites": asdict(self.limites),
                 "decisoes": [d.para_dict() for d in self.decisoes[-20:]],
@@ -163,12 +185,71 @@ class MotorAuto:
                 self.simbolo = str(payload["simbolo"]).upper()
             if payload.get("timeframe"):
                 self.timeframe = str(payload["timeframe"]).upper()
-            return {"ok": True, "limites": asdict(self.limites)}
+            # Corretora e mercado: validados contra o catalogo, nao aceitos
+            # como texto livre. Mandar "binance" com "metals" nao existe e
+            # falharia so na hora do envio, depois de um ciclo inteiro de
+            # inferencia.
+            if payload.get("broker"):
+                from backend.broker_registry import get_broker
+
+                broker = str(payload["broker"]).strip().lower()
+                definicao = get_broker(broker)
+                if definicao is None:
+                    return {
+                        "ok": False,
+                        "error": f"corretora desconhecida: {broker}",
+                    }
+                if not definicao.execution:
+                    return {
+                        "ok": False,
+                        "error": f"{definicao.label} nao tem execucao habilitada no catalogo",
+                    }
+                self.broker = broker
+            if payload.get("market"):
+                from backend.broker_registry import normalize_market
+
+                self.market = normalize_market(str(payload["market"]))
+            # A classe de mercado precisa existir NA CORRETORA escolhida. Binance
+            # so faz cripto (spot e futuros); MT5 faz forex, metals, indices e
+            # mais. Aceitar "binance + metals" deixaria o operador descobrir o
+            # erro so na hora do envio, depois de um ciclo inteiro de inferencia.
+            if self.broker and self.market:
+                from backend.broker_registry import get_broker
+
+                definicao = get_broker(self.broker)
+                if definicao is not None and definicao.markets:
+                    if self.market not in definicao.markets:
+                        return {
+                            "ok": False,
+                            "error": (
+                                f"{definicao.label} nao opera em '{self.market}'. "
+                                f"Mercados desta corretora: {', '.join(definicao.markets)}"
+                            ),
+                            "markets": list(definicao.markets),
+                        }
+            return {
+                "ok": True,
+                "limites": asdict(self.limites),
+                "broker": self.broker or "mt5",
+                "market": self.market or "forex",
+            }
 
     def ligar(self) -> dict[str, Any]:
         ok, motivo = self.limites.valido()
         if not ok:
             return {"ok": False, "error": motivo}
+        # thread nascia e quebrava em toda iteracao: `_trava_instrumento`
+        # devolve cedo com simbolo vazio, `_mt5_candles("", "", 600)` recusa, e
+        # o operador via so "erro no ciclo" sem descobrir que faltava escolher
+        # o ativo. Ligar sem ativo nao tem sentido, entao agora e recusado na
+        # porta, com motivo.
+        if not str(self.simbolo or "").strip():
+            return {
+                "ok": False,
+                "error": "escolha o ativo (simbolo) e o timeframe antes de ligar a operacao automatica",
+            }
+        if not str(self.timeframe or "").strip():
+            return {"ok": False, "error": "escolha o timeframe antes de ligar a operacao automatica"}
         with self._lock:
             if self._thread is not None and self._thread.is_alive():
                 return {"ok": True, "status": "ja ligado"}
@@ -381,19 +462,46 @@ class MotorAuto:
         while not self._parar.is_set():
             try:
                 import pandas as pd
-                from backend.mt5_gateway import _mt5_candles
+                from backend.mt5_gateway import _mt5_candles, candles_mt5_para_dataframe
 
                 self._trava_instrumento()
-                candles = _mt5_candles(self.simbolo, self.timeframe, 600)
-                df = pd.DataFrame(candles or [])
+                # `_mt5_candles` devolve a RESPOSTA canonica (ok, status,
+                # provenance, candles, ...), nao a lista de linhas. Passar o dict
+                # inteiro ao DataFrame misturava escalares com a lista e
+                # estourava em "All arrays must be of the same length" — o
+                # motor auto NUNCA chegou a avaliar um sinal. O mesmo bug que
+                # quebrava o backtest e que ja foi corrigido la em
+                # `fastapi_gateway._ai_predict_sync`; aqui o `except Exception`
+                # generico transformava a falha em "erro no ciclo; tentando de
+                # novo no proximo intervalo", sem causa visivel na tela.
+                resposta = _mt5_candles(self.simbolo, self.timeframe, 600)
+                linhas = resposta.get("candles") if isinstance(resposta, dict) else resposta
+                if not linhas:
+                    motivo = ""
+                    if isinstance(resposta, dict):
+                        motivo = str(
+                            resposta.get("reason_code") or resposta.get("error") or ""
+                        )
+                    raise RuntimeError(
+                        f"MT5 nao devolveu candles para {self.simbolo} "
+                        f"{self.timeframe}" + (f" ({motivo})" if motivo else "")
+                    )
+                df = candles_mt5_para_dataframe(linhas)
+                if df.empty:
+                    raise RuntimeError(
+                        f"serie de {self.simbolo} {self.timeframe} ficou vazia "
+                        "depois da conversao para o formato do treino"
+                    )
                 inf = ai_inference.inferir(self.simbolo, df, self.timeframe)
                 self.ciclo_unico(lambda s, t: inf, enviar, risk_state)
-            except Exception:
-                # O loop nao pode morrer por um erro pontual; o proximo ciclo
-                # tenta de novo e a falha ja aparece no historico de decisoes.
+            except Exception as exc:
+                # O loop nao pode morrer por um erro pontual, mas esconder a
+                # causa e o que deixou este bug invisivel: o operador via
+                # "erro no ciclo" por horas sem saber o porquep. O tipo e a
+                # mensagem vao para o historico de decisoes.
                 self._registrar(Decisao(
                     datetime.now(timezone.utc).isoformat(), self.simbolo, self.timeframe,
-                    False, "erro no ciclo; tentando de novo no proximo intervalo"))
+                    False, f"erro no ciclo: {type(exc).__name__}: {exc}"))
             self._parar.wait(max(60, self.limites.intervalo_minutos * 60))
 
 

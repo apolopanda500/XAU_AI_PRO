@@ -79,8 +79,26 @@ export type AutoState = {
   simbolo?: string;
   timeframe?: string;
   ciclo?: number;
+  threads?: number;
+  updated_at?: string;
   limites?: Json;
-  decisoes?: Array<{ ts?: string; simbolo?: string; side?: string; motivo?: string }>;
+  // Campos que o backend ja devolve em cada decisao (`auto_engine.Decisao`)
+  // e que o Mini Terminal le para mostrar o que o motor esta fazendo agora.
+  // Estavam de fora do tipo, entao a tela so conseguia mostrar `motivo`.
+  decisoes?: Array<{
+    ts?: string;
+    simbolo?: string;
+    timeframe?: string;
+    side?: string;
+    acao?: string;
+    motivo?: string;
+    confianca?: number | null;
+    edge?: number | null;
+    volume?: number | null;
+    sl?: number | null;
+    tp?: number | null;
+    risco?: number | null;
+  }>;
 };
 export function useAutoState() {
   return useQuery<AutoState>({

@@ -21,7 +21,7 @@ class InferenciaFalsa:
     """Dublê de Inferencia. Reproduz o que o servico real devolve."""
 
     def __init__(self, disponivel=True, signal="BUY", confianca=70.0, edge=0.11,
-                 atr=2.0, price=4300.0, motivo="", modelo="rf_XAUUSD_H1"):
+                 atr=2.0, price=4300.0, motivo="", modelo="rfATIVO_P60"):
         self.disponivel = disponivel
         self.signal = signal
         self.confianca = confianca
@@ -48,8 +48,14 @@ def enviar_espiao(chamadas: list[dict], resposta=None):
     return _enviar
 
 
+ATIVO = "ATIVO_TESTE"
+PERIODO = "P60"
+
+
 def motor_pronto(**kwargs) -> MotorAuto:
     m = MotorAuto()
+    m.simbolo = ATIVO
+    m.timeframe = PERIODO
     m.limites = LimitesAuto(
         banca=20.0, risco_por_trade_pct=1.0, confianca_minima=55.0,
         edge_minimo=0.05, max_posicoes=2, max_operacoes_dia=20,
@@ -222,7 +228,7 @@ class TestOperaQuandoDeve:
         assert d.agir is True
         assert len(chamadas) == 1
         p = chamadas[0]
-        assert p["symbol"] == "XAUUSD"
+        assert p["symbol"] == ATIVO
         assert p["side"] == "BUY"
         assert p["confirm"] is True
         assert p["sl"] < p["tp"], "BUY tem SL abaixo e TP acima"
@@ -264,13 +270,13 @@ class TestOperaQuandoDeve:
     def test_registra_decisao_com_proveniencia(self):
         m = motor_pronto()
         m.ciclo_unico(
-            lambda s, t: InferenciaFalsa(confianca=72.0, edge=0.12, modelo="rf_H1"),
+            lambda s, t: InferenciaFalsa(confianca=72.0, edge=0.12, modelo="rfP60"),
             enviar_espiao([]), risco)
         d = m.decisoes[-1]
         assert d.sinal == "BUY"
         assert d.confianca == pytest.approx(72.0)
         assert d.edge == pytest.approx(0.12)
-        assert d.timeframe == "H1"
+        assert d.timeframe == PERIODO
         assert d.resultado  # o que o gateway respondeu
 
 
@@ -299,7 +305,7 @@ class TestIntegracaoInferenciaReal:
         """
         modelo = "M5"  # edge negativo no ambiente
         candles = None
-        r = ai.inferir("XAUUSD", candles if candles is not None else __import__("pandas").DataFrame(), modelo)
+        r = ai.inferir(ATIVO, candles if candles is not None else __import__("pandas").DataFrame(), modelo)
         assert r.disponivel is False
         m = motor_pronto()
         d = m.ciclo_unico(lambda s, t: r, enviar_espiao([]), risco)

@@ -70,7 +70,11 @@ if %ERRORLEVEL% geq 8 (
     exit /b 1
 )
 if not exist "%ROOT%\frontend\src-tauri\Python\models" mkdir "%ROOT%\frontend\src-tauri\Python\models"
-robocopy "%ROOT%\Python\models" "%ROOT%\frontend\src-tauri\Python\models" /MIR /XF *.tmp /NFL /NDL /NJH /NJS /NP
+REM /XD _backup* impede que um backup de metadados (criado quando um pipeline
+REM legado corrompe a governanca) entre no bundle. Em 2026-09-29 o backup foi
+REM para dentro de Python\models e o MSI novo o empacotou no app instalado,
+REM onde nao serve para nada. Backup pertence em Temp\, nao na pasta de modelos.
+robocopy "%ROOT%\Python\models" "%ROOT%\frontend\src-tauri\Python\models" /MIR /XD _backup* /XF *.tmp /NFL /NDL /NJH /NJS /NP
 if %ERRORLEVEL% geq 8 (
     echo ERRO: Nao foi possivel sincronizar os modelos
     exit /b 1

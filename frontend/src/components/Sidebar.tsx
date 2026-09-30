@@ -3,11 +3,12 @@ import { QuantumIcon, type IconName } from './QuantumIcon';
 import { APP_VERSION } from '../version';
 
 const ITEMS: Array<[TabType, string, IconName]> = [
-  ['portfolio', 'Patrimônio', 'wallet'],
-  // Robô concentra o posto de operação: sinal do modelo, operação automática,
-  // ordem manual, posições ao vivo, gestão, risco, EA e copiloto. As abas
-  // Mercado, Inteligência Artificial e Risco saíram de fora de propósito.
-  ['robot', 'Robô', 'robot'],
+  // Operar concentra o posto de operação: automático ON/OFF, posições ao vivo,
+  // ordem manual, sinal do modelo, EA e copiloto. As abas Mercado,
+  // Inteligência Artificial e Risco saíram de fora de propósito.
+  ['robot', 'ROBÔ', 'robot'],
+  ['portfolio', 'Carteira', 'wallet'],
+
   // Performance & Analytics foi fundida no Histórico.
   ['history', 'Histórico', 'history'],
   ['calendar', 'Calendário', 'calendar'],

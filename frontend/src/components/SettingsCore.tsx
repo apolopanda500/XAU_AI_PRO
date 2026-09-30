@@ -7,9 +7,10 @@ import { THEMES } from '../hooks/useTheme';
 import SubscriptionPanel from './SubscriptionPanel';
 import ConnectionSettings from './ConnectionSettings';
 import ConnectedDevicesPanel from './ConnectedDevicesPanel';
+import DeclaracoesConfianca from './DeclaracoesConfianca';
 import '../theme/settings.css';
 
-type Section = 'general' | 'connections' | 'security' | 'plans';
+type Section = 'general' | 'connections' | 'security' | 'plans' | 'confianca';
 const tabs: [Section, string][] = [
   ['general', 'Geral / Interface'],
   // "Notificações & Alertas" saiu: a seção existia no menu sem renderizar
@@ -18,9 +19,12 @@ const tabs: [Section, string][] = [
   ['connections', 'Conexões & Corretoras'],
   ['security', 'Segurança'],
   ['plans', 'Planos'],
+  // Declarações de confiança: o que o app faz, o que nunca faz, e quem
+  // developeu. Cada afirmação da tela tem um teste ou auditoria por trás.
+  ['confianca', 'Confiança & Responsável'],
 ];
 const fmt = (v: unknown) => { const n = Number(v); return Number.isFinite(n) ? n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '--'; };
-export default function SettingsCoreSimple() {
+export default function SettingsCore() {
   const settings = useAppStore((state) => state.settings);
   const setSettings = useAppStore((state) => state.setSettings);
   // O auth.json no disco e a fonte da verdade do PIN; o espelho no store serve
@@ -228,6 +232,12 @@ export default function SettingsCoreSimple() {
         {section === 'plans' && (
           <div className="settings-panel">
             <SubscriptionPanel />
+          </div>
+        )}
+
+        {section === 'confianca' && (
+          <div className="settings-panel">
+            <DeclaracoesConfianca />
           </div>
         )}
       </div>

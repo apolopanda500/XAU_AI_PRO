@@ -247,7 +247,6 @@ pub const PROTOCOL_ENVELOPE: &str = "xau-ai-pro/1";
 /// Constantes do protocolo
 pub const PROTOCOL_VERSION: &str = "1.0.0";
 pub const WS_PING_INTERVAL_MS: u64 = 30000;
-pub const DEFAULT_SYMBOLS: &[&str] = &["XAUUSD", "EURUSD", "GBPUSD", "USDJPY", "BTCUSD"];
 
 #[cfg(test)]
 mod tests {

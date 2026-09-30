@@ -10,7 +10,7 @@ use futures_util::stream::SplitSink;
 use futures_util::SinkExt;
 
 use super::service::MarketDataService;
-use crate::protocol::{WsMessage, DEFAULT_SYMBOLS};
+use crate::protocol::WsMessage;
 
 pub type WsSender = SplitSink<WebSocket, Message>;
 
@@ -22,14 +22,13 @@ pub struct WsSharedState {
 }
 
 impl WsSharedState {
+    /// O Core nao carrega portfolio fixo: nasce sem assinatura alguma e so
+    /// envia cota depois que o cliente pedir `Subscribe`. Um portfolio embutido
+    /// faria o servidor produzir dados de um mercado que ninguem pediu.
     pub fn new(market: Arc<MarketDataService>) -> Self {
-        let mut initial = HashSet::new();
-        for s in DEFAULT_SYMBOLS {
-            initial.insert((*s).to_string());
-        }
         Self {
             market,
-            subscriptions: RwLock::new(initial),
+            subscriptions: RwLock::new(HashSet::new()),
         }
     }
 

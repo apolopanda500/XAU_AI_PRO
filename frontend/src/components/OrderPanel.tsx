@@ -536,30 +536,16 @@ export default function OrderPanel() {
         </div>
       )}
 
-      {/* Parada de emergencia: disponivel em qualquer modo, inclusive REAL. */}
-      <div className="btn-row" style={{ marginTop: 14, gap: 8 }}>
-        {emergencia ? (
-          <button className="btn xau-resume" type="button" onClick={() => void retomar()} disabled={busy} style={{ flex: 1, minHeight: 44 }}>
-            <Ico name="power" size={16} /> Retomar execução
-          </button>
-        ) : (
-          <button
-            className="btn danger emergency-stop"
-            type="button"
-            onClick={() => void pararEmergencia()}
-            disabled={busy}
-            style={{ flex: 1, minHeight: 46, fontWeight: 800, letterSpacing: 0.6, gap: 9 }}
-            title="Corta toda execução no gateway, em qualquer modo de conta"
-          >
-            <Ico name="power" size={17} /> PARADA DE EMERGÊNCIA
-          </button>
-        )}
-      </div>
-      {emergencia && (
-        <div className="hint neg" role="alert" style={{ marginTop: 6 }}>
-          Execução cortada. Para liberar é preciso <code>XAU_ENABLE_EMERGENCY_RESUME=1</code> no ambiente do gateway.
-        </div>
-      )}
+      {/* A PARADA DE EMERGENCIA SAIU DESTE PAINEL em 2026-09-29.
+
+          Ela aparecia aqui E no `RiskTab`, na mesma aba ROBÔ: dois botões com o
+          mesmo efeito, em lados opostos da tela, era exatamente o tipo de
+          duplicidade que faz o operador clicar no errado. O `RiskTab` ficou
+          como o unico lugar, logo acima dos limites, onde a leitura do risco
+          justifica a acao.
+
+          O endpoint `/api/universal/emergency-stop` continua intacto e e
+          acionado pelo `RiskTab`; o que saiu foi a segunda porta de entrada. */}
       <div className="hint" style={{ marginTop: 6 }}>{CAMPOS.join(' · ')} são os campos usados pelos botões rápidos acima.</div>
     </div>
   );

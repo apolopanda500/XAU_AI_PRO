@@ -19,8 +19,8 @@ _STRATEGIES: tuple[dict[str, Any], ...] = (
         "name": "Trend Filter",
         "description": "Perfil de tendência com confirmação de timeframe superior.",
         "risk_profile": "conservative",
-        "timeframes": ["M15", "H1", "H4"],
-        "symbols": ["XAUUSD", "EURUSD"],
+        "timeframes": [],
+        "symbols": [],
         "paper_only": True,
     },
     {
@@ -28,8 +28,8 @@ _STRATEGIES: tuple[dict[str, Any], ...] = (
         "name": "Mean Reversion",
         "description": "Perfil de reversão à média para estudo em paper/demo.",
         "risk_profile": "moderate",
-        "timeframes": ["M5", "M15"],
-        "symbols": ["XAUUSD"],
+        "timeframes": [],
+        "symbols": [],
         "paper_only": True,
     },
     {
@@ -37,8 +37,8 @@ _STRATEGIES: tuple[dict[str, Any], ...] = (
         "name": "Session Breakout",
         "description": "Perfil de rompimento de sessão com spread e horário sob observação.",
         "risk_profile": "moderate",
-        "timeframes": ["M5", "M15"],
-        "symbols": ["XAUUSD", "GBPUSD"],
+        "timeframes": [],
+        "symbols": [],
         "paper_only": True,
     },
 )

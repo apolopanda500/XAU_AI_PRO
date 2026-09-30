@@ -67,15 +67,16 @@ class StrategyTester(tk.Frame):
         # Simbolo
         sym_card = Card(panel, title="Ativo", padx=12, pady=12)
         sym_card.pack(fill="x", padx=8, pady=8)
-        self.sym_var = tk.StringVar(value="XAUUSD")
+        self.sym_var = tk.StringVar(value="")
         tk.Entry(sym_card.body, textvariable=self.sym_var, bg=Theme.PANEL, fg=Theme.TEXT,
                  font=(Theme.FONT_FAMILY, 11), relief="flat").pack(fill="x", pady=4)
 
         # Timeframe
         tf_card = Card(panel, title="Timeframe", padx=12, pady=12)
         tf_card.pack(fill="x", padx=8, pady=4)
-        self.tf_var = tk.StringVar(value="H1")
-        for tf in ["M5", "M15", "M30", "H1", "H4", "D1"]:
+        from app.market_symbols import DEFAULT_TIMEFRAME, TIMEFRAMES
+        self.tf_var = tk.StringVar(value="")
+        for tf in TIMEFRAMES:
             tk.Radiobutton(tf_card.body, text=tf, variable=self.tf_var, value=tf,
                           bg=Theme.CARD, fg=Theme.TEXT, selectcolor=Theme.PRIMARY,
                           font=(Theme.FONT_FAMILY, 9)).pack(side="left", padx=2)
@@ -145,11 +146,18 @@ class StrategyTester(tk.Frame):
         try:
             from app.mt5_lock import mt5_lock
             import MetaTrader5 as mt5
-            symbol = self.sym_var.get().upper()
-            tf_map = {"M5": mt5.TIMEFRAME_M5, "M15": mt5.TIMEFRAME_M15,
+            symbol = (self.sym_var.get() or "").upper()
+            if not symbol:
+                self.frame.after(0, lambda: self._on_data_loaded(False, 0))
+                return
+            from app.market_symbols import TIMEFRAMES as _TFS
+            tf_map = {"M1": mt5.TIMEFRAME_M1, "M5": mt5.TIMEFRAME_M5, "M15": mt5.TIMEFRAME_M15,
                       "M30": mt5.TIMEFRAME_M30, "H1": mt5.TIMEFRAME_H1,
                       "H4": mt5.TIMEFRAME_H4, "D1": mt5.TIMEFRAME_D1}
-            tf = tf_map.get(self.tf_var.get(), mt5.TIMEFRAME_H1)
+            tf = tf_map.get(self.tf_var.get())
+            if tf is None:
+                self.frame.after(0, lambda: self._on_data_loaded(False, 0))
+                return
             with mt5_lock:
                 mt5.symbol_select(symbol, True)
                 rates = mt5.copy_rates_from_pos(symbol, tf, 0, 500)

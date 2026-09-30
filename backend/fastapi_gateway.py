@@ -254,7 +254,7 @@ async def ai_trained() -> dict:
 
 
 @app.get("/api/ai/predict")
-async def ai_predict(symbol: str = "XAUUSD", timeframe: str = "H1") -> dict:
+async def ai_predict(symbol: str = "", timeframe: str = "") -> dict:
     """Inferencia real do modelo publicado sobre os candles do MT5.
 
     Devolve a probabilidade que o classificador atribui a decisao. Se o
@@ -777,6 +777,8 @@ async def backtest_run(payload: dict) -> JSONResponse:
             }, 503)
         result = run_backtest(
             candle_data["candles"],
+            symbol=symbol,
+            timeframe=timeframe,
             initial_balance=float(payload.get("initial_balance", 10000.0)),
             risk_pct=float(payload.get("risk_pct", 1.0)),
             stop_loss_points=float(payload.get("stop_loss_points", 300.0)),

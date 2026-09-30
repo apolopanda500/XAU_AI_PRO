@@ -1060,6 +1060,21 @@ def _mt5():
     return mt5
 
 
+def _mt5_connected() -> bool:
+    """A sessao do MT5 ja esta inicializada neste processo?
+
+    `MetaTrader5.terminal_info()` devolve None enquanto nao ha sessao, e nao
+    lanca: e o jeito barato de checar antes de mexer em `copy_rates`, que
+    devolve None e nao explica por que.
+    """
+    try:
+        mt5 = _mt5()
+        info = getattr(mt5, "terminal_info", None)
+        return bool(callable(info) and info() is not None)
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _ensure_mt5() -> bool:
     # MetaTrader5.initialize() pode abrir o terminal automaticamente.
     # O app deve somente conectar a uma sessao que o usuario ja abriu.
@@ -1094,6 +1109,47 @@ def _ensure_mt5() -> bool:
     except Exception as exc:
         print(f"[gateway] snapshot inicial indisponivel: {exc}")
     return True
+
+
+def candles_mt5_para_dataframe(linhas: Any) -> Any:
+    """Converte as linhas do MT5 no DataFrame que a feature builder espera.
+
+    FATOR DE FALHA REPETIDO
+    ========================
+    O treino usa `Time/Open/High/Low/Close/Volume` (ver `INPUT_COLUMNS` em
+    `Python/ai/train_v2.py`). As linhas do gateway vem em minusculo e `time` em
+    epoch de segundos. Sem esta conversao, a inferencia falha com
+    `None of ['Time'] are in the columns`.
+
+    Alem disso, `t.reamostrar` usa `resample()`, que exige `DatetimeIndex`, e a
+    feature builder exige a COLUNA `Time`. `drop=False` satisfaz os dois: o
+    indice vira datetime sem remover a coluna.
+
+    Ja foi corrigido em tres lugares isoladamente (a previsao do gateway, o
+    backtest e agora o motor automatico), e cada vez o mesmo erro voltou em
+    um caminho novo. Por isso vira um unico ponto de traducao.
+    """
+    import pandas as pd
+
+    df = pd.DataFrame(linhas or [])
+    if df.empty:
+        return df
+    df = df.rename(columns={c: c.capitalize() for c in df.columns})
+    if "Time" in df.columns:
+        coluna = df["Time"]
+        # O gateway ja pode devolver `timestamp` em ISO; nesse caso `time` fica
+        # redundante. Prioridade: coluna ja datetime > timestamp > epoch em s.
+        if not pd.api.types.is_datetime64_any_dtype(coluna):
+            if "Timestamp" in df.columns and "Time" not in ("time",):
+                origem = df["Timestamp"]
+                if pd.api.types.is_numeric_dtype(origem):
+                    df["Time"] = pd.to_datetime(origem, unit="s", errors="coerce", utc=True)
+                else:
+                    df["Time"] = pd.to_datetime(origem, errors="coerce", utc=True)
+            else:
+                df["Time"] = pd.to_datetime(coluna, unit="s", errors="coerce", utc=True)
+        df = df.dropna(subset=["Time"]).sort_values("Time").set_index("Time", drop=False)
+    return df
 
 
 def _read_ea_heartbeat() -> dict:
@@ -1513,6 +1569,22 @@ def _mt5_unavailable(symbol: str, timeframe: str, reason: str, code: str, mt5: o
 
 
 def _mt5_candles(symbol: str, timeframe: str = "M5", count: int = 300) -> dict:
+    # A sessao do MT5 precisa estar inicializada antes de `copy_rates`. Ate
+    # 2026-09-29 esta funcao pegava o modulo cru e chamava `copy_rates` direto;
+    # quando o gateway ainda nao tinha ligado a sessao (que acontece em cada
+    # processo novo, e o auto_engine roda em thread), o MT5 devolvia None e a
+    # resposta saia como `terminal_disconnected` mesmo com o terminal aberto e
+    # logado. `initialize()` em processo ja aberto nao abre uma segunda janela
+    # nem inicia sessao sozinho — ele conecta ao terminal que ja existe, que e
+    # exatamente a exigencia do projeto (so conectar, nunca abrir).
+    #
+    # A guarda e `getattr` e nao acesso direto: os dubles de teste injetam um
+    # modulo MT5 minimo, sem `initialize`. Sem o getattr, todo teste de candles
+    # quebrava com `AttributeError` antes de chegar a rota que ele quer
+    # exercitar.
+    inicializar = getattr(_mt5(), "initialize", None)
+    if callable(inicializar) and not _mt5_connected():
+        _ensure_mt5()
     mt5 = _mt5()
     symbol = str(symbol or "").strip().upper()
     count = max(10, min(int(count), 2000))
@@ -1556,6 +1628,14 @@ def _risk_state(mt5) -> dict:
     Falha de leitura bloqueia novas entradas; None do MT5 nao significa lista vazia.
     """
     from backend.risk_gate import RiskLimits
+
+    # Mesma questao de `_mt5_candles`: `account_info()` devolve None sem sessao
+    # inicializada. A thread do motor automatico roda em processo novo, e era
+    # exatamente ai que o ciclo morria com "risk_gate nao respondeu: sem dados"
+    # — sem uma unica linha de log dizendo que faltava conectar ao terminal.
+    inicializar = getattr(mt5, "initialize", None)
+    if callable(inicializar) and not _mt5_connected():
+        _ensure_mt5()
 
     limits = RiskLimits()
     try:
@@ -1659,6 +1739,14 @@ def _risk_state(mt5) -> dict:
     exposure_pct = (volume / ceiling * 100.0) if ceiling > 0 else 0.0
 
     return {
+        # `ok` explicito: `auto_engine.ciclo_unico` recusa o ciclo quando
+        # `risco.get("ok")` e falso. Sem este campo, um estado de risco
+        # PERFEITAMENTE valido era recusado com "risk_gate nao respondeu: sem
+        # dados" — o `error` tambem nao existia, entao a tela mostrava "sem
+        # dados" para um estado que tinha balance, equity e limites reais.
+        "ok": True,
+        "source": "mt5_gateway",
+        "withdrawals_enabled": False,
         "daily_loss_pct": round(daily_loss_pct, 4),
         "exposure_pct": round(exposure_pct, 4),
         "open_positions": len(positions),
@@ -2342,6 +2430,23 @@ def _rate_limit_for(is_command: bool) -> int:
     return RATE_LIMIT_MAX
 
 
+# Travas de plano por rota. `plano_gate` traduz a feature para o entitlement do
+# catalogo em app/subscriptions.py. Rotas de leitura do catalogo ficam de fora:
+# sem elas a UI nao descobre o que existe e a tela inteira quebra no Free.
+_ROTAS_GET: dict[str, str] = {
+    "/api/economic/calendar": "economic_calendar",
+    "/api/backtest": "model_backtest",
+}
+
+_ROTAS_POST: dict[str, str] = {
+    "/api/auto/start": "auto_engine",
+    "/api/auto/tick": "auto_engine",
+    "/api/order": "manual_order",
+    "/api/universal/order": "manual_order",
+    "/api/social/follow": "social_paper",
+}
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):  # silencia log
         pass
@@ -2412,11 +2517,78 @@ class Handler(BaseHTTPRequestHandler):
         if not ok:
             self._send(401 if motivo in _MOTIVOS_TOKEN else 429, {"ok": False, "error": "nao autorizado" if motivo in _MOTIVOS_TOKEN else "rate limit excedido"})
             return
+        _feature = _ROTAS_GET.get(parsed.path)
+        if _feature is not None:
+            from backend import plano_gate
+
+            # O nome NAO pode ser `_payload`: existe uma funcao global com esse
+            # nome, e atribuir a variavel local transformaria toda chamada
+            # `_payload()` de do_GET em "UnboundLocalError".
+            _liberado, _recusa = plano_gate.verificar(_feature)
+            if not _liberado:
+                self._send(403, plano_gate.resposta_bloqueio(_feature, _recusa))
+                return
         if parsed.path.startswith("/api/connections/"):
             parts = parsed.path.strip("/").split("/"); connection_id = unquote("/".join(parts[2:-1]))
             action = parts[-1] if parts else ""
             if action == "test": self._send(200, {"ok": True, "configured": any(x["id"] == connection_id for x in list_connections()), "credentials_exposed": False}); return
         if parsed.path == "/api/connections": self._send(200, {"ok": True, "connections": list_connections()}); return
+        if parsed.path == "/api/ai/trained":
+            # O painel do motor so pode oferecer par que o motor VAI aceitar.
+            # `_carregar()` so devolve o modelo quando `publicable` e verdadeiro,
+            # entao listar aqui um par reprovado levava o operador a escolher
+            # XAUUSD M15 (edge +0,0498 contra o minimo +0,0500), ligar o motor e
+            # ver "modelo ausente para m15". `so_publicavel=0` traz o inventario
+            # completo, com o motivo da reprovacao, para a tela de treino.
+            from backend import ai_inference
+
+            modelos = ai_inference.listar_modelos()
+            if parse_qs(parsed.query).get("so_publicavel", ["1"])[0] not in ("0", "false", "False"):
+                publicaveis = [m for m in modelos if m.get("publicable")]
+                reprovados = [
+                    {
+                        "id": m["id"],
+                        "symbol": m["symbol"],
+                        "timeframe": m["timeframe"],
+                        "reason": m.get("reason", ""),
+                        "edge": m.get("edge"),
+                        "min_edge": m.get("edge_min"),
+                    }
+                    for m in modelos if not m.get("publicable")
+                ]
+                self._send(200, {
+                    "ok": True,
+                    "models": publicaveis,
+                    "reprovados": reprovados,
+                    "count": len(publicaveis),
+                    "reprovados_count": len(reprovados),
+                }); return
+            self._send(200, {"ok": True, "models": modelos, "count": len(modelos)}); return
+        if parsed.path == "/api/auto/state":
+            from backend import auto_engine
+            self._send(200, {"ok": True, **auto_engine.motor.snapshot()}); return
+        # ---------------------------------------------------------------- planos
+        # Estas rotas viviam so no `fastapi_gateway` (9003), mas o frontend fala
+        # com o gateway local (9001, ver `apiBase()`). Resultado: a tela de
+        # Planos recebia 404 em todas as cinco chamadas e aparecia vazia — era
+        # ela que o usuario descreveu como "generica, sem vida".
+        #
+        # `live_execution` e `withdrawals_enabled` seguem False de forma fixa:
+        # escolher um plano nao habilita ordem nem saque.
+        if parsed.path == "/api/subscriptions/plans":
+            from app.subscriptions import list_plans
+            self._send(200, {"ok": True, "plans": list_plans(),
+                             "billing": "not_configured", "live_execution": False,
+                             "withdrawals_enabled": False}); return
+        if parsed.path == "/api/subscriptions/me":
+            from app.subscriptions import get_subscription
+            self._send(200, {"ok": True, "subscription": get_subscription(),
+                             "live_execution": False, "withdrawals_enabled": False}); return
+        if parsed.path == "/api/social/strategies":
+            from app.social_paper import list_strategies
+            self._send(200, {"ok": True, "strategies": list_strategies(),
+                             "mode": "paper_trade", "live_execution": False,
+                             "withdrawals_enabled": False}); return
         path = parsed.path
         query = parse_qs(parsed.query)
         if path in ("/", "/api/health"):
@@ -2719,6 +2891,15 @@ class Handler(BaseHTTPRequestHandler):
         if THIRD_PARTY_READ_ONLY and parsed.path != "/api/universal/emergency-stop":
             self._send(403, {"ok": False, "status": "blocked", "error": "perfil de compatibilidade somente leitura", "commands_enabled": False, "execution_enabled": False, "withdrawals_enabled": False})
             return
+        _feature_post = _ROTAS_POST.get(parsed.path)
+        if _feature_post is not None:
+            from backend import plano_gate
+
+            # Mesmo cuidado do GET: nunca nomear a variavel `_payload` aqui.
+            _liberado, _recusa = plano_gate.verificar(_feature_post)
+            if not _liberado:
+                self._send(403, plano_gate.resposta_bloqueio(_feature_post, _recusa))
+                return
         if parsed.path == "/api/connections":
             try:
                 length = int(self.headers.get("Content-Length", "0"))
@@ -2818,6 +2999,94 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 self._send(503, {"ok": False, "error": str(exc), "command": ea_paths[parsed.path]})
             return
+        # -------------------------------------------------------------- planos (POST)
+        # Ativar plano e seguir estrategia mudam estado local; nenhuma das duas
+        # toca em ordem, conta ou saque.
+        # ------------------------------------------------- motor automatico (POST)
+        # Estas rotas viviam so no `fastapi_gateway` (9003), mas o painel fala
+        # com o gateway local (9001, ver `apiBase()`): apertar "Ligar" devolvia
+        # 404 e a operacao automatica NUNCA era ligada pelo app. A ordem continua
+        # indo para `mt5.order_send()` — o mercado e real, em conta DEMO.
+        if parsed.path in ("/api/auto/config", "/api/auto/start", "/api/auto/stop", "/api/auto/tick"):
+            length = int(self.headers.get("Content-Length", "0") or 0)
+            try:
+                corpo = json.loads(self.rfile.read(length) or b"{}") if length else {}
+            except (ValueError, UnicodeDecodeError):
+                self._send(400, {"ok": False, "error": "corpo JSON invalido"}); return
+            if not isinstance(corpo, dict):
+                self._send(400, {"ok": False, "error": "corpo JSON invalido"}); return
+            from backend import auto_engine
+
+            m = auto_engine.motor
+            try:
+                if parsed.path == "/api/auto/config":
+                    self._send(200, m.configurar(corpo)); return
+                if parsed.path == "/api/auto/start":
+                    self._send(200, m.ligar()); return
+                if parsed.path == "/api/auto/stop":
+                    self._send(200, m.desligar()); return
+
+                # /api/auto/tick: UM ciclo sob demanda, sem depender da thread.
+                import pandas as pd
+
+                from backend import ai_inference
+
+                def risk_state() -> dict[str, Any]:
+                    return _risk_state(_mt5())
+
+                def enviar(payload: dict[str, Any]) -> dict[str, Any]:
+                    return _trade_order(payload)
+
+                # `_mt5_candles` devolve a RESPOSTA canonica, nao a lista.
+                # Passar o dict ao DataFrame estourava em
+                # "All arrays must be of the same length".
+                resposta = _mt5_candles(m.simbolo, m.timeframe, 600)
+                linhas = resposta.get("candles") if isinstance(resposta, dict) else resposta
+                if not linhas:
+                    motivo = ""
+                    if isinstance(resposta, dict):
+                        motivo = str(resposta.get("reason_code") or resposta.get("error") or "")
+                    self._send(503, {
+                        "ok": False,
+                        "error": f"MT5 nao devolveu candles para {m.simbolo} {m.timeframe}"
+                                 + (f" ({motivo})" if motivo else ""),
+                    }); return
+                df = candles_mt5_para_dataframe(linhas)
+                inf = ai_inference.inferir(m.simbolo, df, m.timeframe)
+                decisao = m.ciclo_unico(lambda s, t: inf, enviar, risk_state)
+                self._send(200, {"ok": True, "decision": decisao.para_dict()}); return
+            except PermissionError as exc:
+                self._send(403, {"ok": False, "error": str(exc),
+                                 "withdrawals_enabled": False}); return
+            except Exception as exc:  # noqa: BLE001
+                self._send(503, {"ok": False, "error": f"{type(exc).__name__}: {exc}",
+                                 "withdrawals_enabled": False}); return
+
+        if parsed.path == "/api/subscriptions/activate":
+            length = int(self.headers.get("Content-Length", "0"))
+            payload = json.loads(self.rfile.read(length) or b"{}")
+            from app.subscriptions import activate_local_plan
+            try:
+                assinatura = activate_local_plan(str(payload.get("plan_id", "")))
+            except ValueError as exc:
+                self._send(422, {"ok": False, "error": str(exc), "billing": "not_configured",
+                                 "withdrawals_enabled": False}); return
+            self._send(200, {"ok": True, "subscription": assinatura,
+                             "billing": "not_configured", "live_execution": False,
+                             "withdrawals_enabled": False}); return
+        if parsed.path == "/api/social/follow":
+            length = int(self.headers.get("Content-Length", "0"))
+            payload = json.loads(self.rfile.read(length) or b"{}")
+            from app.social_paper import follow_strategy
+            # `follow_strategy(strategy_id, user_id=None)`: o segundo argumento e
+            # o usuario, nao um booleano "seguindo". Passar `bool(...)` aqui
+            # transformava o id do usuario em True/False e quebrava o estado.
+            try:
+                resultado = follow_strategy(str(payload.get("strategy_id", "")))
+            except (ValueError, LookupError) as exc:
+                self._send(422, {"ok": False, "error": str(exc), "withdrawals_enabled": False}); return
+            self._send(200, {"ok": True, **resultado, "mode": "paper_trade",
+                             "live_execution": False, "withdrawals_enabled": False}); return
         guardian_paths = {"/api/guardian/set": guardian_set, "/api/guardian/remove": guardian_remove,
                           "/api/guardian/tick": lambda p: guardian_tick(),
                           "/api/intents/reconcile": lambda p: intent_log.reconcile(_mt5())}

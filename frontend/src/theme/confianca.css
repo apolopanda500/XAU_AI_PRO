@@ -1,0 +1,119 @@
+/* Declaracoes de confianca — selo do desenvolvedor e travas do produto.
+   Sem gradiente decorativo: a tela existe para informar, nao para vender. */
+
+.confianca {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 860px;
+}
+
+.confianca-selo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.selo-marca {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.selo-nome {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--primary);
+}
+
+.selo-versao {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.selo-desenvolvedor {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  text-align: right;
+}
+
+.selo-rotulo {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.selo-nome-dev {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.selo-contato {
+  font-size: 12px;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.selo-contato:hover {
+  color: var(--primary);
+  text-decoration: underline;
+}
+
+.confianca-bloco {
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.confianca-bloco h3 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.confianca-bloco p {
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.confianca-bloco p:last-child {
+  margin-bottom: 0;
+}
+
+.confianca-lista {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.confianca-lista li {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.confianca-lista strong {
+  color: var(--warn);
+}

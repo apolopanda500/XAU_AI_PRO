@@ -1,18 +1,24 @@
 import { useEffect, useState } from 'react';
-import { connectionAction, detectTerminal, marketsFor, requestConnection, saveExchange } from '../lib/connections';
-import type { Broker, Connection, TerminalAccount } from '../lib/connections';
+import {
+  connectionAction, detectTerminal, exigePassphrase, marketsFor, requestConnection,
+  saveExchange, ROTULO_BROKER, type Broker, type Connection, type TerminalAccount,
+} from '../lib/connections';
+
+const TODAS: Broker[] = ['mt5', 'binance', 'mexc', 'bybit', 'okx'];
 
 export default function ConnectionSettings() {
   const [broker, setBroker] = useState<Broker>('mt5');
-  const [market, setMarket] = useState('forex');
+  const [market, setMarket] = useState('');
   const [name, setName] = useState('');
   const [key, setKey] = useState('');
   const [secret, setSecret] = useState('');
+  const [passphrase, setPassphrase] = useState('');
   const [rows, setRows] = useState<Connection[]>([]);
   const [account, setAccount] = useState<TerminalAccount | null>(null);
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
   const [verified, setVerified] = useState<Record<string, string>>({});
+  const precisaPassphrase = exigePassphrase(broker);
   const load = async () => {
     const data = await requestConnection('/api/connections');
     setRows(data.connections ?? []);
@@ -40,10 +46,17 @@ export default function ConnectionSettings() {
     catch (error) { setStatus(error instanceof Error ? error.message : 'Falha na comunicação com o gateway.'); }
     finally { setBusy(false); }
   };
+  // Trocar de corretora limpa o segredo: a passphrase de uma exchange nao
+  // pertence a outra, e manter o campo preenchido convida a gravar errado.
+  const trocaBroker = (proxima: Broker) => {
+    setBroker(proxima);
+    setMarket(marketsFor(proxima)[0] ?? '');
+    setKey(''); setSecret(''); setPassphrase(''); setStatus('');
+  };
   const save = async () => {
     if (broker === 'mt5') { await sync(); return; }
-    const id = await saveExchange(broker, market, name, key, secret);
-    setKey(''); setSecret('');
+    const id = await saveExchange(broker, market, name, key, secret, passphrase);
+    setKey(''); setSecret(''); setPassphrase('');
     await load();
     try {
       await connectionAction(id, 'test');
@@ -67,10 +80,9 @@ export default function ConnectionSettings() {
     <p className="muted">MT5 usa a sessão do terminal. Binance e MEXC usam API key e secret. Validar leitura não autoriza negociação.</p>
     <fieldset disabled={busy} style={{ border: 0, padding: 0 }}>
       <div className="order-ticket-grid">
-        <label className="field">Corretora<select value={broker} onChange={event => {
-          const next = event.target.value as Broker;
-          setBroker(next); setMarket(marketsFor(next)[0]); setKey(''); setSecret(''); setStatus('');
-        }}><option value="mt5">MT5</option><option value="binance">Binance</option><option value="mexc">MEXC</option></select></label>
+        <label className="field">Corretora<select value={broker} onChange={event => trocaBroker(event.target.value as Broker)}>
+          {TODAS.map(value => <option key={value} value={value}>{ROTULO_BROKER[value]}</option>)}
+        </select></label>
         <label className="field">Mercado<select value={market} onChange={event => setMarket(event.target.value)}>
           {marketsFor(broker).map(value => <option key={value} value={value}>{value}</option>)}
         </select></label>
@@ -81,8 +93,17 @@ export default function ConnectionSettings() {
           <label className="field">Nome<input value={name} onChange={event => setName(event.target.value)} /></label>
           <label className="field">API key<input type="password" autoComplete="off" value={key} onChange={event => setKey(event.target.value)} /></label>
           <label className="field">Secret<input type="password" autoComplete="off" value={secret} onChange={event => setSecret(event.target.value)} /></label>
+          {precisaPassphrase && (
+            <label className="field" title="A OKX recusa a conexão sem a passphrase criada junto com a API key">
+              <span>Passphrase</span>
+              <input type="password" autoComplete="off" value={passphrase} onChange={event => setPassphrase(event.target.value)} />
+            </label>
+          )}
         </>}
       </div>
+      {broker !== 'mt5' && precisaPassphrase && (
+        <p className="hint">A {ROTULO_BROKER[broker]} exige a passphrase gerada junto com a API key. Sem ela a corretora recusa a leitura.</p>
+      )}
       {broker === 'mt5' && <p>Entre na conta pelo MetaTrader 5. O aplicativo detecta a sessão existente, sem guardar senha, trocar contas ou controlar o EA.</p>}
       <button type="button" className="btn primary" onClick={() => void run(save)}>{broker === 'mt5' ? 'Sincronizar MT5' : 'Salvar e validar API'}</button>
     </fieldset>

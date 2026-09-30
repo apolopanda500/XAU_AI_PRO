@@ -1,3 +1,33 @@
+/* ==========================================================
+   LEGIBILIDADE — PISO DE TEXTO (2026-09-29)
+   ==========================================================
+   A varredura achou 119 ocorrencias de `font-size` entre 8px e 11px.
+   Abaixo de 12px a fonte cai abaixo do limite de leitura em Windows com
+   DPI acima de 100%: as letras encostam, os digitos somem e numeros de
+   saldo/posicao ficam ambiguos — que e pior do que uma tela apertada.
+
+   Aqui o piso e 12px e a altura de linha ganha folga. Nao aumenta nenhum
+   bloco: o texto cresce dentro do espaco que ele ja ocupava, entao a
+   janela nao muda de tamanho. `tabular-nums` mantem os numeros alinhados
+   em coluna, que e o que faz um saldo ser conferido de relance.
+   ========================================================== */
+.app-shell .content :is(td, th, label, span, small, em, strong, p, li, dt, dd, figcaption) {
+  font-size: max(12px, 1em);
+  line-height: 1.45;
+}
+
+/* Numeros nunca podem ser ambiguos: mesma largura por digito. */
+.app-shell .content :is(td, th, .num, .kpi-value, .chip) {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Rotulo minusculo continua minusculo, mas legivel e com respiro. */
+.app-shell .content :is(.kpi-label, .muted, .eyebrow, .hint) {
+  font-size: max(12px, 1em);
+  letter-spacing: .02em;
+  line-height: 1.5;
+}
+
 /* Legibilidade operacional: aumento moderado sem ampliar a janela do aplicativo. */
 .app-shell .content .tbl th,
 .app-shell .content .tbl td {
@@ -423,6 +453,32 @@ a {
   background: transparent;
   color: var(--muted);
   border-color: var(--border);
+}
+
+/* Tons de BOTAO que faltavam (2026-09-29).
+   `ok`, `warn` e `neutral` existiam so como `.chip.*`. Varios componentes
+   aplicam `className="btn ... ok"` esperando a mesma semantica do chip, e
+   recebiam o estilo padrao do botao: um "Parar execucao" com tom de warn
+   ficava igual a um "Atualizar" neutro, e o operador perdia a leitura do
+   que era acao destrutiva. Reaproveitam as cores que o tema ja define
+   para o chip equivalente, entao nenhum tom novo foi inventado. */
+.btn.ok {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+.btn.ok:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
+}
+.btn.warn {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+.btn.warn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+}
+.btn.neutral {
+  border-color: var(--border);
+  color: var(--muted);
 }
 
 .btn.ghost:hover:not(:disabled) {
