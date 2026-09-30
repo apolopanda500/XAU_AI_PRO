@@ -223,3 +223,6 @@ experiments/isolated/
 /*.dll
 /*.scr
 /*.sys
+
+# Assinatura de plano e estado local do usuario: nunca versionar
+app/data/subscriptions.json
