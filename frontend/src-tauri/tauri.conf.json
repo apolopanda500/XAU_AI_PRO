@@ -25,6 +25,7 @@
       "core/xau-ai-pro-core.exe",
       "bridge/**/*"
     ],
+    "shortcut": true,
     "windows": {
       "nsis": {
         "installerHooks": "./windows/hooks.nsh"
