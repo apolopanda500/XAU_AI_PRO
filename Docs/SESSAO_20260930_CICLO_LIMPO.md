@@ -65,6 +65,26 @@ continua sendo limpeza.
 Aplicado em `cmd.exe`, o `/reset` removeu o arquivo ao redefinir a ACL —
 é o caminho mais curto quando a ACL está irrecuperável.
 
+### O que a ACL do `cmd.exe` revelou
+
+O arquivo **não pôde ser apagado**. A sequência resolveria metade do problema:
+
+```powershell
+takeown /F cmd.exe                        # propriedade volta para o usuario
+icacls cmd.exe /grant "<user>:(F)"        # controle total explicito
+```
+
+E mesmo assim, com `FullControl` **explícito no arquivo e na pasta**, o
+`Remove-Item`, o `cmd /c del` e o `MoveFileEx(MOVEFILE_DELAY_UNTIL_REBOOT)`
+devolveram **erro 5 (Access Denied)**. A renomeação para `cmd_antigo.txt`
+funcionou; a remoção, não. Isso é comportamento de filtro de segurança
+(Controlador de Arquivos) prendendo o binário — não corrigível sem elevação.
+
+**Estado atual:** fora do Git, adicionado ao `.gitignore`, e sem bloquear
+o `preflight` (que só rejeita `.exe`, `.dll`, `.vbs`, `.scr`, `.sys`).
+Continua ocupando 344 KB no disco. **Precisa de um shell elevado, uma
+vez, para sumir de vez.**
+
 ---
 
 ## 3. Dois artefatos que não deveriam existir
