@@ -51,3 +51,53 @@
 .quantum-history .history-row-negative td:nth-child(7) { color: #ef4444 !important; }
 .quantum-history .history-row-neutral td:nth-child(7) { color: #94a3b8 !important; }
 .quantum-history .history-error { border-left: 3px solid #ef4444; }
+
+/* TABELA COMPACTA E GAVETAS POR DIA (2026-09-30)
+   -----------------------------------------------
+   O dono pediu "uns 3 ou 4 duplicates remover e otimizar melhor
+   gavetamentos tabelados compactadoss". Os duplicados foram resolvidos no
+   codigo (lib/historico.ts, `deduplicar`); aqui e so a apresentacao.
+
+   Regras: numeracao tabular para as colunas de dinheiro alinharem, altura
+   de linha reduzida, e a gaveta do dia como cabecalho clicavel. */
+.history-wrap .tbl td,
+.history-wrap .tbl th {
+  padding: 2px 8px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+/* Dinheiro e quantidade em coluna: sem isto os digitos nao alinham e a
+   coluna parece bagunçada mesmo com os numeros certos. */
+.history-wrap .tbl td.num,
+.history-wrap .tbl th.num {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* Gaveta do dia: cabeçalho sticky para o operador saber onde esta mesmo
+   depois de rolar dezenas de linhas. */
+.history-dia-gaveta th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--panel, #14181f);
+  border-top: 1px solid var(--border, #2a3038);
+  border-bottom: 1px solid var(--border, #2a3038);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  padding: 3px 8px;
+  text-align: left;
+}
+
+.history-dia-gaveta td {
+  border-bottom: 1px solid transparent;
+}
+
+.history-wrap .tbl tbody tr:hover td {
+  background: rgba(255, 255, 255, 0.03);
+}

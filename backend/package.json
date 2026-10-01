@@ -30,7 +30,9 @@
   "overrides": {
     "nanoid": "5.1.16",
     "qs": "6.16.0",
-    "undici": "7.29.0"
+    "undici": "7.29.1",
+    "engine.io": "6.6.11",
+    "brace-expansion": "5.0.12"
   },
   "allowScripts": {
     "@swc/core@1.15.3": true,

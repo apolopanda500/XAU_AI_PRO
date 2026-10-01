@@ -96,7 +96,60 @@ if (-not $Apply) {
     exit 0
 }
 
+function Resolve-Icacls {
+    <#
+    .SYNOPSIS
+        Devolve o controle de ACL quando um alvo nao pode ser lido.
+
+    .DESCRIPTION
+        O `target\debug` do Rust fica com ACL quebrada depois de cada build
+        nesta maquina: o `Remove-Item` falha com "O acesso ao caminho ... foi
+        negado" e a limpeza nao acontece. O sintoma ja foi documentado em
+        `docs/SESSAO_20260930.md` secao 8 (".git: ACL corrompida no
+        .pytest_cache travava git status").
+
+        LIMITACAO HONESTA
+        ----------------
+        Isto resolve o caso de ACL *herdada quebrada*, em que bastam o SID e
+        o `/T`. NAO resolve o `.pytest_cache` desta maquina: la nem o
+        proprio dono consegue ler a pasta (`icacls` e `takeown` respondem
+        "Acesso negado"), e so o shell elevado reverte. Nesse caso o script
+        AVISA e segue - nunca trava o lote inteiro.
+
+        O SID `*S-1-1-0` e "Everyone". Conceder controle total recursivo e o
+        que destrava a remocao; o alvo e sempre cache de build, nunca
+        codigo nem dado do usuario.
+    #>
+    param([Parameter(Mandatory)][string]$Target)
+
+    if (-not (Test-Path -LiteralPath $Target)) { return }
+    Write-Host "  devolvendo controle de ACL em $Target"
+    # Duas correcoes sao necessarias, e a segunda e a que so funciona:
+    #
+    # 1. O icacls escreve aviso em stderr mesmo em arvore ja correta.
+    # 2. Com `$ErrorActionPreference = 'Stop'` (linha 26), stderr de um
+    #    executavel externo vira erro TERMINATING e mata o script inteiro —
+    #    a limpeza nao acontece, que e o defeito que este bloco corrige.
+    #
+    # Envolver em try/catch e o que neutraliza (2): o aviso continua visivel,
+    # mas a remocao segue.
+    try {
+        & icacls.exe $Target /grant '*S-1-1-0:(OI)(CI)F' /T /Q 2>&1 | Out-Null
+    } catch {
+        Write-Host "  icacls nao pode alterar a ACL deste alvo; tentando remover assim mesmo"
+    }
+}
+
 foreach ($item in $items) {
-    Remove-Item -LiteralPath $item.FullName -Recurse -Force
+    Resolve-Icacls -Target $item.FullName
+    # O `Remove-Item` tambem vira erro TERMINATING sob `$ErrorActionPreference`
+    # e aborta o resto do lote. Um alvo que nao pode ser removido nao pode
+    # impedir os outros de serem limpos — a limpeza parcial ainda e limpeza.
+    try {
+        Remove-Item -LiteralPath $item.FullName -Recurse -Force -ErrorAction Stop
+        Write-Host "  removido: $($item.FullName)"
+    } catch {
+        Write-Warning "nao removido: $($item.FullName) -> $($_.Exception.Message)"
+    }
 }
 Write-Host 'Limpeza segura concluida.'

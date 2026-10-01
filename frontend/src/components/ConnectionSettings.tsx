@@ -53,8 +53,29 @@ export default function ConnectionSettings() {
     setMarket(marketsFor(proxima)[0] ?? '');
     setKey(''); setSecret(''); setPassphrase(''); setStatus('');
   };
+  // MT5 GRAVA A CONEXAO COMO AS OUTRAS (2026-09-30)
+  //
+  // Antes: `if (broker === 'mt5') { await sync(); return; }` — o MT5 lia a
+  // sessao e nao criava registro nenhum. A linha dele era filtrada da tabela
+  // (linha 113), entao o operador via as exchanges e nao via o proprio
+  // terminal. Isso e MT5 como caminho paralelo, que e a regra que o projeto
+  // proibe: a diferenca real dele e o CAMPO (login/servidor em vez de
+  // API key), nao o fluxo.
+  //
+  // O nome da conexao do MT5 vem do proprio terminal, para o operador nao
+  // ter que inventar um apelido so para a linha aparecer.
   const save = async () => {
-    if (broker === 'mt5') { await sync(); return; }
+    if (broker === 'mt5') {
+      const current = await detectTerminal();
+      setAccount(current);
+      const rotulo = [current.name, String(current.server)].filter(Boolean).join(' @ ') || `conta ${current.login}`;
+      const id = await saveExchange(broker, market, rotulo, '', '');
+      await load();
+      await connectionAction(id, 'test');
+      setVerified(values => ({ ...values, [id]: 'Sessão do terminal' }));
+      setStatus(`MT5 sincronizado: ${current.login} · ${current.server}. Conexão registrada como as demais.`);
+      return;
+    }
     const id = await saveExchange(broker, market, name, key, secret, passphrase);
     setKey(''); setSecret(''); setPassphrase('');
     await load();
@@ -110,7 +131,7 @@ export default function ConnectionSettings() {
     <p role="status" aria-live="polite">{status}</p>
     <div className="table-scroll"><table className="tbl compact-table">
       <thead><tr><th>Conexão</th><th>Corretora</th><th>Mercado</th><th>Estado</th><th>Ações</th></tr></thead>
-      <tbody>{rows.filter(row => row.broker !== 'mt5').map(row => <tr key={row.id}>
+      <tbody>{rows.map(row => <tr key={row.id}>
         <td>{row.id.split(':').slice(2).join(':')}</td><td>{row.broker.toUpperCase()}</td><td>{row.market}</td>
         <td>{row.active === false ? 'Desativada' : verified[row.id] ?? 'Salva · não verificada'}</td>
         <td><button disabled={busy} className="btn xs ghost" onClick={() => void run(() => action(row.id, 'test'))}>Testar leitura</button>

@@ -74,3 +74,54 @@
   min-width: 0;
   padding-bottom: 2px;
 }
+
+/* BOTOES DE COMANDO DO MOTOR (2026-09-30)
+   ------------------------------------------
+   Antes eram tres botoes `sm` em uma linha, com a mesma aparencia, e dois
+   deles ("Aplicar" e "Ligar") faziam coisas diferentes. O operador clicava em
+   "Ligar" sem "Aplicar" e o motor seguia operando o par antigo.
+
+   Agora o caminho principal e um botao so, com o rotulo dizendo o que FAZ.
+   O espaco entre eles e fixo para os rotulos nunca quebrarem de linha: um
+   botao que muda de largura quando o texto muda obriga o operador a mirar. */
+.auto-engine-acoes {
+  margin-top: 10px;
+  gap: 8px;
+}
+
+.auto-engine-acoes .btn {
+  min-width: 132px;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+/* O botao principal ocupa o lugar de destaque; o de parada vai para a borda
+   oposta, que e onde a mao do operador ja esta quando algo deu errado. */
+.auto-engine-acoes .btn.danger {
+  margin-left: auto;
+  background: transparent;
+  border-color: var(--danger, #b91c1c);
+  color: var(--danger, #b91c1c);
+}
+
+.auto-engine-acoes .btn.danger:hover:not(:disabled) {
+  background: var(--danger, #b91c1c);
+  color: #fff;
+}
+
+/* Desabilitado = acao impossivel agora. Precisa parecer isso, e nao apenas
+   esmaecido: antes "Ligar" ficava cinza com o motor ligado e o operador
+   achava que era clique perdido. */
+.auto-engine-acoes .btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* While ocupado, nenhum botao aceita segundo clique: dois POSTs de
+   /api/auto/config seguidos gravariam o par duas vezes. */
+.auto-engine-acoes .btn:not(:disabled) {
+  cursor: pointer;
+}

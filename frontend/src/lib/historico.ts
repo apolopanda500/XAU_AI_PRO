@@ -111,6 +111,48 @@ export interface HistoricoOptions {
 }
 
 /**
+ * Chave estavel de um deal, para deduplicar.
+ *
+ * POR QUE NAO E SO O `id`
+ * ==========================
+ * O `id` do gateway e o ticket do MT5, que e um contador POR CONTA. A tela
+ * consulta varias corretoras ao mesmo tempo e junta tudo numa lista, entao o
+ * mesmo ticket aparece em duas contas — e o React ainda avisaria, porque o
+ * `id` repetido vira `key` repetida.
+ *
+ * A chave precisa do que torna o deal unico no conjunto: corretora, conta,
+ * ticket, horario e lado. Sem o horario, um deal de abertura e o de fechamento
+ * da mesma posicao (mesmo ticket, mesmo conta) continuariam colidindo.
+ */
+export function dealChave(deal: Deal, indice = 0): string {
+  const partes = [
+    deal.broker ?? '',
+    String(deal.id ?? ''),
+    deal.symbol ?? '',
+    deal.executedAt ?? deal.close_time ?? '',
+    String(deal.side ?? ''),
+  ];
+  const chave = partes.join('|');
+  // O indice so entra quando o resto e vazio: sem ticket, horario e lado, dois
+  // deals seriam indistinguiveis e um deles sumiria da tela. Quando existe
+  // qualquer um desses campos, dois deals de verdade NUNCA tem a mesma chave.
+  return chave === '||||' ? `sem-campos|${indice}` : chave;
+}
+
+/** Remove deals repetidos, preservando a ordem de chegada. */
+export function deduplicar(deals: Deal[]): Deal[] {
+  const vistas = new Set<string>();
+  const saida: Deal[] = [];
+  deals.forEach((deal, indice) => {
+    const chave = dealChave(deal, indice);
+    if (vistas.has(chave)) return;
+    vistas.add(chave);
+    saida.push(deal);
+  });
+  return saida;
+}
+
+/**
  * Hook de historico. Compartilhado por HistoryTab e AnalyticsTab para que as
  * duas abas leiam exatamente os mesmos deals.
  */
@@ -174,7 +216,10 @@ export function useHistorico(options: HistoricoOptions = {}): HistoricoState {
         lista.map((deal) => ({ ...deal, broker: deal.broker ?? b })),
       );
       plano.sort((a, b) => dealDate(b).localeCompare(dealDate(a)));
-      setDeals(plano);
+      // Deduplica DEPOIS do sort: a ordem vem de varias corretoras, e o mesmo
+      // ticket pode aparecer em contas diferentes. Sem esta linha o operador
+      // via a mesma operacao duas vezes na tabela.
+      setDeals(deduplicar(plano));
 
       const contagem = coletados
         .map((c) => `${c.broker}: ${c.deals.length}`)

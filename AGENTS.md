@@ -61,6 +61,30 @@ cargo check --locked
 cargo test --locked
 ```
 
+O cache de build do Rust vive **fora** do disco do código, em
+`Temp\cargo-target` (definido por `scripts\build_app.bat`). Em 30/09/2026 o
+`target` dentro do repositório chegou a 3,9 GB e o `cargo check` falhou duas
+vezes com *Espaço insuficiente no disco* antes de qualquer teste. `Temp/` já
+está no `.gitignore` e na allowlist de `scripts\limpeza_segura.ps1`.
+
+## Nenhum ativo e nenhuma corretora são fixos
+
+Duas regras do dono, ambas verificadas por teste:
+
+- **Nenhum símbolo pode ser presumido.** Símbolo vazio é **recusa com
+  motivo**, nunca um ativo padrão. A regra já estava escrita em
+  `app/market_symbols.py` (`return ""  # sem ativo fixo`).
+- **Nenhuma corretora pode ser caminho exclusivo.** MT5 é uma entrada entre
+  nove em `backend/broker_registry.py`, não o padrão. Escolher uma corretora
+  na tela tem de ser a corretora que realmente opera.
+
+Trava: `tests/test_ai_inference.py::TestNenhumAtivoPresumido` e
+`tests/test_auto_engine.py::TestRoteamentoPorCorretora`.
+
+O que **não** viola a regra: tabelas de mapeamento (`app/market_data.py`),
+o `Literal` de `backend/universal_contracts.py` (é a lista de suportadas) e o
+`broker_registry` (é o catálogo). Ver `docs/LEVANTAMENTO_20260930.md` §4.
+
 ## Gates de execução
 
 As gates estão liberadas por padrão e podem ficar ligadas:
@@ -99,22 +123,52 @@ Alteração em adaptador de execução: rodar `pytest -q tests/test_execution_ad
 
 Alteração em EA: recompilar no MetaEditor64 antes de considerar pronta a mudança.
 
-## Pendências atuais (2026-09-28)
+## Pendencias atuais (verificado em 30/09/2026)
 
-### Alta prioridade
-1. Implementar tela de login/token para Android (B1)
-2. Expor rotas HTTP do remote_auth.py
-3. Implementar SL/TP e modificação de posição na UI
-4. Desbloquear execução DEMO com travas de segurança
-5. Desbloquear MCP trading com escopo próprio
+A lista anterior (12 itens, de 28/09) foi **substituida**: todos ja foram
+resolvidos ou sao de credencial. O estado real, medido por comando:
 
-### Média prioridade
-6. Criar matriz de capabilities por corretora/ativo
-7. Resolver conflito A1/B3 (assinatura Windows)
-8. Fazer gh auth login e auditar dependências
-9. Commit e push das alterações pendentes
+### Fechado nesta sessao (30/09/2026)
 
-### Baixa prioridade
-10. Endurance test 24h/72h/7d
-11. Forward test em conta DEMO XM Global
-12. Teste em aparelho físico Android
+| Item | Prova |
+|---|---|
+| Nenhum ativo presumido | `TestNenhumAtivoPresumido` - 4 verdes |
+| Nenhuma corretora como padrao | `TestRoteamentoPorCorretora` - 4 verdes |
+| Motor multi-corretora | `_loop` usa `UniversalRouter` + `market_access` |
+| MT5 no mesmo fluxo de conexao | `test_connection_contract` - 6 verdes |
+| Nome real do modelo na tela | `Floresta_XAUUSD_H1`, lido do `.meta.json` |
+| Supervisor de processos (Tauri) | `cargo test` - 11 verdes |
+| Build Rust linkando | `.cargo/config.toml` com `/PDB:NONE` |
+| Ambiente com espaco | 0,87 GB -> 17 GB |
+
+### Pendente de CREDENCIAL (nao e codigo)
+
+1. **Chaves de MEXC, Binance, Bybit e OKX** na maquina do operador. Os 4
+   adaptadores tem envio HTTP real (`mexc_client.py:135`, `okx_client.py:143`,
+   `binance_client.py:128`, `bybit_client.py:140`) e **59 testes verdes**.
+   Sem chave a resposta e `EXECUTION_NO_CREDENTIALS` e nada e enviado - correto.
+2. **Conta corretora REAL** - `XAU_ACCOUNT_KIND=real`. Hoje e
+   `MetaQuotes-DEMO`.
+3. **Certificado de CA publica** - os artefatos 1.2.4 tem certificado
+   autoassinado; o Windows mostra `UnknownError`. Custo ~$200-400/ano.
+
+### Pendente de EXECUCAO (exige o app no ar)
+
+4. **Endurance 24h/72h/7d** - `scripts/endurance_test.py` existe, nao executado.
+5. **Aprovacao do forward test** - a janela existe e e real (14.265 eventos,
+   26 dias, 1.251 starts, 269 aberturas), **mas nao passa**: 4.246
+   `BROKER_ERROR` = 3,4 erro de broker por ciclo. Ver
+   `Docs/MAPEAMENTO_10_10_VERIFICADO_20260930.md`.
+6. **Teste em aparelho fisico Android** - nao ha aparelho.
+7. **`git push` dos lockfiles** - `gh auth` JA ESTA AUTENTICADO
+   (`apolopanda500`, escopo `repo`). O GitHub reporta **81 alertas do
+   Dependabot** (5 critical, 31 high) que NAO refletem o codigo instalado:
+   `npm audit` local da **0 vulnerabilidades** em frontend e backend. O
+   `chromadb` (4 critical) nao esta instalado nem importado; `tar` (1 critical)
+   da `(empty)` no `npm ls`. Os alertas fecham quando os lockfiles forem
+   enviados - nao ha vulnerabilidade a corrigir no codigo.
+
+### Regra de limpeza
+
+Antes de `git status` travar: `.\scripts\limpeza_segura.ps1 -Apply -DebugCache`.
+A ACL do `target\debug` se corrompe a cada build; o script ja corrige.

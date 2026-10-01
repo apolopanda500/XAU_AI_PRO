@@ -106,6 +106,15 @@ def _resolver_modelos() -> Path:
 
 MODELOS_DIR = _resolver_modelos()
 
+#: Motivo devolvido quando nao ha simbolo. Constante e nao string solta no
+#: ponto de uso porque o mesmo texto aparece em `_carregar` e em `inferir`, e
+#: as duas precisam concordar: se divergirem, a tela mostra um motivo e o log
+#: registra outro.
+MOTIVO_SEM_SIMBOLO = (
+    "escolha o ativo antes de pedir inferencia: simbolo vazio nao carrega "
+    "nenhum modelo (o projeto nao presume ativo padrao)"
+)
+
 # Quantas threads de CPU o processo pode usar. O usuario ve esse numero na aba
 # IA; nao e cosmetics, e o limite real de paralelismo do scikit-learn.
 def cpu_threads() -> int:
@@ -173,15 +182,36 @@ _CACHE: dict[str, Any] = {}
 def _carregar(symbol: str, timeframe: str) -> tuple[Any | None, dict[str, Any]]:
     """Carrega .pkl e .meta.json de um timeframe de um simbolo.
 
-    O artefato e `<SIMBOLO>_<TF>` (XAUUSD_H1, BTCUSD_M15, ...). Antes o
-    caminho era fixo em XAUUSD, entao pedir BTCUSD devolvia o modelo de
-    ouro — sinal de outro ativo apresentado como se fosse do ativo pedido.
+    SEM ATIVO FIXO
+    ==============
+    O artefato e `<SIMBOLO>_<TF>` (XAUUSD_H1, BTCUSD_M15, ...). Simbolo vazio
+    aqui e **recusa**, nunca XAUUSD: a regra do dono e "nenhum simbolo pode ser
+    presumido" e ja estava escrita em `app/market_symbols.py`
+    (`return ""  # sem ativo fixo`).
 
-    O .pkl tem 8 MB e leva ~2 s para desserializar. Recarregar a cada tique
+    HISTORICO DESTE DEFEITO
+    -----------------------
+    Duas vezes o mesmo par de bugs apareceu neste modulo:
+
+    1. O CAMINHO era fixo em XAUUSD. Pedir BTCUSD devolvia o modelo de ouro.
+       Corrigido: as linhas de `pkl`/`meta` passaram a usar `{simbolo}`.
+    2. O DEFAULT ficou. `str(symbol or "XAUUSD")` sobreviveu ao conserto do
+       caminho, e `inferir("", candles, "H1")` continuava devolvendo o
+       classificador de ouro — com confianca real e sem nada no retorno que
+       denuncie.
+
+    O padrao e sempre o mesmo: conserta-se o caso visivel e o silencioso fica.
+    Por isso `tests/test_ai_inference.py::TestNenhumAtivoPresumido` existe.
+
+    O `.pkl` tem 8 MB e leva ~2 s para desserializar. Recarregar a cada tique
     seria crippling, entao o resultado fica em cache e so e invalidado quando
     o mtime do arquivo muda (retraining).
     """
-    simbolo = str(symbol or "XAUUSD").strip().upper() or "XAUUSD"
+    simbolo = str(symbol or "").strip().upper()
+    if not simbolo:
+        # Sem artefato, sem metadados e sem chance de cache: um simbolo vazio
+        # nao tem mtime para invalidar.
+        return None, {"publish_reason": MOTIVO_SEM_SIMBOLO}
     chave = f"modelo:{simbolo}:{timeframe}"
     pkl = MODELOS_DIR / f"{simbolo}_{timeframe}.pkl"
     meta = MODELOS_DIR / f"{simbolo}_{timeframe}.meta.json"
@@ -207,6 +237,52 @@ def _carregar(symbol: str, timeframe: str) -> tuple[Any | None, dict[str, Any]]:
 
 def limpar_cache() -> None:
     _CACHE.clear()
+
+
+def _nome_do_modelo(symbol: str, timeframe: str, meta: dict[str, Any]) -> str:
+    """Nome do modelo QUE DECIDIU, lido do proprio metadado.
+
+    POR QUE ISTO EXISTE
+    ===================
+    A inferencia usava `f"random_forest_{symbol}_{timeframe}"` — um nome
+    FABRICADO em tempo de execucao. tres problemas, todos reais:
+
+    1. **O nome da tela era falso.** O operador lia `random_forest_XAUUSD_H1`
+       no app e acreditava que aquele era o artefato rodando. O `.meta.json`
+       ja gravava `"algorithm"` desde o treino (train_v2.py:508) e a
+       inferencia simplesmente o ignorava.
+    2. **Nao sobrevivia a troca de algoritmo.** Se o treino passasse a usar
+       GradientBoosting, a tela continuaria dizendo "random forest" — o
+       oposto do principio de `Docs/LEVANTAMENTO_20260930.md`: *"afirmacao
+       sem verificacao e marketing"*.
+    3. **O frontend fabricava de novo.** `UniversalLiveTerminal.tsx:177`
+       montava o mesmo nome a partir de `auto.simbolo`/`auto.timeframe`,
+       ou seja, o terminal mostrava um modelo que talvez nem fosse o do ciclo.
+
+    O nome agora vem do artefato. `Fallback: sem metadado, mostra o par — que
+    e verdadeiro — em vez de inventar um algoritmo.
+    """
+    algoritmo = str(meta.get("algorithm") or "").strip()
+    par = f"{str(symbol or '').strip().upper()}_{str(timeframe or '').strip().upper()}"
+    if not algoritmo:
+        return par
+    # `RandomForestClassifier` -> "Floresta" fica ilegivel para o operador;
+    # `random_forest` e o nome tecnico curto que ele reconhece.
+    return f"{_ROTULO_ALGORITMO.get(algoritmo, algoritmo)}_{par}"
+
+
+#: Rotulo legivel por algoritmo. Sem esta tabela, a tela mostraria
+#: `RandomForestClassifier_XAUUSD_H1` — correto e inutil para quem opera.
+_ROTULO_ALGORITMO: dict[str, str] = {
+    "RandomForestClassifier": "Floresta",
+    "GradientBoostingClassifier": "Boosting",
+    "ExtraTreesClassifier": "ExtraTrees",
+    "HistGradientBoostingClassifier": "HistBoost",
+    "LogisticRegression": "Logistica",
+    "SVC": "SVM",
+    "XGBClassifier": "XGBoost",
+    "LGBMClassifier": "LightGBM",
+}
 
 
 def _n_jobs_inferencia() -> int:
@@ -237,12 +313,21 @@ def inferir(symbol: str, candles: pd.DataFrame, timeframe: str = "H1") -> Infere
     """Roda o modelo do timeframe e devolve a decisao, ou diz por que nao pode.
 
     `candles` deve conter Time/Open/High/Low/Close/Volume/ATR/ADX/RSI no
-    timeframe pedido. Nao ha默认值 e nao haFallback: se faltar, devolvemos
+    timeframe pedido. Nao ha padrao e nao ha fallback: se faltar, devolvemos
     indisponivel com o motivo.
+
+    SIMBOLO VAZIO E RECUSA
+    =====================
+    Verificado ANTES de qualquer trabalho pesado (reamostrar, construir as 25
+    features). Sem simbolo nao existe artefato, e sem artefato nao existe
+    decisao. Devolver qualquer coisa aqui seria inventar o ativo.
     """
     inicio = time.perf_counter()
     threads = cpu_threads()
     os.environ.setdefault("XAU_AI_PRO_N_JOBS", str(threads))
+
+    if not str(symbol or "").strip():
+        return Inferencia(False, MOTIVO_SEM_SIMBOLO, "", timeframe)
 
     if timeframe not in t.MINUTOS_TIMEFRAME:
         return Inferencia(False, f"timeframe nao suportado: {timeframe}", symbol, timeframe)
@@ -294,7 +379,7 @@ def inferir(symbol: str, candles: pd.DataFrame, timeframe: str = "H1") -> Infere
             accuracy=metricas.get("accuracy"),
             folds=metricas.get("folds"),
             inferencia_ms=ms,
-            modelo=f"random_forest_{symbol.upper()}_{timeframe}",
+            modelo=_nome_do_modelo(symbol, timeframe, meta),
             feature_hash=t.feature_hash(),
         )
     except Exception as exc:  # pragma: no cover

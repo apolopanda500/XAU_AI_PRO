@@ -33,9 +33,7 @@ import type { ReactNode } from 'react';
 import { useAppStore, ROBOT_SUBS, type RobotSub } from '../hooks/useAppStore';
 import ErrorBoundary from './ErrorBoundary';
 import AutoEnginePanel from './AutoEnginePanel';
-import OrderPanel from './OrderPanel';
 import RiskTab from './tabs/RiskTab';
-import GuardianManager from './GuardianManager';
 import UniversalLiveTerminal from './UniversalLiveTerminal';
 import '../theme/robot-subtabs.css';
 // Densidade das tabelas do Histórico, aplicada também às do Robô (M3).
@@ -46,7 +44,7 @@ const ROTULOS: Record<RobotSub, string> = {
 };
 
 const RESUMOS: Record<RobotSub, string> = {
-  operar: 'Automático, posições e ordem manual — a mesa inteira num lugar só.',
+  operar: 'Operação automática, terminal e posições abertas — só o que o operador precisa ver.',
 };
 
 function Secao({ nome, children }: { nome: string; children: ReactNode }) {
@@ -57,31 +55,33 @@ export default function RobotTabs() {
   const sub = useAppStore((s) => s.robotSub);
   const setSub = useAppStore((s) => s.setRobotSub);
 
-  // UMA ABA SO PARA OPERAR (2026-09-29).
+  // ORDEM DA MESA, E O QUE FICOU (2026-09-30)
+  // ==============================================
+  // O dono pediu: *"operacao automatica, terminal, posicoes abertas so isso
+  // mais bem configurado e com botoes melhorados"*.
   //
-  // "Sinal" e "EA" saíram como sub-abas porque separadas obrigavam o operador a
-  // trocar de tela para responder "qual ativo e modelo?" e "quanto posso
-  // arriscar?" — duas perguntas que precisam da MESMA resposta, na mesma hora.
+  // Antes eram quatro blocos, nesta ordem:
+  //   1. automatico  — AutoEnginePanel
+  //   2. posicoes    — UniversalLiveTerminal
+  //   3. ordem manual — OrderPanel
+  //   4. guardian    — GuardianManager
   //
-  // O `RiskTab` saiu daqui por outro motivo: ele trazia a PARADA DE
-  // EMERGENCIA, que ja existia tambem no `OrderPanel`. Dois botoes de corte
-  // na mesma tela, em lados opostos, e o risco real de o operador clicar no
-  // errado. A parada de emergencia continua no `OrderPanel` (que e onde se
-  // envia a ordem) e no risco, mas como leitura — o corte de verdade e o
-  // botao unico do OrderPanel.
+  // Saem (3) e (4):
+  //   - **Ordem manual**: tinha o seletor de corretora/mercado DUPLICADO (o
+  //     `OrderPanel` mantem o proprio `Broker` e `MERCADOS`), o que fazia a
+  //     tela afirmar uma corretora e o motor operar outra. Era a origem de
+  //     "escolhi Binance e a ordem foi para o MT5".
+  //   - **Guardian**: protecao e trailing ficam legiveis no terminal ao vivo e
+  //     no EA; dentro do Robô eram um bloco de configuracao que o operador
+  //     rarely revisava e que competia visually com o motor.
   //
-  // Ordem da mesa, na sequencia em que se opera:
-  //   1. automatico  — liga o motor e escolhe ativo/modelo
-  //   2. posições    — o que esta aberto agora (conferencia, sempre visivel)
-  //   3. ordem       — compra/venda a mao
-  //   4. guardian    — protecao e trailing
+  // Ficam (1) e (2), que sao as duas leituras que o operador precisa
+  // continuamente: o que o motor esta fazendo e o que esta aberto agora.
   const paineis: Record<RobotSub, ReactNode> = {
     operar: (
       <>
         <Secao nome="Operação automática"><AutoEnginePanel /></Secao>
         <Secao nome="Posições ao vivo"><UniversalLiveTerminal /></Secao>
-        <Secao nome="Ordem manual"><OrderPanel /></Secao>
-        <Secao nome="Guardian"><GuardianManager /></Secao>
       </>
     ),
   };

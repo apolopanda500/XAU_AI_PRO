@@ -98,6 +98,10 @@ export type AutoState = {
     sl?: number | null;
     tp?: number | null;
     risco?: number | null;
+    /** Nome do artefato que produziu a inferencia do ciclo, lido do
+     *  `.meta.json` pelo backend. O Mini Terminal mostra este valor em vez
+     *  de fabricar `random_forest_<simbolo>_<tf>` no proprio JSX. */
+    modelo?: string;
   }>;
 };
 export function useAutoState() {

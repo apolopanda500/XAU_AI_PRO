@@ -48,6 +48,7 @@ from backend.third_party_ea import READ_ONLY_CAPABILITIES, evaluate_all as evalu
 from backend import intent_log
 from backend import persistent_queue
 from backend import watchdog
+from backend import gateway_server
 from Python.model_registry import model_catalog
 
 HOST = "127.0.0.1"
@@ -2533,6 +2534,38 @@ class Handler(BaseHTTPRequestHandler):
             action = parts[-1] if parts else ""
             if action == "test": self._send(200, {"ok": True, "configured": any(x["id"] == connection_id for x in list_connections()), "credentials_exposed": False}); return
         if parsed.path == "/api/connections": self._send(200, {"ok": True, "connections": list_connections()}); return
+        # CALENDARIO ECONOMICO (2026-09-30)
+        #
+        # A rota estava declarada no mapa de planos (`_ROTAS_GET`) e a funcao
+        # `_economic_calendar` existia, mas NENHUMA linha do `do_GET` chamava
+        # uma ou outra. Resultado: 404, e a aba Calendario ficava vazia.
+        #
+        # Por que o teste nao pegou: `EconomicCalendarTab.test.tsx` trava o
+        # `fetch` com eventos de mentira. Ele prova a RENDERIZACAO, nunca a
+        # rota — e um 404 e um payload vazio produzem a mesma tela.
+        #
+        # Aqui a chamada e real. Se `app.economic_calendar` falhar, a resposta
+        # diz o motivo em vez de virar lista vazia sem explicacao.
+        if parsed.path == "/api/economic/calendar":
+            # `parse_qs` JA esta importado no topo do modulo (linha 21).
+            # Nao repetir o import aqui: Python passa a tratar o nome como
+            # variavel local da funcao e o `UnboundLocalError` derrubava TODAS
+            # as rotas do `do_GET`. O mesmo bug ja aconteceu nesta sessao com
+            # `_payload` — ver `plano_gate` e o comentario no `do_GET`.
+            _q = parse_qs(parsed.query)
+            _g = lambda _k, _d: (_q.get(_k) or [_d])[0]
+            try:
+                self._send(200, _economic_calendar(
+                    limit=int(_g("limit", "30") or 30),
+                    tz=_g("tz", "BRT"),
+                    days=int(_g("days", "14") or 14),
+                ))
+            except (ValueError, TypeError) as _e:
+                self._send(400, {"ok": False, "error": f"parametro invalido: {_e}"})
+            except Exception as _e:
+                self._send(503, {"ok": False, "error": f"agenda indisponivel: {_e}",
+                                  "events": [], "count": 0})
+            return
         if parsed.path == "/api/ai/trained":
             # O painel do motor so pode oferecer par que o motor VAI aceitar.
             # `_carregar()` so devolve o modelo quando `publicable` e verdadeiro,
@@ -3148,10 +3181,19 @@ def main() -> None:
         start_guardian_loop()
         persistent_queue.start_queue_loop()
         watchdog.start_telemetry_loop()
-    srv = ThreadingHTTPServer((HOST, PORT), Handler)
+    srv = gateway_server.criar_servidor((HOST, PORT), Handler)
     srv.daemon_threads = True
-    print(f"[gateway] MT5 Gateway rodando em http://{HOST}:{PORT}")
-    srv.serve_forever()
+    print(
+        f"[gateway] MT5 Gateway rodando em http://{HOST}:{PORT} "
+        f"(backlog={srv.request_queue_size}, "
+        f"keep_alive={Handler.protocol_version})"
+    )
+    try:
+        srv.serve_forever()
+    except KeyboardInterrupt:
+        print("[gateway] encerrado por interrupcao")
+    finally:
+        srv.server_close()
 
 
 if __name__ == "__main__":

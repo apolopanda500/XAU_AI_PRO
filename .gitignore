@@ -154,6 +154,13 @@ frontend/src-tauri/*.log
 frontend/src-tauri/*.flag
 frontend/tauri_bundle*.log
 frontend/tauri_bundle*.flag
+
+# PDB do Rust quando o linker recebe um caminho de saida vazio. Um `NONE` de
+# 11 MB apareceu na raiz de src-tauri em 30/09/2026 (formato "Microsoft C/C++
+# MSF 7.00"), e o `preflight` acusava "binarios na raiz" por causa dele.
+# A origem foi `bg_build.ps1`, hoje substituido por `scripts\build_app.bat`.
+frontend/src-tauri/NONE
+frontend/src-tauri/bg_build.ps1
 core/*.exe
 core/*.log
 core/*.flag

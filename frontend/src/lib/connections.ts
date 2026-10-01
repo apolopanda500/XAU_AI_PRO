@@ -83,23 +83,44 @@ export async function detectTerminal(): Promise<TerminalAccount> {
  * outras e inofensivo (o store ignora), mas omitir o campo quando a corretora
  * nao usa mantem o payload minimo e evita guardar segredo que nao sera usado.
  */
+/**
+ * Cadastra uma conexao. Nao envia ordem: so grava e o chamador valida a leitura.
+ *
+ * MT5 entra pelo MESMO caminho (2026-09-30)
+ * =========================================
+ * Antes esta funcao aceitava so `Exchange` e lancava em MT5 com "MT5 usa a
+ * sessao do terminal, nao API key". O `ConnectionSettings` ainda por cima
+ * filtrava a linha de MT5 da tabela, entao a conexao do terminal nunca
+ * aparecia entre as outras: MT5 era caso especial em tres lugares seguidos
+ * (backend, lib e tela) quando o backend ja o tratava como as demais.
+ *
+ * Agora a unica diferenca e o CAMPO: corretora de sessao nao tem API key, e
+ * o backend grava `credential_source: "session"` para a tela saber o que
+ * pedir. A diferenca fica declarada, nao espalhada em `if`.
+ */
 export async function saveExchange(
-  broker: Exchange,
+  broker: Broker,
   market: string,
   name: string,
   key: string,
   secret: string,
   passphrase = '',
 ): Promise<string> {
-  if (!isExchange(broker)) throw new Error('MT5 usa a sessão do terminal, não API key.');
   if (!marketsFor(broker).includes(market)) throw new Error('Mercado incompatível com a corretora.');
-  if (![name, key, secret].every(value => value.trim())) throw new Error('Informe nome, API key e secret.');
+  if (!name.trim()) throw new Error('Dê um nome à conexão.');
+  const precisaCredencial = isExchange(broker);
+  if (precisaCredencial && ![key, secret].every(value => value.trim())) {
+    throw new Error(`${ROTULO_BROKER[broker]}: informe API key e secret.`);
+  }
   if (exigePassphrase(broker) && !passphrase.trim()) {
     throw new Error(`${ROTULO_BROKER[broker]} exige a passphrase criada junto com a API key.`);
   }
   const id = `${broker}:${market}:${name.trim()}`;
   await requestConnection('/api/connections', 'POST', {
-    id, broker, market, api_key: key.trim(), api_secret: secret.trim(),
+    id, broker, market,
+    // Corretora de sessao nao recebe segredo nenhum: gravar vazio no DPAPI
+    // seria guardar um segredo que nao existe.
+    ...(precisaCredencial ? { api_key: key.trim(), api_secret: secret.trim() } : {}),
     ...(exigePassphrase(broker) ? { api_passphrase: passphrase.trim() } : {}),
   });
   return id;

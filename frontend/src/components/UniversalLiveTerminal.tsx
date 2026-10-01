@@ -32,6 +32,10 @@ export default function UniversalLiveTerminal() {
   // A decisao mais recente do motor: o historico vem do mais novo para o mais
   // velho (ver `MotorAuto._registrar`), entao o indice 0 e o ultimo ciclo.
   const ultimaDecisao = Array.isArray(auto?.decisoes) ? auto.decisoes[0] : undefined;
+  // O nome do modelo que REALMENTE rodou neste ciclo, lido do `.meta.json`
+  // pelo backend. Antes o terminal montava `random_forest_${simbolo}_${tf}`
+  // aqui dentro - um nome que ele fabricava, sem nunca ter lido o artefato.
+  const modeloDoCiclo = String(ultimaDecisao?.modelo ?? '').trim();
 
   // O modo da conta (DEMO/REAL) aparece AQUI e em mais lugar nenhum da
   // interface: o Mini Terminal ja mostra saldo, patrimonio e posicoes, entao
@@ -173,9 +177,16 @@ export default function UniversalLiveTerminal() {
         <span title="Modelo e última decisão do ciclo em execução">
           <em>Modelo</em>
           <strong>
-            {auto?.simbolo && auto?.timeframe
-              ? `random_forest_${auto.simbolo}_${auto.timeframe}`
-              : '—'}
+            {/* O nome vem da DECISAO registrada pelo motor, nao de
+                `auto.simbolo`/`auto.timeframe`. Antes era montado aqui como
+                `random_forest_${simbolo}_${timeframe}` - o terminal mostrava
+                um nome que o motor nunca leu do disco. Se o ciclo ainda nao
+                rodou, mostra o par (verdadeiro) em vez de um algoritmo
+                inventado. */}
+            {modeloDoCiclo
+              || (auto?.simbolo && auto?.timeframe
+                ? `${auto.simbolo}_${auto.timeframe}`
+                : '—')}
           </strong>
         </span>
       )}

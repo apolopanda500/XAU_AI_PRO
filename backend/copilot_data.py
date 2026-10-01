@@ -155,20 +155,29 @@ def _erro_de(d: dict[str, Any], padrao: str) -> str:
     return padrao
 
 
-def cotacoes(broker: str = "mt5", market: str = "other",
-             simbolos: str = "XAUUSD") -> dict[str, Any]:
+def cotacoes(broker: str, market: str, simbolos: str) -> dict[str, Any]:
+    """Cotacoes de um conjunto de simbolos, na corretora e mercado informados.
+
+    `simbolos` e OBRIGATORIO (antes tinha `= "XAUUSD"`). Cotacao de um ativo
+    que ninguem pediu e invencao: o operador pergunta sobre EURUSD e a tela
+    mostra o ouro.
+
+    `broker` e `market` tambem sao obrigatorios: a normalizacao em
+    `normalize_read_scope` existe justamente porque cada corretora tem seu
+    conjunto de mercados, e um default silencioso aqui escolheria um par que
+    o chamador nao pediu.
+    """
     r = buscar("/api/universal/quotes", {"broker": broker, "market": market, "symbols": simbolos})
     if r.get("erro") or r.get("ok") is False or r.get("status") == 503:
         r = {**r, "motivo": _erro_de(r, "sem retorno")}
     return r
 
 
-def stats24h(symbol: str, broker: str = "mt5", market: str = "other") -> dict[str, Any]:
+def stats24h(symbol: str, broker: str, market: str) -> dict[str, Any]:
     return buscar("/api/universal/stats24h", {"symbol": symbol, "broker": broker, "market": market})
 
 
-def candles(symbol: str, timeframe: str = "H1", limite: int = 200,
-            broker: str = "mt5", market: str = "other") -> dict[str, Any]:
+def candles(symbol: str, timeframe: str, limite: int, broker: str, market: str) -> dict[str, Any]:
     r = buscar("/api/universal/candles", {
         "symbol": symbol, "timeframe": timeframe, "limit": limite,
         "broker": broker, "market": market,
@@ -178,7 +187,7 @@ def candles(symbol: str, timeframe: str = "H1", limite: int = 200,
     return r
 
 
-def profundidade(symbol: str, limite: int = 10, broker: str = "mt5", market: str = "other") -> dict[str, Any]:
+def profundidade(symbol: str, limite: int, broker: str, market: str) -> dict[str, Any]:
     return buscar("/api/universal/depth", {
         "symbol": symbol, "limit": limite, "broker": broker, "market": market,
     })
@@ -187,19 +196,19 @@ def profundidade(symbol: str, limite: int = 10, broker: str = "mt5", market: str
 # ------------------------------------------------------------------- conta
 
 
-def conta(broker: str = "mt5", market: str = "other") -> dict[str, Any]:
+def conta(broker: str, market: str) -> dict[str, Any]:
     r = buscar("/api/universal/account", {"broker": broker, "market": market})
     if r.get("erro") or r.get("ok") is False or r.get("status") == 503:
         r = {**r, "motivo": _erro_de(r, "sem conta")}
     return r
 
 
-def posicoes(broker: str = "mt5", market: str = "other") -> dict[str, Any]:
+def posicoes(broker: str, market: str) -> dict[str, Any]:
     return buscar("/api/universal/positions", {"broker": broker, "market": market})
 
 
-def historico(dias: int = 90, symbol: str | None = None, broker: str = "mt5") -> dict[str, Any]:
-    params: dict[str, Any] = {"broker": broker, "market": "other", "days": dias}
+def historico(broker: str, market: str, dias: int = 90, symbol: str | None = None) -> dict[str, Any]:
+    params: dict[str, Any] = {"broker": broker, "market": market, "days": dias}
     if symbol:
         params["symbol"] = symbol
     return buscar("/api/universal/history", params)
@@ -334,15 +343,27 @@ def resumo_do_ambiente() -> dict[str, Any]:
     return saida
 
 
-def leitura_do_mercado(symbol: str = "", timeframe: str = "") -> dict[str, Any]:
-    """Cotacao + 24h + leitura de tendencia dos candles. Sem previsao."""
+def leitura_do_mercado(
+    symbol: str,
+    timeframe: str,
+    broker: str,
+    market: str,
+) -> dict[str, Any]:
+    """Cotacao + 24h + leitura de tendencia dos candles. Sem previsao.
+
+    Todos os quatro sao obrigatorios. `symbol=""` aqui significava "ver a
+    cotacao de XAUUSD", porque o `cotacoes` tinha esse default. Sem simbolo
+    escolhido nao existe leitura de mercado a fazer.
+    """
     saida: dict[str, Any] = {
         "symbol": symbol,
+        "broker": broker,
+        "market": market,
         "timeframe": timeframe,
         "colhido_em": datetime.now(timezone.utc).isoformat(),
     }
 
-    q = cotacoes(simbolos=symbol)
+    q = cotacoes(broker=broker, market=market, simbolos=symbol)
     items = q.get("quotes") or q.get("data") if isinstance(q, dict) else None
     if isinstance(items, list) and items:
         saida["cotacao"] = {
@@ -357,7 +378,7 @@ def leitura_do_mercado(symbol: str = "", timeframe: str = "") -> dict[str, Any]:
     else:
         saida["cotacao"] = {"erro": q.get("erro") if isinstance(q, dict) else "sem retorno"}
 
-    st = stats24h(symbol)
+    st = stats24h(symbol, broker=broker, market=market)
     std = st.get("stats") or st.get("data") if isinstance(st, dict) else None
     if isinstance(std, dict):
         saida["24h"] = {
@@ -493,10 +514,15 @@ def relatorio_ambiente() -> str:
     return "\n".join(l)
 
 
-def relatorio_mercado(symbol: str = "", timeframe: str = "") -> str:
-    """Leitura de mercado. Descritiva, nunca previsao."""
-    m = leitura_do_mercado(symbol, timeframe)
-    l: list[str] = [f"**{symbol} {timeframe}** _(leitura ao vivo)_\n"]
+def relatorio_mercado(symbol: str, timeframe: str, broker: str, market: str) -> str:
+    """Leitura de mercado. Descritiva, nunca previsao.
+
+    Sem `symbol` nao ha leitura: o default anterior (`symbol=""`) levava ao
+    `cotacoes`, que por sua vez tinha `simbolos="XAUUSD"` — o operador pedia
+    mercado e recebia ouro, sem nenhuma palavra dizendo isso.
+    """
+    m = leitura_do_mercado(symbol, timeframe, broker, market)
+    l: list[str] = [f"**{symbol} {timeframe}** _(leitura ao vivo · {broker}/{market})_\n"]
 
     q = m.get("cotacao") or {}
     if "erro" in q:

@@ -20,7 +20,7 @@
 // não há como listar histórico sem saber o par.
 import { useMemo, useState } from 'react';
 import { fmtNum, fmtSigned, clsPnl } from '../../lib/format';
-import { useHistorico, resumir, toNumber, dealDate, type Deal } from '../../lib/historico';
+import { useHistorico, resumir, toNumber, dealDate, dealChave, type Deal } from '../../lib/historico';
 import '../../theme/history.css';
 // Carregado por último: sobrescreve as celulas de 40px do history.css.
 import '../../theme/history-grid.css';
@@ -156,7 +156,7 @@ export default function HistoryTab() {
 
       <div className="card compact-card acum-table-card">
         <h2>Por período</h2>
-        <div className="table-scroll">
+        <div className="table-scroll history-wrap">
           <table className="tbl compact-table history-grid">
             <thead>
               <tr>
@@ -184,7 +184,7 @@ export default function HistoryTab() {
         <p className="csv-note">Calculado sobre os registros do filtro atual. Use "Tudo" para o acumulado completo.</p>
       </div>
 
-      <div className="card compact-card table-scroll history-table-card">
+      <div className="card compact-card table-scroll history-table-card history-wrap">
         <table className="tbl compact-table history-grid history-deals">
           <caption className="sr-only">Execuções reais por corretora</caption>
           <thead>
@@ -198,7 +198,7 @@ export default function HistoryTab() {
               const p = toNumber(r.realizedPnl);
               const value = Number.isFinite(p) ? p : 0;
               return (
-                <tr key={`${r.id}-${i}`} className={value > 0 ? 'history-row-positive' : value < 0 ? 'history-row-negative' : ''}>
+                <tr key={dealChave(r, i)} className={value > 0 ? 'history-row-positive' : value < 0 ? 'history-row-negative' : ''}>
                   <td className="history-when">{date(r.executedAt ?? r.close_time)}</td>
                   <td><strong>{r.symbol ?? '--'}</strong></td>
                   <td><span className={`chip ${/buy/i.test(String(r.side)) ? 'ok' : /sell/i.test(String(r.side)) ? 'warn' : 'neutral'}`}>{r.side ?? '--'}</span></td>

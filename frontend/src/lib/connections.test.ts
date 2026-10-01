@@ -47,9 +47,29 @@ describe('corretoras aceitas', () => {
   });
 
   it('recusa MT5 no saveExchange', async () => {
-    await expect(
-      saveExchange('mt5' as never, 'crypto-spot', 'conta', 'k', 's'),
-    ).rejects.toThrow(/sessão do terminal/);
+  });
+
+  it('MT5 entra no mesmo fluxo, sem API key (2026-09-30)', async () => {
+    // Antes este teste exigia que MT5 fosse RECUSADO. O dono mandou o
+    // contrario: MT5 tem que aparecer na lista de conexao como as outras.
+    // O que sobra de diferente e o CAMPO, nao o fluxo.
+    const post = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true, json: async () => ({ ok: true }),
+    }));
+    await saveExchange('mt5', 'metals', 'conta demo', '', '');
+    expect(post).toBeDefined();
+  });
+
+  it('nao manda segredo no payload de corretora de sessao', async () => {
+    const spy = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true }) });
+    vi.stubGlobal('fetch', spy);
+    await saveExchange('mt5', 'metals', 'conta demo', '', '');
+    const corpo = JSON.parse(String(spy.mock.calls[0][1].body));
+    // Gravar vazio no DPAPI seria guardar segredo que nao existe.
+    expect(corpo.api_key).toBeUndefined();
+    expect(corpo.api_secret).toBeUndefined();
+    expect(corpo.broker).toBe('mt5');
   });
 });
 
@@ -79,8 +99,10 @@ describe('passphrase', () => {
   });
 
   it('exige nome, key e secret para qualquer exchange', async () => {
-    await expect(saveExchange('mexc', 'crypto-spot', '', 'k', 's')).rejects.toThrow(/nome, API key e secret/);
-    await expect(saveExchange('mexc', 'crypto-spot', 'n', '  ', 's')).rejects.toThrow(/nome, API key e secret/);
+    // A mensagem agora diz o campo que falta, em vez de "informe nome, API
+    // key e secret" para um formulario que ja veio preenchido.
+    await expect(saveExchange('mexc', 'crypto-spot', '', 'k', 's')).rejects.toThrow(/nome/i);
+    await expect(saveExchange('mexc', 'crypto-spot', 'n', '  ', 's')).rejects.toThrow(/API key e secret/);
   });
 
   it('identifica a corretora pelo rotulo exibido na tela', () => {

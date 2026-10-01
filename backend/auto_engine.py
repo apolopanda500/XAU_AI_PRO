@@ -111,6 +111,12 @@ class Decisao:
     sl: float = 0.0
     tp: float = 0.0
     resultado: dict[str, Any] = field(default_factory=dict)
+    #: Nome do artefato que produziu a inferencia deste ciclo, lido do
+    #: `.meta.json` (campo `algorithm`). Antes nao existia, e o terminal ao vivo
+    #: FABRICAVA um nome a partir de `simbolo`/`timeframe` — mostrando
+    #: `random_forest_XAUUSD_H1` sem ter lido aquilo de lugar nenhum.
+    #: Vazio quando o ciclo nem chegou a inferir.
+    modelo: str = ""
 
     def para_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -161,8 +167,11 @@ class MotorAuto:
                 "ativo": self.ativo,
                 "simbolo": self.simbolo,
                 "timeframe": self.timeframe,
-                "broker": self.broker or "mt5",
-                "market": self.market or "forex",
+                # Sem `or "mt5"`: com broker vazio o painel mostrava MT5, e o
+                # `_loop` usava MT5 de verdade. O valor vazio e o honesto —
+                # ainda nao foi escolhida nenhuma corretora.
+                "broker": self.broker or "",
+                "market": self.market or "",
                 "ciclo": self.ciclo,
                 "limites": asdict(self.limites),
                 "decisoes": [d.para_dict() for d in self.decisoes[-20:]],
@@ -230,8 +239,8 @@ class MotorAuto:
             return {
                 "ok": True,
                 "limites": asdict(self.limites),
-                "broker": self.broker or "mt5",
-                "market": self.market or "forex",
+                "broker": self.broker or "",
+                "market": self.market or "",
             }
 
     def ligar(self) -> dict[str, Any]:
@@ -250,6 +259,16 @@ class MotorAuto:
             }
         if not str(self.timeframe or "").strip():
             return {"ok": False, "error": "escolha o timeframe antes de ligar a operacao automatica"}
+        # Corretora tambem e obrigatoria, pelo mesmo motivo do ativo: sem ela o
+        # motor nao tem para onde mandar a ordem, e descobrir isso no meio de
+        # um ciclo significa inferencia, risco e sizing jogados fora. Sem o
+        # default "mt5", que era a mentira que o painel contava.
+        if not str(self.broker or "").strip():
+            return {
+                "ok": False,
+                "error": "escolha a corretora antes de ligar a operacao automatica: "
+                         "nenhuma corretora e caminho padrao",
+            }
         with self._lock:
             if self._thread is not None and self._thread.is_alive():
                 return {"ok": True, "status": "ja ligado"}
@@ -292,6 +311,10 @@ class MotorAuto:
             self.ciclo += 1
             limites = asdict(self.limites)
             simbolo, timeframe = self.simbolo, self.timeframe
+        # Nome do artefato que decides este ciclo. Comeca vazio e so e
+        # preenchido DEPOIS da inferencia — uma decisao anterior a ela nao tem
+        # modelo, e mostrar o do ciclo passado seria mentira de novo.
+        modelo_ciclo = ""
 
         # 1. Risco real do gateway. Se nao vier, nao opera: falha fechado.
         try:
@@ -321,38 +344,41 @@ class MotorAuto:
         edge = getattr(inf, "edge", None)
         atr = float(getattr(inf, "atr", 0.0) or 0.0)
         preco = float(getattr(inf, "price", 0.0) or 0.0)
+        # LIDO DA INFERENCIA, que por sua vez leu do `.meta.json`. E o unico
+        # lugar em que o nome do modelo pode ser verdadeiro.
+        modelo_ciclo = str(getattr(inf, "modelo", "") or "")
 
         # 3. O modelo precisa ter edge e confianca minima.
         if edge is not None and float(edge) < float(limites["edge_minimo"]):
             return self._registrar(Decisao(
                 agora, simbolo, timeframe, False,
                 f"edge {float(edge):+.4f} abaixo do minimo {float(limites['edge_minimo']):+.4f}",
-                sinal, confianca, edge))
+                sinal, confianca, edge, modelo=modelo_ciclo))
         if confianca < float(limites["confianca_minima"]):
             return self._registrar(Decisao(
                 agora, simbolo, timeframe, False,
                 f"confianca {confianca:.1f}% abaixo do minimo {float(limites['confianca_minima']):.1f}%",
-                sinal, confianca, edge))
+                sinal, confianca, edge, modelo=modelo_ciclo))
         if sinal not in ("BUY", "SELL"):
             return self._registrar(Decisao(
                 agora, simbolo, timeframe, False,
-                "modelo em NEUTRAL", sinal, confianca, edge))
+                "modelo em NEUTRAL", sinal, confianca, edge, modelo=modelo_ciclo))
         if atr <= 0 or preco <= 0:
             return self._registrar(Decisao(
                 agora, simbolo, timeframe, False,
-                "sem ATR ou preco real para dimensionar protecao", sinal, confianca, edge))
+                "sem ATR ou preco real para dimensionar protecao", sinal, confianca, edge, modelo=modelo_ciclo))
 
         # 4. Limites de exposicao vindos do risk_gate.
         if int(risco.get("open_positions", 0)) >= int(limites["max_posicoes"]):
             return self._registrar(Decisao(
                 agora, simbolo, timeframe, False,
                 f"ja ha {risco.get('open_positions')} posicoes (max {limites['max_posicoes']})",
-                sinal, confianca, edge))
+                sinal, confianca, edge, modelo=modelo_ciclo))
         if int(risco.get("daily_trades", 0)) >= int(limites["max_operacoes_dia"]):
             return self._registrar(Decisao(
                 agora, simbolo, timeframe, False,
                 f"limite diario de {limites['max_operacoes_dia']} operacoes atingido",
-                sinal, confianca, edge))
+                sinal, confianca, edge, modelo=modelo_ciclo))
 
         # 5. Tamanho pela banca e pelo risco por trade, com ATR real.
         sl = preco - atr * float(limites["sl_atr"]) if sinal == "BUY" else preco + atr * float(limites["sl_atr"])
@@ -360,7 +386,7 @@ class MotorAuto:
         distancia = abs(preco - sl)
         if distancia <= 0:
             return self._registrar(Decisao(
-                agora, simbolo, timeframe, False, "Stop Loss calculou zero", sinal, confianca, edge))
+                agora, simbolo, timeframe, False, "Stop Loss calculou zero", sinal, confianca, edge, modelo=modelo_ciclo))
         risco_moeda = float(limites["banca"]) * float(limites["risco_por_trade_pct"]) / 100.0
         volume = risco_moeda / distancia
         # O gateway recusa acima de 0.10 e o volume do MT5 tem degraus. O
@@ -368,7 +394,7 @@ class MotorAuto:
         volume = min(volume, 0.10)
         if volume <= 0:
             return self._registrar(Decisao(
-                agora, simbolo, timeframe, False, "volume calculado zero", sinal, confianca, edge))
+                agora, simbolo, timeframe, False, "volume calculado zero", sinal, confianca, edge, modelo=modelo_ciclo))
         # Arredonda para 2 casas: o MT5 so aceita volume com passo do simbolo.
         volume = round(volume, 2)
 
@@ -378,7 +404,7 @@ class MotorAuto:
             if slot in self._vistos:
                 return self._registrar(Decisao(
                     agora, simbolo, timeframe, False,
-                    "ciclo ja processado nesta janela", sinal, confianca, edge))
+                    "ciclo ja processado nesta janela", sinal, confianca, edge, modelo=modelo_ciclo))
             self._vistos[slot] = time.time()
             if len(self._vistos) > 500:
                 corte = time.time() - 86400
@@ -403,13 +429,15 @@ class MotorAuto:
         except Exception as exc:  # pragma: no cover
             return self._registrar(Decisao(
                 agora, simbolo, timeframe, False, f"envio falhou: {exc}",
-                sinal, confianca, edge, volume, risco_moeda, round(sl, 2), round(tp, 2)))
+                sinal, confianca, edge, volume, risco_moeda, round(sl, 2), round(tp, 2),
+                modelo=modelo_ciclo))
 
         ok = bool(resultado.get("ok"))
         return self._registrar(Decisao(
             agora, simbolo, timeframe, ok,
             "ordene enviada ao gateway" if ok else str(resultado.get("error") or resultado.get("comment") or "recusada"),
-            sinal, confianca, edge, volume, risco_moeda, round(sl, 2), round(tp, 2), resultado))
+            sinal, confianca, edge, volume, risco_moeda, round(sl, 2), round(tp, 2), resultado,
+            modelo=modelo_ciclo))
 
     def _trava_instrumento(self) -> None:
         """RECUSA o ciclo se o modelo nao foi treinado para este ativo.
@@ -449,54 +477,95 @@ class MotorAuto:
                 f"modelo {treino} nao pode operar {simbolo} (treinado em {treino})")
 
     def _loop(self) -> None:  # pragma: no cover - thread de producao
-        from backend import ai_inference
+        """Ciclo periodico pela CORRETORA E MERCADO CONFIGURADOS.
 
-        def risk_state() -> dict[str, Any]:
-            from backend.mt5_gateway import _risk_state, _mt5
-            return _risk_state(_mt5())
+        POR QUE ESTE METODO MUDOU (2026-09-30)
+        =======================================
+        Antes importava `mt5_gateway` direto e ignorava `self.broker`:
+
+            def risk_state():  from backend.mt5_gateway import _risk_state, _mt5
+            def enviar(...):   from backend.mt5_gateway import _trade_order
+            resposta = _mt5_candles(self.simbolo, self.timeframe, 600)
+
+        O `configurar()` validava a corretora contra o catalogo, o `snapshot()`
+        devolvia a corretora escolhida e o painel mostrava isso — mas o envio
+        ia para o MT5 de qualquer jeito. Escolher Binance e ver "Binance" na
+        tela era mentira sobre para onde o dinheiro estava indo.
+
+        Agora as tres dependencias (candles, risco e envio) sao resolvidas por
+        `(broker, market)`, e o ENVIO continua sendo do `UniversalRouter` com
+        `intent_log` — o motor nao tem caminho proprio de ordem.
+        """
+        from backend import ai_inference
+        from backend.market_access import candles as candles_da_corretora
+        from backend.market_access import estado_de_risco
+        from backend.universal_router import UniversalRouter, UniversalRouterError
+
+        router = UniversalRouter()
+
+        def escopo() -> tuple[str, str]:
+            """Corretora e mercado do ciclo, sem default.
+
+            `self.broker` vazio e recusa, nao "MT5". O `ligar()` ja exige ativo
+            e timeframe; falta exigir a corretora, e a diferenca entre exigir
+            aqui e descobrir no envio e um ciclo inteiro de inferencia jogado
+            fora.
+            """
+            broker = str(self.broker or "").strip().lower()
+            market = str(self.market or "").strip().lower()
+            if not broker:
+                raise RuntimeError(
+                    "escolha a corretora antes de ligar a operacao automatica: "
+                    "nenhuma corretora e padrao"
+                )
+            return broker, market
 
         def enviar(payload: dict[str, Any]) -> dict[str, Any]:
-            from backend.mt5_gateway import _trade_order
-            return _trade_order(payload)
+            """Ordem pelo UniversalRouter, com intent_log e gate da corretora."""
+            broker, market = escopo()
+            pedido = {
+                "request_id": payload["request_id"],
+                "broker": broker,
+                "market": market,
+                "symbol": payload["symbol"],
+                "side": "buy" if str(payload["side"]).upper() == "BUY" else "sell",
+                "quantity": payload["volume"],
+                "price": payload.get("price"),
+                "order_type": "market",
+                "confirm": True,
+                "account_id": payload.get("account_id", ""),
+            }
+            return router.execute(pedido, explicit_authorization=True)
 
         while not self._parar.is_set():
             try:
                 import pandas as pd
-                from backend.mt5_gateway import _mt5_candles, candles_mt5_para_dataframe
 
+                broker, market = escopo()
                 self._trava_instrumento()
-                # `_mt5_candles` devolve a RESPOSTA canonica (ok, status,
-                # provenance, candles, ...), nao a lista de linhas. Passar o dict
-                # inteiro ao DataFrame misturava escalares com a lista e
-                # estourava em "All arrays must be of the same length" — o
-                # motor auto NUNCA chegou a avaliar um sinal. O mesmo bug que
-                # quebrava o backtest e que ja foi corrigido la em
-                # `fastapi_gateway._ai_predict_sync`; aqui o `except Exception`
-                # generico transformava a falha em "erro no ciclo; tentando de
-                # novo no proximo intervalo", sem causa visivel na tela.
-                resposta = _mt5_candles(self.simbolo, self.timeframe, 600)
-                linhas = resposta.get("candles") if isinstance(resposta, dict) else resposta
-                if not linhas:
-                    motivo = ""
-                    if isinstance(resposta, dict):
-                        motivo = str(
-                            resposta.get("reason_code") or resposta.get("error") or ""
-                        )
-                    raise RuntimeError(
-                        f"MT5 nao devolveu candles para {self.simbolo} "
-                        f"{self.timeframe}" + (f" ({motivo})" if motivo else "")
-                    )
-                df = candles_mt5_para_dataframe(linhas)
+
+                # `candles()` ja devolve a serie no formato do treino e ja
+                # recusa com motivo quando a corretora nao tem dado. A traducao
+                # MT5 -> treino (que ja falhou em tres lugares isolados) fica
+                # em um unico ponto, dentro dele.
+                linhas = candles_da_corretora(
+                    broker, market, self.simbolo, self.timeframe, 600
+                )
+                df = linhas if hasattr(linhas, "empty") else pd.DataFrame(linhas)
                 if df.empty:
                     raise RuntimeError(
-                        f"serie de {self.simbolo} {self.timeframe} ficou vazia "
-                        "depois da conversao para o formato do treino"
+                        f"serie de {self.simbolo} {self.timeframe} em {broker} "
+                        "ficou vazia depois da conversao para o formato do treino"
                     )
                 inf = ai_inference.inferir(self.simbolo, df, self.timeframe)
-                self.ciclo_unico(lambda s, t: inf, enviar, risk_state)
-            except Exception as exc:
+                self.ciclo_unico(
+                    lambda s, t: inf,
+                    enviar,
+                    lambda: estado_de_risco(broker, market),
+                )
+            except (UniversalRouterError, RuntimeError, ValueError) as exc:
                 # O loop nao pode morrer por um erro pontual, mas esconder a
-                # causa e o que deixou este bug invisivel: o operador via
+                # causa e o que deixou o bug invisivel: o operador via
                 # "erro no ciclo" por horas sem saber o porquep. O tipo e a
                 # mensagem vao para o historico de decisoes.
                 self._registrar(Decisao(

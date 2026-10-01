@@ -3,8 +3,11 @@
 Atualizado em **30/09/2026**. Este mapa existe porque a pasta chegou a ter
 61 arquivos com quatro "FINAL" e cinco "HANDOFF" disputando o mesmo assunto.
 
-**Comece por:** [`SESSAO_20260930.md`](./SESSAO_20260930.md) — é o estado
-verificado do projeto com tudo que foi corrigido e o que ficou pendente.
+**Comece por:** [`LEVANTAMENTO_20260930.md`](./LEVANTAMENTO_20260930.md) —
+paridade entre corretoras, os dois defeitos que a tela esconde (ativo
+inventado e motor que opera a corretora errada) e as etapas propostas.
+Depois: [`SESSAO_20260930.md`](./SESSAO_20260930.md) — como o build 1.2.4
+foi fechado.
 
 ---
 
@@ -12,16 +15,17 @@ verificado do projeto com tudo que foi corrigido e o que ficou pendente.
 
 | Documento | Quando | Sobre |
 |---|---|---|
-| **`SESSAO_20260930.md`** | 30/09 | **Estado verificado da sessão que fechou o build 1.2.4.** Leia primeiro. |
+| **`MAPEAMENTO_10_10_VERIFICADO_20260930.md`** | 30/09 | **10/10 real, camada por camada, com o comando de cada prova.** Leia primeiro. |
+| **`LEVANTAMENTO_20260930.md`** | 30/09 | **Paridade de corretoras + as 5 etapas executadas.** Leia segundo. |
+| **`SESSAO_20260930.md`** | 30/09 | Estado verificado do build 1.2.4 assinado |
 | `AUDITORIA_20260929.md` | 29/09 | Auditoria de segurança e integridade com comandos reproduzíveis |
 | `CORECOES_OPERACAO_20260929.md` | 29/09 | Correções do motor de operação automática |
 | `HANDOFF_20260928.md` | 29/09 03:00 | Snapshot do build 1.2.4 anterior (mantido por referência) |
 | `MAPEAMENTO_10_10.md` | 28/09 | Avaliação camada por camada com comando de prova |
 | `ESTADO_E_PENDENCIAS.md` | 27/09 | Estado e pendências daquele ciclo |
 
-> **Atenção:** os cinco documentos acima descrevem ciclos anteriores. Para
-> saber o que é verdade **hoje**, o `SESSAO_20260930.md` tem precedência —
-> ele lista explicitamente o que mudou depois.
+> **Atenção:** os documentos de 27 a 29/09 descrevem ciclos anteriores. Para
+> saber o que é verdade **hoje**, o `LEVANTAMENTO_20260930.md` tem precedência.
 
 ---
 

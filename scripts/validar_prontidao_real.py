@@ -24,11 +24,32 @@ from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
 # Arquivo de eventos do forward test, gravado pelo EA.
-FORWARD = (
-    Path(r"C:\Users\Micro\AppData\Roaming\MetaQuotes\Terminal")
-    / "D0E8209F77C8CF37AD8BF550E51FF075" / "MQL5" / "Files" / "Data"
-    / "forward_test_events.csv"
-)
+#
+# POR QUE A BUSCA E DINAMICA (2026-09-30)
+# ========================================
+# Este caminho estava CHUMBADO com o ID do terminal:
+#
+#     C:\...\MetaQuotes\Terminal\D0E8209F77C8CF37AD8BF550E51FF075\MQL5\Files\Data
+#
+# O terminal e instalado em pasta propria, e o ID muda quando o usuario
+# reinstala, usa outro login ou o MT5 e movido. Com o caminho errado, este
+# script lia o arquivo de TELEMETRIA em vez do forward test e reportava
+# "29670 eventos registrados" — numero de snapshots de hardware, nao de
+# decisoes de trade. Um forward test inexistente passava como aprovado.
+#
+# A busca agora varre `Terminal\*\MQL5\Files\Data\forward_test_events.csv` e
+# some as linhas de todos. Isso e o que "quantos eventos de forward test
+# existem" significa quando ha mais de um terminal.
+def _caminhos_forward() -> list[Path]:
+    base = Path(os.environ.get("APPDATA", "")) / "MetaQuotes" / "Terminal"
+    achados: list[Path] = []
+    if base.is_dir():
+        achados = sorted(base.glob(r"*\MQL5\Files\Data\forward_test_events.csv"))
+    return achados
+
+
+FORWARD_ENV = os.environ.get("XAU_FORWARD_CSV", "").strip()
+FORWARD = Path(FORWARD_ENV) if FORWARD_ENV else RAIZ / "Data" / "forward_test_events.csv"
 
 
 def _flag(nome: str) -> str:
@@ -114,17 +135,42 @@ def _verificar_saque() -> tuple[bool, str]:
 
 
 def _verificar_forward_test() -> tuple[bool, str]:
-    if not FORWARD.is_file():
-        return False, f"sem registro de forward test ({FORWARD.name} nao existe)"
+    """Conta os eventos REAIS de forward test.
+
+    Antes lia um unico caminho chumbado com o ID do terminal, e quando esse
+    caminho nao existia o script ainda reportava "29670 eventos registrados"
+    — vindo do arquivo de telemetria, que e snapshot de hardware e nao decisao
+    de trade. Um forward test que nunca rodou passava como aprovado.
+    """
+    caminhos = [Path(FORWARD_ENV)] if FORWARD_ENV else _caminhos_forward()
+    if FORWARD_ENV:
+        existentes = [c for c in caminhos if c.is_file()]
+    else:
+        # `Terminal\*\MQL5\Files\Data` e `Terminal\*\MQL5\Files\XAU_AI_PRO\Data`
+        # sao o MESMO terminal visto por dois caminhos: o glob ja pega os dois.
+        # Somar tambem o `Data` do repositorio contaria a mesma evidencia duas
+        # vezes — 14.673 viravam 29.346 sem nenhum evento novo.
+        unicos = {c.resolve() for c in caminhos if c.is_file()}
+        existentes = sorted(unicos)
+    if not existentes:
+        return False, (
+            "sem registro de forward test: nenhum "
+            "forward_test_events.csv encontrado nos terminais"
+        )
+    total = 0
     try:
-        linhas = len(FORWARD.read_text(encoding="utf-8", errors="replace").splitlines())
+        for caminho in existentes:
+            linhas = caminho.read_text(encoding="utf-8", errors="replace").splitlines()
+            # A primeira linha e o cabecalho CSV.
+            total += max(0, len(linhas) - 1)
     except OSError as exc:
         return False, f"erro ao ler: {exc}"
-    if linhas < 2:
-        return False, "registro de forward test vazio"
+    if total < 1:
+        return False, "registro de forward test sem evento (apenas cabecalho)"
+    onde = f" em {len(existentes)} arquivo(s)" if len(existentes) > 1 else ""
     return True, (
-        f"{linhas - 1} eventos registrados (a janela minima de dias ainda e "
-        "decisao do proprietario)"
+        f"{total} evento(s) de forward test{onde} "
+        "(a janela minima de dias ainda e decisao do proprietario)"
     )
 
 

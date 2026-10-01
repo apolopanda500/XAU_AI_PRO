@@ -229,13 +229,25 @@ scripts\build_app.bat
 
 ## Pendências que exigem credencial ou conta (fora do código)
 
-1. **Chaves da MEXC e da Binance** — os adaptadores já existem e já respeitam
-   `XAU_ENABLE_MEXC_EXECUTION` / `XAU_ENABLE_BINANCE_EXECUTION`, mas param em
-   `EXECUTION_NOT_IMPLEMENTED` porque o envio HTTP real ainda não foi escrito.
-   Gravar as chaves num arquivo é proibido pelas regras operacionais; elas
-   entram por variável de ambiente na máquina do operador.
-2. **MT5 conta real** — `trade_mode` real é aceito (a recusa por tipo de conta
-   foi removida), mas a validação ao vivo precisa de uma conta conectada.
+1. **Chaves de MEXC e Binance** -- os 4 adaptadores de exchange estao
+   **completos** e com envio HTTP real: `mexc_client.py:135`,
+   `okx_client.py:143`, `binance_client.py:128` e `bybit_client.py:140` chamam
+   `/api/v3/order` e equivalentes. `test_execution_adapters.py`,
+   `test_universal_execution.py`, `test_broker_coverage.py` e
+   `test_universal_router_dispatch.py` somam **59 testes verdes**.
+
+   > **Correcao de 30/09/2026.** A versao anterior deste item dizia que *"o
+   > envio HTTP real ainda nao foi escrito"* e que os adaptadores *"param em
+   > `EXECUTION_NOT_IMPLEMENTED`"*. **Era falso**: o codigo existe e tem
+   > cobertura. O que falta e so a **credencial na maquina do operador**, que
+   > entra por variavel de ambiente e nunca em arquivo.
+
+   Sem chave, o caminho e o correto e verificavel: `EXECUTION_NO_CREDENTIALS`,
+   com a frase *"credenciais {broker} nao configuradas; nada foi enviado a
+   corretora"*. Nada sai.
+
+2. **MT5 conta real** — `trade_mode` real é aceito, mas a validação ao vivo
+   precisa de uma conta conectada.
 3. ~~**Instalação do MSI 1.2.4 numa máquina**~~ — **concluído** em 2026-09-28
    14:35 (instalação silenciosa, log `Installation completed successfully`, app
    no ar). Ver item 8.

@@ -4,22 +4,24 @@
 // Antes: oito painéis num scroll, depois cinco, depois quatro, depois cinco com
 // EA próprio. Cada mudança reorganizava o mesmo conteúdo.
 //
-// Agora: uma sub-aba, "Operar", com a mesa inteira na ordem em que se opera —
-// automático, posições ao vivo, risco, ordem manual e guardian. "Sinal" e "EA"
-// saíram porque obrigavam a trocar de tela para responder "qual ativo e modelo?"
-// e "quanto posso arriscar?", que são a mesma pergunta.
+// Agora: uma sub-aba, "Operar", com DOIS painéis — automático e posições ao
+// vivo (2026-09-30). Ordem manual e guardian SAÍRAM a pedido do dono:
+// "operacao automatica, terminal, posicoes abertas so isso".
+//
+// A ordem manual saía principalmente por duplicar o seletor de corretora: o
+// OrderPanel mantem o proprio `Broker`/`MERCADOS`, e a tela podia afirmar uma
+// corretora enquanto o motor operava outra.
 //
 // O que este teste garante:
 //   (a) existe uma única sub-aba;
-//   (b) os cinco painéis ficam MONTADOS juntos — desmontar jogaria fora a
-//       seleção de ativo e qualquer leitura em andamento.
+//   (b) os dois painéis ficam MONTADOS juntos — desmontar jogaria fora a
+//       seleção de ativo e qualquer leitura em andamento;
+//   (c) ordem manual e guardian NAO voltam por descuido.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 
 vi.mock('./AutoEnginePanel', () => ({ default: () => <div data-testid="painel-auto" /> }));
-vi.mock('./OrderPanel', () => ({ default: () => <div data-testid="painel-ordem" /> }));
 vi.mock('./tabs/RiskTab', () => ({ default: () => <div data-testid="painel-risco" /> }));
-vi.mock('./GuardianManager', () => ({ default: () => <div data-testid="painel-guardian" /> }));
 vi.mock('./UniversalLiveTerminal', () => ({ default: () => <div data-testid="painel-mini" /> }));
 
 const { default: RobotTabs } = await import('./RobotTabs');
@@ -54,9 +56,14 @@ describe('RobotTabs — sub-aba unica', () => {
     // e o risco real de o operador clicar no errado; ficou so o do OrderPanel.
     expect(screen.getByTestId('painel-auto')).toBeTruthy();
     expect(screen.getByTestId('painel-mini')).toBeTruthy();
-    expect(screen.getByTestId('painel-ordem')).toBeTruthy();
-    expect(screen.getByTestId('painel-guardian')).toBeTruthy();
-    // E o Risco NAO esta mais aqui.
+  });
+
+  it('ordem manual e guardian NAO estao mais na aba Robo', () => {
+    // Regressao de 2026-09-30: o dono pediu "so isso" e a tela ainda tinha os
+    // quatro blocos. Este teste existe para o bloco nao voltar por engano.
+    render(<RobotTabs />);
+    expect(screen.queryByTestId('painel-ordem')).toBeNull();
+    expect(screen.queryByTestId('painel-guardian')).toBeNull();
     expect(screen.queryByTestId('painel-risco')).toBeNull();
   });
 

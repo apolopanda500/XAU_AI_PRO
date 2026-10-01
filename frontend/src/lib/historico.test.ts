@@ -11,6 +11,8 @@ import {
   dealPnl,
   dealDate,
   resumir,
+  deduplicar,
+  dealChave,
   type Deal,
 } from './historico';
 
@@ -134,5 +136,41 @@ describe('coerencia entre abas', () => {
     expect(segunda).toEqual(primeira);
     // O ponto do teste: mesma entrada, mesma saida, sem estado compartilhado.
     expect(primeira.total).toBeCloseTo(825.25, 6);
+  });
+});
+
+
+describe('deduplicar deals', () => {
+  it('remove o mesmo ticket em contas diferentes', () => {
+    // O `id` do gateway e o ticket, que e contador POR CONTA. Junta de varias
+    // corretoras, o mesmo ticket aparece duas vezes.
+    const entrada = [
+      { id: '77', broker: 'mt5', symbol: 'XAUUSD', executedAt: '2026-09-01T10:00', side: 'buy' },
+      { id: '77', broker: 'binance', symbol: 'XAUUSD', executedAt: '2026-09-01T10:00', side: 'buy' },
+    ];
+    expect(deduplicar(entrada)).toHaveLength(2);
+  });
+
+  it('remove repeticao exata dentro da mesma conta', () => {
+    const d = { id: '1', broker: 'mt5', symbol: 'XAUUSD', executedAt: '2026-09-01T10:00', side: 'sell' };
+    expect(deduplicar([d, { ...d }])).toHaveLength(1);
+  });
+
+  it('preserva abertura e fechamento da mesma posicao', () => {
+    // Mesmo ticket e mesma conta: o que separa e o horario e o lado.
+    const ab = { id: '5', broker: 'mt5', symbol: 'XAUUSD', executedAt: '2026-09-01T10:00', side: 'buy' };
+    const fe = { id: '5', broker: 'mt5', symbol: 'XAUUSD', executedAt: '2026-09-01T12:00', side: 'sell' };
+    expect(deduplicar([ab, fe])).toHaveLength(2);
+  });
+
+  it('preserva a ordem de chegada', () => {
+    const a = { id: '1', broker: 'mt5' };
+    const b = { id: '2', broker: 'mt5' };
+    expect(deduplicar([a, b, { ...a }]).map((d) => d.id)).toEqual(['1', '2']);
+  });
+
+  it('dealChave muda quando muda a corretora', () => {
+    const base = { id: '9', symbol: 'XAUUSD', executedAt: '2026-09-01T10:00', side: 'buy' };
+    expect(dealChave({ ...base, broker: 'mt5' })).not.toBe(dealChave({ ...base, broker: 'okx' }));
   });
 });

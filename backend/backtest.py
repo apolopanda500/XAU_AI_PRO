@@ -165,7 +165,7 @@ def _decisao_do_modelo(
 def run_backtest(
     candles: list[dict[str, Any]],
     *,
-    symbol: str = "XAUUSD",
+    symbol: str,
     timeframe: str = "M15",
     initial_balance: float = 10_000.0,
     risk_pct: float = 1.0,
@@ -176,6 +176,21 @@ def run_backtest(
     spread_points: float = 0.0,
     max_volume: float = 0.10,
 ) -> dict[str, Any]:
+    """Mede o MODELO publicado, nao uma heuristica local.
+
+    `symbol` e OBRIGATORIO (antes tinha `= "XAUUSD"`). Um backtest de ouro
+    apresentado sem dizer qual ativo mediu faz o operador julgar o modelo por
+    um numero que nao pediu. A regra do projeto: nenhum simbolo e presumido.
+
+    O backtest tambem nao decide sozinho: `point` e `contract_size` variam por
+    classe de ativo (forex tem pip e swap, metal tem contrato de 100 oz,
+    indice tem tick de 0,5). Deixados no padrao, sao o chamador que tem de
+    dizer — e enquanto ele nao disser, o resultado declara os valores usados
+    em `params`, para nenhum numero aparecer sem contexto.
+    """
+    simbolo = str(symbol or "").strip().upper()
+    if not simbolo:
+        raise ValueError("informe o simbolo: o projeto nao presume ativo padrao")
     if len(candles) < 30:
         raise ValueError("são necessários pelo menos 30 candles")
     values = _normalise_candles(candles)
@@ -192,7 +207,9 @@ def run_backtest(
     # warm-up do RSI/ATR/ewm). Como os sinais ficam indexados pela posicao da
     # serie derivada, o deslocamento tem de ser conhecido senao a decisao do
     # modelo seria atribuida ao candle errado.
-    sinais, info = _decisao_do_modelo(symbol, timeframe, values)
+    # Usa `simbolo` (normalizado e validado), nao o `symbol` cru: e o mesmo
+    # ativo, mas um so caminho de normalizacao no arquivo inteiro.
+    sinais, info = _decisao_do_modelo(simbolo, timeframe, values)
     sinais_por_indice = {s["index"]: s for s in (sinais or [])}
 
     balance = float(initial_balance)

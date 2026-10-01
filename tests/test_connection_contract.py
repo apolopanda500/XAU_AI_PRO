@@ -1,4 +1,4 @@
-﻿"""Contrato HTTP de conexões: cadastro e validação somente leitura.
+"""Contrato HTTP de conexões: cadastro e validação somente leitura.
 
 Usa servidor efêmero em 127.0.0.1:0, credenciais sintéticas e clientes stub.
 Nenhuma credencial real é lida; nenhum arquivo do usuário é alterado.
@@ -65,10 +65,51 @@ def _request(base: str, method: str, path: str, payload: dict | None = None):
     return response.status, data
 
 
-def test_save_rejeita_api_key_para_mt5(gateway):
-    payload = {"id": "mt5:forex:x", "broker": "mt5", "market": "forex", "api_key": "k", "api_secret": "s"}
+def test_mt5_entra_no_mesmo_fluxo_de_conexao(gateway):
+    """MT5 e uma conexao como as outras - a credencial vem da sessao.
+
+    Antes este teste afirmava o CONTRARIO: 422 "nao cadastre API key para
+    MT5". A regra do dono e o oposto de excecao: nenhuma corretora pode ser
+    caminho exclusivo, e MT5 nao e caso especial, e uma fonte de credencial
+    diferente.
+
+    O que muda e o que a tela recebe: `credential_source: "session"` diz que
+    nao ha API key para pedir, em vez de a corretora sumir do fluxo.
+    """
+    payload = {"id": "mt5:forex:terminal", "broker": "mt5", "market": "forex"}
     status, data = _request(gateway, "POST", "/api/connections", payload)
-    assert status == 422 and data["ok"] is False and "terminal" in data["error"]
+    assert status == 201, data
+    assert data["ok"] is True
+    assert data["credential_source"] == "session"
+
+    status, data = _request(gateway, "GET", "/api/connections")
+    assert status == 200
+    linha = next(c for c in data["connections"] if c["id"] == payload["id"])
+    assert linha["broker"] == "mt5"
+    assert linha["credential_source"] == "session"
+    assert linha["configured"] is False
+    # Sem API key gravada: gravar string vazia no DPAPI seria mentira.
+    assert "api_key" not in linha and "api_secret" not in linha
+
+
+def test_corretora_desconhecida_e_recusada(gateway):
+    status, data = _request(
+        gateway, "POST", "/api/connections",
+        {"id": "x:forex:y", "broker": "nao-existe", "market": "forex"},
+    )
+    assert status == 422 and data["ok"] is False
+    assert "desconhecida" in data["error"].lower()
+
+
+def test_mercado_incompativel_com_a_corretora_e_recusado(gateway):
+    """Binance so faz cripto. A recusa vem do catalogo, nao de uma lista local."""
+    status, data = _request(
+        gateway, "POST", "/api/connections",
+        {"id": "binance:forex:x", "broker": "binance", "market": "forex",
+         "api_key": "k", "api_secret": "s"},
+    )
+    assert status == 422 and data["ok"] is False
+    assert "forex" in data["error"]
 
 
 def test_salva_e_testa_leitura_com_stub(gateway):
@@ -89,14 +130,17 @@ def test_salva_e_testa_leitura_com_stub(gateway):
 
     import backend.connection_service as service
 
-    with patch.object(service, "MexcClient", StubClient):
+    # O patch mira o REGISTRO `CLIENTES`, nao o nome importado: e o registro
+    # que decide qual construtor entra em uso. Apontar para `MexcClient`
+    # ainda passaria no teste antigo e pararia de valer aqui.
+    with patch.dict(service.CLIENTES, {"mexc": StubClient}):
         status, data = _request(gateway, "POST", "/api/connections/mexc:crypto-spot:demo/test", {})
     assert status == 200 and data["validated"] is True and data["read_only"] is True
 
     status, data = _request(gateway, "POST", "/api/connections/inexistente/test", {})
     assert status == 404 and data["ok"] is False and data["credentials_exposed"] is False
 
-    with patch.object(service, "MexcClient", StubClient):
+    with patch.dict(service.CLIENTES, {"mexc": StubClient}):
         status, data = _request(gateway, "POST", "/api/connections/mexc:crypto-spot:demo/deactivate", {})
     assert status == 200 and data["active"] is False
 

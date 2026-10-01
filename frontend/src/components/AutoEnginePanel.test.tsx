@@ -17,6 +17,11 @@ const E = vi.hoisted(() => ({
     ciclo: 3,
     simbolo: 'ATIVOA',
     timeframe: 'H1',
+    // O motor informa a corretora e o mercado que VAI usar. Sem eles no
+    // mock, o painel comparava a tela (vazio) com o servidor (vazio) e o
+    // botao caia em "Aplique antes de ligar" mesmo sem mudanca nenhuma.
+    broker: 'mt5',
+    market: 'metals',
     threads: 4,
     limites: {},
     decisoes: [],
@@ -101,7 +106,7 @@ describe('AutoEnginePanel — par, comandos e config', () => {
     await waitFor(() => expect(sel.options.length).toBe(3));
 
     fireEvent.change(sel, { target: { value: 'ATIVOB' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Aplicar' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar so' }));
 
     await waitFor(() => expect(chamadas.some((c) => c.url.includes('/api/auto/config'))).toBe(true));
     const config = chamadas.find((c) => c.url.includes('/api/auto/config'));
@@ -113,23 +118,53 @@ describe('AutoEnginePanel — par, comandos e config', () => {
     expect(E.refetch).toHaveBeenCalled();
   });
 
-  it('sobram três comandos: Aplicar, Ligar e Desligar', async () => {
+  it('sem corretora o botao diz o que falta em vez de so falhar', async () => {
+    // Trava de 2026-09-30: o backend recusa o "ligar" sem corretora
+    // ("nenhuma corretora e caminho padrao") e o painel nao tinha onde
+    // escolher. O operador recebia a recusa so depois do clique.
+    //
+    // O cenario e o motor recem-ligado, sem corretora: e o estado em que a
+    // recusa acontece de verdade.
+    E.data.broker = '';
+    E.data.market = '';
     render(<AutoEnginePanel />);
     await screen.findByLabelText('Ativo do motor automatico');
-
-    const nomes = screen.getAllByRole('button').map((b) => b.textContent ?? '');
-    expect(nomes).toContain('Aplicar');
-    expect(nomes).toContain('Ligar');
-    expect(nomes).toContain('Desligar');
-    // 5 botoes: os 3 de comando (Aplicar, Ligar, Desligar) mais os 2 de modo
-    // de operacao (Operar na mao / Deixar o motor), que chegaram em
-    // 2026-09-29 para fundir o manual dentro do automatico.
-    expect(nomes).toHaveLength(5);
-    expect(nomes).toContain('Operar na mao');
-    expect(nomes).toContain('Deixar o motor');
-    expect(document.body.textContent).not.toContain('Rodar um ciclo');
+    const botao = screen.getByRole('button', { name: 'Escolha a corretora' }) as HTMLButtonElement;
+    expect(botao.disabled).toBe(true);
+    E.data.broker = 'mt5';
+    E.data.market = 'metals';
   });
 
+  it('escolhendo a corretora o caminho feliz fica disponivel', async () => {
+    render(<AutoEnginePanel />);
+    const seletor = await screen.findByLabelText('Corretora do motor automatico');
+    fireEvent.change(seletor, { target: { value: 'binance' } });
+    const mercado = screen.getByLabelText('Mercado do motor automatico');
+    // Binance so opera cripto: a lista de mercado tem de acompanhar a
+    // corretora, senao o motor aceitaria "binance + forex" e so recusaria
+    // no envio.
+    expect(mercado.querySelector('option[value="forex"]')).toBeNull();
+    expect(screen.getByRole('button', { name: /Aplicar e ligar|Aplique antes/ })).toBeTruthy();
+  });
+
+  it('botoes dizem o que FAZ: aplicar e ligar e um caminho so', async () => {
+    render(<AutoEnginePanel />);
+    await screen.findByLabelText('Ativo do motor automatico');
+    fireEvent.change(
+      await screen.findByLabelText('Corretora do motor automatico'),
+      { target: { value: 'mt5' } },
+    );
+
+    const nomes = screen.getAllByRole('button').map((b) => b.textContent ?? '');
+    // "Aplicar e ligar" existe porque "Aplicar" e "Ligar" eram indistinguiveis:
+    // o operador clicava em "Ligar" sem "Aplicar" e o motor seguia no par antigo.
+    expect(nomes).toContain('Aplicar e ligar');
+    expect(nomes).toContain('Aplicar so');
+    expect(nomes).toContain('Parar motor');
+    // E o seletor de modo manual saiu com a ordem manual.
+    expect(nomes).not.toContain('Operar na mao');
+    expect(nomes).not.toContain('Deixar o motor');
+  });
   it('mostra o motor rodando e desabilita o comando que não faz sentido', async () => {
     E.data.ativo = true;
     render(<AutoEnginePanel />);
@@ -138,7 +173,11 @@ describe('AutoEnginePanel — par, comandos e config', () => {
     // 2026-09-29: com os dois modos na mesma tela, "Operando" sozinho era
     // ambigo — parecia que a ordem manual tambem estava operando.
     expect(screen.getByText('Automatico operando')).toBeTruthy();
-    expect((screen.getByRole('button', { name: 'Ligar' }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole('button', { name: 'Desligar' }) as HTMLButtonElement).disabled).toBe(false);
+    // Ligar virou "Aplicar e ligar" (2026-09-30): os dois botoes antigos eram
+    // indistinguiveis e o operador clicava em "Ligar" sem "Aplicar".
+    // Com o motor ligado o botao muda de rotulo para "Operando" — e o que
+    // impede o operador de achar que ainda ha algo a ligar.
+    expect((screen.getByRole('button', { name: 'Operando' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Parar motor' }) as HTMLButtonElement).disabled).toBe(false);
   });
 });

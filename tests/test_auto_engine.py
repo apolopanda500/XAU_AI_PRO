@@ -341,3 +341,127 @@ class TestEstado:
         assert m.desligar()["ok"] is True
         assert m.desligar()["ok"] is True
         assert m.ativo is False
+# ------------------------------------------------------ corretora de verdade
+#
+# POR QUE ESTES TESTES EXISTEM
+# ===========================
+# `MotorAuto` aceita, valida e EXPOE `broker` e `market` (linhas 192-229 e
+# 164/233). O `_loop`, esse, importa `mt5_gateway` direto e ignora os dois.
+#
+# O efeito e o pior possivel para quem opera: escolher `binance`, ver `binance`
+# na tela e no historico, e a ordem ir para o MT5. A tela mente sobre onde o
+# dinheiro esta indo.
+#
+# A suite tem 25 testes e nenhum cobria o roteamento — por isso estes quatro.
+# Eles leem o FONTE do `_loop` de proposito: subir a thread e esperar um ciclo
+# seria lento, fragil e abriria caminho para MT5 de verdade. Um teste que
+# depende de rede real nao e um teste, e um risco.
+
+
+class TestRoteamentoPorCorretora:
+    """O `_loop` tem de usar a corretora que o operador configurou."""
+
+    @staticmethod
+    def _fonte_do_loop() -> str:
+        """Trecho do `_loop` na fonte, para inspecao sem executar nada."""
+        import inspect
+        from backend import auto_engine
+
+        return inspect.getsource(auto_engine.MotorAuto._loop)
+
+    @staticmethod
+    def _codigo_do_loop() -> str:
+        """O `_loop` sem a docstring e sem os comentarios.
+
+        Necessario porque a docstring CITA o codigo antigo para documentar o
+        defeito. Um teste que varre o texto inteiro acusa a propria evidencia
+        do bug — e `test_loop_usa_o_router_universal` ja foi aprovado por
+        acaso, pelo mesmo motivo.
+        """
+        import ast
+        import inspect
+        import textwrap
+        from backend import auto_engine
+
+        arvore = ast.parse(textwrap.dedent(inspect.getsource(auto_engine)))
+        for no in ast.walk(arvore):
+            if isinstance(no, ast.ClassDef) and no.name == "MotorAuto":
+                for filho in no.body:
+                    if isinstance(filho, ast.FunctionDef) and filho.name == "_loop":
+                        corpo = filho.body[1:]  # pula o docstring
+                        return "\n".join(
+                            ast.unparse(parte) for parte in corpo
+                        )
+        raise AssertionError("_loop nao encontrado na fonte de MotorAuto")
+
+    def test_loop_nao_importa_mt5_gateway_direto(self):
+        """Importar `mt5_gateway` dentro do `_loop` prende o motor no MT5.
+
+        O `UniversalRouter.adapter_for` existe e sabe escolher entre os cinco
+        adaptadores. O motor precisa passar por ele.
+        """
+        codigo = self._codigo_do_loop()
+        assert "mt5_gateway" not in codigo, (
+            "_loop importa mt5_gateway direto: ignora o UniversalRouter e a "
+            "corretora escolhida pelo operador"
+        )
+
+    def test_loop_nao_chama_trade_order_do_mt5(self):
+        """`_trade_order` e o envio do MT5. Chama-lo direto ignora a corretora."""
+        codigo = self._codigo_do_loop()
+        assert "_trade_order" not in codigo, (
+            "_loop chama _trade_order (MT5) direto: a ordem vai para o MT5 "
+            "mesmo com outra corretora configurada"
+        )
+
+    def test_loop_usa_o_router_universal(self):
+        """O caminho de envio tem de passar pelo `UniversalRouter`."""
+        codigo = self._codigo_do_loop()
+        assert "UniversalRouter" in codigo, (
+            "_loop nao menciona o UniversalRouter: nao ha como ele escolher "
+            "o adaptador pela corretora configurada"
+        )
+
+    def test_loop_resolve_por_broker_e_market(self):
+        """As tres dependencias (candles, risco, envio) sao resolvidas pelo par.
+
+        E o teste que cobre a regressao de verdade: um `_loop` que resolve
+        candles por corretora mas envia pelo MT5 ainda estaria quebrado.
+        """
+        codigo = self._codigo_do_loop()
+        assert "self.broker" in codigo, "o `_loop` ignora a corretora configurada"
+        assert "self.market" in codigo, "o `_loop` ignora o mercado configurado"
+
+    def test_snapshot_reporta_a_corretora_configurada(self):
+        """`snapshot()` nao pode inventar "mt5" quando o operador escolheu outra.
+
+        O `or "mt5"` das linhas 164 e 233 era a forma mais direta dessa
+        mentira: com `broker=""` ele mostrava MT5, e o `_loop` usava MT5.
+        """
+        m = motor_pronto()
+        m.configurar({"broker": "binance", "market": "crypto-spot"})
+        assert m.snapshot()["broker"] == "binance", (
+            "snapshot devolve uma corretora diferente da configurada"
+        )
+
+    def test_snapshot_nao_inventa_corretora_quando_nao_escolhida(self):
+        """Sem corretora escolhida, o painel mostra vazio — nao MT5."""
+        m = motor_pronto()
+        m.broker = ""
+        m.market = ""
+        assert m.snapshot()["broker"] == "", (
+            "snapshot inventou uma corretora que o operador nao escolheu"
+        )
+
+    def test_ligar_exige_corretora_escolhida(self):
+        """Ligar sem corretora e recusado, com motivo.
+
+        Descobrir no meio do ciclo significa inferencia, risco e sizing jogados
+        fora antes de o operador ver o erro.
+        """
+        m = motor_pronto()
+        m.broker = ""
+        r = m.ligar()
+        assert r["ok"] is False
+        assert "corretora" in r["error"].lower()
+        assert m.ativo is False

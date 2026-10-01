@@ -259,8 +259,23 @@ async def ai_predict(symbol: str = "", timeframe: str = "") -> dict:
 
     Devolve a probabilidade que o classificador atribui a decisao. Se o
     timeframe nao tem modelo publicado, ou nao ha candles, a resposta traz
-    `available: false` e o motivo — nunca um sinal fabricado.
+    `available: false` e o motivo - nunca um sinal fabricado.
+
+    SIMBOLO VAZIO E RECUSA NA PORTA
+    ==============================
+    A rota aceita `symbol=""` e, sem esta checagem, ia pedir 600 candles do
+    MT5 para um simbolo inexistente e so entao ouvir que nao pode decidir. A
+    regra do projeto e "nenhum simbolo pode ser presumido": a resposta correta
+    e dizer isso logo, sem tocar no terminal.
     """
+    if not str(symbol or "").strip():
+        return {
+            "ok": False,
+            "available": False,
+            "reason": ai_inference.MOTIVO_SEM_SIMBOLO,
+            "symbol": "",
+            "timeframe": timeframe,
+        }
     return await _read_call(
         lambda: _ai_predict_sync(symbol, timeframe),
         timeout=30.0,
@@ -587,7 +602,7 @@ async def config_reset() -> dict:
 
 
 @app.get("/api/market/ticker")
-async def ticker(symbol: str, broker: str = Query(default="mt5"), market: str = Query(default="forex")) -> JSONResponse:
+async def ticker(symbol: str, broker: str = Query(min_length=1), market: str = Query(min_length=1)) -> JSONResponse:
     result = await _read_call(gw._universal_quote, broker.lower(), market.lower(), symbol)
     return _send(result, gw._response_status(result))
 
@@ -598,14 +613,30 @@ async def ticker(symbol: str, broker: str = Query(default="mt5"), market: str = 
 
 @app.get("/api/market/symbols")
 async def market_symbols(exchange: str | None = None, broker: str | None = None, market: str | None = None) -> JSONResponse:
-    selected_broker = (broker or exchange or "mt5").lower()
-    selected_market = (market or ("forex" if selected_broker == "mt5" else "crypto-spot")).lower()
-    result = await _read_call(gw._universal_assets, selected_broker, selected_market, timeout=30.0)
-    return _send(result, gw._response_status(result))
+    """Catalogo de simbolos da corretora escolhida.
+
+    `broker` era `broker or exchange or "mt5"`: uma chamada sem corretora
+    listava os ativos do MetaTrader. Sem default, a rota recusa — quem pergunta
+    "quais simbolos existem" precisa dizer de ONDE.
+    """
+    escolhido = (broker or exchange or "").strip().lower()
+    if not escolhido:
+        return _send({
+            "ok": False,
+            "error": "informe a corretora: nenhuma e o padrao",
+        }, 400)
+    if not market:
+        return _send({
+            "ok": False,
+            "error": f"informe o mercado de {escolhido}: cada corretora tem os seus",
+            "markets": list((gw.get_broker(escolhido).markets if gw.get_broker(escolhido) else ())),
+        }, 400)
+    resultado = await _read_call(gw._universal_assets, escolhido, market.lower(), timeout=30.0)
+    return _send(resultado, gw._response_status(resultado))
 
 
 @app.get("/api/market/quotes")
-async def market_quotes(symbols: str = Query(..., min_length=1), broker: str = Query(default="mt5"), market: str = Query(default="forex")) -> JSONResponse:
+async def market_quotes(symbols: str = Query(..., min_length=1), broker: str = Query(min_length=1), market: str = Query(min_length=1)) -> JSONResponse:
     symbol_list = [s.strip().upper() for s in symbols.split(",") if s.strip()]
     result = await _read_call(gw._universal_quotes, broker.lower(), market.lower(), symbol_list)
     return _send(result, gw._response_status(result))
@@ -1166,7 +1197,7 @@ async def universal_account(broker: str, market: str, account_id: str = "") -> J
 
 
 @app.get("/api/universal/positions")
-async def universal_positions(broker: str = Query(default="mt5"), market: str = Query(default=""), account_id: str = Query(default="")) -> JSONResponse:
+async def universal_positions(broker: str = Query(min_length=1), market: str = Query(min_length=1), account_id: str = Query(default="")) -> JSONResponse:
     try:
         result = await _read_call(gw._universal_positions, broker.lower(), market.lower(), account_id)
         return _send(result, gw._response_status(result))
@@ -1186,7 +1217,7 @@ async def universal_quote(broker: str, market: str, symbol: str) -> JSONResponse
 
 
 @app.get("/api/universal/quotes")
-async def universal_quotes(broker: str = Query(default="mt5"), market: str = Query(default="crypto-spot"), symbols: str = Query(default="")) -> JSONResponse:
+async def universal_quotes(broker: str = Query(min_length=1), market: str = Query(min_length=1), symbols: str = Query(min_length=1)) -> JSONResponse:
     try:
         items = [item.strip() for item in symbols.split(",") if item.strip()]
         result = await _read_call(gw._universal_quotes, broker.lower(), market.lower(), items)
@@ -1197,7 +1228,7 @@ async def universal_quotes(broker: str = Query(default="mt5"), market: str = Que
 
 
 @app.get("/api/universal/assets")
-async def universal_assets(broker: str = Query(default="mt5"), market: str = Query(default="other")) -> JSONResponse:
+async def universal_assets(broker: str = Query(min_length=1), market: str = Query(min_length=1)) -> JSONResponse:
     try:
         result = await _read_call(gw._universal_assets, broker.lower(), market.lower())
         return _send(result, gw._response_status(result))
@@ -1207,7 +1238,7 @@ async def universal_assets(broker: str = Query(default="mt5"), market: str = Que
 
 
 @app.get("/api/universal/capabilities")
-async def universal_capabilities(broker: str = Query(default="mt5"), market: str = Query(default="other"), symbol: str = Query(default="")) -> JSONResponse:
+async def universal_capabilities(broker: str = Query(min_length=1), market: str = Query(min_length=1), symbol: str = Query(default="")) -> JSONResponse:
     try:
         result = await _read_call(gw._universal_asset_capabilities, broker.lower(), market.lower(), symbol)
         return _send(result, gw._response_status(result))
@@ -1217,7 +1248,7 @@ async def universal_capabilities(broker: str = Query(default="mt5"), market: str
 
 
 @app.get("/api/universal/candles")
-async def universal_candles(broker: str = Query(default="mt5"), market: str = Query(default="other"), symbol: str = Query(min_length=1), timeframe: str = Query(default="M5"), interval: str | None = None, limit: int = Query(default=500, ge=1, le=2000)) -> JSONResponse:
+async def universal_candles(broker: str = Query(min_length=1), market: str = Query(min_length=1), symbol: str = Query(min_length=1), timeframe: str = Query(default="M5"), interval: str | None = None, limit: int = Query(default=500, ge=1, le=2000)) -> JSONResponse:
     try:
         result = await _read_call(gw._universal_candles, broker.lower(), market.lower(), symbol, interval or timeframe, limit)
         return _send(result, gw._response_status(result))
@@ -1227,7 +1258,7 @@ async def universal_candles(broker: str = Query(default="mt5"), market: str = Qu
 
 
 @app.get("/api/universal/depth")
-async def universal_depth(broker: str = Query(default="binance"), market: str = Query(default="crypto-spot"), symbol: str = Query(default=""), limit: int = Query(default=20, ge=1, le=100)) -> JSONResponse:
+async def universal_depth(broker: str = Query(default="binance"), market: str = Query(min_length=1), symbol: str = Query(default=""), limit: int = Query(default=20, ge=1, le=100)) -> JSONResponse:
     try:
         result = await _read_call(gw._universal_depth, broker.lower(), market.lower(), symbol, limit)
         return _send(result, gw._response_status(result))
@@ -1237,7 +1268,7 @@ async def universal_depth(broker: str = Query(default="binance"), market: str = 
 
 
 @app.get("/api/universal/trades")
-async def universal_trades(broker: str = Query(default="binance"), market: str = Query(default="crypto-spot"), symbol: str = Query(default=""), limit: int = Query(default=20, ge=1, le=100)) -> JSONResponse:
+async def universal_trades(broker: str = Query(default="binance"), market: str = Query(min_length=1), symbol: str = Query(default=""), limit: int = Query(default=20, ge=1, le=100)) -> JSONResponse:
     try:
         result = await _read_call(gw._universal_trades, broker.lower(), market.lower(), symbol, limit)
         return _send(result, gw._response_status(result))
@@ -1248,7 +1279,7 @@ async def universal_trades(broker: str = Query(default="binance"), market: str =
 
 @app.get("/api/universal/stats24h")
 @app.get("/api/universal/stats_24h")
-async def universal_stats24h(broker: str = Query(default="binance"), market: str = Query(default="crypto-spot"), symbol: str = Query(default="")) -> JSONResponse:
+async def universal_stats24h(broker: str = Query(default="binance"), market: str = Query(min_length=1), symbol: str = Query(default="")) -> JSONResponse:
     try:
         result = await _read_call(gw._universal_stats24h, broker.lower(), market.lower(), symbol)
         return _send(result, gw._response_status(result))

@@ -7,6 +7,11 @@ import pytest
 
 from backend.backtest import run_backtest
 
+#: Simbolo usado pelos testes. Desde 30/09/2026 `run_backtest` exige o simbolo:
+#: o default era `XAUUSD`, e um backtest medindo ouro sem dizer qual ativo mediu
+#: faz o operador julgar o modelo por um numero que nao pediu.
+SIMBOLO = "XAUUSD"
+
 
 def _candles(count: int = 80) -> list[dict[str, float]]:
     rows = []
@@ -18,8 +23,18 @@ def _candles(count: int = 80) -> list[dict[str, float]]:
     return rows
 
 
+def test_backtest_exige_simbolo():
+    """Nenhum ativo e presumido: sem simbolo, recusa com motivo.
+
+    Antes o parametro tinha `= "XAUUSD"` e a medicao saia correta para o
+    ativo errado, sem nada no resultado que declarasse qual era.
+    """
+    with pytest.raises(ValueError, match="simbolo"):
+        run_backtest(_candles(), symbol="")
+
+
 def test_backtest_nao_executa_ordens_e_devolve_metricas():
-    result = run_backtest(_candles())
+    result = run_backtest(_candles(), symbol=SIMBOLO)
     assert result["ok"] is True
     assert result["live_execution"] is False
     assert result["mode"] == "historical_paper"
@@ -30,14 +45,14 @@ def test_backtest_nao_executa_ordens_e_devolve_metricas():
 
 def test_backtest_rejeita_dados_insuficientes():
     with pytest.raises(ValueError, match="30 candles"):
-        run_backtest(_candles(29))
+        run_backtest(_candles(29), symbol=SIMBOLO)
 
 
 def test_backtest_rejeita_ohlc_inconsistente():
     candles = _candles()
     candles[0]["high"] = candles[0]["low"] - 1
     with pytest.raises(ValueError, match="OHLC"):
-        run_backtest(candles)
+        run_backtest(candles, symbol=SIMBOLO)
 
 
 def test_endpoint_backtest_consome_candles_reais(monkeypatch):
@@ -63,7 +78,7 @@ def test_endpoint_backtest_consome_candles_reais(monkeypatch):
 
 def test_backtest_declara_a_procedencia_da_decisao():
     """O resultado tem de dizer de onde veio o numero."""
-    result = run_backtest(_candles())
+    result = run_backtest(_candles(), symbol=SIMBOLO)
     assert "decision_source" in result
     assert result["decision_source"] in ("model", "indisponivel")
     assert "measured" in result
@@ -83,7 +98,7 @@ def test_backtest_nao_inventa_sinal_sem_modelo_publicado(monkeypatch):
     monkeypatch.setattr(
         bt, "_decisao_do_modelo", lambda symbol, timeframe, candles: (None, {"decision_source": "indisponivel", "reason": "sem modelo"})
     )
-    result = bt.run_backtest(_candles())
+    result = bt.run_backtest(_candles(), symbol=SIMBOLO)
     assert result["trade_count"] == 0
     assert result["measured"] is False
     assert result["reason"] == "sem modelo"
@@ -118,7 +133,7 @@ def test_backtest_usa_o_modelo_publicado_quando_existe(monkeypatch):
 
 def test_backtest_precisa_registrar_o_modelo_que_decidiu():
     """Nao basta abrir trade: o resultado tem de dizer qual artefato decidiu."""
-    result = run_backtest(_candles())
+    result = run_backtest(_candles(), symbol=SIMBOLO)
     if result["decision_source"] == "model":
         assert result["model"], "qual modelo decidiu tem de estar no resultado"
         assert result["feature_hash"], "o hash das features prova a coerencia com o treino"

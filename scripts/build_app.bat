@@ -36,6 +36,13 @@ echo Frontend compilado com sucesso.
 
 echo [4/7] Compilando core Rust...
 cd /d "%ROOT%\core"
+REM O cache do Rust saia do disco do codigo. Nesta maquina o `target` dentro do
+REM repositorio chegou a 3,9 GB e o `cargo check` falhou DUAS vezes com
+REM "Espaco insuficiente no disco (os error 112)" — antes de qualquer teste.
+REM `Temp\cargo-target` ja esta na allowlist de `scripts\limpeza_segura.ps1`
+REM (`Temp/` esta no .gitignore, linha 41), entao a limpeza segura o alcanca.
+if not defined CARGO_TARGET_DIR set "CARGO_TARGET_DIR=%ROOT%\Temp\cargo-target"
+echo CARGO_TARGET_DIR=%CARGO_TARGET_DIR%
 cargo build --release --locked
 if %ERRORLEVEL% neq 0 (
     echo ERRO: Build do core falhou
@@ -58,7 +65,18 @@ REM Sem esta etapa o bundle fica com um corte antigo de Python/models e o app
 REM instalado enxerga so os simbolos que por acaso ja estavam em src-tauri.
 echo [6/7] Sincronizando recursos do Tauri...
 if not exist "%ROOT%\frontend\src-tauri\core" mkdir "%ROOT%\frontend\src-tauri\core"
-copy /Y "%ROOT%\core\target\release\xau-ai-pro-core.exe" "%ROOT%\frontend\src-tauri\core\xau-ai-pro-core.exe" >nul
+REM O caminho do binario tem de vir da MESMA variavel usada na compilacao.
+REM Antes era fixo em `core\target\release`, mas a etapa 4 pode redirecionar o
+REM cache para `Temp\cargo-target` (linha 44) — e a copia quebrava com
+REM "ERRO: Nao foi possivel copiar o binary do core". O binario estava
+REM compilado, em outro lugar.
+set "CORE_BIN=%CARGO_TARGET_DIR%\release\xau-ai-pro-core.exe"
+if not exist "%CORE_BIN%" set "CORE_BIN=%ROOT%\core\target\release\xau-ai-pro-core.exe"
+if not exist "%CORE_BIN%" (
+    echo ERRO: binario do core nao encontrado em %CARGO_TARGET_DIR%\release nem em core\target\release
+    exit /b 1
+)
+copy /Y "%CORE_BIN%" "%ROOT%\frontend\src-tauri\core\xau-ai-pro-core.exe" >nul
 if %ERRORLEVEL% neq 0 (
     echo ERRO: Nao foi possivel copiar o binary do core
     exit /b 1

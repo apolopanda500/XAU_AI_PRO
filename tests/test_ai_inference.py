@@ -151,3 +151,78 @@ def test_decisao_corresponde_a_probabilidade_maior():
     probs = {0: r.prob_sell, 1: r.prob_neutral, 2: r.prob_buy}
     esperado = {0: "SELL", 1: "NEUTRAL", 2: "BUY"}[max(probs, key=lambda k: probs[k])]
     assert r.signal == esperado
+# -------------------------------------------- nenhum ativo pode ser presumido
+#
+# POR QUE ESTES TESTES EXISTEM
+# ===========================
+# O dono definiu: *"nao deixei xauusd em codigos como comandos ou exclusivo.
+# manter codigos limpos e livres"*. A regra ja esta escrita no projeto
+# (`app/market_symbols.py:32` → `return ""  # sem ativo fixo`).
+#
+# A docstring de `_carregar`, DUAS LINHAS ACIMA do defeito, descreve este
+# bug como ja corrigido: *"Antes o caminho era fixo em XAUUSD, entao pedir
+# BTCUSD devolvia o modelo de ouro"*. O caminho foi corrigido; o
+# `or "XAUUSD"` da linha 184 ficou.
+#
+# Efeito hoje, verificavel:
+#     ai.inferir("", candles, "H1")  ->  carrega XAUUSD_H1.pkl  ->  sinal de OURO
+#
+# E a segunda vez que este par exato reaparece no mesmo modulo:
+# `ESTADO_E_PENDENCIAS.md` linha 36 registra *"Inferencia usava coluna
+# `time`, features esperavam `Time`"*. O padrao e corrigir o caso visivel e
+# deixar o silencioso.
+
+
+class TestNenhumAtivoPresumido:
+    def test_simbolo_vazio_nao_carrega_o_modelo_de_ouro(self):
+        """`_carregar` com simbolo vazio NAO pode devolver um modelo.
+
+        Este e o teste mais importante do arquivo. Sem ele, qualquer chamador
+        que passe simbolo vazio recebe decisao de trading do ativo errado com
+        confianca real — e nada no retorno denuncia isso.
+        """
+        ai.limpar_cache()
+        modelo, meta = ai._carregar("", "H1")
+        assert modelo is None, (
+            "simbolo vazio carregou um modelo. A regra do projeto e "
+            "'sem ativo fixo': nenhum .pkl pode ser escolhido por omissao."
+        )
+        assert not meta.get("modelo") or meta.get("modelo") != "XAUUSD_H1"
+
+    def test_simbolo_ausente_e_recusado_com_motivo(self):
+        """`inferir` com simbolo vazio tem de dizer que nao pode decidir.
+
+        Nao pode devolver `disponivel=False` com motivo generico nem, pior,
+        `disponivel=True` carregando ouro.
+        """
+        ai.limpar_cache()
+        r = ai.inferir("", _candles(), "H1")
+        assert r.disponivel is False
+        assert r.motivo, "recusa de simbolo ausente sempre tem motivo"
+        assert "XAUUSD" not in (r.modelo or ""), (
+            f"recusou mas declarou o modelo {r.modelo!r}"
+        )
+
+    def test_simbolo_desconhecido_nao_troca_por_outro(self):
+        """`INEXISTENTE_QUALQUER` nao pode virar o modelo de ouro.
+
+        Este e o caso que a docstring descreve: pedir BTCUSD e receber ouro.
+        """
+        ai.limpar_cache()
+        r = ai.inferir("INEXISTENTE_QUALQUER", _candles(), "H1")
+        assert r.disponivel is False
+        assert "INEXISTENTE_QUALQUER" not in str(r.modelo or "")
+
+    def test_simbolo_e_preservado_ao_carregar(self):
+        """`_carregar` normaliza caixa, mas nao troca o ativo.
+
+        `btcusd` e `BTCUSD` sao o mesmo ativo — isso e normalizacao legitima.
+        O que nao pode e virar em outro ativo.
+        """
+        ai.limpar_cache()
+        _, meta = ai._carregar("btcusd", "H1")
+        declarado = str(meta.get("symbol") or meta.get("modelo") or "")
+        if declarado:
+            assert "BTCUSD" in declarado.upper(), (
+                f"pediu BTCUSD e recebeu {declarado!r}"
+            )

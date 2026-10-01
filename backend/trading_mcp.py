@@ -77,6 +77,39 @@ def _cortar_execucao(args):
     return {}
 
 
+def _escopo_obrigatorio(args):
+    """Corretora e mercado, sem default.
+
+    Antes era `args.get("broker", "mt5")` em quatro ferramentas: uma chamada
+    sem corretora ia para o MetaTrader. Sem default, o MCP recusa — quem pede
+    saldo, posicao ou cotacao precisa dizer de ONDE.
+
+    Devolve `(broker, market, erro)`. `erro` preenchido ja e resposta pronta.
+    """
+    broker = str(args.get("broker", "") or "").strip().lower()
+    market = str(args.get("market", "") or "").strip().lower()
+    if not broker:
+        return "", "", {
+            "ok": False,
+            "error": "informe a corretora: nenhuma e o padrao",
+            "brokers_known": sorted(BROKERS_EXECUCAO),
+        }
+    if not market:
+        return "", "", {
+            "ok": False,
+            "error": f"informe o mercado de {broker}: cada corretora tem os seus",
+        }
+    return broker, market, None
+
+
+#: Corretoras conhecidas, vindas do catalogo — nao uma lista escrita aqui.
+from backend.broker_registry import BROKERS as _BROKERS  # noqa: E402
+
+BROKERS_EXECUCAO = frozenset(
+    definition.id for definition in _BROKERS.values() if definition.public_data
+)
+
+
 TOOLS = [
     {"name": "health", "description": "Verifica se o gateway local esta no ar.",
      "inputSchema": {"type": "object", "properties": {}}},
@@ -107,16 +140,22 @@ def tool_call(name, args):
     if name == "health":
         return _http("/api/health")
     if name == "account_summary":
-        b = args.get("broker", "mt5")
-        path = f"/api/universal/account?broker={b}&market={args.get('market', 'forex')}" if b != "mt5" else "/api/account"
+        b, m, erro = _escopo_obrigatorio(args)
+        if erro:
+            return erro
+        path = f"/api/universal/account?broker={b}&market={m}" if b != "mt5" else "/api/account"
         return _http(path)
     if name == "list_positions":
-        b = args.get("broker", "mt5")
-        path = f"/api/universal/positions?broker={b}&market={args.get('market', 'forex')}" if b != "mt5" else "/api/positions"
+        b, m, erro = _escopo_obrigatorio(args)
+        if erro:
+            return erro
+        path = f"/api/universal/positions?broker={b}&market={m}" if b != "mt5" else "/api/positions"
         return _http(path)
     if name == "get_quote":
-        b = args.get("broker", "mt5")
-        path = f"/api/universal/quote?broker={b}&market={args.get('market', 'forex')}&symbol={args['symbol']}" if b != "mt5" else f"/api/mt5/quote?symbol={args['symbol']}"
+        b, m, erro = _escopo_obrigatorio(args)
+        if erro:
+            return erro
+        path = f"/api/universal/quote?broker={b}&market={m}&symbol={args['symbol']}" if b != "mt5" else f"/api/mt5/quote?symbol={args['symbol']}"
         return _http(path)
     if name == "place_order":
         if bloqueio := _cortar_execucao(args):
@@ -125,7 +164,10 @@ def tool_call(name, args):
     if name == "close_position":
         if bloqueio := _cortar_execucao(args):
             return {**bloqueio}
-        corpo = {"broker": args.get("broker", "mt5"), "market": args.get("market", "forex"),
+        b, m, erro = _escopo_obrigatorio(args)
+        if erro:
+            return erro
+        corpo = {"broker": b, "market": m,
                  "symbol": args.get("symbol", ""), "ticket": args.get("ticket"),
                  "request_id": f"mcp-close-{os.getpid()}-{time.time_ns()}-{next(_SEQ)}", "confirm": True,
                  "action": "close",

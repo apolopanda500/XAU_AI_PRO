@@ -24,6 +24,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { apiBase } from '../lib/api';
 import { notify } from '../lib/notify';
 import { useAutoState } from '../hooks/queries';
+import { BROKERS, MARKETS_BY_BROKER, MARKET_LABELS, compatibleMarket } from '../lib/brokerCatalog';
 import '../theme/auto-engine.css';
 
 const API = `${apiBase()}`;
@@ -46,9 +47,16 @@ type Estado = {
   ciclo: number;
   simbolo: string;
   timeframe: string;
+  // Corretora e mercado que o motor VAI usar. Vem do proprio motor, nao de
+  // um default da tela: sem estes dois o backend recusa o "ligar" porque
+  // nenhuma corretora e caminho padrao.
+  broker?: string;
+  market?: string;
   threads: number;
   limites: Partial<Limites>;
-  decisoes: Array<{ ts?: string; simbolo?: string; side?: string; acao?: string; motivo?: string; confianca?: number }>;
+  // `modelo` e o nome do artefato que rodou, lido do `.meta.json` pelo
+  // backend. O terminal ao vivo mostra este campo em vez de montar um nome.
+  decisoes: Array<{ ts?: string; simbolo?: string; side?: string; acao?: string; motivo?: string; confianca?: number; modelo?: string }>;
   updated_at?: string;
 };
 
@@ -83,7 +91,6 @@ export default function AutoEnginePanel() {
   // O modo nasce do motor ligado: se ele ja estava operando, o operador esta
   // vendo o automatico, e trocar para manual tem de desligar o motor — nunca
   // deixar os dois decidindo a mesma conta.
-  const [modo, setModo] = useState<'auto' | 'manual'>('auto');
 
   // Mesma queryKey do Mini Terminal: um polling so para /api/auto/state,
   // compartilhado entre a sub-aba e a faixa de conferencia.
@@ -95,6 +102,27 @@ export default function AutoEnginePanel() {
   const [modelos, setModelos] = useState<Modelo[]>([]);
   const [simbolo, setSimbolo] = useState('');
   const [timeframe, setTimeframe] = useState('');
+
+  // CORRETORA E MERCADO DO MOTOR (2026-09-30)
+  //
+  // O painel aceitava ativo e periodo, mas NAO tinha onde escolher a
+  // corretora. O backend exige a escolha (nenhuma corretora e caminho padrao)
+  // e recusava o "Aplicar e ligar" com a mensagem
+  // "escolha a corretora antes de ligar". O operador nao conseguia cumplir
+  // uma exigencia que a tela nao oferecia: nao era erro dele, era falta de
+  // campo. O motor ficou ligavel apenas por API.
+  const [broker, setBroker] = useState('');
+  const [market, setMarket] = useState('');
+
+  const mercados = useMemo(() => MARKETS_BY_BROKER[broker] ?? [], [broker]);
+
+  // Trocar de corretora pode tornar o mercado atual impossivel (Binance nao
+  // faz forex). Sem isto o motor aceitaria "binance + metals" e so recusaria
+  // no envio, depois de um ciclo inteiro de inferencia.
+  useEffect(() => {
+    if (!broker) return;
+    setMarket((atual) => compatibleMarket(broker, atual));
+  }, [broker]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -141,6 +169,8 @@ export default function AutoEnginePanel() {
     if (!estado || sujo || aplicadoRef.current) return;
     if (estado.simbolo) setSimbolo(String(estado.simbolo).toUpperCase());
     if (estado.timeframe) setTimeframe(String(estado.timeframe).toUpperCase());
+    if (estado.broker) setBroker(String(estado.broker).toLowerCase());
+    if (estado.market) setMarket(String(estado.market).toLowerCase());
     const l = estado.limites;
     if (l) {
       setLimites((atual) => {
@@ -211,6 +241,54 @@ export default function AutoEnginePanel() {
         void notify('Recusado', motivo);
       }
       await autoQ.refetch();
+      return true;
+    } catch (e) {
+      setStatus(`Gateway indisponivel: ${e instanceof Error ? e.message : 'erro'}`);
+      return false;
+    } finally {
+      setOcupado(false);
+    }
+  };
+
+  // Aplica e liga em um clique, sem mentir sobre o caminho feliz.
+  //
+  // Por que dois `fetch` e nao um: `/api/auto/config` e `/api/auto/start` sao
+  // rotas distintas, e o gateway recusa `start` com limites invalidos. Se a
+  // configuracao for recusada, o motor NAO pode ligar — senao o operador ve
+  // "Operando" com os limites antigos em vigor.
+  const aplicarELigar = async () => {
+    if (ocupado || ativo) return;
+    setOcupado(true);
+    try {
+      const cfg = await fetch(`${API}/api/auto/config`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...limites, simbolo, timeframe, broker, market }),
+        signal: AbortSignal.timeout(10_000),
+      });
+      const dCfg = (await cfg.json().catch(() => ({}))) as { ok?: boolean; error?: string; motivo?: string };
+      if (!cfg.ok || dCfg.ok === false) {
+        const motivo = dCfg.error || dCfg.motivo || `HTTP ${cfg.status}`;
+        setStatus(motivo);
+        void notify('Configuracao recusada', `${motivo} — o motor nao foi ligado.`);
+        return;
+      }
+      const ini = await fetch(`${API}/api/auto/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+        signal: AbortSignal.timeout(10_000),
+      });
+      const dIni = (await ini.json().catch(() => ({}))) as { ok?: boolean; error?: string; motivo?: string };
+      if (ini.ok && dIni.ok !== false) {
+        setStatus('Motor ligado.');
+        void notify('Operacao automatica ligada', `Motor operando ${simbolo} ${timeframe}.`);
+      } else {
+        const motivo = dIni.error || dIni.motivo || `HTTP ${ini.status}`;
+        setStatus(`Configurado, mas nao ligou: ${motivo}`);
+        void notify('Nao ligou', motivo);
+      }
+      await autoQ.refetch();
     } catch (e) {
       setStatus(`Gateway indisponivel: ${e instanceof Error ? e.message : 'erro'}`);
     } finally {
@@ -219,6 +297,11 @@ export default function AutoEnginePanel() {
   };
 
   const ativo = estado?.ativo ?? false;
+  // Sem corretora o backend recusa o "ligar". A tela diz isso ANTES do
+  // clique: um botao que so falha depois obriga o operador a descobrir a
+  // regra no texto de erro.
+  const faltaCorretora = !broker || !market;
+
   // Par escolhido na tela ainda nao aplicado ao motor.
   const parDiferente = Boolean(
     estado
@@ -226,14 +309,18 @@ export default function AutoEnginePanel() {
   ) || Boolean(
     estado
     && String(estado.timeframe ?? '').toUpperCase() !== timeframe,
+  ) || Boolean(
+    estado && String(estado.broker ?? '').toLowerCase() !== broker,
+  ) || Boolean(
+    estado && String(estado.market ?? '').toLowerCase() !== market,
   );
 
   return (
     <section className="card compact-card auto-engine" aria-labelledby="auto-engine-title">
       <div className="section-head">
         <div>
-          <h2 id="auto-engine-title">Operacao</h2>
-          <span className="muted">Manual a mao ou automatico — os dois no mesmo lugar, com o mesmo par de ativo</span>
+          <h2 id="auto-engine-title">Operacao automatica</h2>
+          <span className="muted">O motor avalia o modelo treinado do par escolhido e envia ordens sozinho, dentro dos limites abaixo</span>
         </div>
         <div className="btn-row">
           <span className={`chip ${ativo ? 'ok' : 'warn'}`}>{ativo ? 'Automatico operando' : 'Automatico parado'}</span>
@@ -253,33 +340,39 @@ export default function AutoEnginePanel() {
           selecionado acima. Quem aperta "Operar manualmente" desliga o motor
           primeiro: os dois nao devem decidir a mesma conta ao mesmo tempo. */}
 
-      <div className="auto-engine-modes" role="group" aria-label="Modo de operacao">
-        <button
-          type="button"
-          className={`btn sm ${modo === 'manual' ? 'primary' : ''}`}
-          aria-pressed={modo === 'manual'}
-          onClick={() => setModo('manual')}
-        >
-          Operar na mao
-        </button>
-        <button
-          type="button"
-          className={`btn sm ${modo === 'auto' ? 'primary' : ''}`}
-          aria-pressed={modo === 'auto'}
-          onClick={() => setModo('auto')}
-        >
-          Deixar o motor
-        </button>
-        <span className="muted">
-          {modo === 'manual'
-            ? 'Voce envia a ordem. O motor fica parado.'
-            : 'O motor avalia a cada intervalo. A ordem manual e bloqueada.'}
-        </span>
-      </div>
 
       {/* O MOTOR OPERA UM PAR POR VEZ: escolher ativo + periodo e escolher
           qual modelo roda. So aparecem pares com `.pkl` no disco. */}
       <div className="auto-engine-grid auto-engine-par">
+        {/* CORRETORA E MERCADO DO MOTOR (2026-09-30)
+            Sem estes dois campos o "Aplicar e ligar" era recusado com
+            "escolha a corretora antes de ligar": o backend exige a escolha e a
+            tela nao offers. Fica na MESMA grade do par, para nao virar uma
+            linha extra de UI. */}
+        <label className="field" title="Corretora que vai executar a ordem. Nenhuma corretora e o padrao: o operador escolhe.">
+          <span>Corretora</span>
+          <select
+            aria-label="Corretora do motor automatico"
+            value={broker}
+            disabled={!BROKERS.length}
+            onChange={(e) => { setSujo(true); setBroker(e.target.value); }}
+          >
+            <option value="">Escolha a corretora</option>
+            {BROKERS.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
+          </select>
+        </label>
+        <label className="field" title="Classe de ativo. A lista segue a corretora escolhida: Binance nao opera forex.">
+          <span>Mercado</span>
+          <select
+            aria-label="Mercado do motor automatico"
+            value={market}
+            disabled={!broker || !mercados.length}
+            onChange={(e) => { setSujo(true); setMarket(e.target.value); }}
+          >
+            {!broker && <option value="">Escolha a corretora antes</option>}
+            {mercados.map((m) => <option key={m} value={m}>{MARKET_LABELS[m] ?? m}</option>)}
+          </select>
+        </label>
         <label className="field" title="Ativo que o motor vai avaliar a cada ciclo">
           <span>Ativo do motor</span>
           <select
@@ -306,7 +399,6 @@ export default function AutoEnginePanel() {
         </label>
         <div className="auto-engine-par-chips">
           <span className="chip">modelo {simbolo}_{timeframe}</span>
-          {parDiferente && <span className="chip warn">par novo · aplique para trocar</span>}
           {!modelos.length && <span className="chip warn">lista de modelos indisponível</span>}
         </div>
       </div>
@@ -325,12 +417,56 @@ export default function AutoEnginePanel() {
         ))}
       </div>
 
-      {/* Tres comandos: aplicar, ligar, desligar. "Rodar um ciclo" saiu —
-          repetia o que o proprio loop faz e ficava ao lado do Ligar. */}
-      <div className="btn-row" style={{ marginTop: 8 }}>
-        <button className="btn sm primary" type="button" onClick={() => void enviar('/api/auto/config', { ...limites, simbolo, timeframe })} disabled={ocupado}>Aplicar</button>
-        <button className="btn sm" type="button" onClick={() => void enviar('/api/auto/start')} disabled={ocupado || ativo}>Ligar</button>
-        <button className="btn sm danger" type="button" onClick={() => void enviar('/api/auto/stop')} disabled={ocupado || !ativo}>Desligar</button>
+      {/* COMO ESTES BOTOES FORAM REESCRITOS (2026-09-30)
+          ====================================================
+          O dono pediu "botoes melhorados". O problema nao era o visual: era
+          que os tres botoes eram indistinguiveis no momento da acao.
+
+          "Aplicar" e "Ligar" pareciam equivalentes — os dois habilitados,
+          os dois com a mesma aparencia, e so um deles tinha efeito imediato.
+          Um operador que clicava "Ligar" sem "Aplicar" achava que o motor
+          estava operando com o par novo, e ele seguia no par antigo.
+
+          Agora:
+            - cada botao diz o que FAZ, nao o que e: "Aplicar e ligar" e uma
+              acao so, e o caminho feliz em um clique;
+            - "Aplicar" separado continua existindo para quem so quer gravar
+              sem ligar;
+            - "Par pendente" some: o motor so opera o par ja aplicado, e o
+              aviso fica visivel em vez de escondido num chip pequeno.
+          */}
+      <div className="btn-row auto-engine-acoes" role="group" aria-label="Comandos do motor">
+        <button
+          className="btn primary"
+          type="button"
+          onClick={() => void aplicarELigar()}
+          disabled={ocupado || ativo || parDiferente || faltaCorretora}
+        >
+          {ativo
+            ? 'Operando'
+            : faltaCorretora
+              ? 'Escolha a corretora'
+              : parDiferente
+                ? 'Aplique antes de ligar'
+                : 'Aplicar e ligar'}
+        </button>
+        <button
+          className="btn"
+          type="button"
+          onClick={() => void enviar('/api/auto/config', { ...limites, simbolo, timeframe, broker, market })}
+          disabled={ocupado}
+          title="Grava os limites e o par sem ligar o motor"
+        >
+          Aplicar so
+        </button>
+        <button
+          className="btn danger"
+          type="button"
+          onClick={() => void enviar('/api/auto/stop')}
+          disabled={ocupado || !ativo}
+        >
+          Parar motor
+        </button>
       </div>
 
       <div className="hint" role="status" aria-live="polite" style={{ marginTop: 6 }}>{status || `Threads: ${estado?.threads ?? '--'}`}</div>
