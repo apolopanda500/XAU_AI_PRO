@@ -15,7 +15,8 @@ export type TabType =
   | 'alert'
     | 'analytics'
   | 'calendar'
-  | 'ai';
+  | 'ai'
+  | 'vips';
 
 export type ThemeName = 'dark' | 'xau_dark' | 'btc_dark' | 'light' | 'ocean_dark' | 'emerald_dark' | 'rose_dark' | 'violet_dark';
 

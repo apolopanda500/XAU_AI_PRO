@@ -15,6 +15,7 @@ import SystemHealth from './components/SystemHealthOnly';
 import SettingsCore from './components/SettingsCore';
 import ExitAppButton from './components/ExitAppButton';
 import EconomicCalendarTab from './components/tabs/EconomicCalendarTab';
+import VipsTab from './components/VipsTab';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 
 function renderActiveTab(tab: TabType): ReactNode {
@@ -32,6 +33,10 @@ function renderActiveTab(tab: TabType): ReactNode {
     case 'system': return <SystemHealth />;
     case 'settings': return <><SettingsCore /><ExitAppButton /></>;
     case 'calendar': return <EconomicCalendarTab />;
+    // VIPS: progressao por volume, medida no audit.jsonl real. Fica separada
+    // do plano (Free/VIP/VIPS) porque sao coisas diferentes: o plano e
+    // preferencia local, o nivel aqui e conquistado operando.
+    case 'vips': return <VipsTab />;
     default: return null;
   }
 }

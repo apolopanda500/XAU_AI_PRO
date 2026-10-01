@@ -12,6 +12,12 @@ const ITEMS: Array<[TabType, string, IconName]> = [
   // Performance & Analytics foi fundida no Histórico.
   ['history', 'Histórico', 'history'],
   ['calendar', 'Calendário', 'calendar'],
+
+  // VIPS fica ao lado do Calendario e nao dentro de Configuracao: e leitura
+  // de progresso, nao configuracao. Esconder em Configuracao faria o
+  // operador operar meses sem saber que a escada existe.
+  ['vips', 'VIPS', 'vips'],
+
   ['system', 'Sistema', 'system'],
   ['settings', 'Configuração', 'settings'],
 ];

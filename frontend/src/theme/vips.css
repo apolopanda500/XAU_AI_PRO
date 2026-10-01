@@ -1,0 +1,44 @@
+/* Sub-aba VIPS — progressao por volume.
+   Densa de proposito: sao 6 linhas de dados e nao um relatorio. A coluna de
+   "falta" fica a direita e em monospace alinhado, porque e a coluna que o
+   operador olha para saber o que fazer. */
+
+.vips-nivel {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 10px 0 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--primary, #00c6fb) 8%, transparent);
+}
+
+.vips-nivel strong {
+  font-size: 15px;
+  letter-spacing: 0.04em;
+  color: var(--primary, #00c6fb);
+}
+
+.vips-beneficios {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 11px;
+  color: var(--text-secondary, #9ca9bd);
+}
+
+.vips-beneficios li::before {
+  content: '· ';
+  color: var(--text-muted, #68778c);
+}
+
+.vips-tabela .num {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
