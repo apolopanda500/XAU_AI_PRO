@@ -36,6 +36,61 @@ no Git. Sem isso, `git status` mostraria `??` para um binário do Windows.
 
 ---
 
+## 4. Build completo rodado de verdade (01/10, 15:31-16:27)
+
+O `build_app.bat` foi executado com as correções deste ciclo. **EXIT=0**.
+
+| Etapa | Resultado |
+|---|---|
+| 1-2 · versão | 8 alvos OK |
+| 3 · frontend | **exit 0** — 170 módulos, 520 ms |
+| 4 · core Rust | **exit 0** — achou o binário no `CARGO_TARGET_DIR` |
+| 5 · gateway | **exit 0** — PyInstaller, 506,7 MB |
+| 6 · recursos | core 8,7 MB · bridge 32,8 MB · **72 modelos** |
+| 7 · bundle | MSI **312,6 MB** + NSIS **203,1 MB** |
+
+**O `install_app.bat` também foi executado — EXIT=0.** Ele nunca tinha passado
+da linha de verificação, porque procurava o MSI num caminho inexistente:
+
+```
+Instalador criado em: "...\Temp\cargo-target\release\bundle\msi"
+INSTALL_EXIT=0
+```
+
+Os tamanhos batem exatamente com os artefatos assinados de 29/09 (MSI
+312,6 MB · NSIS 203,1 MB), o que confirma que a cadeia de build produz o
+mesmo produto — e agora existe um caminho que a UI pode seguir.
+
+### O que o build provou sobre `CARGO_TARGET_DIR`
+
+A etapa 4 do `build_app.bat` usa `%CARGO_TARGET_DIR%` com fallback para
+`core\target\release`. Com o `Temp\cargo-target` limpo no início, o caminho
+real só existe se o `.cargo\config.toml` ou a variável estiverem certos. O
+log mostra o valor efetivo:
+
+```
+CARGO_TARGET_DIR=...\XAU_AI_PRO\scripts\..\Temp\cargo-target
+```
+
+E o bundle nasceu em `Temp\cargo-target\release\bundle` — **exatamente onde a
+correção manda procurar**. Antes, essa linha do script apontava para
+`frontend\src-tauri\target`, que nunca existiu.
+
+### Disco durante o build
+
+| Momento | Livre |
+|---|---|
+| Início | 29,99 GB |
+| meio (PyInstaller) | 23,16 GB |
+| NSIS comprimindo | 18,89 GB |
+| Fim | **15,60 GB** |
+
+O consumo é o `Temp\cargo-target` (cache do Rust + bundle). Tudo removível
+por `limpeza_segura.ps1 -BuildArtifacts -Apply`, com o destino de volta aos
+~30 GB.
+
+---
+
 ## 2. Validação por comando
 
 Tudo medido neste ciclo, nada herdado de relatório anterior:
@@ -45,9 +100,10 @@ Tudo medido neste ciclo, nada herdado de relatório anterior:
 | Python | `pytest -q tests` | **659 passed, 0 failed** (111,86s) |
 | Frontend | `npx tsc --noEmit` | **exit 0** |
 | Frontend | `npm test -- --run` | **179 passed** (46,46s) |
+| Build | `scripts\build_app.bat` | **EXIT=0** — MSI 312,6 MB · NSIS 203,1 MB |
+| Instalador | `scripts\install_app.bat` | **EXIT=0** — encontrou o MSI |
 | Preflight | `scripts\preflight.py` | **Tudo pronto para a operacao** |
 | Segredos | `scripts\auditar_segredos.py` | **0 bloqueios** |
-| Disco | `shutil.disk_usage` | **30,58 GB livres** |
 | Git | `git status` | **0 arquivos pendentes** |
 | Git | `git diff --check` | **sem erro de whitespace** |
 | MQL5 | `git status --porcelain MQL5` | **vazio — intocado** |
@@ -57,7 +113,7 @@ deste ciclo), e ele sumiu com o commit.
 
 ---
 
-## 3. O push
+## 5. O push
 
 ```
 c552bce..336d199  develop -> develop    (origin = GitHub, EXIT=0)
@@ -87,13 +143,13 @@ configurado nesta máquina.** O remoto existe e está correto:
 gitlab  https://gitlab.com/apolopanda500/XAU_AI_PRO.git
 ```
 
-É pendência de **credencial**, não de código — entra na lista do §5.
+É pendência de **credencial**, não de código — entra na lista do §7.
 
 
 
 ---
 
-## 4. Como o app instalado funciona
+## 6. Como o app instalado funciona
 
 | Camada | Caminho | Tamanho |
 |---|---|---|
@@ -114,7 +170,7 @@ gitlab  https://gitlab.com/apolopanda500/XAU_AI_PRO.git
 
 ---
 
-## 5. Pendências — nenhuma é de código
+## 7. Pendências — nenhuma é de código
 
 1. **Token do GitLab** — o remoto existe e o push trava sem credencial. Novo
    neste ciclo.
@@ -133,7 +189,7 @@ gitlab  https://gitlab.com/apolopanda500/XAU_AI_PRO.git
 
 ---
 
-## 6. Regra que vale para o próximo ciclo
+## 8. Regra que vale para o próximo ciclo
 
 O `install_app.bat` existia desde **25/09/2026** e falhava em **100% das
 execuções**, sem que nenhum teste pegasse: a suíte valida Python e TypeScript,
