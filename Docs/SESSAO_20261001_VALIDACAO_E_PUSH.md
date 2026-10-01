@@ -1,9 +1,119 @@
-# Ciclo 01/10/2026 — preflight destravado, validação e push
+# Ciclo 01/10/2026 — sessão completa: do build travado ao VIP por volume
 
-> Complementa [`SESSAO_20260930_CICLO_LIMPO.md`](./SESSAO_20260930_CICLO_LIMPO.md)
-> (30/09), que registra a **limpeza**. Este registra a **validação e o push**.
+> Registro único do dia. Substitui a leitura de três documentos: o que
+> estava limpo (`SESSAO_20260930_CICLO_LIMPO.md`), o que foi validado
+> (`SESSAO_20261001_VALIDACAO_E_PUSH.md`) e a pesquisa do VIP
+> (`VIP_PROGRESSAO.md`, que continua separado por ser referência, não
+> registro).
 >
-> **Branch:** `develop` · **Versão:** 1.2.4 · **Commit:** `336d199`
+> **Branch:** `develop` · **Versão:** 1.2.4 · **13 commits** · `c552bce → bb6cece`
+
+---
+
+## 1. Resumo do dia
+
+| Chamado | Achado | Commit |
+|---|---|---|
+| Liberar espaço | `NONE` (88 MB) removido e posto na allowlist | `336d199` |
+| Corrigir dois comandos | `install_app.bat` falhava 100%; `build_app.bat` anunciava caminho morto | `336d199` |
+| Limpar ambiente | Preflight de **2 falhas para 0** | `336d199` |
+| Build e reinstalação | MSI 312,6 MB · app no ar · 3 processos | `bcf5f9c`, `3363212` |
+| Atalho do instalador | Defeito meu: chave `shortcut` não existe no Tauri v2 | `e18932d` → `65e746e` |
+| `account_id` obrigatório | Motor mandava `""` sempre | `940ba56` |
+| Planos para VIP | Free / VIP / VIPS **com migração do id gravado** | `22f16a5` |
+| Progressão VIP | Escada por volume real, modelo PrimeXBT | `f1ddb99`, `a29ccbb` |
+| Regra da IBKR | Promoção no dia seguinte, não imediata | `dc2efc9` |
+| Forward test | `retcode` do broker no evento | `dbdce10` |
+| Cobertura | 15 testes para a escada + falso positivo corrigido | `bb6cece` |
+
+---
+
+## 2. Os dois comandos de build estavam errados
+
+O `target-dir` do Cargo é `Temp\cargo-target` (`.cargo\config.toml` linha 23
+e `build_app.bat` linha 44). Os dois scripts apontavam para
+`frontend\src-tauri\target`, **que nunca existiu**.
+
+**`install_app.bat` falhava em 100% das execuções** desde 25/09: rodava
+`npx tauri build` (que não compila o core, não roda o PyInstaller e não
+sincroniza os modelos) e depois verificava o caminho inexistente.
+
+Prova depois da correção, rodando de verdade:
+
+```
+Instalador criado em: "...\Temp\cargo-target\release\bundle\msi"
+INSTALL_EXIT=0
+```
+
+---
+
+## 3. `account_id é obrigatório` — a ordem nunca saía
+
+`auto_engine.py` montava o pedido com `payload.get("account_id", "")`, e o
+`Decisao` **não tem esse campo**: o valor era sempre vazio. Toda ordem morria
+no contrato universal *depois* de gastar um ciclo de inferência, e o painel
+não tinha de onde pegar o valor.
+
+A conta agora vem da conexão ativa da corretora escolhida no ciclo
+(`resolve_connection`). Havendo mais de uma conta ativa para o mesmo par, a
+função **recusa** — escolher entre duas contas é decisão do operador.
+
+---
+
+## 4. VIP: plano e progressão são coisas diferentes
+
+**Plano** (`app/subscriptions.py`): Free / VIP / VIPS. O `business` que
+estava gravado na máquina virou `vips` por migração — sem ela o usuário
+cairia para Free sem aviso.
+
+**Progressão** (`backend/vip_progress.py`): nível por **volume executado**,
+lido do `audit.jsonl`. É o modelo do PrimeXBT e da Interactive Brokers.
+Detalhes em [`VIP_PROGRESSAO.md`](./VIP_PROGRESSAO.md).
+
+Três regras que vieram da pesquisa e valem:
+
+1. O limiar muda por **grupo de instrumento** (10x entre cripto e forex).
+2. O nível **trava 30 dias** ao ser alcançado.
+3. A promoção **não é imediata** — vale no dia seguinte, como na IBKR.
+
+A tela mostra nível e distância, **nunca um desconto**: os limiares são de
+estrutura e o preço depende de acordo comercial.
+
+---
+
+## 5. O forward test: 4.246 erros sem causa
+
+`ExecutionEngine.mqh:276` mandava `EventBrokerError(EnumToString(execResult))`
+— o nome do enum local, que nunca variava. Por isso os 4.246 `BROKER_ERROR`
+tinham **uma única mensagem**.
+
+Agora o evento carrega `OrderSendResult()` (o que o servidor respondeu) e
+`GetLastError()` (o que a API respondeu). São diferentes: o servidor pode
+recusar por política de risco com a API correta.
+
+> **Pendência:** o `.mqh` alterado exige **recompilar no MetaEditor64** e
+> reanexar o EA. A taxa de 3,4 erros por ciclo não cai sozinha — o que muda
+> é que da próxima vez vem com a causa.
+
+---
+
+## 6. Estado final medido
+
+| Camada | Resultado |
+|---|---|
+| pytest | **677 passed, 0 failed** |
+| vitest | **184 passed** |
+| tsc · build frontend | **exit 0** |
+| backend lint + build | **exit 0** |
+| core Rust | **38 passed** |
+| Tauri | **11 passed** |
+| Privacidade | **6/6 declarações** |
+| Segredos | **0 bloqueios** |
+| Saque | **0 violações** |
+| Preflight | **0 bloqueantes** |
+| Git | **0 pendentes** |
+
+
 
 ---
 

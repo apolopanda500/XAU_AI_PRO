@@ -15,9 +15,10 @@ foi fechado.
 
 | Documento | Quando | Sobre |
 |---|---|---|
-| **`SESSAO_20261001_VALIDACAO_E_PUSH.md`** | 01/10 | **Preflight destravado (2→0), os 2 scripts de build corrigidos, validação e push.** Leia primeiro. |
-| **`MAPEAMENTO_10_10_VERIFICADO_20260930.md`** | 30/09 | **10/10 real, camada por camada, com o comando de cada prova.** |
-| **`LEVANTAMENTO_20260930.md`** | 30/09 | **Paridade de corretoras + as 5 etapas executadas.** |
+| **`SESSAO_20261001_VALIDACAO_E_PUSH.md`** | 01/10 | **Sessão completa: do build travado ao VIP por volume. 13 commits, tudo medido.** Leia primeiro. |
+| **`VIP_PROGRESSAO.md`** | 01/10 | **Pesquisa: como PrimeXBT, IC Markets e IBKR estruturam nível por volume.** Referência, não registro. |
+| **`MAPEAMENTO_10_10_VERIFICADO_20260930.md`** | 30/09 | 10/10 real, camada por camada, com o comando de cada prova. |
+| **`LEVANTAMENTO_20260930.md`** | 30/09 | Paridade de corretoras + as 5 etapas executadas. |
 | **`SESSAO_20260930_CICLO_LIMPO.md`** | 30/09 | Ciclo de limpeza: disco, artefatos, `NONE`, `cmd.exe` |
 | `SESSAO_20260930.md` | 30/09 | Estado verificado do build 1.2.4 assinado |
 | `AUDITORIA_20260929.md` | 29/09 | Auditoria de segurança e integridade com comandos reproduzíveis |
