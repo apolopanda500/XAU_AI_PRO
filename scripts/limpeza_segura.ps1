@@ -99,8 +99,39 @@ foreach ($item in $items) {
 }
 
 if (-not $Apply) {
-    Write-Host 'Dry-run concluido. Reexecute com -Apply para remover somente estes itens.'
+    Write-Host 'Dry-run concluido. Reexecute com -Apply para remover somente estos itens.'
     exit 0
+}
+
+# --------------------------------------------------------------------------
+# TRAVA DE BUILD EM ANDAMENTO
+# --------------------------------------------------------------------------
+# `Temp\cargo-target` e o diretorio de TRABALHO do `tauri build` e do
+# `cargo build`, nao so um cache frio. Apagar com o build rodando causa
+#
+#   failed to write `...\Temp\cargo-target\release\.fingerprint\...`
+#   O sistema nao pode encontrar o caminho especificado. (os error 3)
+#
+# e o bundle falha na etapa 7 — exatamente o que aconteceu em 01/10/2026,
+# quando a limpeza foi disparada com o Tauri compilando dentro do alvo.
+# O erro 3 e "caminho sumiu no meio", nao "falta espaco": as duas coisas
+# parecem iguais no log e sao causas completamente diferentes.
+#
+# `Get-Process` e o criterio certo: o processo existe enquanto compila.
+$processosBuild = @('cargo', 'rustc', 'makensis', 'light', 'candle') |
+    ForEach-Object { Get-Process -Name $_ -ErrorAction SilentlyContinue }
+if ($processosBuild.Count -gt 0) {
+    $nomes = ($processosBuild | Select-Object -ExpandProperty ProcessName -Unique) -join ', '
+    Write-Host ""
+    Write-Warning "BUILD EM ANDAMENTO ($nomes). Alvos de build serao preservados."
+    Write-Host "  O `target-dir` do Cargo esta em uso; remove-lo quebra o bundle em andamento."
+    Write-Host "  Rode a limpeza DEPOIS que o build terminar."
+    $items = $items | Where-Object { $_.FullName -notmatch '(?i)(cargo-target|[\\/]target$|[\\/]build$|[\\/]dist$)' }
+    if ($items.Count -eq 0) {
+        Write-Host 'Nada seguro a remover com build em andamento.'
+        exit 0
+    }
+    Write-Host ""
 }
 
 function Resolve-Icacls {
