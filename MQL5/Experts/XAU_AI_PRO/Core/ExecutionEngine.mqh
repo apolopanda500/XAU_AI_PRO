@@ -264,16 +264,41 @@ bool ExecuteTrade(string symbol,int signal)
    }
    else
    {
+      // O `retcode` e o unico campo que diz POR QUE o broker recusou. Sem
+      // ele, os 4.246 BROKER_ERROR do forward test tinham uma unica mensagem
+      // ("Erro de broker") e a taxa de 3,4 erros por ciclo nao era
+      // diagnosticavel: sabia-se que falhou, nunca por que.
+      //
+      // Os dois codigos sao necessarios e significam coisas diferentes:
+      // `retcode` vem do SERVIDOR do broker (10004 = requote, 10006 =
+      // rejeitado) e `GetLastError()` vem da API local (134 = sem margem,
+      // 4108 = ordem invalida). O servidor pode recusar por politica
+      // enquanto a API estava correta.
+      int  erroApi    = GetLastError();
+      uint erroBroker = (uint)OrderSendResult();
+      string motivo   = StringFormat(
+                           "retcode_broker=%u | erro_api=%d",
+                           erroBroker,
+                           erroApi
+                        );
+
       Print(
          "ERRO EXECUCAO | ",
          symbol,
          " | Signal=",
          signal,
          " | Result=",
-         EnumToString(execResult)
+         EnumToString(execResult),
+         " | RETCODE_BROKER=",
+         erroBroker,
+         " | ERRO_API=",
+         erroApi
       );
 
-      EventBrokerError(EnumToString(execResult));
+      // A causa vai no campo `reason`, que e o que o log e a tela leem. Era
+      // aqui que a informacao se perdia: o evento saia com o motivo vazio
+      // e o forward test so conseguia contar falhas, nunca explica-las.
+      EventBrokerError(EnumToString(execResult) + " | " + motivo);
 
       return false;
    }
