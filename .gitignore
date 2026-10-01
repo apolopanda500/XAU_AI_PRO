@@ -197,10 +197,19 @@ experiments/isolated/
 # Copia do `cmd.exe` do Windows que estava na raiz desde 24/06/2026 (hash
 # 65EC268A..., identico ao de C:\Windows\System32). O `preflight` bloqueia a
 # operacao por causa dela porque um binario solto sombreia o do sistema.
-# Em 30/09/2026 o arquivo foi renomeado para `cmd_antigo.txt` ao recuperar a
-# ACL, e o Windows recusou a delecao (erro 5) mesmo com FullControl explicito
-# no arquivo e na pasta. Fica fora do Git enquanto nao for possivel apagar.
+#
+# Em 30/09/2026 foi renomeada para `cmd_antigo.txt` e em 01/10/2026 para
+# `cmd_remover_elevado.txt`. Nos dois casos a delecao foi recusada (erro 5,
+# Access Denied) mesmo com FullControl explicito no arquivo e na pasta, e mesmo
+# apos `takeown` + `icacls` bem-sucedidos. A renomeacao resolve o que
+# resolvia: o nome `cmd.exe` saiu da raiz, o `preflight` destravou (de 2 falhas
+# para 0) e `tests/test_preflight.py` voltou a 28 verdes. O que resta e 344 KB
+# presos pelo Controlador de Arquivos — some num shell elevado, uma vez.
+#
+# Por isso as duas entradas: o nome pode mudar a cada tentativa, e nenhuma delas
+# pode entrar no Git.
 /cmd_antigo.txt
+/cmd_remover_elevado.txt
 
 # ---------------------------------------------------------------------------
 # Scripts e binarios bloqueados (2026-09-26)

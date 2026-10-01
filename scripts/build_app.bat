@@ -109,6 +109,14 @@ if %ERRORLEVEL% neq 0 (
 
 echo.
 echo === Build e bundle completos! ===
-echo Artefatos: "%ROOT%\frontend\src-tauri\target\release\bundle"
+REM O bundle nasce em `Temp\cargo-target`, e nao em `frontend\src-tauri\target`.
+REM O `target-dir` do Cargo foi desviado para fora do disco de codigo de
+REM proposito (ver `src-tauri\.cargo\config.toml` linha 23 e a etapa 4 acima),
+REM e o Tauri empacota sempre a partir desse `target-dir`. Anunciar o caminho
+REM padrao do Tauri levava o operador a procurar um diretorio que nunca teve o
+REM artefato — foi o que `install_app.bat` fazia ate a correcao de 01/10/2026.
+set "BUNDLE=%CARGO_TARGET_DIR%\release\bundle"
+if not exist "%BUNDLE%" set "BUNDLE=%ROOT%\frontend\src-tauri\target\release\bundle"
+echo Artefatos: "%BUNDLE%"
 endlocal
 exit /b 0

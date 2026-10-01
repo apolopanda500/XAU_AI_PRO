@@ -37,7 +37,14 @@ $rootPath = (Resolve-Path -LiteralPath $Root).Path
 $allowed = @(
     '.pytest_cache', '.pytest-cycle-clean', '.pytest-runtime', '.pytest-suite-run',
     'frontend\.vite', 'frontend\dist', 'Temp\pyinstaller_latest.out.log',
-    'Temp\pyinstaller_latest.err.log', 'Temp\pyinstaller_latest.pid'
+    'Temp\pyinstaller_latest.err.log', 'Temp\pyinstaller_latest.pid',
+    # Artefato de link do Rust gravado num arquivo chamado "NONE" (formato
+    # "Microsoft C/C++ MSF 7.00", ou seja, um PDB de debug). O `config.toml`
+    # passa `link-arg=/PDB:NONE`, mas o token chega ao linker como nome de
+    # arquivo e o PDB e escrito em disco mesmo assim. Cresce a cada build:
+    # 11,2 MB em 29/09, 88 MB em 30/09. Nao e versaoado, nao e lido por nada
+    # e `cargo build` o recria quando preciso. Ver `Docs\SESSAO_20260930_CICLO_LIMPO.md` 3.2.
+    'frontend\src-tauri\NONE'
 )
 if ($BuildArtifacts) {
     $allowed += @('build', 'dist', 'core\target', 'frontend\src-tauri\target', 'Temp\cargo-target')
