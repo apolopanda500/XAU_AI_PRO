@@ -38,7 +38,14 @@ def assinatura_isolada(tmp_path, monkeypatch):
 
 def test_catalogo_tem_os_tres_planos():
     ids = {p["id"] for p in subscriptions.list_plans()}
-    assert ids == {"free", "pro", "business"}
+    assert ids == {"free", "vip", "vips"}
+
+
+def test_planos_vip_e_vips_tem_os_nomes_do_catalogo():
+    """O nome exibido e o que a tela mostra: VIP e VIPS, nao Pro e Business."""
+    nomes = {p["id"]: p["name"] for p in subscriptions.list_plans()}
+    assert nomes["vip"] == "VIP"
+    assert nomes["vips"] == "VIPS"
 
 
 def test_planos_subem_de_preco():
@@ -63,16 +70,31 @@ def test_free_opera_na_mao_mas_nao_automatiza():
     assert subscriptions.has_entitlement("economic_calendar") is False
 
 
-def test_pro_libera_modelo_automatico_e_calendario():
-    subscriptions.activate_local_plan("pro")
+def test_vip_libera_modelo_automatico_e_calendario():
+    subscriptions.activate_local_plan("vip")
     for feature in ("ai_signals", "advanced_analytics", "economic_calendar", "social_paper"):
-        assert subscriptions.has_entitlement(feature) is True, f"Pro deveria liberar {feature}"
+        assert subscriptions.has_entitlement(feature) is True, f"VIP deveria liberar {feature}"
 
 
-def test_business_libera_auditoria_avancada():
-    subscriptions.activate_local_plan("business")
+def test_vips_libera_auditoria_avancada():
+    subscriptions.activate_local_plan("vips")
     assert subscriptions.has_entitlement("advanced_audit") is True
     assert subscriptions.has_entitlement("priority_support") is True
+
+
+def test_plano_antigo_pro_ainda_e_aceito():
+    """Regressao do renome: quem tinha `pro` gravado nao pode perder o plano.
+
+    Sem a migracao em `_normalized_record`, o registro deixaria de casar com
+    o catalogo e o usuario cairia para Free sem aviso.
+    """
+    resultado = subscriptions.activate_local_plan("pro")
+    assert resultado["effective_plan_id"] == "vip"
+
+
+def test_plano_antigo_business_ainda_e_aceito():
+    resultado = subscriptions.activate_local_plan("business")
+    assert resultado["effective_plan_id"] == "vips"
 
 
 def test_motor_automatico_exige_ia():
@@ -92,10 +114,10 @@ def test_motor_automatico_exige_ia():
 # O gate realmente bloqueia (o ponto que estava quebrado)
 # --------------------------------------------------------------------------
 
-def test_gate_bloqueia_no_free_e_libera_no_pro():
+def test_gate_bloqueia_no_free_e_libera_no_vip():
     subscriptions.activate_local_plan("free")
     assert plano_gate.verificar("auto_engine")[0] is False
-    subscriptions.activate_local_plan("pro")
+    subscriptions.activate_local_plan("vip")
     assert plano_gate.verificar("auto_engine")[0] is True
 
 
@@ -104,7 +126,7 @@ def test_resposta_bloqueio_diz_qual_plano_libera():
     payload = plano_gate.resposta_bloqueio("auto_engine", plano_gate.verificar("auto_engine")[1])
     assert payload["ok"] is False
     assert payload["code"] == "PLAN_REQUIRED"
-    assert "Pro" in payload["required_plans"], "a UI precisa saber o que destrava"
+    assert "VIP" in payload["required_plans"], "a UI precisa saber o que destrava"
 
 
 def test_gate_nao_derruba_a_leitura_do_catalogo():
@@ -146,7 +168,7 @@ def test_nenhum_plano_liberaria_saque():
 
 def test_gate_de_plano_nao_altera_dinheiro_real():
     """Liberar plano nao pode virar execucao real."""
-    subscriptions.activate_local_plan("business")
+    subscriptions.activate_local_plan("vips")
     assinatura = subscriptions.get_subscription()
     assert assinatura["live_execution"] is False
     assert assinatura["withdrawals_enabled"] is False

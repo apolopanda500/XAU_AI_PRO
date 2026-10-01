@@ -164,7 +164,7 @@ export default function SubscriptionPanel() {
                 <td>{strategy.timeframes.join(' / ')}</td>
                 <td>
                   <button type="button" className="btn xs ghost" disabled={!strategy.available || strategy.following} onClick={() => void follow(strategy.id)}>
-                    {strategy.following ? 'Seguindo' : strategy.available ? 'Seguir' : 'Requer Pro'}
+                    {strategy.following ? 'Seguindo' : strategy.available ? 'Seguir' : 'Requer VIP'}
                   </button>
                 </td>
               </tr>
