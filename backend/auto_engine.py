@@ -520,6 +520,45 @@ class MotorAuto:
                 )
             return broker, market
 
+        def conta_da_corretora(broker: str, market: str) -> str:
+            """Descobre a conta ativa da corretora escolhida.
+
+            POR QUE ISTO EXISTE
+            -------------------
+            O envio exigia `account_id` e o motor mandava `""` sempre
+            (`payload.get("account_id", "")`). Toda ordem de operacao
+            automatica morria em `UniversalOrderRequest.from_payload` com
+            "account_id e obrigatorio" — depois de gastar um ciclo inteiro de
+            inferencia. O painel nao tinha de onde pegar o valor: a tela
+            mostrava corretora e mercado, e nao a conta.
+
+            A resolucao fica aqui, e nao no painel, porque quem decide qual
+            conta opera e o proprio motor: ele ja sabe a corretora e o
+            mercado do ciclo.
+
+            O QUE NAO MUDOU
+            ---------------
+            Nenhuma conta e inventada. Se houver mais de uma ativa para a
+            mesma corretora e mercado, `resolve_connection` recusa com
+            "account_id e obrigatorio quando ha mais de uma conta ativa" —
+            e essa recusa e o comportamento correto: escolher entre duas
+            contas do mesmo par e uma decisao do operador. O motor so
+            escolhe sozinho quando a escolha e unica.
+            """
+            from backend.connection_store import resolve_connection
+
+            try:
+                conta = resolve_connection("", broker, market)
+            except LookupError as exc:
+                raise RuntimeError(str(exc)) from exc
+            account_id = str(conta.get("id", "")).strip()
+            if not account_id:
+                raise RuntimeError(
+                    f"a conexao ativa de {broker} nao tem identificador de conta; "
+                    "cadastre a conexao novamente"
+                )
+            return account_id
+
         def enviar(payload: dict[str, Any]) -> dict[str, Any]:
             """Ordem pelo UniversalRouter, com intent_log e gate da corretora."""
             broker, market = escopo()
@@ -533,7 +572,11 @@ class MotorAuto:
                 "price": payload.get("price"),
                 "order_type": "market",
                 "confirm": True,
-                "account_id": payload.get("account_id", ""),
+                # Antes era `payload.get("account_id", "")`, que era sempre
+                # vazio: o `Decisao` nao tem esse campo. Toda ordem caia em
+                # "account_id e obrigatorio" no contrato universal. A conta
+                # vem da conexao ativa da corretora escolhida neste ciclo.
+                "account_id": conta_da_corretora(broker, market),
             }
             return router.execute(pedido, explicit_authorization=True)
 

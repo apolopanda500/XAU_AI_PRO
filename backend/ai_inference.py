@@ -386,6 +386,34 @@ def inferir(symbol: str, candles: pd.DataFrame, timeframe: str = "H1") -> Infere
         return Inferencia(False, f"erro na inferencia: {exc}", symbol, timeframe)
 
 
+# Rotulo legivel do timeframe. O `id` do modelo e o nome do arquivo
+# (`XAUUSD_H1`) e precisa continuar assim: o `.pkl` e o `.meta.json` sao
+# gravados por esse nome, e trocar a convencao deixaria os 72 artefatos
+# ja treinados orfaos. O que muda e o texto que a tela mostra.
+#
+# Antes a interface exibia o id cru. O operador lia "XAUUSD_H1" e tinha que
+# saber que H1 = 1 hora. Agora a tela mostra "MODELO XAUUSD 1H".
+_ROTULO_TF: dict[str, str] = {
+    "M1": "1M", "M5": "5M", "M15": "15M", "M30": "30M",
+    "H1": "1H", "H4": "4H", "D1": "1D", "W1": "1S",
+}
+
+
+def rotulo_modelo(symbol: str, timeframe: str) -> str:
+    """Nome de exibicao de um modelo: `MODELO XAUUSD 1H`.
+
+    Funcao pura e sem I/O — pode ser chamada de qualquer tela que liste
+    modelo, sem depender do arquivo existir.
+    """
+    simbolo = str(symbol or "").strip().upper()
+    tf = str(timeframe or "").strip().upper()
+    if not simbolo and not tf:
+        return "MODELO"
+    if not tf:
+        return f"MODELO {simbolo}"
+    return f"MODELO {simbolo} {_ROTULO_TF.get(tf, tf)}"
+
+
 def listar_modelos() -> list[dict[str, Any]]:
     """Inventario real dos artefatos, com os metricos do treino.
 
@@ -409,10 +437,15 @@ def listar_modelos() -> list[dict[str, Any]]:
         metricas = m.get("metrics", {})
         folds = metricas.get("folds") or []
         edges = [fo["edge"] for fo in folds if isinstance(fo, dict) and "edge" in fo]
+        rotulo_simbolo = str(m.get("symbol") or simbolo).upper()
+        rotulo_tf = str(m.get("timeframe") or tf).upper()
         saida.append({
             "id": nome,
-            "symbol": str(m.get("symbol") or simbolo).upper(),
-            "timeframe": str(m.get("timeframe") or tf).upper(),
+            # `label` e o texto para a tela. `id` continua sendo o nome do
+            # arquivo, porque e ele que localiza o `.pkl` no disco.
+            "label": rotulo_modelo(rotulo_simbolo, rotulo_tf),
+            "symbol": rotulo_simbolo,
+            "timeframe": rotulo_tf,
             "publicable": bool(m.get("publicable")),
             "reason": m.get("publish_reason", ""),
             "accuracy": metricas.get("accuracy"),

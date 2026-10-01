@@ -8,6 +8,8 @@
 // que vieram do arquivo do modelo — nunca um numero inventado na interface.
 import { useEffect, useState } from 'react';
 import { buscarModelosTreinados, type ModeloTreinado } from '../hooks/useAICommunication';
+import ModelCover from './ModelCover';
+import '../theme/robot-model.css';
 
 function pct(value: number | null): string {
   return value === null || value === undefined || !Number.isFinite(value)
@@ -51,9 +53,36 @@ export default function RobotModelSelector() {
         <span className="chip">{selecionavel.length} disponíve{selecionavel.length === 1 ? 'l' : 'is'}</span>
       </div>
       {erro && <p className="hint" role="status">{erro}</p>}
+      {/* POR QUE CANDOS DE CAPA E NAO UM <select>
+          A lista tem 25 modelos carregaveis. Num select eles viram 25 linhas
+          de texto com tres numeros, e comparar "qual tem edge maior" vira
+          trabalho. A capa mostra simbolo, timeframe, accuracy e edge juntos,
+          com cor pela classe do ativo — a escolha vira visual.
+          O <select> continua existindo para o leitor de tela e para o
+          teclado: as capas sao botoes com aria-pressed, e a metrica fica
+          no aria-label. */}
+      <div className="model-cover-grid" role="group" aria-label="Modelos disponiveis">
+        {selecionavel.map((m) => (
+          <ModelCover
+            key={m.id}
+            modelo={{
+              id: m.id,
+              symbol: m.symbol,
+              timeframe: m.timeframe,
+              accuracy: m.accuracy,
+              edge: m.edge,
+              f1: m.f1,
+              publicable: m.publicable,
+              pklPresent: m.pklPresent,
+            }}
+            selecionado={m.id === modeloId}
+            onSelect={(id) => { setModeloId(id); }}
+          />
+        ))}
+      </div>
       <div className="robot-model-row">
         <label className="field">
-          <span>Selecionar</span>
+          <span>Selecionar (lista)</span>
           <select
             aria-label="Selecionar modelo do robo"
             value={modeloId}
