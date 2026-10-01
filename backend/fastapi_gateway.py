@@ -519,6 +519,19 @@ async def subscription_me() -> dict:
     return {"ok": True, "subscription": get_subscription()}
 
 
+@app.get("/api/vip/progress")
+async def vip_progress() -> dict:
+    """Progressao VIP por volume, lida do audit.jsonl real.
+
+    Rota somente-leitura: mostra em que nivel o operador esta e quanto falta.
+    Nao altera plano, nao libera dinheiro real e nao promete desconto — os
+    limiares sao de estrutura. Ver `backend/vip_progress.py`.
+    """
+    from backend.vip_progress import progresso as _progresso
+
+    return {"ok": True, **(_progresso())}
+
+
 @app.post("/api/subscriptions/activate")
 async def subscription_activate(payload: dict) -> JSONResponse:
     try:
