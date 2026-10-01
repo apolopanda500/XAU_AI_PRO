@@ -36,7 +36,7 @@ no Git. Sem isso, `git status` mostraria `??` para um binário do Windows.
 
 ---
 
-## 4. Build completo rodado de verdade (01/10, 15:31-16:27)
+## 2. Build completo rodado de verdade (01/10, 15:31-16:27)
 
 O `build_app.bat` foi executado com as correções deste ciclo. **EXIT=0**.
 
@@ -91,7 +91,7 @@ por `limpeza_segura.ps1 -BuildArtifacts -Apply`, com o destino de volta aos
 
 ---
 
-## 2. Validação por comando
+## 3. Validação por comando
 
 Tudo medido neste ciclo, nada herdado de relatório anterior:
 
@@ -113,7 +113,7 @@ deste ciclo), e ele sumiu com o commit.
 
 ---
 
-## 5. O push
+## 4. O push
 
 ```
 c552bce..336d199  develop -> develop    (origin = GitHub, EXIT=0)
@@ -149,6 +149,65 @@ gitlab  https://gitlab.com/apolopanda500/XAU_AI_PRO.git
 
 ---
 
+## 5. Reinstalação completa e app no ar (01/10, 16:28-16:33)
+
+Ciclo pedido: desinstalar o app antigo, instalar o novo, executar pelo atalho,
+testar.
+
+| Passo | Resultado |
+|---|---|
+| Desinstalar 1.2.4 antigo | `uninstall.exe /S` — pasta **removida**, registro limpo |
+| Instalar o MSI novo | `MainEngineThread is returning 0` — **sucesso** |
+| Instalado | **870,9 MB** · bridge 506,7 · Python 342,6 · core 8,7 · **72 modelos** |
+| Atalho | **não existia** — ver §5.1 |
+| App pelo atalho | 3 processos no ar |
+| Portas | **9001 · 9002 · 9003** ouvindo |
+| Prova de vida | `telemetry_history.jsonl` |
+
+### Prova de vida
+
+```json
+{"ts_iso": "2026-10-01T16:32:55", "source": "loop",
+ "terminal_connected": true, "equity": 150.87, "ea_state": "stale"}
+```
+
+`terminal_connected: true` e `equity: 150,87` são do **MetaTrader 5 real** — o
+app instalado subiu, falou com o terminal e gravou telemetria. Não é
+simulado.
+
+### 5.1 O atalho não era recriado — defeito encontrado nesta sessão
+
+Depois de desinstalar e reinstalar, `XAU AI PRO.lnk` **não estava na Área de
+Trabalho**, e o Menu Iniciar também estava vazio. O atalho anterior veio de
+algum ciclo antigo; o instalador nunca o gerava.
+
+**Causa:** `tauri.conf.json` não declarava a chave `shortcut`. Sem ela, o Tauri
+não gera atalho em nenhum dos dois lugares.
+
+**Efeito real:** o caminho de teste "abrir pelo atalho" falhava com *"o sistema
+não pode encontrar o arquivo especificado"* — e o usuário que instalasse o
+1.2.4 ficaria sem atalho para sempre.
+
+**Correção:** `"shortcut": true` no bloco `bundle` (commit `e18932d`). O `.lnk`
+da máquina foi recriado para o build atual ficar utilizável.
+
+### 5.2 O `preflight` acusou 3 falhas — e eram o sinal de sucesso
+
+Com o app instalado rodando, o `preflight` passou a acusar:
+
+```
+[XX] porta 9001 (gateway)   ocupada
+[XX] porta 9002 (websocket) ocupada
+[XX] porta 9003 (core)      ocupada
+```
+
+São **as três portas do próprio app instalado**. O `preflight` foi escrito para
+rodar **antes** de subir o ambiente, e ele está certo: quem chama antes de
+operar quer as portas livres. Registrado aqui para que a próxima pessoa não leia
+"BLOQUEADO: 3 falhas" como defeito depois de instalar.
+
+---
+
 ## 6. Como o app instalado funciona
 
 | Camada | Caminho | Tamanho |
@@ -167,6 +226,22 @@ gitlab  https://gitlab.com/apolopanda500/XAU_AI_PRO.git
 - **Artefatos de release**: `release\1.2.4\` com MSI (312,6 MB), NSIS (203,1 MB),
   exe (12,9 MB) e `release-manifest.json` com SHA-256 de cada, todos assinados
   (`signed: true`), certificado **autoassinado**.
+
+---
+
+### Fechado nesta sessão (01/10/2026)
+
+| Item | Prova |
+|---|---|
+| `install_app.bat` falhando sempre | **EXIT=0** — `Instalador criado em: ...\Temp\cargo-target\release\bundle\msi` |
+| `build_app.bat` anunciando caminho morto | MSI **312,6 MB** + NSIS **203,1 MB** gerados |
+| Preflight bloqueando operação | **2 falhas → 0** (antes de instalar) |
+| `cmd.exe` na raiz | renomeado, fora do Git, preflight verde |
+| `NONE` de 88 MB | removido e posto na allowlist |
+| Atalho não recriado pelo instalador | `"shortcut": true` + `.lnk` recriado |
+| Build completo | **EXIT=0** de ponta a ponta |
+| Reinstalação e app no ar | 3 processos · portas 9001/9002/9003 · `terminal_connected: true` |
+| `git push` | `74a1903..e18932d` GitHub, EXIT=0 |
 
 ---
 
