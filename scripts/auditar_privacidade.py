@@ -224,7 +224,26 @@ def auditar_credencial() -> None:
             # do header. Nao e segredo: e identificador do cliente na exchange.
             if re.search(r"^self\.api_key$", valor, re.I):
                 continue
-            if valor.lower() in ("none", "null", "''", '""', "bool(", "self.api_secret", "secret"):
+            # `passphrase` e NOME de variavel, nao o segredo. A linha 173 de
+            # `connection_service.py` monta o dicionario assim:
+            #
+            #   {"api_key": key, "secret": secret, "api_secret": secret,
+            #    "passphrase": passphrase}
+            #
+            # Os valores vem de `load_connection_credentials_full()`, que
+            # descriptografa com DPAPI. O auditor acusava `passphrase` porque a
+            # lista de nomes aceitaveis tinha `secret` e esqueceu o companheiro
+            # de parede da OKX. Falso positivo que travava a declaracao de
+            # seguranca com um codigo que nao existe no disco.
+            #
+            # Nao e afrouxar a regra: sao os nomes que o codigo usa para
+            # transportar o segredo ja descriptografado ate o cliente da
+            # exchange. Um literal de verdade ("abc123") continua acronymsado.
+            if re.match(r"^self\.api_passphrase$", valor, re.I):
+                continue
+            if valor.lower() in ("none", "null", "''", '""', "bool(",
+                                 "self.api_secret", "secret", "passphrase",
+                                 "self.api_passphrase", "key", "api_key"):
                 continue
             achados.append(f"{arquivo.relative_to(RAIZ)}:{linha} -> {valor[:32]}")
     _registrar(not achados, "nenhum segredo em claro no payload ou no disco",
