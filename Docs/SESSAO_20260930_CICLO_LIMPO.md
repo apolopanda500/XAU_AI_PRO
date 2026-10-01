@@ -1,4 +1,98 @@
-# Ciclo limpo 30/09/2026 — 22:28 a 23:40 (tarde/noite)
+# Ciclo limpo 01/10/2026 — preflight destravado, dois scripts corrigidos e push
+
+> Registro do ciclo de 01/10/2026. Continua de
+> [`SESSAO_20260930_CICLO_LIMPO.md`](./SESSAO_20260930_CICLO_LIMPO.md) (30/09).
+>
+> **Branch:** `develop` · **Versão:** 1.2.4 · **Commit:** `336d199`
+
+---
+
+## 1. O que foi pedido e o que foi feito
+
+| Pedido | Estado medido |
+|---|---|
+| Liberar espaço | `frontend\src-tauri\NONE` (88 MB) + `.pytest_cache` removidos |
+| Ler a pasta `Docs` e entender o estado | [`SESSAO_20261001_VALIDACAO_E_PUSH.md`](./SESSAO_20261001_VALIDACAO_E_PUSH.md) §4 |
+| Corrigir dois comandos | `install_app.bat` e `build_app.bat` — Seção 2 |
+| Limpar ambiente | Preflight de **2 falhas para 0** — §1 do documento de validação |
+| Instalar, rodar, aprovar | §2 e §4 do documento de validação |
+| `git push` | GitHub sincronizado — §3 do documento de validação |
+
+---
+
+## 2. Os dois comandos que estavam errados
+
+### 2.1 O caminho do bundle nunca existiu
+
+Os dois scripts anunciavam e verificavam o MSI em:
+
+```
+frontend\src-tauri\target\release\bundle\msi
+```
+
+Esse diretório **não existe e nunca existiu**. O `target-dir` do Cargo neste
+projeto é `Temp\cargo-target` — definido em dois lugares, ambos corretos:
+
+- `frontend\src-tauri\.cargo\config.toml` linha 23
+- `scripts\build_app.bat` linha 44
+
+O Tauri empacota sempre a partir do `target-dir`. A prova é direta:
+
+```
+Test-Path frontend\src-tauri\target   -> False
+release\1.2.4\*.msi                   -> True (312,6 MB)
+```
+
+### 2.2 `install_app.bat` falhava em 100% das execuções
+
+A versão anterior rodava `npx tauri build` e depois verificava o caminho
+errado. Três defeitos ao mesmo tempo:
+
+1. **Verificava um caminho que não existe** — o MSI estava em `Temp\cargo-target`,
+   o script olhava em `src-tauri\target`. Falhava mesmo com build perfeito.
+2. **Não executava as etapas 4, 5 e 6** do `build_app.bat` — `npx tauri build`
+   não compila o core Rust, não roda o PyInstaller do gateway e não sincroniza
+   os modelos. O MSI saía com `core\`, `bridge\` e `Python\models\`
+   **desatualizados ou ausentes**.
+3. **Não tinha o core compilado** — sem o binário Rust, o bundle nascia
+   incompleto.
+
+**Correção:** `install_app.bat` passou a chamar `build_app.bat`, que executa
+as 7 etapas na ordem, e resolve o bundle nos dois candidatos
+(`Temp\cargo-target` primeiro, `src-tauri\target` como fallback).
+
+### 2.3 `build_app.bat` anunciava o caminho errado
+
+Linha 112 imprimia `frontend\src-tauri\target\release\bundle` — mandava o
+operador procurar um diretório que nunca teve o artefato. Agora resolve e
+imprime o caminho real.
+
+---
+
+## 3. `NONE`: 88 MB que crescem a cada build
+
+O `src-tauri\.cargo\config.toml` passa `link-arg=/PDB:NONE` para o linker,
+mas o token chega como **nome de arquivo** e o PDB é gravado mesmo assim.
+Cabeçalho lido byte a byte:
+
+```
+4D 69 63 72 6F 73 6F 66 74 20 43 2F 43 2B 2B 20 4D 53 46 20 37 2E 30 30
+M  i  c  r  o  s  o  f  t     C  /  C  +  +     M  S  F     7  .  0  0
+```
+
+É um PDB do MSVC, referenciando `Temp\cargo-target-tauri\debug\deps\...` — um
+ciclo de build anterior. Não é versionado, não é lido por nada e o `cargo
+build` recria quando precisa.
+
+| Data | Tamanho |
+|---|---|
+| 29/09/2026 | 11,2 MB |
+| 30/09/2026 | **88 MB** |
+
+Foi para a allowlist do `limpeza_segura.ps1`: da próxima vez sai por comando,
+não por investigação.
+
+
 
 > Registro do ciclo de limpeza do Windows e do repositório, da revalidação da
 > suíte inteira e do build. Complementa

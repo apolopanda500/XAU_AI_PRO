@@ -15,17 +15,20 @@ foi fechado.
 
 | Documento | Quando | Sobre |
 |---|---|---|
-| **`MAPEAMENTO_10_10_VERIFICADO_20260930.md`** | 30/09 | **10/10 real, camada por camada, com o comando de cada prova.** Leia primeiro. |
-| **`LEVANTAMENTO_20260930.md`** | 30/09 | **Paridade de corretoras + as 5 etapas executadas.** Leia segundo. |
-| **`SESSAO_20260930.md`** | 30/09 | Estado verificado do build 1.2.4 assinado |
+| **`SESSAO_20261001_VALIDACAO_E_PUSH.md`** | 01/10 | **Preflight destravado (2→0), os 2 scripts de build corrigidos, validação e push.** Leia primeiro. |
+| **`MAPEAMENTO_10_10_VERIFICADO_20260930.md`** | 30/09 | **10/10 real, camada por camada, com o comando de cada prova.** |
+| **`LEVANTAMENTO_20260930.md`** | 30/09 | **Paridade de corretoras + as 5 etapas executadas.** |
+| **`SESSAO_20260930_CICLO_LIMPO.md`** | 30/09 | Ciclo de limpeza: disco, artefatos, `NONE`, `cmd.exe` |
+| `SESSAO_20260930.md` | 30/09 | Estado verificado do build 1.2.4 assinado |
 | `AUDITORIA_20260929.md` | 29/09 | Auditoria de segurança e integridade com comandos reproduzíveis |
 | `CORECOES_OPERACAO_20260929.md` | 29/09 | Correções do motor de operação automática |
 | `HANDOFF_20260928.md` | 29/09 03:00 | Snapshot do build 1.2.4 anterior (mantido por referência) |
 | `MAPEAMENTO_10_10.md` | 28/09 | Avaliação camada por camada com comando de prova |
 | `ESTADO_E_PENDENCIAS.md` | 27/09 | Estado e pendências daquele ciclo |
 
-> **Atenção:** os documentos de 27 a 29/09 descrevem ciclos anteriores. Para
-> saber o que é verdade **hoje**, o `LEVANTAMENTO_20260930.md` tem precedência.
+> **Atenção:** os documentos de 27 a 30/09 descrevem ciclos anteriores. Para
+> saber o que é verdade **hoje**, o `SESSAO_20261001_VALIDACAO_E_PUSH.md` tem
+> precedência.
 
 ---
 
