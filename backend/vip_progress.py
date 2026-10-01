@@ -55,9 +55,36 @@ GRUPOS_INSTRUMENTO: dict[str, set[str]] = {
 }
 
 
-# Estrutura dos niveis, com limiares de volume em USD. Estes numeros vem da
-# tabela do PrimeXBT e sao de ESTRUTURA: o desconto de cada nivel depende de
-# acordo comercial e NAO esta aqui.
+# Estrutura dos niveis, com limiares de volume em USD.
+#
+# Duas fontes, e por que a segunda entra aqui:
+#
+# PRIME.XBT — cinco niveis alem do Regular. Limiar por grupo de
+# instrumento: 10.000 USD em cripto sobe para VIP1, mas em forex sao
+# 100.000 USD (cripto e 10x mais liquido). O nivel trava 30 dias ao ser
+# alcancado, para o cliente nao perder no meio do ciclo um desconto pelo
+# qual ja pagou.
+#
+# INTERACTIVE BROKERS — a mesma ideia com nomes e muito mais degraus. A
+# comissao cai em degraus conforme o volume mensal cresce (0,05% ->
+# 0,03% -> 0,02% -> 0,015% do valor negociado). Duas regras dela valem
+# aqui e NAO valem no PrimeXBT:
+#
+# 1. "Calculated once daily, not at the time of the trade. The execution
+#    reduction starts the NEXT TRADING DAY after the threshold is
+#    exceeded." — o nivel NAO e imediato. Quem cruza o limiar as 23h50
+#    descobre amanha. Isso evita a corrida de última hora em que todo
+#    mundo infla o volume para fechar o mes.
+#
+# 2. "Only shares traded while under the Tiered pricing structure will
+#    count towards the monthly volume." — o volume que conta e o do mes
+#    corrente, nao acumulado vitalicio. Ja e o que JANELA_DIAS faz, mas a
+#    frase deixa o motivo explicito.
+#
+# O que NAO esta aqui: o desconto em si. IBKR e PrimeXBT tem acordos
+# diferentes, e o preco do produto deste projeto depende de decisao
+# comercial. A tela mostra o nivel e a distancia ate o proximo — nunca um
+# numero que o sistema nao pode cumprir.
 NIVEIS: list[dict[str, Any]] = [
     {"id": "regular", "nome": "Regular",
      "minimo_por_grupo": {"cripto": 0.0, "forex_cfd": 0.0},
@@ -78,6 +105,13 @@ NIVEIS: list[dict[str, Any]] = [
      "minimo_por_grupo": {"cripto": 25_000_000.0, "forex_cfd": 90_000_000.0},
      "beneficios": ["Spread minimo do catalogo", "Suporte dedicado"]},
 ]
+
+# O nivel nao sobe no mesmo instante em que o limiar e cruzado. A IBKR e
+# explicita: o calculo e diario e a reducao comeca no dia seguinte. O
+# motivo e o contrapeso da corrida de fim de mes — sem ele, todo mundo
+# operaria no ultimo minuto so para fechar o numero.
+DIAS_ATE_PROMOCAO = 1
+
 
 # Atos que contam como volume realizado. `order` sozinho nao prova fill — o
 # cancelamento logo depois nao movimenta nada.
@@ -189,6 +223,11 @@ def progresso() -> dict[str, Any]:
     resultado["volume_por_grupo"] = volumes
     resultado["janela_dias"] = JANELA_DIAS
     resultado["trava_dias"] = JANELA_DIAS
+    # Regra da IBKR: o nivel nao promove no mesmo instante. Quem cruza o
+    # limiar as 23h50 descobre o novo nivel no dia seguinte. A tela mostra
+    # isso para o operador nao operar no ultimo minuto achando que o
+    # desconto ja esta valendo.
+    resultado["dias_ate_promocao"] = DIAS_ATE_PROMOCAO
     resultado["fonte"] = "audit.jsonl"
     # A trava de dinheiro real e declarada aqui tambem: a progressao nao
     # habilita saque, transferencia nem execucao real.

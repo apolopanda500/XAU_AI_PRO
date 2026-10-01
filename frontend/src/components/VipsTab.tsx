@@ -22,6 +22,7 @@ type Nivel = {
   beneficios: string[];
   janela_dias: number;
   trava_dias: number;
+  dias_ate_promocao: number;
   volume_por_grupo: Record<string, number>;
   proximo: { id: string; nome: string; falta_por_grupo: Record<string, number> } | null;
   live_execution: boolean;
@@ -108,8 +109,13 @@ export default function VipsTab() {
           )}
 
           <p className="hint">
-            Nível alcançado trava por {dados.trava_dias} dias. Os limiares são de estrutura:
-            o desconto de cada nível depende de acordo com a corretora e não é exibido aqui.
+            Nível alcançado trava por {dados.trava_dias} dias. A promoção não é
+            imediata: o nível novo vale a partir do dia seguinte ({dados.dias_ate_promocao} dia),
+            como na Interactive Brokers.
+          </p>
+          <p className="hint">
+            Os limiares são de estrutura: o desconto de cada nível depende de acordo
+            com a corretora e não é exibido aqui.
           </p>
           <p className="hint">
             Saque e transferência: <b>{dados.withdrawals_enabled ? 'ATIVADO' : 'desativados'}</b> ·

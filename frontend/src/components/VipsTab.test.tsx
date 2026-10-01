@@ -27,6 +27,7 @@ const COMPLETO = {
   beneficios: ['Spread reduzido'],
   janela_dias: 30,
   trava_dias: 30,
+  dias_ate_promocao: 1,
   volume_por_grupo: { cripto: 12_000, forex_cfd: 150_000 },
   proximo: { id: 'vip2', nome: 'VIP 2', falta_por_grupo: { cripto: 88_000, forex_cfd: 850_000 } },
   live_execution: false,
@@ -69,10 +70,14 @@ describe('VipsTab', () => {
     expect(screen.getByText('$2.5M')).toBeTruthy();
   });
 
-  it('avisa que limiar nao e promessa de desconto', async () => {
+  it('avisa que a promocao nao e imediata', async () => {
+    // Regra da IBKR: o nivel novo vale no dia seguinte, nao no instante em que
+    // o limiar e cruzado. Sem isto na tela, o operador opera no ultimo minuto
+    // achando que o desconto ja esta valendo.
     RESPOSTA.body = COMPLETO;
     render(<VipsTab />);
     await waitFor(() => expect(nivelRenderizado()).toBeTruthy());
+    expect(screen.getByText(/promoção não é/)).toBeTruthy();
     expect(screen.getByText(/limiares são de estrutura/)).toBeTruthy();
   });
 

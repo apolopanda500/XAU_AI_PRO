@@ -90,4 +90,30 @@ Nenhuma regra aqui altera plano, libera saque ou habilita dinheiro real.
 
 - primexbt.help — "How VIP Tiers Work" (14/07/2026)
 - ic.com — "Raw Spread Account"
+- interactivebrokers.com — "Commissions Stocks" (volume tiers)
+
+## Interactive Brokers — o padrão que faltava
+
+Pesquisa de 01/10/2026. A IBKR usa a mesma ideia (volume → nível) com muito
+mais degraus, e tem **duas regras** que o PrimeXBT não tem e que valem aqui:
+
+**1. A promoção não é imediata.** O texto é explícito:
+
+> "Value tiers are applied based on monthly cumulative trade volume. This is
+> calculated once daily, not at the time of the trade. As such, execution
+> reductions will start the **next trading day** after the threshold has been
+> exceeded."
+
+Quem cruza o limiar às 23h50 descobre o nível novo amanhã. O motivo é o
+contrapeso da corrida de fim de mês: sem isso, todo mundo operaria no último
+minuto só para fechar o número. Implementado como `DIAS_ATE_PROMOCAO = 1`, e a
+tela mostra isso ao operador.
+
+**2. Só conta o volume do mês corrente.** "Only shares that are traded while
+under the Tiered pricing structure will count towards the monthly volume." O
+que `JANELA_DIAS` já fazia, mas agora com o motivo escrito.
+
+Os degraus de comissão da IBKR caem de 0,05% → 0,03% → 0,02% → 0,015% do valor
+negociado conforme o volume cresce. **Esse percentual não foi copiado para
+aqui**: é o preço do produto da IBKR, não o deste projeto.
 
