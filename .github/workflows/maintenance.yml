@@ -20,6 +20,20 @@ jobs:
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK || secrets.SLACK_WEBHOOK_URL }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          # O workflow e AGENDADO. Workflow agendado roda sempre na branch
+          # DEFAULT do repositorio, e a default e `main` — nao `develop`.
+          #
+          # `main` esta 39 commits atras de `develop`, entao o cron executava
+          # um codigo de 01/10 e falhava com:
+          #     ModuleNotFoundError: No module named 'fastapi'
+          # `requirements-ci.txt` na `main` NAO tem `fastapi`; na `develop` tem.
+          # Ou seja: falhava por rodar codigo velho, nao por defeito do codigo.
+          #
+          # O `ref` explicito manda o cron validar a branch de trabalho, que e
+          # a mesma que o Super-Linter deste repositorio declara em
+          # `DEFAULT_BRANCH: develop`.
+          ref: develop
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
