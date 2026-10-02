@@ -157,6 +157,87 @@ A validação fechou em 16/16. As pendências que restam **não são de código*
 | Certificado de CA pública | ~US$ 200–400/ano |
 | Forward test aprovado | 3,4 `BROKER_ERROR` por ciclo; corrigir exige `.mq5` + MetaEditor64 |
 | Endurance 24h/72h/7d | Exige o app no ar por dias |
+---
+
+## 8. Build 1.2.4, instalação e execução pelo atalho
+
+### Artefatos gerados
+
+| Arquivo | Tamanho |
+|---|---|
+| `Temp\cargo-target\release\bundle\msi\XAU AI PRO_1.2.4_x64_en-US.msi` | 312,6 MB |
+| `Temp\cargo-target\release\bundle\nsis\XAU AI PRO_1.2.4_x64-setup.exe` | 203,1 MB |
+
+As 7 etapas do `build_app.bat` rodaram nesta ordem e nenhuma falhou: versão →
+frontend → **core Rust** → **gateway PyInstaller** → recursos Tauri →
+bundle. O `cargo build --release` levou 3m59s; o core chegou ao crate
+`xau-ai-pro-core` e o gateway passou pelo `COLLECT` com 4.702 entradas
+reclassificadas.
+
+### Instalação
+
+```
+MainEngineThread is returning 0
+```
+
+Instalado em `%LOCALAPPDATA%\XAU AI PRO\`: **0,85 GB · 5.209 arquivos**, com
+`bridge\`, `core\`, `Python\` e o executável de 12,9 MB. Registro do Windows
+confirma `XAU AI PRO 1.2.4`.
+
+O atalho vai para **`C:\Users\Public\Desktop\XAU AI PRO.lnk`** — não para a
+Área de Trabalho do usuário. É a diferença entre "o instalador criou" e "o
+usuário não acha": o `Desktop` do perfil é pasta oculta por padrão, e o
+`Public\Desktop` é o que o Windows junta visualmente.
+
+### Execução como usuário normal
+
+Acionado pelo `.lnk`, sem elevação. Três processos:
+
+| Processo | Memória |
+|---|---|
+| `XAU AI PRO` (janela) | 32 MB |
+| `mt5-gateway` | 95 MB |
+| `xau-ai-pro-core` | 24 MB |
+
+Portas **9001, 9002 e 9003 todas ouvindo**, estáveis após 30 s (mesmos PIDs,
+mesmo consumo). Janela aberta: **"XAU AI PRO - Trading Desk"**, respondendo.
+
+### O 401 É o comportamento correto
+
+Chamar `/api/health` sem token devolve **401**, e parece defeito:
+
+| Rota | Resposta | Leitura |
+|---|---|---|
+| `9001/api/health` | 401 | Gateway `fail-closed` |
+| `9001/` | 401 | idem |
+| `9003/health` | 401 | Core exige token |
+| `9003/api/status` | 404 | Rota não existe nesse core |
+| `9002/ws/market` | 400 | WebSocket exige upgrade de protocolo |
+
+O token é gerado **em memória** pelo Tauri a cada sessão e nunca vai para
+arquivo — por isso `%APPDATA%\XAU_AI_PRO\` tem `config.json`, `audit.jsonl`,
+`intents.jsonl` e os bancos, e **nenhum** token.
+
+Um 401 aqui é a trava funcionando. Tratar como erro seria aceitar gateway
+aberto — que é justamente o defeito que a auditoria de 29/09 corrigiu.
+
+---
+
+## 9. Regra que o ciclo confirma
+
+Mais um caso do mesmo padrão que a sessão de 30/09 registrou:
+
+- A matriz dizia "OK" e ninguém questionou — **o script não media nada**
+- O `audit de segredos` disse "0 arquivos auditados" e pareceu falha — **está
+  certo**, audita só o que entra no commit, e o worktree estava limpo
+- O grep de `XAUUSD` acusou 3 arquivos — **os 3 eram docstrings** explicando
+  a correção
+- O `/api/health` devolveu 401 e pareceu quebrado — **é a trava fechada**
+
+Nenhum desses quatro era defeito. Um era defeito, mas escondido atrás de um
+script que parecia autoritativo. A regra continua: **não confiar em tela verde,
+provocar o defeito e ler o que acontece** — e conferir se o alarme é real antes
+de "consertar" a coisa errada.
 | Aparelho Android físico | Não há aparelho |
 
 **Uma lacuna real que sobrou:** `XAU_ENABLE_REAL_ORDERS` está injetado como `1`
