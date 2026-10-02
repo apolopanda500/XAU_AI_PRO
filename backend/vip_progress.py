@@ -216,6 +216,63 @@ def nivel_por_volume(volumes: dict[str, float]) -> dict[str, Any]:
     }
 
 
+def escada_completa(volumes: dict[str, float], alcancado_id: str) -> list[dict[str, Any]]:
+    """A escada inteira, na ordem, com o estado de cada degrau.
+
+    POR QUE A TELA PRECISA DA ESCADA E NAO SO DO PROXIMO
+    ====================================================
+    Antes esta funcao nao existia: a tela recebia o nivel alcancado e o
+    proximo, e nada mais. O operador via "falta US$ 10.000" sem enxergar a
+    escada — quantos degraus existem, qual dele ele esta alcancando, e o que
+    vem DEPOIS. Um nivel isolado nao diz se a meta esta longe ou perto.
+
+    `percentual` responde a pergunta que o operador realmente faz ("quanto
+    eu ja fiz deste degrau?"). Ele usa o grupo mais atrasado: o nivel so
+    conta quando TODOS passam, e mostrar o melhor grupo daria um numero
+    maior do que a reality.
+
+    `estado` e um de `alcancado`, `atual` ou `futuro`. A tela usa isso para
+    marcar a linha — e nao para prometer: um degrau `futuro` mostra o
+    limiar, nunca um desconto.
+    """
+    escada: list[dict[str, Any]] = []
+    passou_atual = False
+    # Marca se o proximo degrau ALCANÇAVEL ainda nao recebeu o rotulo
+    # `atual`. Comeca ligada: logo apos o alcancado, o primeiro degrau e o
+    # proximo alvo.
+    estado_atual_pendente = True
+    for nivel in NIVEIS:
+        minimos = nivel["minimo_por_grupo"]
+        # Groupo mais atrasado: o que decide a subida. Teto de 100 para o
+        # primeiro degrau (limiar zero nao produce divisao por zero).
+        percentuais = [
+            min(100.0, (volumes.get(g, 0.0) / m * 100.0) if m > 0 else 100.0)
+            for g, m in minimos.items()
+        ]
+        percentual = min(percentuais) if percentuais else 0.0
+        # `alcancado` e o unico degrau confirmado. `atual` e o proximo a
+        # perseguir — exatamente UM. Marcar todos os posteriores como
+        # `atual` diria ao operador que ele precisa trabalhar em cinco
+        # degraus ao mesmo tempo, o que e falso: so o proximo conta.
+        if nivel["id"] == alcancado_id:
+            estado = "alcancado"
+            passou_atual = True
+        elif not passou_atual:
+            estado = "futuro"  # abaixo do alcancado: inatingivel nesta ordem
+        else:
+            estado = "atual" if estado_atual_pendente else "futuro"
+            estado_atual_pendente = False
+        escada.append({
+            "id": nivel["id"],
+            "nome": nivel["nome"],
+            "estado": estado,
+            "percentual": round(percentual, 1),
+            "minimo_por_grupo": {g: float(m) for g, m in minimos.items()},
+            "beneficios": list(nivel["beneficios"]),
+        })
+    return escada
+
+
 def progresso() -> dict[str, Any]:
     """Estado completo da progressao, para a tela e para a API."""
     volumes = volume_por_grupo()
@@ -229,6 +286,10 @@ def progresso() -> dict[str, Any]:
     # desconto ja esta valendo.
     resultado["dias_ate_promocao"] = DIAS_ATE_PROMOCAO
     resultado["fonte"] = "audit.jsonl"
+    # A escada inteira, para o operador enxergar onde esta e o que vem
+    # depois. Sem isto a tela mostrava um degrau solto.
+    resultado["escada"] = escada_completa(volumes, resultado["nivel"])
+    resultado["total_degraus"] = len(NIVEIS)
     # A trava de dinheiro real e declarada aqui tambem: a progressao nao
     # habilita saque, transferencia nem execucao real.
     resultado["live_execution"] = False

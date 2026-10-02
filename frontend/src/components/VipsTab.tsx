@@ -16,6 +16,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { apiBase } from '../lib/api';
 import '../theme/vips.css';
 
+type Degrau = {
+  id: string;
+  nome: string;
+  estado: 'alcancado' | 'atual' | 'futuro';
+  percentual: number;
+  minimo_por_grupo: Record<string, number>;
+};
+
 type Nivel = {
   nivel: string;
   nivel_nome: string;
@@ -24,6 +32,8 @@ type Nivel = {
   trava_dias: number;
   dias_ate_promocao: number;
   volume_por_grupo: Record<string, number>;
+  escada?: Degrau[];
+  total_degraus?: number;
   proximo: { id: string; nome: string; falta_por_grupo: Record<string, number> } | null;
   live_execution: boolean;
   withdrawals_enabled: boolean;
@@ -83,6 +93,38 @@ export default function VipsTab() {
               {dados.beneficios.map((b) => <li key={b}>{b}</li>)}
             </ul>
           </div>
+
+          {dados.escada && dados.escada.length > 0 && (
+            <ol className="vips-escada" aria-label="Escada de níveis por volume">
+              {dados.escada.map((degrau) => (
+                <li key={degrau.id} className={`vips-degrau is-${degrau.estado}`}>
+                  <div className="vips-degrau-topo">
+                    <span className="vips-degrau-nome">{degrau.nome}</span>
+                    {degrau.estado === 'alcancado' && <span className="vips-marca">alcançado</span>}
+                    {degrau.estado === 'atual' && <span className="vips-marca atual">próximo</span>}
+                    <span className="vips-degrau-pct">{degrau.percentual.toFixed(1)}%</span>
+                  </div>
+                  {/* A barra mostra quanto do degrau foi feito. `aria-hidden`
+                      porque o numero ja esta em texto ao lado — leitor de
+                      tela leria "barra" sem contexto. */}
+                  <div
+                    className="vips-barra"
+                    role="img"
+                    aria-label={`${degrau.percentual.toFixed(1)} por cento de ${degrau.nome}`}
+                  >
+                    <span style={{ width: `${Math.max(0, Math.min(100, degrau.percentual))}%` }} />
+                  </div>
+                  <div className="vips-degrau-min">
+                    {GRUPOS.map(([chave, rotulo]) => (
+                      <span key={chave}>
+                        {rotulo}: {usd(degrau.minimo_por_grupo?.[chave])}
+                      </span>
+                    ))}
+                  </div>
+                </li>
+              ))}
+            </ol>
+          )}
 
           {dados.proximo ? (
             <table className="tbl compact-table vips-tabela">

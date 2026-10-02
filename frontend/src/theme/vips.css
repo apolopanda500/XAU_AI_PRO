@@ -42,3 +42,90 @@
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
+
+/* Escada de niveis. Uma linha por degrau, na ordem, com a barra mostrando
+   quanto daquele degrau ja foi feito. O operador precisa enxergar a escada
+   inteira — antes so via um degrau solto e nao sabia quantos faltavam. */
+.vips-escada {
+  list-style: none;
+  margin: 12px 0 14px;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.vips-degrau {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+}
+
+.vips-degrau.is-atual {
+  border-color: var(--primary, #00c6fb);
+  background: color-mix(in srgb, var(--primary, #00c6fb) 6%, transparent);
+}
+
+.vips-degrau.is-futuro {
+  opacity: 0.62; /* dimensao, nao ocultacao: o limiar continua legivel */
+}
+
+.vips-degrau-topo {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 5px;
+}
+
+.vips-degrau-nome {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary, #e6edf7);
+  min-width: 62px;
+}
+
+.vips-marca {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary, #00c6fb) 18%, transparent);
+  color: var(--primary, #00c6fb);
+  letter-spacing: 0.03em;
+}
+
+.vips-degrau-pct {
+  margin-left: auto;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--text-secondary, #9ca9bd);
+}
+
+.vips-barra {
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border) 70%, transparent);
+  overflow: hidden;
+}
+
+.vips-barra > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--primary, #00c6fb);
+}
+
+.vips-degrau.is-alcancado .vips-barra > span {
+  background: color-mix(in srgb, #22c55e 80%, transparent);
+}
+
+.vips-degrau-min {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 5px;
+  font-size: 10px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  color: var(--text-muted, #68778c);
+}

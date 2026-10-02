@@ -75,6 +75,44 @@ total** (spread + comissão), e a conta existe para quem opera volume alto.
 
 Estado real desta máquina: `Regular`, volume 0 nos dois grupos, `live_execution: False`.
 
+## A escada inteira na tela (01/10/2026)
+
+A tela mostrava **um degrau solto**: "falta US$ 10.000" para o VIP 1, sem o
+operador enxergar quantos degraus existem, onde ele está, nem quanto já fez do
+próximo. Um nível isolado não diz se a meta está longe ou perto.
+
+`escada_completa()` devolve a escada inteira, na ordem, com três campos por
+degrau:
+
+| Campo | O que é | Por que existe |
+|---|---|---|
+| `estado` | `alcancado`, `atual` ou `futuro` | Marca **exatamente um** `atual` |
+| `percentual` | 0–100 pelo grupo **mais atrasado** | Responde "quanto já fiz?" |
+| `minimo_por_grupo` | Os limiares do degrau | O número que a barra mede |
+
+**Três decisões que vieram do defeito, não da estética:**
+
+1. **`percentual` usa o grupo mais atrasado.** O nível só conta quando *todos*
+   os grupos passam. Usar o melhor grupo mostraria 100% quando o Forex está
+   em 5% — o número seria maior que a realidade.
+
+2. **Só um degrau é `atual`.** A primeira versão marcava *todos* os posteriores
+   como `atual`. Isso diria ao operador que ele precisa trabalhar em cinco
+   metas ao mesmo tempo, o que é falso: só o próximo conta.
+
+3. **No topo não há degrau `atual`.** Quem já é VIP 5 não tem próxima meta, e a
+   tela precisa dizer isso em vez de sugerir que falta algo.
+
+O `percentual` é preso em 100 pelo teto no backend e por `Math.min` no
+frontend — sem os dois, um volume muito acima do limiar estouraria a barra.
+
+**Degradação:** `escada` é opcional no tipo do frontend. Um gateway antigo sem
+o campo continua renderizando nível e "falta para o próximo" — a tela
+degrada, não quebra. Há teste para isso.
+
+Cobertura: `tests/test_vip_progress.py::TestEscadaCompleta` (8 testes) e
+`VipsTab.test.tsx` (5 testes).
+
 ## Limite explícito
 
 Os limiares em código são **estrutura, não promessa comercial**. O desconto

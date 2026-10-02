@@ -15,6 +15,63 @@ from __future__ import annotations
 import json
 
 from backend import vip_progress as vp
+from backend.vip_progress import NIVEIS, escada_completa
+
+
+class TestEscadaCompleta:
+    """A escada inteira que a tela precisa, e as regras do rotulo `estado`.
+
+    Antes desta mudanca a tela recebia so o nivel alcancado e o proximo: o
+    operador via "falta US$ 10.000" sem enxergar quantos degraus existem nem
+    onde ele esta. Um nivel solto nao diz se a meta esta longe ou perto.
+    """
+
+    def test_escada_tem_todos_os_degraus_na_ordem(self) -> None:
+        escada = escada_completa({"cripto": 0.0, "forex_cfd": 0.0}, "regular")
+        assert [d["id"] for d in escada] == [n["id"] for n in NIVEIS]
+
+    def test_exatamente_um_degrau_atual(self) -> None:
+        """So o proximo degrau e `atual`. Marcar todos diria que o operador
+        precisa trabalhar em cinco metas ao mesmo tempo — o que e falso."""
+        escada = escada_completa({"cripto": 5_000.0, "forex_cfd": 50_000.0}, "regular")
+        assert sum(1 for d in escada if d["estado"] == "atual") == 1
+        assert next(d for d in escada if d["estado"] == "atual")["id"] == "vip1"
+
+    def test_no_topo_nao_ha_degrau_atual(self) -> None:
+        escada = escada_completa({"cripto": 99_999_999.0, "forex_cfd": 99_999_999.0}, "vip5")
+        assert sum(1 for d in escada if d["estado"] == "atual") == 0
+
+    def test_percentual_usa_o_grupo_mais_atrasado(self) -> None:
+        """O nivel so conta quando TODOS os grupos passam. Mostrar o melhor
+        grupo daria um percentual maior que a realidade."""
+        volumes = {"cripto": 100_000.0, "forex_cfd": 5_000.0}
+        linha = next(d for d in escada_completa(volumes, "regular") if d["id"] == "vip1")
+        # cripto 100000/10000 = 1000% (teto 100); forex 5000/100000 = 5%.
+        # O menor manda: 5%.
+        assert linha["percentual"] == 5.0
+
+    def test_percentual_preso_em_100(self) -> None:
+        escada = escada_completa({"cripto": 50_000_000.0, "forex_cfd": 500_000_000.0}, "regular")
+        assert all(0.0 <= d["percentual"] <= 100.0 for d in escada)
+
+    def test_regular_always_100_porque_limiar_e_zero(self) -> None:
+        """Divisao por zero produziria NaN e a tela mostraria 'NaN%'."""
+        regular = next(d for d in escada_completa({"cripto": 0.0, "forex_cfd": 0.0}, "regular") if d["id"] == "regular")
+        assert regular["percentual"] == 100.0
+
+    def test_progresso_expoe_a_escada_e_o_total(self) -> None:
+        resultado = vp.progresso()
+        assert resultado["escada"], "a API precisa devolver a escada"
+        assert resultado["total_degraus"] == len(NIVEIS)
+        for linha in resultado["escada"]:
+            assert linha["estado"] in {"alcancado", "atual", "futuro"}
+
+    def test_escada_nao_promete_desconto(self) -> None:
+        """A escada mostra limiar, nunca preco. O desconto depende de acordo
+        comercial e nao esta no sistema."""
+        resultado = vp.progresso()
+        texto = json.dumps(resultado, ensure_ascii=False).lower()
+        assert "desconto de" not in texto
 
 
 def escrever_audit(tmp_path, monkeypatch, eventos):
