@@ -9,3 +9,11 @@ Pillow
 python-dotenv
 pydantic
 sentry-sdk>=2.44.0
+
+# O gateway HTTP é `backend/fastapi_gateway.py`, e a suíte o importa de
+# verdade: `tests/test_fastapi_auth.py` e `tests/test_fastapi_capabilities.py`
+# failham na COLETA com `ModuleNotFoundError: No module named 'fastapi'`
+# quando estes dois faltam. Sem eles o CI nem chega a rodar um teste.
+# `uvicorn` entra junto porque o gateway cria a instancia da app com ele.
+fastapi
+uvicorn
