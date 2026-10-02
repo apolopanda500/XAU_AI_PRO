@@ -75,8 +75,17 @@ jobs:
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
     env:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID || 'team_m6XXhz0AuVtzK0zxtv96h03a' }}
-      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID || 'prj_RApeFNVlnOGYxtYcRDqaSUTIJD1G' }}
+      # SEM VALOR DE FALLBACK. Antes era
+      # `${{ secrets.VERCEL_ORG_ID || 'team_m6XX...' }}`, com o id da
+      # organizacao em texto puro no repositorio. Isso e segredo
+      # versionado: o gitleaks do Super-Linter sinalizou e o id ficaria no
+      # historico para sempre mesmo depois de remover a linha.
+      #
+      # Org e Project sao identificadores, nao credenciais — mas sao
+      # exigidos pela CLI da Vercel e, juntos com um token vazado,_ENABLE_
+      # deploy em conta errada. Ficam em Secrets, sem excecao.
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
       # Webhook do Slack definido no nível do JOB para ser visível nas condições "if"
       # (aceita SLACK_WEBHOOK ou SLACK_WEBHOOK_URL)
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK || secrets.SLACK_WEBHOOK_URL }}
@@ -91,6 +100,10 @@ jobs:
         run: |
           if [ -z "$VERCEL_TOKEN" ]; then
             echo "::error::Secret VERCEL_TOKEN ausente. Crie em https://vercel.com/account/tokens e adicione nos Secrets do repo."
+            exit 1
+          fi
+          if [ -z "$VERCEL_ORG_ID" ] || [ -z "$VERCEL_PROJECT_ID" ]; then
+            echo "::error::Secrets VERCEL_ORG_ID e VERCEL_PROJECT_ID ausentes. Adicione nos Secrets do repo."
             exit 1
           fi
           echo "Token OK | Org=$VERCEL_ORG_ID | Proj=$VERCEL_PROJECT_ID"
@@ -215,8 +228,8 @@ jobs:
     if: github.event_name == 'pull_request' || github.ref == 'refs/heads/develop'
     env:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID || 'team_m6XXhz0AuVtzK0zxtv96h03a' }}
-      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID || 'prj_RApeFNVlnOGYxtYcRDqaSUTIJD1G' }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5

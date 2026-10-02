@@ -184,8 +184,11 @@ como Vercel Functions ou Vercel Sandbox.
 ```powershell
 # Projeto Vercel
 #   projectName: xau-ai-pro-api
-#   projectId:   prj_RApeFNVlnOGYxtYcRDqaSUTIJD1G
-#   orgId:       team_m6XXhz0AuVtzK0zxtv96h03a
+#   projectId:   <o id aparece em Project Settings > General, apos o link>
+#   orgId:       <o id aparece em vercel whoami / Settings da equipe>
+#
+# Estes dois NAO ficam neste arquivo: sao identificadores de conta e o
+# gitleaks os marca. Copie do painel da Vercel.
 
 vercel whoami   # deve mostrar: rickjax123-6204
 vercel link     # se ainda nao estiver linkado

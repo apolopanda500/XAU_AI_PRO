@@ -69,6 +69,13 @@ Logs/*
 # Python venv (local)
 .venv/
 .vercel
+# A Vercel cria `.vercel/project.json` com o projectId e o orgId. O
+# proprio README que vem nela diz para nao compartilhar. O padrao
+# `.vercel` nao cobre o backup renomeado (`.vercel.backup-2026...`), que
+# foi parar no git com os dois ids em texto puro — o gitleaks do CI
+# sinalizou. Cobre os dois nomes daqui para frente.
+.vercel.backup-*
+.vercel.backup*
 .env*
 .slack_watcher_offset
 Ultimate/.slack_watcher_offset
