@@ -138,7 +138,24 @@ def test_inferencia_usa_as_mesmas_features_do_treino():
         pytest.skip("modelo H1 nao publicado neste ambiente")
     # O hash sai do mesmo modulo usado no treino.
     assert r.feature_hash == t.feature_hash()
-    assert r.modelo.endswith("_H1")
+    # O nome na tela e limpo e legivel: `Floresta · XAUUSD 1H`.
+    # Nao usa mais `_H1`: o operador pediu nome sem sublinhado, e o timeframe
+    # ja vem traduzido por `_ROTULO_TF`. O artefato em disco continua
+    # `XAUUSD_H1.pkl` — renomear o arquivo deixaria os 36 modelos orfaos.
+    assert r.modelo.endswith("XAUUSD 1H"), r.modelo
+    assert "_" not in r.modelo, r.modelo
+
+
+def test_rotulo_modelo_nao_tem_sublinhado():
+    """Nome exibido e sempre `SIMBOLO TF`, sem `_` nem prefixo no meio."""
+    assert ai.rotulo_modelo("XAUUSD", "H1") == "MODELO XAUUSD 1H"
+    assert ai.rotulo_modelo("BTCUSDT", "M5") == "MODELO BTCUSDT 5M"
+    assert ai.rotulo_modelo("XAUUSD", "H1", comPrefixo=False) == "XAUUSD 1H"
+    # O prefixo MODELO e cabecalho de coluna: nunca aparece entre o algoritmo
+    # e o par, que era o que a tela mostrava ("Floresta MODELO XAUUSD 1H").
+    meta = {"algorithm": "RandomForestClassifier"}
+    assert ai._nome_do_modelo("XAUUSD", "H1", meta).endswith("XAUUSD 1H")
+    assert "MODELO" not in ai._nome_do_modelo("XAUUSD", "H1", meta)
 
 
 def test_confianca_e_probabilidade_do_classificador():

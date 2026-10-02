@@ -57,8 +57,23 @@ export default function VipsTab() {
 
   const carregar = useCallback(async (signal?: AbortSignal) => {
     try {
-      const resposta = await fetch(`${apiBase()}/api/vip/progress`, { signal: signal ?? AbortSignal.timeout(6000) });
-      if (!resposta.ok) throw new Error(`gateway respondeu ${resposta.status}`);
+      const base = apiBase();
+      const resposta = await fetch(`${base}/api/vip/progress`, { signal: signal ?? AbortSignal.timeout(6000) });
+      if (!resposta.ok) {
+        // O status sozinho nao diz onde procurar. Um 404 aqui tem DUAS causas
+        // possiveis e elas pedem acoes opostas: (1) a rota existe e faltou o
+        // token -> 401 mascarado; (2) `apiBase()` aponta para uma porta que nao
+        // expoe /api/* (o core Rust nao tem esta rota) -> 404 de verdade.
+        // Sem dizer qual origem foi consultada, o operador so ve "404" e nao
+        // sabe se recarregar, refazer login ou corrigir a URL do gateway.
+        throw new Error(
+          resposta.status === 404
+            ? `${base} não expõe /api/vip/progress — o gateway atende em http://127.0.0.1:9001. Confira a URL do gateway na tela de conexão.`
+            : resposta.status === 401
+              ? `${base} recusou: token ausente ou expirado. Refaça o login.`
+              : `${base} respondeu ${resposta.status}.`,
+        );
+      }
       setDados(await resposta.json() as Nivel);
       setErro('');
     } catch (e) {

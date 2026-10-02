@@ -263,12 +263,18 @@ def _nome_do_modelo(symbol: str, timeframe: str, meta: dict[str, Any]) -> str:
     e verdadeiro — em vez de inventar um algoritmo.
     """
     algoritmo = str(meta.get("algorithm") or "").strip()
-    par = f"{str(symbol or '').strip().upper()}_{str(timeframe or '').strip().upper()}"
+    par = rotulo_modelo(symbol, timeframe)
     if not algoritmo:
         return par
     # `RandomForestClassifier` -> "Floresta" fica ilegivel para o operador;
     # `random_forest` e o nome tecnico curto que ele reconhece.
-    return f"{_ROTULO_ALGORITMO.get(algoritmo, algoritmo)}_{par}"
+    #
+    # `rotulo_modelo()` ja devolve "MODELO XAUUSD 1H". Com o prefixo do algoritmo
+    # antes, a tela mostrava "Floresta MODELO XAUUSD 1H" - a palavra MODELO no
+    # meio, entre o nome e o timeframe. O operador pediu nome limpo e curto, sem
+    # sublinhado: o timeframe ja vem legivel de `rotulo_modelo`, e o algoritmo
+    # continua disponivel em `algorithm` no payload, entao nada se perde.
+    return f"{_ROTULO_ALGORITMO.get(algoritmo, algoritmo)} · {rotulo_modelo(symbol, timeframe, comPrefixo=False)}"
 
 
 #: Rotulo legivel por algoritmo. Sem esta tabela, a tela mostraria
@@ -399,19 +405,24 @@ _ROTULO_TF: dict[str, str] = {
 }
 
 
-def rotulo_modelo(symbol: str, timeframe: str) -> str:
+def rotulo_modelo(symbol: str, timeframe: str, comPrefixo: bool = True) -> str:
     """Nome de exibicao de um modelo: `MODELO XAUUSD 1H`.
 
     Funcao pura e sem I/O — pode ser chamada de qualquer tela que liste
     modelo, sem depender do arquivo existir.
+
+    `comPrefixo=False` devolve so `XAUUSD 1H`. A palavra MODELO e um
+    cabecalho de coluna, nao parte do nome: entrelaçar com o algoritmo
+    produzia `Floresta MODELO XAUUSD 1H`, que e ruido para quem opera.
     """
     simbolo = str(symbol or "").strip().upper()
     tf = str(timeframe or "").strip().upper()
+    prefixo = "MODELO " if comPrefixo else ""
     if not simbolo and not tf:
-        return "MODELO"
+        return prefixo.strip() or "MODELO"
     if not tf:
-        return f"MODELO {simbolo}"
-    return f"MODELO {simbolo} {_ROTULO_TF.get(tf, tf)}"
+        return f"{prefixo}{simbolo}"
+    return f"{prefixo}{simbolo} {_ROTULO_TF.get(tf, tf)}"
 
 
 def listar_modelos() -> list[dict[str, Any]]:

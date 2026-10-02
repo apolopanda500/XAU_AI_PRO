@@ -1,3 +1,24 @@
+"""Planos locais e o que cada um destrava de verdade.
+
+O QUE ESTE MODULO FAZ
+=====================
+Catalogo Free / VIP / VIPS, assinatura local persistida com assinatura
+criptografica, e a funcao `has_entitlement` que o `backend/plano_gate.py`
+consulta para destravar ou recusar cada rota.
+
+FREE — NUNCA USA MULTI (2026-10-02)
+==================================
+Decisao do dono: *"FREE nao pode usar multi"*.
+
+Antes o catalogo nao tinha nenhuma chave de modelo. `multi_account` (varias
+contas) e `multi_model` (varios modelos) sao coisas diferentes e a confusao
+entre as duas ja fez o app prometer um recurso que nao destravava nada.
+
+`multi_model` e o unico caminho para `MULTI_<GRUPO>_<TF>` em
+`backend/ai_inference.py`. No Free ele e `False` SEMPRE, e a funcao
+`pode_usar_multi_modelo` em `backend/acesso.py` reforca isso: mesmo que
+alguem adultere o `subscriptions.json`, a porta nao abre.
+"""
 from __future__ import annotations
 
 import copy
@@ -52,10 +73,11 @@ _PLAN_CATALOG: dict[str, dict[str, Any]] = {
             "ai_signals": True,
             "economic_calendar": False,
             "multi_account": False,
+            "multi_model": False,
             "social_paper": False,
             "priority_support": False,
         },
-        "limits": {"workspaces": 1, "alerts": 10, "ai_signals_per_day": 25, "paper_strategies": 0},
+        "limits": {"workspaces": 1, "alerts": 10, "ai_signals_per_day": 25, "paper_strategies": 0, "multi_models": 0},
         "features": ["Paper/demo", "Mercado principal", "Alertas de preco", "IA basica"],
     },
     "vip": {
@@ -74,11 +96,12 @@ _PLAN_CATALOG: dict[str, dict[str, Any]] = {
             "ai_signals": True,
             "economic_calendar": True,
             "multi_account": True,
+            "multi_model": True,
             "social_paper": True,
             "priority_support": False,
         },
-        "limits": {"workspaces": 5, "alerts": 100, "ai_signals_per_day": 500, "paper_strategies": 3},
-        "features": ["Tudo do Free", "Analytics avancado", "Calendario economico", "Social paper", "5 workspaces"],
+        "limits": {"workspaces": 5, "alerts": 100, "ai_signals_per_day": 500, "paper_strategies": 3, "multi_models": 2},
+        "features": ["Tudo do Free", "Analytics avancado", "Calendario economico", "Social paper", "5 workspaces", "2 modelos multi (PRO)"],
     },
     "vips": {
         "id": "vips",
@@ -96,11 +119,12 @@ _PLAN_CATALOG: dict[str, dict[str, Any]] = {
             "ai_signals": True,
             "economic_calendar": True,
             "multi_account": True,
+            "multi_model": True,
             "social_paper": True,
             "priority_support": True,
         },
-        "limits": {"workspaces": 20, "alerts": 1000, "ai_signals_per_day": 5000, "paper_strategies": 20},
-        "features": ["Tudo do VIP", "20 workspaces", "20 estrategias paper", "Auditoria avancada", "Suporte prioritario"],
+        "limits": {"workspaces": 20, "alerts": 1000, "ai_signals_per_day": 5000, "paper_strategies": 20, "multi_models": 8},
+        "features": ["Tudo do VIP", "20 workspaces", "20 estrategias paper", "8 modelos multi (PRO)", "Auditoria avancada", "Suporte prioritario"],
     },
 }
 

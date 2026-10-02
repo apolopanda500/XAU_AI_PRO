@@ -4,13 +4,12 @@ import { useAppStore } from '../hooks/useAppStore';
 import { useAuthStore } from '../auth/authStore';
 import { definirPin, removerPin, validarPin, verificarPin } from '../auth/auth';
 import { THEMES } from '../hooks/useTheme';
-import SubscriptionPanel from './SubscriptionPanel';
 import ConnectionSettings from './ConnectionSettings';
 import ConnectedDevicesPanel from './ConnectedDevicesPanel';
 import DeclaracoesConfianca from './DeclaracoesConfianca';
 import '../theme/settings.css';
 
-type Section = 'general' | 'connections' | 'security' | 'plans' | 'confianca';
+type Section = 'general' | 'connections' | 'security' | 'confianca';
 const tabs: [Section, string][] = [
   ['general', 'Geral / Interface'],
   // "Notificações & Alertas" saiu: a seção existia no menu sem renderizar
@@ -18,7 +17,6 @@ const tabs: [Section, string][] = [
   // é pior que não existir.
   ['connections', 'Conexões & Corretoras'],
   ['security', 'Segurança'],
-  ['plans', 'Planos'],
   // Declarações de confiança: o que o app faz, o que nunca faz, e quem
   // developeu. Cada afirmação da tela tem um teste ou auditoria por trás.
   ['confianca', 'Confiança & Responsável'],
@@ -226,12 +224,6 @@ export default function SettingsCore() {
               </p>
             )}
             {status && <div className="hint" role="status">{status}</div>}
-          </div>
-        )}
-
-        {section === 'plans' && (
-          <div className="settings-panel">
-            <SubscriptionPanel />
           </div>
         )}
 
