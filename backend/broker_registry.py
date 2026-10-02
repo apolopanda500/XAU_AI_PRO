@@ -176,6 +176,11 @@ def capability_matrix(include_planned: bool = False) -> list[dict[str, Any]]:
                 # acao de execucao liberada. Saque e transferencia ficam fora
                 # desta variavel: continuam False no maximo.
                 "read_only": not execution,
+                # `public_data` e o que responde a coluna "Leitura" da matriz:
+                # existe dado publico desta corretora sem credencial. `read_only`
+                # acima NAO serve para isso — ele mede ausencia de execucao, e
+                # usar os dois como sinonimo invertia o sentido do documento.
+                "public_data": bool(definition.public_data),
                 "capabilities": list(capabilities),
                 "execution": execution,
                 "withdrawals": False,

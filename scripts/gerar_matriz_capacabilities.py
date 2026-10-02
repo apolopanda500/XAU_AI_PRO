@@ -29,9 +29,43 @@ AVISO = """# Matriz de capabilities por corretora e mercado
 >
 > Dados publicos: {data}
 
+## A coluna "Leitura" estava invertida (corrigido 01/10/2026)
+
+O gerador preenchia a coluna "Leitura" com `read_only`, que vale
+`not execution` (`broker_registry.py:178`) e significa **"não executa
+ordem"**. Rotulado como "Leitura", isso invertia a verdade:
+
+| | Antes (errado) | Agora |
+|---|---|---|
+| Corretora que **não** executa ordem | `OK` | depende de `public_data` |
+| Corretora que **entrega** dado publico | `nao` | depende de `public_data` |
+
+Como nenhuma corretora deste registro executa ordem nesta versão, **todas as
+linhas exibiam "OK"** — o documento afirmava leitura confirmada para todos os
+17 pares, e a evidência não sustentava nenhuma dessas afirmações.
+
+A correção usa `public_data` (existe dado público sem credencial?), campo que
+passou a ser exposto em `capability_matrix()`. A legenda também mudou: "OK"
+prometia uma verificação que o script nunca fez. O script é derivado do
+registro — ele **não** sonda as APIs, então a coluna responde "o que o registro
+declara", nunca "o que foi testado agora".
+
+Travado por `TestMatrizLeituraNaoInvertida` (4 testes), inclusive um que
+reintroduziu o bug de propósito para provar que o teste pega a volta.
+
 ## Como ler
 
-- **OK**: o endpoint responde com dado real da corretora.
+**A coluna "Leitura" responde a uma pergunta so: existe dado publico desta
+corretora sem credencial?** Vem de `public_data` no registro.
+
+- **sim**: a corretora expoe dado publico (cotacao, candles, catalogo) sem
+  credencial. Isso **nao** significa que a resposta foi testada agora — e o que
+  o registro declara.
+- **nao**: a corretora nao expoe dado publico; leitura de conta depende de
+  credencial configurada pelo operador.
+
+Sobre o resto:
+
 - **unavailable**: declarado honestamente pelo gateway. Ausencia de dado e
   declarada, nunca preenchida com valor inventado.
 - **unsupported**: o adaptador nao implementa este endpoint para a corretora.
@@ -90,7 +124,16 @@ def gerar() -> str:
         leitura.append([
             f"`{row['broker']}`",
             f"`{row['market']}`",
-            "OK" if row["read_only"] else "nao",
+            # COLUNA "LEITURA" = a corretora entrega dado de leitura? E o campo
+            # `public_data` do registro (dado publico existe sem credencial).
+            #
+            # JA FOI UM BUG AQUI: o codigo usava `read_only`, que vale
+            # `not execution` (veja broker_registry.py:178) e significa
+            # "NAO executa ordem". Rotulado como "Leitura", invertia a
+            # verdade: toda corretora SEM execucao aparecia com "OK" e as que
+            # ENTREGAM leitura real apareciam com "nao". O documento afirmava
+            # leitura OK para todos os 9 pares, o que a evidencia nao sustentava.
+            "sim" if row.get("public_data") else "nao",
             f"`{row['status']}`",
             ", ".join(f"`{c}`" for c in row["capabilities"]) or "nenhuma",
         ])

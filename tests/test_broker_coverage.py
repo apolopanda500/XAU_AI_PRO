@@ -10,8 +10,16 @@ Achados que estes testes fixam:
    instrumentos e a cotacao nao casaria com a lista de ativos.
 3. ``trades`` e ``stats24h`` tinham allowlist hardcoded (``binance``/``mexc``),
    o que desligava Bybit e OKX mesmo com o metodo implementado no cliente.
+4. A matriz de capabilities gerava a coluna "Leitura" a partir de
+   ``read_only``, que vale ``not execution`` (ver ``broker_registry.py``).
+   Rotulado como "Leitura", isso INVERTIA a verdade: toda corretora sem
+   execucao aparecia com "OK" e as que entregam dado publico real apareciam
+   com "nao". O documento afirmava leitura confirmada para todos os pares.
 """
 from __future__ import annotations
+
+import sys
+from pathlib import Path
 
 import pytest
 
@@ -28,6 +36,62 @@ from backend.bybit_client import BybitClient
 from backend.okx_client import OkxClient
 import backend.mt5_gateway as gw
 
+import backend.mt5_gateway as gw
+
+
+class TestMatrizLeituraNaoInvertida:
+    """A coluna "Leitura" da matriz precisa dizer a verdade.
+
+    O defeito era o script gerar "Leitura" a partir de ``read_only``, que vale
+    ``not execution``. O efeito era invertido: as corretoras que NAO executam
+    ordem apareciam com "OK" e as que ENTREGAM dado publico apareciam com "nao".
+    Como todas as corretoras do registro estao sem execucao real nesta versao,
+    o documento acabava afirmando "OK" para todas — leitura que a evidencia
+    nao sustentava.
+
+    Estes testes travam a semântica pelo nome do campo: `read_only` mede
+    ausencia de execucao e nunca pode alimentar a coluna "Leitura".
+    """
+
+    def test_matriz_expoe_public_data(self) -> None:
+        linhas = capability_matrix(include_planned=True)
+        assert linhas, "a matriz nao pode voltar vazia"
+        for linha in linhas:
+            assert "public_data" in linha, "a matriz precisa expor public_data"
+            assert isinstance(linha["public_data"], bool)
+
+    def test_public_data_nao_e_read_only(self) -> None:
+        """O campo da coluna Leitura nao pode ser o de execucao.
+
+        Ambas as variaveis existem no registro, mas medem coisas diferentes:
+        `public_data` responde "existe dado publico?", `read_only` responde
+        "nao executa ordem?". Usar a segunda na primeira produz o documento
+        invertido.
+        """
+        linhas = capability_matrix(include_planned=True)
+        ativas = [linha for linha in linhas if linha["status"] == "active"]
+        assert ativas, "deveria haver corretora ativa"
+        # Toda linha ativa deste registro declara public_data=True, logo
+        # public_data e read_only divergem. Se voltarem a ser iguais, o bug
+        # voltou.
+        assert any(linha["public_data"] != linha["read_only"] for linha in ativas), (
+            "public_data virou sinonimo de read_only: a coluna Leitura "
+            "voltaria a medir execucao em vez de dado publico"
+        )
+
+    def test_toda_corretora_com_dado_publico_declara_sim(self) -> None:
+        for linha in capability_matrix(include_planned=True):
+            if linha["public_data"]:
+                assert linha["read_only"] in (True, False)
+
+    def test_documento_gerado_diz_a_verdade(self) -> None:
+        """O .md precisa bater com o registro no dia de hoje."""
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+        from scripts.gerar_matriz_capacabilities import gerar
+
+        assert gerar() == (Path(__file__).resolve().parent.parent / "Docs" / "MATRIZ_CAPABILIDADES.md").read_text(
+            encoding="utf-8"
+        ), "Docs/MATRIZ_CAPABILIDADES.md desatualizado: rode o gerador sem --check"
 
 class _RespostaFalsa:
     """Substitui a rede e devolve um payload ja decodificado."""
