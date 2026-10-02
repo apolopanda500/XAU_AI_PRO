@@ -60,6 +60,39 @@ a = Analysis(
         'backend.audit_log',
         'backend.plano_gate',
         'backend.risk_gate',
+        # METAS E TRAVAS DO VIP (2026-10-02)
+        #
+        # Estes dois NAO entram sozinhos pelo mesmo motivo acima: o
+        # `plano_gate` importa `subscriptions` dentro da funcao, e o novo
+        # `acesso` importa `metas_vip` e `vip_progress` tambem dentro das
+        # funcoes. Sem a lista, o PyInstaller empacota o `.exe` sem eles e o
+        # app instalado sobe sem a arvore de acesso — que foi exatamente o que
+        # aconteceu na primeira instalacao deste ciclo: `metas_vip` e `acesso`
+        # ausentes do bundle, e a tela sem VIP funcional.
+        'backend.metas_vip',
+        'backend.acesso',
+        'backend.vip_progress',
+        # MODULOS QUE JÁ ESTAVAM DE FORA (achado por tests/test_spec_gateway.py)
+        #
+        # Este bloco foi escrito depois de `test_nenhum_modulo_do_backend_fica_
+        # de_fora_do_bundle` reprovar com 14 nomes. Os quatro `*_client` sao
+        # excecao: vem por import de nivel superior e o PyInstaller pega sozinho
+        # (estao em IMPORTADOS_NO_TOPO, no teste).
+        #
+        # Os de execucao importam os clients DENTRO de funcao, entao nao entram
+        # sozinhos — e sem eles o `UniversalRouter` cai no caminho unico do MT5.
+        # `exchange_execution` e `reconciliation` sao o que o motor usa para
+        # fechar posicao em corretora de exchange.
+        'backend.mt5_execution',
+        'backend.exchange_execution',
+        'backend.binance_execution',
+        'backend.bybit_execution',
+        'backend.mexc_execution',
+        'backend.okx_execution',
+        'backend.reconciliation',
+        'backend.execution_receipts',
+        'backend.chart_attach',
+        'backend.fastapi_gateway',
         'backend.watchdog',
         'backend.guardian_engine',
         'backend.persistent_queue',
