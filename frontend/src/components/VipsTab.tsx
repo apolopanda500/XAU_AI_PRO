@@ -39,6 +39,29 @@ type Nivel = {
   withdrawals_enabled: boolean;
 };
 
+// O que o PLANO destrava, separado do que o VOLUME alcancou.
+//
+// ATE 02/10/2026 A ESCADA NAO DESTRAVAVA NADA
+// ===========================================
+// A tela mostrava os degraus e nada mais. O operador subia de VIP por volume
+// e nenhuma feature abria — `vip_progress.progresso()` devolvia a escada mas
+// nunca escrevia em `entitlements`. Era "rotulo sem lastro", o mesmo padrao
+// que o `plano_gate.py` descreve: "a tela prometia plano pago e o produto nao
+// mudava".
+//
+// `/api/acesso` e `backend/acesso.py`: a arvore unica que junta plano e
+// volume. `multi_model` e false no Free por decisao do dono, com reforco
+// duplo. `live_execution` e `withdrawals_enabled` vem False no payload — nem
+// plano nem volume destravam dinheiro real.
+type Acesso = {
+  plano: string;
+  multi_model: boolean;
+  multi_models: number;
+  live_execution: boolean;
+  withdrawals_enabled: boolean;
+  volume?: { disponivel?: boolean; motivo?: string };
+};
+
 const GRUPOS: Array<[string, string]> = [
   ['cripto', 'Cripto'],
   ['forex_cfd', 'Forex e CFD'],
@@ -54,6 +77,7 @@ function usd(valor: number | null | undefined): string {
 export default function VipsTab() {
   const [dados, setDados] = useState<Nivel | null>(null);
   const [erro, setErro] = useState('');
+  const [acesso, setAcesso] = useState<Acesso | null>(null);
 
   const carregar = useCallback(async (signal?: AbortSignal) => {
     try {
@@ -76,6 +100,17 @@ export default function VipsTab() {
       }
       setDados(await resposta.json() as Nivel);
       setErro('');
+      // A escada e o que o VOLUME alcancou; o acesso e o que o PLANO destrava.
+      // Sao duas chamadas porque sao duas fontes: `vip_progress` le o
+      // audit.jsonl, `acesso` le a assinatura local. A tela precisa das duas
+      // para nao mostrar degrau que nao abre nada.
+      try {
+        const r2 = await fetch(`${base}/api/acesso`, { signal: signal ?? AbortSignal.timeout(6000) });
+        if (r2.ok) setAcesso(await r2.json() as Acesso);
+      } catch {
+        // A escada continua util sem o acesso. Falhar aqui nao pode apagar a
+        // tela inteira — o operador ainda precisa ver onde esta.
+      }
     } catch (e) {
       if (signal?.aborted) return;
       setErro(e instanceof Error ? e.message : 'gateway indisponível');
@@ -97,6 +132,23 @@ export default function VipsTab() {
         </div>
         {dados && <span className="chip">{dados.nivel_nome}</span>}
       </div>
+
+      {/* O que o plano ABRE, separado do que o volume ALCANCOU. Sem este bloco
+          a escada parece promocao e nao destrava nada — que era exatamente
+          o defeito de 02/10/2026. */}
+      {acesso && (
+        <div className="section-head" style={{ marginTop: 8 }}>
+          <div>
+            <h3>O que seu plano destrava</h3>
+            <span className="muted">Plano atual: {acesso.plano}</span>
+          </div>
+          <span className={`chip ${acesso.multi_model ? 'ok' : 'warn'}`}>
+            {acesso.multi_model
+              ? `Modelo multi liberado (${acesso.multi_models})`
+              : 'Modelo único — multi no VIP'}
+          </span>
+        </div>
+      )}
 
       {erro && <p className="hint" role="status">{erro}</p>}
 

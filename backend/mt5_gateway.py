@@ -2608,6 +2608,23 @@ class Handler(BaseHTTPRequestHandler):
         #
         # `live_execution` e `withdrawals_enabled` seguem False de forma fixa:
         # escolher um plano nao habilita ordem nem saque.
+# ------------------------------------------------------------- VIP e metas
+        # Mesmo defeito das rotas de plano acima, agora na progressao: a rota
+        # `/api/vip/progress` vivia SO no `fastapi_gateway` (9003). O frontend
+        # fala com o gateway local (9001, ver `apiBase()`), entao a aba VIP
+        # recebia 404 em TODA chamada — com e sem token. Medido no app
+        # instalado em 02/10/2026:
+        #     GET 9001/api/vip/progress -> 404   (com token valido)
+        #     GET 9003/api/vip/progress -> 404   (o core nao tem a rota)
+        #
+        # `/api/acesso` e nova e vai no mesmo bloco: e a arvore unica que junta
+        # plano e volume, e a tela precisa dela para saber o que destravou.
+        if parsed.path == "/api/vip/progress":
+            from backend.vip_progress import progresso
+            self._send(200, {"ok": True, **progresso()}); return
+        if parsed.path == "/api/acesso":
+            from backend.acesso import acesso
+            self._send(200, {"ok": True, **acesso()}); return
         if parsed.path == "/api/subscriptions/plans":
             from app.subscriptions import list_plans
             self._send(200, {"ok": True, "plans": list_plans(),
