@@ -18,6 +18,7 @@ Achados que estes testes fixam:
 """
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -85,13 +86,25 @@ class TestMatrizLeituraNaoInvertida:
                 assert linha["read_only"] in (True, False)
 
     def test_documento_gerado_diz_a_verdade(self) -> None:
-        """O .md precisa bater com o registro no dia de hoje."""
+        """O .md precisa bater com o REGISTRO — sem depender do dia.
+
+        A primeira versao comparava com `gerar()`, que inclui `date.today()`.
+        Isso quebrava todo dia que virava, mesmo com o conteudo correto: o
+        CI rodou a meia-noite e viu `2026-10-02` num arquivo escrito em
+        `2026-10-01`. Falha de calendario, nao de conteudo.
+
+        Aqui a comparacao neutraliza a data dos dois lados. O que passa a
+        valer e se capabilities, status e legenda batem com o registro.
+        """
         sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
         from scripts.gerar_matriz_capacabilities import gerar
 
-        assert gerar() == (Path(__file__).resolve().parent.parent / "Docs" / "MATRIZ_CAPABILIDADES.md").read_text(
-            encoding="utf-8"
-        ), "Docs/MATRIZ_CAPABILIDADES.md desatualizado: rode o gerador sem --check"
+        destino = Path(__file__).resolve().parent.parent / "Docs" / "MATRIZ_CAPABILIDADES.md"
+        sem_data = lambda texto: re.sub(r"Dados publicos: \d{4}-\d{2}-\d{2}", "Dados publicos: <data>", texto)
+
+        assert sem_data(gerar()) == sem_data(destino.read_text(encoding="utf-8")), (
+            "Docs/MATRIZ_CAPABILIDADES.md desatualizado: rode o gerador sem --check"
+        )
 
 class _RespostaFalsa:
     """Substitui a rede e devolve um payload ja decodificado."""

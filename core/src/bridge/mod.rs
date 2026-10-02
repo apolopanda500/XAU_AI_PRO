@@ -18,11 +18,18 @@ use crate::protocol::{AccountInfo, OrderRequest, OrderResponse, Position, Quote}
 pub struct MT5Bridge {
     config: MT5Config,
     base_url: String,
+    /// O token NAO fica em campo proprio: e aplicado como header
+    /// `Authorization` na CONSTRUCAO deste client, e `reqwest::Client` envia
+    /// esse header em toda requisicao que ele faz.
+    ///
+    /// Antes havia `token: Option<String>` aqui, preenchido e nunca lido. O
+    /// `cargo clippy -- -D warnings` reprovava o build inteiro por isso
+    /// (`field 'token' is never read`). Pior: o comentario do campo prometia
+    /// que o token era repassado, e o unico lugar onde ele de fato era
+    /// usado era o construtor do client, duas linhas acima. Campo morto com
+    /// documentacao que descreve comportamento alheio — exatamente o
+    /// padrao que a auditoria ja registrou duas vezes neste projeto.
     client: reqwest::Client,
-    /// Token do gateway. O core so recebe `XAU_CORE_HEALTH_TOKEN`; o
-    /// `XAU_GATEWAY_TOKEN` precisa ser repassado pelo launcher, senao toda
-    /// chamada autenticada volta 401.
-    token: Option<String>,
 }
 
 impl MT5Bridge {
@@ -59,7 +66,6 @@ impl MT5Bridge {
             config: config.clone(),
             base_url,
             client,
-            token,
         };
 
         // Testa conexão
