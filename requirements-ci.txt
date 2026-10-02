@@ -17,3 +17,14 @@ sentry-sdk>=2.44.0
 # `uvicorn` entra junto porque o gateway cria a instancia da app com ele.
 fastapi
 uvicorn
+
+# `starlette.testclient` (importado por `tests/test_fastapi_auth.py` via
+# `fastapi.testclient`) tenta `httpx2` primeiro e cai para `httpx` com aviso
+# de deprecacao. Sem NENHUM dos dois instalado o import levanta
+# `RuntimeError: requires the httpx2 package` — e o pytest morre na coleta.
+#
+# Nao basta declarar `httpx`: o `starlette >=1.6` marca `httpx` como
+# `extra == 'full'`, ou seja, nao e dependencia automatica. O `httpx2` e
+# o caminho primario e sem deprecacao.
+httpx2
+httpx
