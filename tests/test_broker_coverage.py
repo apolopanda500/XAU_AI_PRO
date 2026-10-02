@@ -179,7 +179,12 @@ def test_okx_header_user_agent_via_gateway(monkeypatch):
     ("ETH/BTC", "ETH-BTC"),
     ("ETH_BTC", "ETH-BTC"),
     ("BTC-USDT", "BTC-USDT"),
-    ("XAUUSD", "XAU-USD"),
+    # `XAUUSD` e o par como o MT5 e os modelos o mostram. Na OKX esse par
+    # nao existe: spot de metais e `XAU-USDT`. O valor antigo (`XAU-USD`)
+    # era um par que a exchange nunca aceitou — a propria tabela de quotes
+    # da OKX nao tem `USD` como quote valido de spot. Ver
+    # `backend/exchange_symbols.py`.
+    ("XAUUSD", "XAU-USDT"),
 ])
 def test_okx_converte_par_concatenado_em_hifen(entrada, esperado):
     assert OkxClient._symbol(entrada) == esperado

@@ -175,10 +175,18 @@ class MexcClient:
 
     @staticmethod
     def _symbol(symbol: str) -> str:
-        value = str(symbol or "").strip().upper()
-        if not value:
-            raise ValueError("symbol é obrigatório")
-        return value
+        """Normaliza o par para o formato da MEXC.
+
+       .Delegado a `backend.exchange_symbols`, que e a fonte unica da regra.
+        Antes isto era so `.upper()` e o operador escrevia `BTC/USD` ou
+        `XAUUSD` e a exchange respondia HTTP 400 sem explicar o motivo.
+
+        O formato da MEXC e o par concatenado contra USDT (`BTCUSDT`,
+        `MXUSDT`) — confirmado na documentacao oficial de `POST /api/v3/order`.
+        """
+        from backend.exchange_symbols import par_exchange
+
+        return par_exchange(symbol, "MEXC spot")
 
     @staticmethod
     def _rows(raw: object) -> list[object]:

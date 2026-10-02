@@ -165,15 +165,32 @@ class OkxClient:
 
     @classmethod
     def _symbol(cls, symbol: str) -> str:
-        value = str(symbol or "").strip().upper().replace("/", "-").replace("_", "-")
-        if not value:
-            raise ValueError("symbol é obrigatório")
-        if "-" in value:
-            return value
-        for suffix in cls.QUOTE_SUFFIXES:
-            if value.endswith(suffix) and len(value) > len(suffix):
-                return f"{value[: -len(suffix)]}-{suffix}"
-        return value
+        """InstId da OKX: `BASE-QUOTE` com hifen.
+
+        POR QUE DELEGA (2026-10-02)
+        ============================
+        Esta metodo ja tinha a tabela de quotes e o hifen, e foi a unica das
+        quatro que acertava o formato. Mas ele tinha dois furos:
+
+        1. Sem quote reconhecido, devolvia o valor cru — `EURUSD` virava
+           `EURUSD`, que nao existe na OKX.
+        2. Aceitava `EUR/USDT` e produzia `EUR-USDT`, um par que nao existe.
+
+        Agora a identificacao do quote e a recusa de forex vem de
+        `backend.exchange_symbols`, a fonte unica da regra; a OKX so
+        acrescenta o hifen, que e a unica diferenca de formato entre ela e as
+        outras tres.
+        """
+        from backend.exchange_symbols import QUOTES_ORDENADOS, par_exchange
+
+        concatenado = par_exchange(symbol, "OKX spot")
+        # O hifen entra antes do ULTIMO quote reconhecido. A lista vem do
+        # normalizador, e `OKX.QUOTE_SUFFIXES` fica como espelho para o resto
+        # do modulo OKX que ainda a consome.
+        for quote in QUOTES_ORDENADOS:
+            if concatenado.endswith(quote) and len(concatenado) > len(quote):
+                return f"{concatenado[: -len(quote)]}-{quote}"
+        return concatenado
 
 
     def _inst_id(self, symbol: str) -> str:

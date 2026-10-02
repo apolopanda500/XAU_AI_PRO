@@ -149,10 +149,19 @@ class BinanceClient:
 
     @staticmethod
     def _symbol(symbol: str) -> str:
-        value = str(symbol or "").strip().upper()
-        if not value:
-            raise ValueError("symbol é obrigatório")
-        return value
+        """Normaliza o par para o formato da Binance.
+
+        Delegado a `backend.exchange_symbols` (fonte unica da regra). Antes
+        era so `.upper()`, e `BTC/USD` ou `XAUUSD` iam como digitados e a
+        Binance respondia com par invalido.
+
+        A Binance usa o par concatenado (`BTCUSDT`), sem separador. O quote
+        USDC tambem existe na Binance spot, por isso a regra e por conjunto de
+        quotes e nao "sempre USDT".
+        """
+        from backend.exchange_symbols import par_exchange
+
+        return par_exchange(symbol, "Binance spot")
 
     @staticmethod
     def _select(raw: object, symbol: str) -> object | None:

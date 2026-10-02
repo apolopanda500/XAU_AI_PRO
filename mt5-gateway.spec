@@ -93,6 +93,20 @@ a = Analysis(
         'backend.execution_receipts',
         'backend.chart_attach',
         'backend.fastapi_gateway',
+        # NORMALIZACAO DE PAR (2026-10-02)
+        #
+        # `exchange_symbols` e importado DENTRO de `_symbol()` dos quatro
+        # clientes, entao o PyInstaller nao ve. Sem ele aqui, o app instalado
+        # sobe com o `.upper()` antigo e volta a recusar par com HTTP 400.
+        # Foi o `test_spec_gateway.py` que reprovou e apontou este nome.
+        'backend.exchange_symbols',
+        # CLASSES DE ATIVO (2026-10-02)
+        #
+        # `asset_classes` classifica CRYPTO / FIAT / METALS e recusa simbolo
+        # invalido. Tambem importado dentro de funcao, entao so o `.spec` o
+        # coloca no executavel. Sem ele, `classe_de` cai em `OUTROS` no app
+        # instalado e a progressao VIP perde a separacao por grupo.
+        'backend.asset_classes',
         'backend.watchdog',
         'backend.guardian_engine',
         'backend.persistent_queue',

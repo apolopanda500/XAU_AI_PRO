@@ -160,10 +160,20 @@ class BybitClient:
 
     @staticmethod
     def _symbol(symbol: str) -> str:
-        value = str(symbol or "").strip().upper()
-        if not value:
-            raise ValueError("symbol é obrigatório")
-        return value
+        """Normaliza o par para o formato da Bybit.
+
+        Delegado a `backend.exchange_symbols` (fonte unica da regra). Antes
+        era so `.upper()`, e `BTC/USD` ou `XAUUSD` iam como digitados para a
+        Bybit, que responde com par invalido.
+
+        A Bybit V5 usa o par concatenado (`BTCUSDT`) tanto em spot quanto em
+        linear; em inverso o sufixo e `PERP` (`BTCUSDT` linear continua com
+        USDT, mas a categoria fica a parte). Aqui so normalizamos o par — quem
+        decide spot/linear e o `market` do cliente.
+        """
+        from backend.exchange_symbols import par_exchange
+
+        return par_exchange(symbol, "Bybit spot")
 
     @staticmethod
     def _result(raw: object) -> dict[str, object]:
