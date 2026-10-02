@@ -1,7 +1,7 @@
-"""Contrato HTTP de conexões: cadastro e validação somente leitura.
+﻿"""Contrato HTTP de conexÃµes: cadastro e validaÃ§Ã£o somente leitura.
 
-Usa servidor efêmero em 127.0.0.1:0, credenciais sintéticas e clientes stub.
-Nenhuma credencial real é lida; nenhum arquivo do usuário é alterado.
+Usa servidor efÃªmero em 127.0.0.1:0, credenciais sintÃ©ticas e clientes stub.
+Nenhuma credencial real Ã© lida; nenhum arquivo do usuÃ¡rio Ã© alterado.
 """
 from __future__ import annotations
 
@@ -18,6 +18,19 @@ from unittest.mock import patch
 import pytest
 
 ROOT = str(Path(__file__).resolve().parent.parent)
+
+# Salvar credencial usa DPAPI do Windows: `connection_store._protect()` chama
+# `ctypes.windll.crypt32.CryptProtectData`. Em runner Linux a API nao existe,
+# a excecao vira 503 e o teste falha assertando 201 â€” sem que exista
+# qualquer defeito no contrato HTTP.
+#
+# DPAPI e a garantia de que a credencial nao sai do Windows do operador
+# (decisao C5 de `Docs/DECISOES_PRODUTO_20260925.md`). Nao ha equivalente
+# para Linux, e nao deve haver: o produto e desktop Windows.
+_REQUERE_DPAPI = pytest.mark.skipif(
+    sys.platform != "win32",
+    reason="cadastro de credencial usa DPAPI (ctypes.windll.crypt32), API do Windows",
+)
 
 
 @pytest.fixture()
@@ -112,6 +125,7 @@ def test_mercado_incompativel_com_a_corretora_e_recusado(gateway):
     assert "forex" in data["error"]
 
 
+@_REQUERE_DPAPI
 def test_salva_e_testa_leitura_com_stub(gateway):
     payload = {"id": "mexc:crypto-spot:demo", "broker": "mexc", "market": "crypto-spot", "api_key": "KEY", "api_secret": "SECRET"}
 
@@ -158,6 +172,7 @@ def test_leitura_de_conexoes_nao_cria_diretorio(gateway, tmp_path, monkeypatch):
     assert not missing.exists()
 
 
+@_REQUERE_DPAPI
 def test_falha_de_validacao_retorna_502_sem_segredos(gateway):
     payload = {"id": "binance:crypto-spot:demo", "broker": "binance", "market": "crypto-spot", "api_key": "KEY", "api_secret": "SECRET"}
 
@@ -170,7 +185,7 @@ def test_falha_de_validacao_retorna_502_sem_segredos(gateway):
             self.secret = ""
 
         def account(self):
-            raise RuntimeError("binance indisponível (stub)")
+            raise RuntimeError("binance indisponÃ­vel (stub)")
 
     import backend.connection_service as service
 

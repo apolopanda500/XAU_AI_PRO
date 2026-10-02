@@ -14,6 +14,20 @@ from types import ModuleType
 import pytest
 
 ROOT = str(Path(__file__).resolve().parent.parent)
+
+# Salvar credencial usa DPAPI do Windows: `connection_store._protect()` chama
+# `ctypes.windll.crypt32.CryptProtectData`. Em runner Linux a API nao existe,
+# a excecao vira 503 e o teste falha assertando 201 — sem que exista
+# qualquer defeito no contrato HTTP.
+#
+# DPAPI e a garantia de que a credencial nao sai do Windows do operador
+# (decisao C5 de `Docs/DECISOES_PRODUTO_20260925.md`). Nao ha equivalente
+# para Linux, e nao deve haver: o produto e desktop Windows. Estes testes
+# ficam entao restritos a plataforma, sem perder cobertura no job Windows.
+_REQUERE_DPAPI = pytest.mark.skipif(
+    sys.platform != "win32",
+    reason="cadastro de credencial usa DPAPI (ctypes.windll.crypt32), API do Windows",
+)
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
@@ -541,6 +555,7 @@ def test_rotas_restantes_sem_envio(gateway, monkeypatch):
     assert status in {403, 503}
     status, _ = _request(gateway, "POST", "/api/ea/start", {})
 
+@_REQUERE_DPAPI
 def test_rotas_finais_ea_e_conexoes(gateway):
     for path in ("/api/ea/resume", "/api/ea/stop", "/api/ea/set-symbol",
                  "/api/ea/set-mode", "/api/ea/set-timeframe", "/api/ea/set-autotrading"):

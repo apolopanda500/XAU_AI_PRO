@@ -11,10 +11,25 @@ quando o comando externo falha ou o disco nao pode ser lido.
 from __future__ import annotations
 
 import subprocess
+import sys
 
 import pytest
 
 from scripts import preflight as pf
+
+# O pre-flight valida o ambiente de OPERACAO, que e Windows: o app usa
+# MetaTrader5, DPAPI e `.venv\Scripts\python.exe`. Este teste sobe o
+# executavel do venv por caminho, entao em runner Linux ele falha com
+# FileNotFoundError antes de testar o preflight.
+#
+# Nao e um defeito do preflight nem do codigo — e o teste rodando onde o
+# produto nao roda. O CI Linux de `xau-ai-pro-validation.yml` executa a
+# suite inteira; este teste e de plataforma e fica coberto pelo job
+# `validate`, que roda em `windows-latest`.
+_SO_WINDOWS = pytest.mark.skipif(
+    sys.platform != "win32",
+    reason="pre-flight de operacao exige Windows: .venv\\Scripts\\python.exe, DPAPI e MetaTrader5",
+)
 
 
 class _RelatorioVazio(pf.Relatorio):
@@ -268,6 +283,7 @@ def test_preflight_nao_altera_nada(tmp_path, monkeypatch):
     assert sorted(p.name for p in tmp_path.iterdir()) == antes
 
 
+@_SO_WINDOWS
 def test_cli_nao_altera_nada():
     proc = subprocess.run(
         [str(pf.ROOT / ".venv" / "Scripts" / "python.exe"), "scripts/preflight.py", "--json"],

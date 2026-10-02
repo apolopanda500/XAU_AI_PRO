@@ -68,6 +68,15 @@ def test_resultado_indisponivel_nao_tem_probabilidade():
 # ------------------------------------------------------------- inventario
 
 
+@pytest.mark.skipif(
+    not ai.MODELOS_DIR.exists() or not any(ai.MODELOS_DIR.glob("*.meta.json")),
+    reason=(
+        "sem catalogo de modelos neste checkout: os .pkl e .meta.json sao "
+        "artefatos de treino e nao vao no git (.gitignore). O CI roda o "
+        "checkout limpo e nao tem o catalogo; o inventario real e verificado "
+        "por scripts/auditar_governanca_modelos.py na maquina de operacao."
+    ),
+)
 def test_listar_modelos_traz_metricos_reais():
     modelos = ai.listar_modelos()
     assert modelos, "deveria haver metadados de modelo no repositorio"
