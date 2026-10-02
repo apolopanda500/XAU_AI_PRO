@@ -24,6 +24,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Super-Linter valida `GITHUB_BEFORE_SHA` contra o historico. Sem
+          # isto o checkout e superficial (shallow), o SHA antes do push nao
+          # existe localmente e o linter morre em:
+          #   [FATAL] Error while initializing GITHUB_BEFORE_SHA
+          # O job `security` acima ja usava fetch-depth: 0 pelo mesmo motivo.
+          fetch-depth: 0
       - name: Super-Linter
         # >= 8.3.1 corrige CVE-2026-25761 (GHSA-r79c-pqj3-577x): injecao de
         # comando via nome de arquivo com sintaxe $(...) em pull requests.
