@@ -41,6 +41,27 @@ jobs:
         env:
           DEFAULT_BRANCH: develop
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # PRETTIER DESLIGADO, DE PROPÓSITO
+          #
+          # Com Prettier ligado o job reprovava em "Code style issues found
+          # in 228 files" — e a causa nao era estilo nosso: o repositorio
+          # nao tem `.prettierrc`, entao o Prettier aplica os DEFAUTS dele
+          # (2 espacos, ponto e virgula, LF) sobre um projeto escrito com
+          # outra convencao. 228 arquivos, dos quais este ciclo tocou 5.
+          #
+          # Alem disso o proprio Super-Linter avisa que Prettier e Biome
+          # "might conflict with each other" em JSON, YAML, Markdown, CSS,
+          # TS e TSX. O projeto JÁ tem as ferramentas certas e eleas rodam
+          # com a configuracao do projeto: `npm run lint` (eslint) no
+          # backend e `npx tsc` + vitest no frontend.
+          #
+          # Chamar `prettier --write` em 228 arquivos seria reescrever o
+          # repositorio inteiro por causa de um arquivo de configuracao que
+          # nunca existiu. Isso e decisao do dono, nao um fix de workflow.
+          #
+          # PARA LIGAR DE VOLTA: criar `.prettierrc` com a convencao real do
+          # projeto e rodar `prettier --write` em um commit proprio.
+          PRETTIER: false
 
   validate:
     runs-on: windows-latest

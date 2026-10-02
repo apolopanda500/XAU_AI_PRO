@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -285,9 +286,21 @@ def test_preflight_nao_altera_nada(tmp_path, monkeypatch):
 
 @_SO_WINDOWS
 def test_cli_nao_altera_nada():
+    # O primeiro cuidado e Windows: `.venv\Scripts\python.exe` e um caminho
+    # do Windows. O segundo e o runner do GitHub: ele roda em
+    # `windows-latest`, mas NAO tem `.venv` — o workflow instala as
+    # dependencias direto no interpretador do runner. apontar para
+    # `.venv\Scripts\python.exe` dava `WinError 2` mesmo com o SO certo.
+    #
+    # `sys.executable` resolve os dois: e o interpretador que esta rodando
+    # os testes, entao existe por definicao. Local usa o venv; o CI usa o
+    # Python do runner. O que este teste quer verificar — o preflight nao
+    # altera nada e devolve JSON — vale nos dois.
+    interpretador = Path(sys.executable)
+    assert interpretador.exists(), f"interpretador em uso nao existe: {interpretador}"
     proc = subprocess.run(
-        [str(pf.ROOT / ".venv" / "Scripts" / "python.exe"), "scripts/preflight.py", "--json"],
+        [str(interpretador), "scripts/preflight.py", "--json"],
         cwd=pf.ROOT, capture_output=True, text=True, timeout=180, check=False,
     )
-    assert proc.returncode in (0, 1)
+    assert proc.returncode in (0, 1), proc.stderr
     assert '"ok"' in proc.stdout
