@@ -15,7 +15,8 @@ foi fechado.
 
 | Documento | Quando | Sobre |
 |---|---|---|
-| **`SESSAO_20261001_VALIDACAO_E_PUSH.md`** | 01/10 | **Sessão completa: do build travado ao VIP por volume. 13 commits, tudo medido.** Leia primeiro. |
+| **`SESSAO_20261001_VALIDACAO_10_10.md`** | 01/10 noite | **16 camadas validadas 10/10, a coluna "Leitura" da matriz estava invertida, e a sub-aba VIPs ganhou a escada inteira.** Leia primeiro. |
+| **`SESSAO_20261001_VALIDACAO_E_PUSH.md`** | 01/10 | **Sessão completa: do build travado ao VIP por volume. 13 commits, tudo medido.** |
 | **`VIP_PROGRESSAO.md`** | 01/10 | **Pesquisa: como PrimeXBT, IC Markets e IBKR estruturam nível por volume.** Referência, não registro. |
 | **`MAPEAMENTO_10_10_VERIFICADO_20260930.md`** | 30/09 | 10/10 real, camada por camada, com o comando de cada prova. |
 | **`LEVANTAMENTO_20260930.md`** | 30/09 | Paridade de corretoras + as 5 etapas executadas. |
@@ -28,8 +29,8 @@ foi fechado.
 | `ESTADO_E_PENDENCIAS.md` | 27/09 | Estado e pendências daquele ciclo |
 
 > **Atenção:** os documentos de 27 a 30/09 descrevem ciclos anteriores. Para
-> saber o que é verdade **hoje**, o `SESSAO_20261001_VALIDACAO_E_PUSH.md` tem
-> precedência.
+> saber o que é verdade **hoje**, o `SESSAO_20261001_VALIDACAO_10_10.md` tem
+> precedência — ele tem a precedência sobre o próprio documento de 01/10.
 
 ---
 
