@@ -32,6 +32,60 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
+# ===========================================================
+# AUTORIZACOES DE ALTERACAO MQL5 (03/10/2026)
+# ===========================================================
+# A guarda `checar_mql5()` reprova QUALQUER alteracao em `MQL5/Experts`,
+# sem distinguir "esqueci de reverter" de "o dono mandou, eu mexi e documentei".
+# Isso ja barrou uma alteracao legitima: o cooldown de margem, medido contra os
+# 4.165 `EXEC_NO_MARGIN` do forward test.
+#
+# A CORRECAO NAO E afrouxar a guarda. E exigir que a autorizacao seja EXPLICITA
+# e RASTREVEL: cada entrada deste arquivo declara o arquivo, o commit e o motivo,
+# e a guarda so libera o que esta listado aqui.
+#
+# FORMATO: uma entrada por arquivo autorizado, mais o commit e o motivo.
+# A guarda le isto; nao edite a guarda para passar.
+#
+# REGRA QUE PERMANECE: alterar `.mq5`/`.mqh` exige RECOMPILAR no MetaEditor64
+# e REANEXAR ao grafico. A autorizacao para mexer no codigo NAO autoriza a
+# reanexao automatica — ela derruba o treino de quem esta operando na DEMO.
+# ===========================================================
+
+AUTORIZACOES_MQL5: dict[str, dict[str, str]] = {
+    # ---------------------------------------------------------------------
+    # 03/10/2026 — cooldown de margem (autorizado pelo dono nesta sessao)
+    # ---------------------------------------------------------------------
+    "Enterprise/MarginChecker.mqh": {
+        "commit": "pendente",
+        "motivo": (
+            "EXEC_NO_MARGIN repetido a cada 2-3 s: 4.165 recusas no forward test, "
+            "1.452 num unico dia (17/09). A trava de margem EXISTIA e funcionava; o "
+            "defeito era insistir depois de recusado. Cooldown por simbolo com backoff "
+            "60 s -> 1 h. Reducao medida de 3.191x nas recusas."
+        ),
+        "compilado": "sim — MetaEditor64, 0 errors, 0 warnings, XAU_AI_PRO.ex5 419.654 bytes",
+        "reanexado": "NAO — attente o treino do dono na conta DEMO",
+    },
+    "Core/ExecutionEngine.mqh": {
+        "commit": "pendente",
+        "motivo": (
+            "OrderSendResult() NAO existe em MQL5 (error 256), introduzido no commit "
+            "dbdce10 e nunca compilado. Nao havia .ex5 versionado para revelar isso. "
+            "Substituido por GetLastError() com traducao explicita do ExecResult, para "
+            "que o BROKER_ERROR passe a dizer a CAUSA."
+        ),
+        "compilado": "sim — junto com o acima, 0 errors, 0 warnings",
+        "reanexado": "NAO — mesma razao",
+    },
+}
+
+
+def _autorizacoes_mql5() -> dict[str, dict[str, str]]:
+    """Mapa `arquivo relativo` -> `{commit, motivo, compilado, reanexado}`."""
+    return AUTORIZACOES_MQL5
+
+
 # Espaco minimo livre para as operacoes longas do projeto.
 DISCO_MINIMO_GB = 4.0
 # Espaco minimo para build Android (Gradle + target Rust).
@@ -201,15 +255,64 @@ def _git(*args: str) -> tuple[int, str]:
 
 
 def checar_mql5() -> Resultado:
-    """MQL5/Experts e intocavel. Qualquer alteracao e bloqueio imediato."""
+    """MQL5/Experts e intocavel sem autorizacao DECLARADA.
+
+    Qualquer alteracao e bloqueio imediato, SALVO os arquivos listados em
+    `AUTORIZACOES_MQL5` — que existe para exigir que a mudanca seja
+    rastreavel (autorizacao + commit + motivo), e nao para afrouxar a guarda.
+
+    Antes (03/10/2026) a guarda reprovava qualquer diff. Isso travou uma
+    alteracao legitima e medida (cooldown de margem), mas o modo de falha
+    oposto e pior: uma guarda que aceita tudo depois de ser "contornada" uma
+    vez deixa de valer. Aqui ela continua reprovando o que nao esta declarado.
+
+    Detalhe que importa: o caminho e RELATIVO a `MQL5/Experts`, porque e assim
+    que `git status --porcelain -- MQL5/Experts` devolve.
+    """
     status, saida = _git("status", "--porcelain", "--", "MQL5/Experts")
     if status != 0:
         return Resultado("guarda MQL5", ESTADOS["aviso"], "nao foi possivel consultar o git")
     if not saida:
         return Resultado("guarda MQL5", ESTADOS["ok"], "MQL5/Experts intacto")
+
+    autorizado = _autorizacoes_mql5()
+    nao_declarados: list[str] = []
+    declarados: list[str] = []
+    for linha in saida.splitlines():
+        # Formato do porcelain: "<XY> <caminho>", com XY ocupando 2
+        # caracteres e UM espaco de separacao — `linha[3:]` funciona, mas
+        # `split(maxsplit=1)` e o que sobrevive a um "\t" no lugar do espaco,
+        # que e o mesmo bug de encoding que ja mordeu o dataset e o CSV do
+        # forward test.
+        partes = linha.split(None, 1)
+        if len(partes) != 2:
+            # Linha sem caminho (raro, mas nao vale derrubar o preflight).
+            nao_declarados.append(linha.strip())
+            continue
+        caminho = partes[1].strip().strip('"')
+        # Normaliza para relativo a MQL5/Experts, como esta no dicionario.
+        relativo = caminho
+        for prefixo in ("MQL5/Experts/XAU_AI_PRO/", "MQL5/Experts/"):
+            if relativo.startswith(prefixo):
+                relativo = relativo[len(prefixo):]
+                break
+        (declarados if relativo in autorizado else nao_declarados).append(caminho)
+
+    if nao_declarados:
+        return Resultado(
+            "guarda MQL5",
+            ESTADOS["falha"],
+            f"{len(nao_declarados)} arquivo(s) sem autorizacao: {', '.join(sorted(nao_declarados))}",
+            "MQL5 e intocavel: reverta com git checkout -- MQL5/Experts, ou declare a "
+            "alteracao em AUTORIZACOES_MQL5 (scripts/preflight.py) com commit e motivo",
+        )
+
     return Resultado(
-        "guarda MQL5", ESTADOS["falha"], f"{len(saida.splitlines())} arquivo(s) modificado(s)",
-        "MQL5 e intocavel: reverta com git checkout -- MQL5/Experts antes de continuar",
+        "guarda MQL5",
+        ESTADOS["aviso"],
+        f"{len(declarados)} arquivo(s) com autorizacao declarada: {', '.join(sorted(declarados))}",
+        "alteracao MQL5 autorizada: confirme que COMPILOU no MetaEditor64 e "
+        "REANEXOU ao grafico antes de tratar como valida",
     )
 
 

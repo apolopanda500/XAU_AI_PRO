@@ -3,11 +3,12 @@
 Atualizado em **03/10/2026**. Este mapa existe porque a pasta chegou a ter
 61 arquivos com quatro "FINAL" e cinco "HANDOFF" disputando o mesmo assunto.
 
-**Comece por:** [`SESSAO_20261003_NOITE_MERGE_E_BROKER_ERROR.md`](./SESSAO_20261003_NOITE_MERGE_E_BROKER_ERROR.md) —
-o merge em `main` (que corrigiu o cron na raiz) e a causa real dos 4.246
-`BROKER_ERROR`: 98% `EXEC_NO_MARGIN`, concentrados entre 03h e 05h.
-Depois: [`SESSAO_20261003_TARDE_BUILD_APAGAVA_MODELOS.md`](./SESSAO_20261003_TARDE_BUILD_APAGAVA_MODELOS.md) —
-o `build_app.bat` que apagava os 3 modelos MULTI, o cron e a ACL do pytest.
+**Comece por:** [`SESSAO_20261004_COOLDOWN_MARGEM_E_EA_COMPILANDO.md`](./SESSAO_20261004_COOLDOWN_MARGEM_E_EA_COMPILANDO.md) —
+a trava de margem **já existia**: o defeito era o EA insistir a cada 2-3 s.
+Cooldown por símbolo com backoff 60 s→1 h, EA compilando (0 erros), e um erro
+de compilação pré-existente que ninguém via.
+Depois: [`SESSAO_20261003_NOITE_MERGE_E_BROKER_ERROR.md`](./SESSAO_20261003_NOITE_MERGE_E_BROKER_ERROR.md) —
+o merge em `main` e a leitura dos 4.246 `BROKER_ERROR` (CSV em UTF-16).
 
 ---
 
@@ -15,7 +16,8 @@ o `build_app.bat` que apagava os 3 modelos MULTI, o cron e a ACL do pytest.
 
 | Documento | Quando | Sobre |
 |---|---|---|
-| **`SESSAO_20261003_NOITE_MERGE_E_BROKER_ERROR.md`** | 03/10 noite | **Merge `develop` → `main` (`46fd23b`, 4 conflitos de lockfile) e a causa raiz dos 4.246 `BROKER_ERROR`: 4.165 `EXEC_NO_MARGIN` entre 03h–05h. Conta DEMO preservada.** Leitura de entrada. |
+| **`SESSAO_20261004_COOLDOWN_MARGEM_E_EA_COMPILANDO.md`** | 04/10 madrugada | **`MarginChecker` com cooldown por símbolo e backoff 60 s→1 h (redução de 3.191× nas recusas). `OrderSendResult()` não existe em MQL5 e quebrava a compilação desde `dbdce10`. `0 errors, 0 warnings`.** Leitura de entrada. |
+| **`SESSAO_20261003_NOITE_MERGE_E_BROKER_ERROR.md`** | 03/10 noite | **Merge `develop` → `main` (`46fd23b`, 4 conflitos de lockfile) e a causa raiz dos 4.246 `BROKER_ERROR`: 4.165 `EXEC_NO_MARGIN` entre 03h–05h. Conta DEMO preservada.** |
 |---|---|---|
 | **`SESSAO_20261003_TARDE_BUILD_APAGAVA_MODELOS.md`** | 03/10 tarde | **O `robocopy /MIR` que apagava da pasta do `.spec` os 3 modelos MULTI a cada build; o cron que lê a branch errada; os 199 `ERROR` de ACL corrompida. `833 passed`.** Leitura de entrada. |
 | **`SESSAO_20261003_CI_VERMELHO_E_LEITURA_DOCS.md`** | 03/10 manhã | **Os 3 workflows vermelhos: um corrigido (teste media artefato fora do git), um sem patch no upstream, um que é decisão do dono. Plus a leitura dos 58 docs.** |
