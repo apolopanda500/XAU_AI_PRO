@@ -78,6 +78,47 @@ AUTORIZACOES_MQL5: dict[str, dict[str, str]] = {
         "compilado": "sim — junto com o acima, 0 errors, 0 warnings",
         "reanexado": "NAO — mesma razao",
     },
+    # ---------------------------------------------------------------------
+    # 04/10/2026 — resgate de 2 modulos que existem SO no terminal do MT5
+    # ---------------------------------------------------------------------
+    "XAU_AI_PRO_ORFAOS_DO_TERMINAL/SignalCoreV2.mqh": {
+        "commit": "pendente",
+        "motivo": (
+            "RESGATE, NAO ALTERACAO. 12.806 bytes, criado em 21/09/2026 no "
+            "terminal e NUNCA versionados em nenhuma branch (verificado com "
+            "git log --all --diff-filter=A). Modulo de estrategia paralelo "
+            "('Signal Core v2 - hipotese: breakout de tendencia'), com seletor "
+            "SignalCoreVersion e SignalCoreV2Init()/Release() chamados pelo "
+            "XAU_AI_PRO.mq5 do terminal. Copiar o repo por cima do terminal "
+            "APAGARIA este trabalho. Copiado verbatim, sem alteracao."
+        ),
+        "compilado": "nao — sera compilado junto com a reintegracao",
+        "reanexado": "NAO",
+    },
+    "XAU_AI_PRO_ORFAOS_DO_TERMINAL/EAHeartbeat.mqh": {
+        "commit": "pendente",
+        "motivo": (
+            "RESGATE, NAO ALTERACAO. 1.447 bytes, modificado em 03/10/2026 "
+            "16:37 e NUNCA versionado. Ponte somente leitura EA -> Gateway -> "
+            "App: grava XAU_AI_PRO_heartbeat.json (FILE_COMMON), consumido por "
+            "backend/ea_manager.py:186. O arquivo em disco confirma "
+            "server=MetaQuotes-Demo. Copiado verbatim, sem alteracao."
+        ),
+        "compilado": "nao — sera compilado junto com a reintegracao",
+        "reanexado": "NAO",
+    },
+    "XAU_AI_PRO_ORFAOS_DO_TERMINAL/XAU_AI_PRO.mq5": {
+        "commit": "pendente",
+        "motivo": (
+            "RESGATE, NAO ALTERACAO. 59.802 bytes (26/09/2026) contra 53.646 "
+            "do repo: sao versoes DIVERGENTES do mesmo EA, e a do terminal e a "
+            "que o MT5 carrega. Esta e a copia que inclui SignalCoreV2 e "
+            "EAHeartbeat. Fica versionada para que a divergencia entre as duas "
+            "copias seja um diff, e nao um mistério."
+        ),
+        "compilado": "nao",
+        "reanexado": "NAO",
+    },
 }
 
 
