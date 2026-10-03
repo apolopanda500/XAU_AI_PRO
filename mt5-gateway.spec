@@ -8,6 +8,20 @@ binaries = []
 # congelado cai no fallback hardcoded e o frontend recusa o bootstrap por
 # identidade de build divergente.
 datas.append(("Docs/version.json", "Docs"))
+
+# MODELOS MULTI (2026-10-02)
+#
+# Os `.pkl` sao carregados por `ai_inference` em TEMPO DE EXECUCAO com caminho
+# relativo a raiz do pacote. O PyInstaller so descobre modulos importados; arquivo
+# aberto por `joblib.load()` ele nao enxerga. Sem estas linhas o instalador sai
+# SEM os modelos MULTI e o app instalado volta a dizer "modelos nao carregam" —
+# sem erro visivel, porque nada quebra: o arquivo simplesmente nao existe.
+#
+# O caminho e `frontend/src-tauri/Python/models` e NAO `Python/models`: e ali que
+# `train_multi.MODELOS_DIR` publica (linha 79) e onde os 36 modelos unitarios ja
+# moram. A pasta da raiz tem 72 arquivos e nenhum `MULTI_*` — apontar para ela
+# seria compilar sem erro e entregar um instalador sem os 3 modelos.
+datas.append(("frontend/src-tauri/Python/models", "Python/models"))
 datas += collect_data_files('MetaTrader5')
 binaries += collect_dynamic_libs('MetaTrader5')
 numpy_binaries = collect_dynamic_libs('numpy')

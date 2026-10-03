@@ -103,3 +103,62 @@ def test_modulo_existe_no_fonte(modulo: str):
     """O `__name__` precisa bater com um arquivo real."""
     caminho = RAIZ / (modulo.replace(".", "/") + ".py")
     assert caminho.exists(), f"{modulo} declarado no spec mas sem arquivo: {caminho}"
+
+
+# ---------------------------------------------------------------------------
+# MODELOS: o `.pkl` nao e modulo, entao `hiddenimports` nao o alcança
+# ---------------------------------------------------------------------------
+
+
+def _datas_do_spec() -> str:
+    return SPEC.read_text(encoding="utf-8")
+
+
+def test_pasta_de_modelos_entra_no_bundle():
+    """O `.pkl` e dado, nao modulo: so entra em `datas`.
+
+    `ai_inference` carrega o modelo com `joblib.load` em tempo de execucao.
+    O PyInstaller so enxerga modulo importado, entao a pasta de modelos so
+    entra pelo par `(origem, destino)` em `datas`. Sem ele o instalador compila
+    sem erro e sai SEM os modelos — o app instalado apenas mostra
+    "modelos nao carregam", sem excecao em lugar nenhum.
+    """
+    assert re.search(
+        r'datas\.append\(\("frontend/src-tauri/Python/models",\s*"Python/models"\)\)',
+        _datas_do_spec(),
+    ), (
+        "mt5-gateway.spec nao empacota frontend/src-tauri/Python/models: "
+        "o instalador vai sair sem os .pkl e o app instalado nao carrega modelo"
+    )
+
+
+def test_origem_dos_modelos_existe_e_tem_artefato():
+    """A origem declarada precisa existir E conter `.pkl`/`.meta.json`.
+
+    Um `datas.append` com caminho errado nao falha no build: o PyInstaller
+    avisa e segue. O dano so aparece no app instalado. Aqui o erro aparece no
+    CI, que e o lugar certo.
+    """
+    origem = RAIZ / "frontend" / "src-tauri" / "Python" / "models"
+    assert origem.is_dir(), f"pasta de modelos ausente: {origem}"
+    assert any(origem.glob("*.pkl")), f"nenhum .pkl em {origem}"
+
+
+def test_destino_bate_com_o_que_ai_inference_procura():
+    """O destino no bundle precisa ser o caminho que o runtime resolve.
+
+    `ai_inference._resolver_modelos()` testa candidatos e vence o primeiro que
+    tem artefato. Se o `.spec` escrever em `Python/models` e o runtime procurar
+    outro lugar, o modelo esta no disco e continua invisivel.
+    """
+    from backend.ai_inference import _resolver_modelos
+
+    resolvido = _resolver_modelos()
+    assert resolvido.name == "models", (
+        "ai_inference resolveu para "
+        f"{resolvido}, que nao termina em `models` — o .spec deposita o "
+        "artefato em `Python/models` e o runtime procuraria outro lugar"
+    )
+    assert any(resolvido.glob("*.meta.json")) or any(resolvido.glob("*.pkl")), (
+        f"ai_inference resolveu para {resolvido}, que nao tem nenhum artefato"
+    )
