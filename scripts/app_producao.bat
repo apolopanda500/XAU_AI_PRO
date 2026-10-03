@@ -1,10 +1,10 @@
 @echo off
 REM ===========================================================================
-REM XAU AI PRO - launcher de PRODUCAO (criado em 03/10/2026)
+REM XAU AI PRO - launcher de PRODUCAO
 REM ===========================================================================
 REM POR QUE ESTE ARQUIVO EXISTE
 REM ---------------------------
-REM O `.env` NAO LIGA NADA. Medido em 03/10/2026:
+REM O `.env` NAO LIGA NADA. Medido no fonte:
 REM
 REM   * `frontend/src-tauri/src/main.rs:432` le flag com `std::env::var`;
 REM   * `frontend/src-tauri/Cargo.toml` NAO tem a crate `dotenv`;

@@ -49,8 +49,8 @@ $allowed = @(
     #
     # Estava no `.gitignore` e NAO na allowlist desta limpeza, que e o
     # caminho oficial do projeto: o cache nao entra no git e nao era removido
-    # por nenhum caminho, entao acumulava silenciosamente. Medido em
-    # 04/10/2026: 21 pastas dentro do repositorio.
+    # por nenhum caminho, entao acumulava silenciosamente. Medido: 21 pastas
+    # dentro do repositorio.
     #
     # A entrada e por PADRAO e nao por caminho fixo porque `__pycache__`
     # aparece em `Python/`, `app/`, `backend/`, `scripts/` e `tests/`, e um

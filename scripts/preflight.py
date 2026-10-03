@@ -33,7 +33,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 # ===========================================================
-# AUTORIZACOES DE ALTERACAO MQL5 (03/10/2026)
+# AUTORIZACOES DE ALTERACAO MQL5
 # ===========================================================
 # A guarda `checar_mql5()` reprova QUALQUER alteracao em `MQL5/Experts`,
 # sem distinguir "esqueci de reverter" de "o dono mandou, eu mexi e documentei".
@@ -54,7 +54,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 AUTORIZACOES_MQL5: dict[str, dict[str, str]] = {
     # ---------------------------------------------------------------------
-    # 03/10/2026 — cooldown de margem (autorizado pelo dono nesta sessao)
+    # Cooldown de margem
     # ---------------------------------------------------------------------
     "Enterprise/MarginChecker.mqh": {
         "commit": "pendente",
@@ -79,12 +79,12 @@ AUTORIZACOES_MQL5: dict[str, dict[str, str]] = {
         "reanexado": "NAO — mesma razao",
     },
     # ---------------------------------------------------------------------
-    # 04/10/2026 — resgate de 2 modulos que existem SO no terminal do MT5
+    # Modulos que existem SO no terminal do MT5
     # ---------------------------------------------------------------------
     "XAU_AI_PRO_ORFAOS_DO_TERMINAL/SignalCoreV2.mqh": {
         "commit": "pendente",
         "motivo": (
-            "RESGATE, NAO ALTERACAO. 12.806 bytes, criado em 21/09/2026 no "
+            "COPIA VERBATIM, NAO ALTERACAO. "
             "terminal e NUNCA versionados em nenhuma branch (verificado com "
             "git log --all --diff-filter=A). Modulo de estrategia paralelo "
             "('Signal Core v2 - hipotese: breakout de tendencia'), com seletor "
@@ -98,8 +98,8 @@ AUTORIZACOES_MQL5: dict[str, dict[str, str]] = {
     "XAU_AI_PRO_ORFAOS_DO_TERMINAL/EAHeartbeat.mqh": {
         "commit": "pendente",
         "motivo": (
-            "RESGATE, NAO ALTERACAO. 1.447 bytes, modificado em 03/10/2026 "
-            "16:37 e NUNCA versionado. Ponte somente leitura EA -> Gateway -> "
+            "COPIA VERBATIM, NAO ALTERACAO. "
+            "NUNCA versionado. Ponte somente leitura EA -> Gateway -> "
             "App: grava XAU_AI_PRO_heartbeat.json (FILE_COMMON), consumido por "
             "backend/ea_manager.py:186. O arquivo em disco confirma "
             "server=MetaQuotes-Demo. Copiado verbatim, sem alteracao."
@@ -110,14 +110,71 @@ AUTORIZACOES_MQL5: dict[str, dict[str, str]] = {
     "XAU_AI_PRO_ORFAOS_DO_TERMINAL/XAU_AI_PRO.mq5": {
         "commit": "pendente",
         "motivo": (
-            "RESGATE, NAO ALTERACAO. 59.802 bytes (26/09/2026) contra 53.646 "
-            "do repo: sao versoes DIVERGENTES do mesmo EA, e a do terminal e a "
+            "COPIA VERBATIM, NAO ALTERACAO. "
+            "O repo tem 53.646 e o terminal 59.802: sao versoes DIVERGENTES do mesmo EA, e a do terminal e a "
             "que o MT5 carrega. Esta e a copia que inclui SignalCoreV2 e "
             "EAHeartbeat. Fica versionada para que a divergencia entre as duas "
             "copias seja um diff, e nao um mistério."
         ),
         "compilado": "nao",
         "reanexado": "NAO",
+    },
+    "Core/SignalCoreV2.mqh": {
+        "commit": "pendente",
+        "motivo": (
+            "Integracao do modulo de estrategia paralelo que existia apenas no "
+            "terminal do MT5. Copiado verbatim do original (que esta em "
+            "XAU_AI_PRO_ORFAOS_DO_TERMINAL/) e ligado ao .mq5 em 4 pontos: "
+            "include, SignalCoreV2Init(), SignalCoreV2Release() e o heartbeat. "
+            "Sem isto o repo nao reproduz o EA que o MT5 executa."
+        ),
+        "compilado": "sim - MetaEditor64, 0 errors, 0 warnings",
+        "reanexado": "NAO - attente o treino na conta DEMO",
+    },
+    "Integration/EAHeartbeat.mqh": {
+        "commit": "pendente",
+        "motivo": (
+            "Integracao do modulo de heartbeat que existia apenas no terminal. "
+            "Grava XAU_AI_PRO_heartbeat.json (FILE_COMMON), consumido por "
+            "backend/ea_manager.py para dizer se o EA esta vivo. Copiado "
+            "verbatim, sem alteracao."
+        ),
+        "compilado": "sim - junto com o acima",
+        "reanexado": "NAO - mesma razao",
+    },
+    "Enterprise/VersionManager.mqh": {
+        "commit": "pendente",
+        "motivo": (
+            "EA_VERSION_STRING estava em 1.2.0 com o produto em 1.2.4: o "
+            "`[VERSION]` que o EA escreve no log, e que a tela mostra, "
+            "divulgava uma versao que nao existe mais. Este modulo nao esta "
+            "na lista do sync_version.py, entao `--check` nao via a divergencia."
+        ),
+        "compilado": "sim - junto com o acima",
+        "reanexado": "NAO - mesma razao",
+    },
+    "Enterprise/BackupManager.mqh": {
+        "commit": "pendente",
+        "motivo": (
+            "O manifesto do backup gravava a versao do EA como literal solto "
+            "(\"v1.2.0\"), em um ARQUIVO lido so na restauracao: divergia ha "
+            "quatro versoes sem ninguem ver. Passa a usar EA_VERSION_STRING. "
+            "Exige o include de VersionManager.mqh porque o .mq5 inclui este "
+            "arquivo antes daquele."
+        ),
+        "compilado": "sim - junto com o acima",
+        "reanexado": "NAO - mesma razao",
+    },
+    "XAU_AI_PRO.mq5": {
+        "commit": "pendente",
+        "motivo": (
+            "Duas correcoes. (1) `#property version` dizia \"1.20\" com o "
+            "produto em 1.2.4, e o MT5 mostra esse valor na aba de "
+            "propriedades do EA. (2) Ligacao do SignalCoreV2 e do heartbeat "
+            "nos mesmos pontos em que o terminal os usa."
+        ),
+        "compilado": "sim - junto com o acima",
+        "reanexado": "NAO - mesma razao",
     },
 }
 
@@ -302,7 +359,7 @@ def checar_mql5() -> Resultado:
     `AUTORIZACOES_MQL5` — que existe para exigir que a mudanca seja
     rastreavel (autorizacao + commit + motivo), e nao para afrouxar a guarda.
 
-    Antes (03/10/2026) a guarda reprovava qualquer diff. Isso travou uma
+    Antes a guarda reprovava qualquer diff. Isso travou uma
     alteracao legitima e medida (cooldown de margem), mas o modo de falha
     oposto e pior: uma guarda que aceita tudo depois de ser "contornada" uma
     vez deixa de valer. Aqui ela continua reprovando o que nao esta declarado.

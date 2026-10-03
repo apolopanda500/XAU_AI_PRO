@@ -1,4 +1,4 @@
-﻿//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
 //|                                               MarginChecker.mqh |
 //|                                  Smart Execution Engine - Margin |
 //|                                            XAU_AI_PRO v1.2.0       |
@@ -8,7 +8,7 @@
 #define MARGIN_CHECKER_MQH
 
 //==================================================
-// COOLDOWN — CONSTANTES (03/10/2026)
+// COOLDOWN — CONSTANTES
 //==================================================
 // Definidas AQUI, antes da classe, porque `m_symbol_names[MARGIN_COOLDOWN_MAX_SYMBOLS]`
 // usa a constante no proprio tamanho do array. Declarar depois da classe
@@ -31,7 +31,7 @@ private:
    static bool   m_initialized;
 
    //--------------------------------------------------------------
-   // COOLDOWN APOS RECUSA POR MARGEM (03/10/2026)
+   // COOLDOWN APOS RECUSA POR MARGEM
    //--------------------------------------------------------------
    // Medido no forward test: 4.165 `EXEC_NO_MARGIN`, com intervalo MEDIO
    // de 2 a 3 segundos entre duas tentativas do MESMO simbolo e rajada
@@ -44,9 +44,9 @@ private:
    // log de 1.452 eventos por dia esconde o sinal que importa.
    //
    // Agora: apos uma recusa, o simbolo fica bloqueado por
-   // `MARGIN_COOLDOWN_SEC`. O tempo e exponencial (dobra a cada recusa ate
-   // o teto), porque margem esgotada costuma ser persistente e nao um pico
-   // passageiro.
+   // `MARGIN_COOLDOWN_BASE_SEC`, dobrando a cada recusa ate
+   // `MARGIN_COOLDOWN_MAX_SEC`, porque margem esgotada costuma ser persistente
+   // e nao um pico passageiro.
    //
    // O bloqueio e POR SIMBOLO de proposito: conta sem margem para GBPUSD
    // continua apta para um par cujo lote exija menos.
@@ -65,8 +65,7 @@ private:
    // Maior indice de simbolo suportado pela trava. Acima disso a funcao
    // recua para o comportamento antigo (bloqueia global) em vez de escrever
    // fora do array — um acesso fora de faixa aqui seria falha silenciosa em
-   // producao, que e exatamente o tipo de defeito que o ciclo anterior
-   // rastreou. 64 cobre qualquer lista de pares que o EA usa hoje.
+   // producao, que e exatamente o tipo de defeito que o ciclo anterior rastreou. 64 cobre qualquer lista de pares que o EA usa hoje.
    static int MaxTrackedSymbols() { return m_blocked_symbols; }
 
 public:
@@ -79,7 +78,7 @@ public:
    static void LogMarginStatus();
 
    //--------------------------------------------------------------
-   // API DA TRAVA (03/10/2026)
+   // API DA TRAVA
    //--------------------------------------------------------------
    // `IsInCooldown` e a consulta que `SmartExecution` faz ANTES do calculo
    // de margem: recusar cedo evita ate o `OrderCalcMargin`. Registrar o
@@ -103,7 +102,7 @@ double CMarginChecker::m_margin_level = 0;
 bool CMarginChecker::m_initialized = false;
 
 //==================================================
-// COOLDOWN — ESTADO (03/10/2026)
+// COOLDOWN — ESTADO
 //==================================================
 // Nome do simbolo em cada indice. Os arrays sao ESTATICOS e de TAMANHO FIXO
 // (MARGIN_COOLDOWN_MAX_SYMBOLS) em vez de dinamicos: `ArrayResize` em array
@@ -148,7 +147,7 @@ bool CMarginChecker::IsInCooldown(string symbol)
    if(now >= m_cooldown_until[idx])
    {
       //--------------------------------------------------------------
-      // NAO ZERA `m_consecutive_blocks` AQUI (03/10/2026)
+      // NAO ZERA `m_consecutive_blocks` AQUI
       //--------------------------------------------------------------
       // A primeira versao zerava o contador quando a janela expirava. Medido
       // por simulacao com a mesma logica e os mesmos parametros:
@@ -159,7 +158,7 @@ bool CMarginChecker::IsInCooldown(string symbol)
       // Zerar fazia a trava VOLTAR ao estado inicial a cada 60 s, e o par
       // (60 s de espera + 1 bloqueio) se repetia ~1.080 vezes por dia. Ou
       // seja: a "correcao" mantinha exatamente a taxa do defeito que ela
-      //-existence media de 1.452/dia com 8 simbolos — e nao melhorava nada.
+      //a media de 1.452/dia com 8 simbolos — e nao melhorava nada.
       //
       // O contador so zera quando o simbolo VOLTA A TER MARGEM, e quem faz
       // isso e `RegisterBlock` nunca sendo chamado de novo, porque
@@ -304,7 +303,7 @@ bool CMarginChecker::CheckMargin(string symbol, double volume, double price)
    if(symbol == "") symbol = _Symbol;
 
    //--------------------------------------------------------------
-   // COOLDOWN PRIMEIRO (03/10/2026)
+   // COOLDOWN PRIMEIRO
    //--------------------------------------------------------------
    // Antes de qualquer leitura de conta. Um simbolo recem bloqueado nao
    // precisa de `OrderCalcMargin` para saber que a resposta sera "nao" —
@@ -317,7 +316,7 @@ bool CMarginChecker::CheckMargin(string symbol, double volume, double price)
    m_margin_level = AccountInfoDouble(ACCOUNT_MARGIN_LEVEL);
 
    //--------------------------------------------------------------
-   // REGISTRO DO BLOQUEIO (03/10/2026)
+   // REGISTRO DO BLOQUEIO
    //--------------------------------------------------------------
    // Cada `return false` abaixo vira um cooldown. Sem isto a trava recusa a
    // ordem e o proximo tick tenta de novo, infinitamente — foi o que gerou
@@ -343,7 +342,7 @@ bool CMarginChecker::CheckMargin(string symbol, double volume, double price)
    }
 
    //--------------------------------------------------------------
-   // MARGEM VOLTOU (03/10/2026)
+   // MARGEM VOLTOU
    //--------------------------------------------------------------
    // Chegou ate aqui = passou pelo cooldown E a margem esta suficiente.
    // O backoff so pode crescer enquanto o simbolo segue bloqueado; uma

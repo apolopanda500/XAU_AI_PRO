@@ -90,14 +90,14 @@ if %ERRORLEVEL% geq 8 (
 if not exist "%ROOT%\frontend\src-tauri\Python\models" mkdir "%ROOT%\frontend\src-tauri\Python\models"
 
 REM ---------------------------------------------------------------------------
-REM POR QUE ESTE PASSO USA /E E NAO /MIR  (corrigido em 03/10/2026)
+REM POR QUE ESTE PASSO USA /E E NAO /MIR
 REM ---------------------------------------------------------------------------
 REM `/MIR` ESPELHA: apaga no destino tudo que nao esta na origem. E a origem
 REM aqui (`Python\models`, raiz) tem 72 arquivos e ZERO `MULTI_*`; os tres
 REM modelos MULTI sao publicados por `train_multi.MODELOS_DIR` (linha 80) em
 REM `frontend\src-tauri\Python\models` — o proprio DESTINO deste comando.
 REM
-REM Resultado medido em 03/10/2026: com `/MIR`, o passo [6/7] apaga os 3
+REM Resultado medido: com `/MIR`, o passo [6/7] apaga os 3
 REM `MULTI_*.pkl` + `MULTI_*.meta.json` (174 MB) da pasta que
 REM `mt5-gateway.spec:24` empacota e que `tauri.conf.json` inclui como
 REM `Python/models/**/*`. Os artefatos so sobreviviam em `dist\`, `bridge\` e
