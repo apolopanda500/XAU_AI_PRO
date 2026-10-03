@@ -27,7 +27,8 @@ Thumbs.db
 .env.mexc
 .env.binance.local
 .env.integrations
-.env.integrations.example
+# `.env.integrations.example` NAO e ignorado de proposito: o arquivo de exemplo
+# e a documentacao das variaveis de integracao e precisa estar no repositorio.
 
 # Python
 __pycache__/
@@ -41,6 +42,7 @@ build/
 Temp/
 Backup_v120/
 Python/models_backup_*/
+_treino/
 dist/
 *.log
 Logs/*
@@ -68,7 +70,19 @@ Logs/*
 # Python venv (local)
 .venv/
 .vercel
+# A Vercel cria `.vercel/project.json` com o projectId e o orgId. O
+# proprio README que vem nela diz para nao compartilhar. O padrao
+# `.vercel` nao cobre o backup renomeado (`.vercel.backup-2026...`), que
+# foi parar no git com os dois ids em texto puro — o gitleaks do CI
+# sinalizou. Cobre os dois nomes daqui para frente.
+.vercel.backup-*
+.vercel.backup*
 .env*
+# A regra acima `.env*` e generica e vem depois das especificas, entao tambem
+# engolia os arquivos `.example` — que sao a documentacao das variaveis e
+# precisam ser versionados. Sem esta excecao o `.env.example` depended do
+# historico para continuar rastreado: um `git clone` novo nao o traria.
+!.env*.example
 .slack_watcher_offset
 Ultimate/.slack_watcher_offset
 installer/cert/ 
@@ -153,6 +167,13 @@ frontend/src-tauri/*.log
 frontend/src-tauri/*.flag
 frontend/tauri_bundle*.log
 frontend/tauri_bundle*.flag
+
+# PDB do Rust quando o linker recebe um caminho de saida vazio. Um `NONE` de
+# 11 MB apareceu na raiz de src-tauri em 30/09/2026 (formato "Microsoft C/C++
+# MSF 7.00"), e o `preflight` acusava "binarios na raiz" por causa dele.
+# A origem foi `bg_build.ps1`, hoje substituido por `scripts\build_app.bat`.
+frontend/src-tauri/NONE
+frontend/src-tauri/bg_build.ps1
 core/*.exe
 core/*.log
 core/*.flag
@@ -185,3 +206,60 @@ validar_build.ps1
 
 # clones de repositorios externos em experimentos (nao versionar)
 experiments/isolated/
+
+# Copia do `cmd.exe` do Windows que estava na raiz desde 24/06/2026 (hash
+# 65EC268A..., identico ao de C:\Windows\System32). O `preflight` bloqueia a
+# operacao por causa dela porque um binario solto sombreia o do sistema.
+#
+# Em 30/09/2026 foi renomeada para `cmd_antigo.txt` e em 01/10/2026 para
+# `cmd_remover_elevado.txt`. Nos dois casos a delecao foi recusada (erro 5,
+# Access Denied) mesmo com FullControl explicito no arquivo e na pasta, e mesmo
+# apos `takeown` + `icacls` bem-sucedidos. A renomeacao resolve o que
+# resolvia: o nome `cmd.exe` saiu da raiz, o `preflight` destravou (de 2 falhas
+# para 0) e `tests/test_preflight.py` voltou a 28 verdes. O que resta e 344 KB
+# presos pelo Controlador de Arquivos — some num shell elevado, uma vez.
+#
+# Por isso as duas entradas: o nome pode mudar a cada tentativa, e nenhuma delas
+# pode entrar no Git.
+/cmd_antigo.txt
+/cmd_remover_elevado.txt
+
+# ---------------------------------------------------------------------------
+# Scripts e binarios bloqueados (2026-09-26)
+#
+# Automao permanente, inicializador silencioso, instalador silencioso ou binario
+# solto. Nenhum deles deve voltar ao repositorio: ha verificacao em
+# scripts/validate_release.ps1 que bloqueia a release se algum reaparecer.
+#
+#   cmd.exe                 -> sombreava o cmd.exe do sistema (ja executado pelo
+#                              MoNotificationUx.exe do Office) e era magnet de AV
+#   XAU_AI_PRO_START.vbs    -> inicializador silencioso com autoexecucao (padrao PUP)
+#   overnight_session.ps1   -> build + assinatura + instalacao + limpeza sem revisao
+#   ciclo_limpo_123.py      -> limpeza automatica em segundo plano
+#   pos_reboot_docker.ps1   -> execucao no boot do Windows
+#   post_docker_cli_setup.ps1 / install_docker*  -> instalador silencioso
+#   setup/connect_sandbox_claude*.ps1 -> sandbox de terceiros, fora do produto
+#   vercel_vcr_setup.ps1 / setup-vercel.bat -> instalador silencioso
+# ---------------------------------------------------------------------------
+/cmd.exe
+/XAU_AI_PRO_START.vbs
+/*.vbs
+/scripts/overnight_session.ps1
+/scripts/ciclo_limpo_123.py
+/Tools/pos_reboot_docker.ps1
+/Tools/post_docker_cli_setup.ps1
+/Tools/connect_sandbox_claude.ps1
+/Tools/setup_sandbox_claude.ps1
+/Tools/vercel_vcr_setup.ps1
+/Tools/install_docker.bat
+/Tools/install_docker_windows.ps1
+/setup-vercel.bat
+
+# Binarios nunca versionados na raiz do repositorio
+/*.exe
+/*.dll
+/*.scr
+/*.sys
+
+# Assinatura de plano e estado local do usuario: nunca versionar
+app/data/subscriptions.json

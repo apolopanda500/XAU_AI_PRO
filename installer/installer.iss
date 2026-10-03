@@ -159,19 +159,22 @@ Source: "{#MyRoot}\CHANGELOG.md"; DestDir: "{app}\Docs"; Flags: ignoreversion
 Source: "{#MyRoot}\README.md"; DestDir: "{app}\Docs"; Flags: ignoreversion
 
 ; ============================================================
-; 8) Wrapper que define XAU_AI_PRO_ROOT (Start In = {app})
+; 8) Atalhos e execucao
 ; ============================================================
+; O atalho aponta direto para o executavel. A versao anterior usava um
+; wrapper .vbs de inicializacao silenciosa e ainda oferecia "iniciar
+; automaticamente": dois padroes que heuristicas de antivirus e o proprio
+; relatorio de seguranca classificam como comportamento de PUP. Nada e
+; instalado em area de autoexecucao do usuario.
 Source: "{#MyRoot}\XAU_AI_PRO.cmd"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#MyRoot}\XAU_AI_PRO_START.vbs"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\XAU_AI_PRO_START.vbs"; IconFilename: "{app}\assets\icon.ico"; WorkingDir: "{app}"
+Name: "{group}\{#MyAppName}"; Filename: "{app}\XAU_AI_PRO.exe"; IconFilename: "{app}\assets\icon.ico"; WorkingDir: "{app}"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\XAU_AI_PRO_START.vbs"; IconFilename: "{app}\assets\icon.ico"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\XAU_AI_PRO.exe"; IconFilename: "{app}\assets\icon.ico"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\XAU_AI_PRO_START.vbs"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
-Filename: "{app}\XAU_AI_PRO_START.vbs"; Description: "Iniciar XAU AI PRO automaticamente"; Flags: nowait postinstall skipifsilent; Tasks: autostart
+Filename: "{app}\XAU_AI_PRO.exe"; Description: "{cm:LaunchProgram,{#MyAppName}}"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent
 
 [Code]
 // ============================================================

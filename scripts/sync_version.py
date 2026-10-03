@@ -36,6 +36,12 @@ def current_version(path: Path) -> str:
             return stripped
         return "?"
 
+    if path.name == "version.ts":
+        m = re.search(r"APP_VERSION\s*=\s*'([^']+)'", text)
+        if m:
+            return m.group(1)
+        return "?"
+
     if path.suffix == ".json":
         m = re.search(r'"version"\s*:\s*"(\d+\.\d+\.\d+)"', text)
         if m:
@@ -56,14 +62,43 @@ def _patch_json(path: Path, version: str) -> bool:
     new, n = re.subn(r'"version"\s*:\s*"[^"]+"', f'"version": "{version}"', text, count=1)
     if n == 0:
         return False
+    if new == text:  # ja estava certo: nao reporta "atualizado" mentindo
+        return False
     path.write_text(new, encoding="utf-8")
     return True
 
 
 def _patch_toml(path: Path, version: str) -> bool:
+    # Todas as ocorrencias, nao so a primeira: pyproject.toml declara a versao
+    # em [tool.poetry] E em [project], e atualizar so uma deixa as duas
+    # divergentes — exatamente o bug que existia na 1.2.4.
     text = path.read_text(encoding="utf-8")
-    new, n = re.subn(r'^version\s*=\s*"[^"]+"', f'version = "{version}"', text, count=1, flags=re.MULTILINE)
+    new, n = re.subn(
+        r'^version\s*=\s*"[^"]+"',
+        f'version = "{version}"',
+        text,
+        flags=re.MULTILINE,
+    )
     if n == 0:
+        return False
+    if new == text:
+        return False
+    path.write_text(new, encoding="utf-8")
+    return True
+
+
+def _patch_app_version(path: Path, version: str) -> bool:
+    """frontend/src/version.ts: a versao mostrada na interface."""
+    text = path.read_text(encoding="utf-8")
+    new, n = re.subn(
+        r"export const APP_VERSION = '[^']*'",
+        f"export const APP_VERSION = '{version}'",
+        text,
+        count=1,
+    )
+    if n == 0:
+        return False
+    if new == text:  # ja estava certo
         return False
     path.write_text(new, encoding="utf-8")
     return True
@@ -71,7 +106,7 @@ def _patch_toml(path: Path, version: str) -> bool:
 
 def _patch_version(path: Path, version: str) -> bool:
     new = version + "\n"
-    current = path.read_text(encoding="utf-8").rstrip("\n")
+    current = path.read_text(encoding="utf-8").strip()
     if current == version:
         return False
     path.write_text(new, encoding="utf-8")
@@ -81,6 +116,8 @@ def _patch_version(path: Path, version: str) -> bool:
 def patch(path: Path, version: str) -> bool:
     if path.name == "VERSION":
         return _patch_version(path, version)
+    if path.name == "version.ts":
+        return _patch_app_version(path, version)
     if path.suffix == ".json":
         return _patch_json(path, version)
     if path.suffix == ".toml":
@@ -96,6 +133,7 @@ TARGETS: list[tuple[str, Path]] = [
     ("frontend/src-tauri/Cargo.toml", ROOT / "frontend" / "src-tauri" / "Cargo.toml"),
     ("frontend/src-tauri/tauri.conf.json", ROOT / "frontend" / "src-tauri" / "tauri.conf.json"),
     ("core/Cargo.toml", ROOT / "core" / "Cargo.toml"),
+    ("frontend/src/version.ts", ROOT / "frontend" / "src" / "version.ts"),
 ]
 
 

@@ -22,13 +22,14 @@ import { info } from './icons/info';
 import { wallet } from './icons/wallet';
 import { lock } from './icons/lock';
 import { quantum } from './icons/quantum';
+import { vips } from './icons/vips';
 
 export type IconName =
   | 'dashboard' | 'market' | 'positions' | 'robot' | 'charts'
   | 'vision' | 'strategy' | 'tools' | 'integrations' | 'settings'
   | 'calendar' | 'news' | 'system' | 'info' | 'movements'
   | 'balances' | 'history' | 'quantum' | 'wallet' | 'lock'
-  | 'warning' | 'bell' | 'chart';
+  | 'warning' | 'bell' | 'chart' | 'vips';
 
 interface Props {
   name: IconName;
@@ -40,7 +41,7 @@ interface Props {
 const iconMap: Record<IconName, (c: string, a: string) => React.ReactNode> = {
   dashboard, market, positions, robot, charts, vision, strategy, tools,
   movements, balances, history, calendar, news, system, settings, info,
-  wallet, lock, quantum,
+  wallet, lock, quantum, vips,
   integrations: tools, // fallback
   warning: info, // reuse info icon
   bell: info,      // reuse info icon

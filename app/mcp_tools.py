@@ -31,9 +31,13 @@ def _result(ok: bool, result: Any = None, error: str = "") -> dict[str, Any]:
 
 
 def _act_tradingview(action: str, **params: Any) -> dict[str, Any]:
-    symbol = str(params.get("symbol") or "XAUUSD").upper().replace("/", "")
+    symbol = str(params.get("symbol") or "").upper().replace("/", "")
+    if not symbol:
+        return _result(False, error="TradingView: simbolo nao informado")
     if action in {"symbols", "screener", "assets", "list"}:
-        symbols = params.get("symbols") or ["XAUUSD", "EURUSD", "GBPUSD", "USDJPY", "BTCUSD", "ETHUSD", "SPX500", "NAS100", "US30"]
+        symbols = params.get("symbols") or []
+        if not symbols:
+            return _result(False, error="TradingView: lista de simbolos vazia")
         items = []
         for item in symbols:
             quote = _act_tradingview("quote", symbol=str(item))
@@ -42,10 +46,19 @@ def _act_tradingview(action: str, **params: Any) -> dict[str, Any]:
         return _result(bool(items), {"items": items}, "TradingView: nenhum ativo retornou dados" if not items else "")
 
     candidates = [symbol]
-    if symbol in {"XAUUSD", "XAGUSD", "GOLD", "SILVER"}:
-        candidates += [f"FOREXCOM:{symbol}", f"OANDA:{symbol}", "TVC:GOLD"]
-    elif len(symbol) == 6 and symbol.isalpha():
-        candidates += [f"FX:{symbol}", f"FOREXCOM:{symbol}", f"OANDA:{symbol}"]
+    try:
+        from app.market_symbols import base_symbol
+        from app.data.assets import COMMODITIES_ASSETS
+        _metals = {a.symbol.upper() for a in COMMODITIES_ASSETS}
+        _aliases = {"GOLD", "SILVER"}
+        if base_symbol(symbol) in _metals or symbol in _aliases:
+            candidates += [f"FOREXCOM:{symbol}", f"OANDA:{symbol}", "TVC:GOLD"]
+        elif len(symbol) == 6 and symbol.isalpha():
+            candidates += [f"FX:{symbol}", f"FOREXCOM:{symbol}", f"OANDA:{symbol}"]
+        else:
+            candidates += [f"FOREXCOM:{symbol}", f"OANDA:{symbol}"]
+    except Exception:
+        candidates += [f"FOREXCOM:{symbol}", f"OANDA:{symbol}"]
     headers = {"Origin": "https://www.tradingview.com", "Referer": "https://www.tradingview.com/"}
     last_error = ""
     for ticker in candidates:

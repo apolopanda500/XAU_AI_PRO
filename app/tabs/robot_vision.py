@@ -127,11 +127,17 @@ class RobotVision(tk.Frame):
         """Analisa o mercado como o robo veria."""
         try:
             from app.mt5_lock import mt5_lock
+            from app.market_symbols import DEFAULT_TIMEFRAME
             import MetaTrader5 as mt5
-            symbol = "XAUUSD"
+            symbol = (getattr(self.robot, "symbol", "") or "").strip().upper()
+            if not symbol:
+                return
+            tf_map = {"M1": mt5.TIMEFRAME_M1, "M5": mt5.TIMEFRAME_M5, "M15": mt5.TIMEFRAME_M15,
+                      "M30": mt5.TIMEFRAME_M30, "H1": mt5.TIMEFRAME_H1, "H4": mt5.TIMEFRAME_H4,
+                      "D1": mt5.TIMEFRAME_D1}
             with mt5_lock:
                 mt5.symbol_select(symbol, True)
-                rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_H1, 0, 100)
+                rates = mt5.copy_rates_from_pos(symbol, tf_map.get(DEFAULT_TIMEFRAME, mt5.TIMEFRAME_H1), 0, 100)
             if rates is not None and len(rates) >= 30:
                 candles = []
                 for r in rates:

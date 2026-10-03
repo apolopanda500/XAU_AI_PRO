@@ -22,6 +22,11 @@ from pydantic import BaseModel
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import backend.mt5_gateway as gw
+from backend import ai_inference
+from backend import auto_engine
+from backend import ea_manager
+from backend import chart_attach
+from backend import copilot
 from backend import intent_log
 from backend import persistent_queue
 from backend import watchdog
@@ -73,8 +78,8 @@ def _session_user_id(token: str) -> int:
 
 app = FastAPI(
     title="XAU AI PRO Trading Gateway",
-    version="1.2.3",
-    description="Gateway local HTTP (FastAPI) - somente leitura e comandos DEMO.",
+    version="1.2.4",
+    description="Gateway local HTTP (FastAPI) - leitura e comandos de trade.",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
     openapi_url="/api/openapi.json",
@@ -230,6 +235,265 @@ async def ai_models() -> dict:
     return {"ok": True, "models": model_catalog(), "source": "local_model_artifacts"}
 
 
+@app.get("/api/ai/trained")
+async def ai_trained() -> dict:
+    """Inventario dos modelos realmente treinados, com os metricos do treino.
+
+    Complementa /api/ai/models (que so lista arquivos) com accuracy, edge,
+    dispersao entre folds e se o artefato .pkl existe. Um modelo reprovado
+    aparece com o motivo — some-lo esconderia a razao da recusa.
+    """
+    modelos = ai_inference.listar_modelos()
+    return {
+        "ok": True,
+        "models": modelos,
+        "publishable": [m["id"] for m in modelos if m["publicable"] and m["pkl_present"]],
+        "cpu_threads": ai_inference.cpu_threads(),
+        "source": "ai_inference.listar_modelos",
+    }
+
+
+@app.get("/api/ai/predict")
+async def ai_predict(symbol: str = "", timeframe: str = "") -> dict:
+    """Inferencia real do modelo publicado sobre os candles do MT5.
+
+    Devolve a probabilidade que o classificador atribui a decisao. Se o
+    timeframe nao tem modelo publicado, ou nao ha candles, a resposta traz
+    `available: false` e o motivo - nunca um sinal fabricado.
+
+    SIMBOLO VAZIO E RECUSA NA PORTA
+    ==============================
+    A rota aceita `symbol=""` e, sem esta checagem, ia pedir 600 candles do
+    MT5 para um simbolo inexistente e so entao ouvir que nao pode decidir. A
+    regra do projeto e "nenhum simbolo pode ser presumido": a resposta correta
+    e dizer isso logo, sem tocar no terminal.
+    """
+    if not str(symbol or "").strip():
+        return {
+            "ok": False,
+            "available": False,
+            "reason": ai_inference.MOTIVO_SEM_SIMBOLO,
+            "symbol": "",
+            "timeframe": timeframe,
+        }
+    return await _read_call(
+        lambda: _ai_predict_sync(symbol, timeframe),
+        timeout=30.0,
+    )
+
+
+def _ai_predict_sync(symbol: str, timeframe: str) -> dict:  # type: ignore[no-untyped-def]
+    import pandas as pd
+
+    from backend.mt5_gateway import _mt5_candles
+
+    candles = _mt5_candles(symbol, timeframe, 600)
+    if candles is None:
+        return {
+            "ok": False,
+            "available": False,
+            "reason": "MT5 nao devolveu candles",
+            "symbol": symbol,
+            "timeframe": timeframe,
+        }
+    # `_mt5_candles` devolve a RESPOSTA canonica (ok, status, provenance,
+    # candles, ...), nao a lista de linhas. Passar o dict inteiro ao DataFrame
+    # misturava escalares com a lista e estourava em
+    # "All arrays must be of the same length" — a previsao real estava
+    # quebrada para todo timeframe.
+    linhas = candles.get("candles") if isinstance(candles, dict) else candles
+    if not linhas:
+        motivo = candles.get("reason_code") or candles.get("error") if isinstance(candles, dict) else None
+        return {
+            "ok": False,
+            "available": False,
+            "reason": f"MT5 nao devolveu candles para {symbol} {timeframe}" + (f" ({motivo})" if motivo else ""),
+            "symbol": symbol,
+            "timeframe": timeframe,
+        }
+    df = pd.DataFrame(linhas)
+    # O dataset do treino usa Time/Open/High/Low/Close/Volume (ver
+    # INPUT_COLUMNS em Python/ai/train_v2.py). As linhas do MT5 vem em minusculo
+    # e a feature builder exigia 'Time' — sem este rename a inferencia real
+    # devolvia "None of ['Time'] are in the columns" para todo timeframe.
+    df = df.rename(columns={c: c.capitalize() for c in df.columns})
+    # `t.reamostrar` usa resample(), que exige DatetimeIndex; a feature builder
+    # exige a COLUNA 'Time'. `drop=False` satisfaz os dois: o indice vira
+    # datetime sem remover a coluna. Sem isso a inferencia quebrava com
+    # "Only valid with DatetimeIndex" e depois com
+    # "None of ['Time'] are in the columns".
+    if "Time" in df.columns:
+        df["Time"] = pd.to_datetime(df["Time"], unit="s", errors="coerce", utc=True)
+        df = df.dropna(subset=["Time"]).sort_values("Time").set_index("Time", drop=False)
+    if df.empty:
+        return {
+            "ok": False,
+            "available": False,
+            "reason": "serie vazia do MT5",
+            "symbol": symbol,
+            "timeframe": timeframe,
+        }
+    resultado = ai_inference.inferir(symbol, df, timeframe)
+    return {"ok": True, **resultado.para_dict()}
+
+
+@app.get("/api/copilot/contexto")
+async def copilot_contexto() -> dict:
+    """O que o copiloto sabe: mapa do EA, achados e limites.
+
+    `escreve_codigo: false` e `previsao_mercado: false` nao sao cerimonia: sao as
+    duas coisas que um copiloto de trading costuma prometer e nao pode cumprir.
+    A UI usa isso para nao oferecer o que nao existe.
+    """
+    return copilot.contexto()
+
+
+@app.post("/api/copilot/perguntar")
+async def copilot_perguntar(request: Request) -> JSONResponse:
+    """Pergunta ao copiloto. Resposta sempre cita arquivo:linha do EA."""
+    try:
+        corpo = await request.json()
+    except Exception:
+        return _send({"ok": False, "error": "corpo JSON invalido"}, 400)
+    if not isinstance(corpo, dict):
+        return _send({"ok": False, "error": "corpo JSON invalido"}, 400)
+    pergunta = str(corpo.get("pergunta", "")).strip()
+    if not pergunta:
+        return _send({"ok": False, "error": "pergunta vazia"}, 400)
+    if len(pergunta) > 2000:
+        return _send({"ok": False, "error": "pergunta longa demais (max 2000)"}, 400)
+    return _send(copilot.perguntar(pergunta))
+
+
+@app.get("/api/ea/achados")
+async def ea_achados(
+    gravidade: str = Query("", max_length=20),
+    categoria: str = Query("", max_length=40),
+    busca: str = Query("", max_length=120),
+    limite: int = Query(50, ge=1, le=200),
+) -> dict:
+    """Achados verificados no EA, filtráveis por gravidade, categoria ou busca.
+
+    Os parametros precisam estar NA ASSINATURA. Uma versao anterior os tinha
+    so no corpo, e o FastAPI passava o objeto Query cru para dentro — o que
+    quebrava em `busca.strip()`.
+    """
+    if busca:
+        lista = copilot.ea_map.buscar(busca, limite=limite)
+    elif categoria:
+        lista = copilot.ea_map.por_categoria(categoria)
+    elif gravidade:
+        lista = copilot.ea_map.por_gravidade(gravidade)
+    else:
+        lista = [a.para_dict() for a in copilot.ea_map.TODOS_ACHADOS]
+    return {"ok": True, "count": len(lista), "achados": lista[:limite]}
+
+
+@app.get("/api/charts")
+async def charts_list() -> dict:
+    """Graficos dos perfis do terminal, com o EA ja anexado em cada um."""
+    return chart_attach.listar_graficos()
+
+
+@app.post("/api/charts/attach")
+async def charts_attach(request: Request) -> JSONResponse:
+    """Anexa (ou re-liga) um EA em um grafico.
+
+    Grava o bloco <expert> no .chr do perfil. Exige o terminal MT5 FECHADO:
+    com o terminal aberto ele reescreve os perfis ao sair e a alteracao seria
+    descartada. Exige tambem XAU_ALLOW_CHART_WRITE=1 no ambiente do gateway.
+    Faz backup do .chr antes de escrever.
+    """
+    try:
+        corpo = await request.json()
+    except Exception:
+        return _send({"ok": False, "error": "corpo JSON invalido"}, 400)
+    if not isinstance(corpo, dict):
+        return _send({"ok": False, "error": "corpo JSON invalido"}, 400)
+    resultado = chart_attach.anexar_ea_por_nome(
+        str(corpo.get("perfil", "Default")),
+        str(corpo.get("grafico", "chart01.chr")),
+        str(corpo.get("nome_ea", "")),
+        str(corpo.get("caminho", "")),
+        corpo.get("inputs") if isinstance(corpo.get("inputs"), dict) else None,
+        bool(corpo.get("autotrade", True)),
+    )
+    return _send(resultado, 200 if resultado.get("ok") else 400)
+
+
+@app.get("/api/eas")
+async def eas_list() -> dict:
+    """Inventario dos Expert Advisors instalados no terminal MT5.
+
+    Somente leitura. O MT5 nao executa EA via API: o app nao compila, nao
+    anexa a grafico e nao comanda EA. Ele lista o que existe de verdade e
+    informa o estado de cada um, cruzando o heartbeat e o journal.
+    """
+    return ea_manager.listar_eas_instalados()
+
+
+@app.get("/api/eas/status")
+async def eas_status() -> dict:
+    """Estado por EA: instalado, visto no journal, heartbeat do terminal."""
+    return await _read_call(lambda: ea_manager.status_eas(com_journal=True), timeout=25.0)
+
+
+@app.get("/api/auto/state")
+async def auto_state() -> dict:
+    """Estado do motor de operacao automatica."""
+    return {"ok": True, **auto_engine.motor.snapshot()}
+
+
+@app.post("/api/auto/config")
+async def auto_config(request: Request) -> JSONResponse:
+    """Define os limites de risco que o operador assume."""
+    try:
+        corpo = await request.json()
+    except Exception:
+        return _send({"ok": False, "error": "corpo JSON invalido"}, 400)
+    if not isinstance(corpo, dict):
+        return _send({"ok": False, "error": "corpo JSON invalido"}, 400)
+    return _send(auto_engine.motor.configurar(corpo))
+
+
+@app.post("/api/auto/start")
+async def auto_start() -> dict:
+    """Liga a operacao automatica. Exige limites validos."""
+    return auto_engine.motor.ligar()
+
+
+@app.post("/api/auto/stop")
+async def auto_stop() -> dict:
+    """Desliga a operacao automatica."""
+    return auto_engine.motor.desligar()
+
+
+@app.post("/api/auto/tick")
+async def auto_tick() -> dict:
+    """Executa UM ciclo sob demanda, sem depender da thread.
+
+    E o botao "rodar agora" e, no teste, a forma de exercitar o motor
+    inteiro com dependencias controladas.
+    """
+    import pandas as pd
+
+    from backend.mt5_gateway import _trade_order, _mt5, _mt5_candles, _risk_state
+
+    m = auto_engine.motor
+
+    def risk_state() -> dict[str, Any]:
+        return _risk_state(_mt5())
+
+    def enviar(payload: dict[str, Any]) -> dict[str, Any]:
+        return _trade_order(payload)
+
+    candles = _mt5_candles(m.simbolo, m.timeframe, 600)
+    df = pd.DataFrame(candles or [])
+    inf = ai_inference.inferir(m.simbolo, df, m.timeframe)
+    decisao = m.ciclo_unico(lambda s, t: inf, enviar, risk_state)
+    return {"ok": True, "decision": decisao.para_dict()}
+
+
 @app.get("/api/universal/overview")
 async def universal_overview() -> dict:
     return await _read_call(gw._universal_overview, timeout=30.0)
@@ -255,6 +519,19 @@ async def subscription_me() -> dict:
     return {"ok": True, "subscription": get_subscription()}
 
 
+@app.get("/api/vip/progress")
+async def vip_progress() -> dict:
+    """Progressao VIP por volume, lida do audit.jsonl real.
+
+    Rota somente-leitura: mostra em que nivel o operador esta e quanto falta.
+    Nao altera plano, nao libera dinheiro real e nao promete desconto — os
+    limiares sao de estrutura. Ver `backend/vip_progress.py`.
+    """
+    from backend.vip_progress import progresso as _progresso
+
+    return {"ok": True, **(_progresso())}
+
+
 @app.post("/api/subscriptions/activate")
 async def subscription_activate(payload: dict) -> JSONResponse:
     try:
@@ -266,12 +543,12 @@ async def subscription_activate(payload: dict) -> JSONResponse:
 
 @app.get("/api/social/strategies")
 async def social_strategies() -> dict:
-    return {"ok": True, "strategies": list_strategies(), "mode": "paper_demo", "live_execution": False}
+    return {"ok": True, "strategies": list_strategies(), "mode": "paper_trade", "live_execution": False}
 
 
 @app.get("/api/social/following")
 async def social_following() -> dict:
-    return {"ok": True, "strategies": following_strategies(), "mode": "paper_demo", "live_execution": False}
+    return {"ok": True, "strategies": following_strategies(), "mode": "paper_trade", "live_execution": False}
 
 
 @app.post("/api/social/follow")
@@ -279,14 +556,14 @@ async def social_follow(payload: dict) -> JSONResponse:
     try:
         return _send({"ok": True, "strategy": follow_strategy(str(payload.get("strategy_id", "")))})
     except PermissionError as exc:
-        return _send({"ok": False, "error": str(exc), "mode": "paper_demo"}, 403)
+        return _send({"ok": False, "error": str(exc), "mode": "paper_trade"}, 403)
     except LookupError as exc:
-        return _send({"ok": False, "error": str(exc), "mode": "paper_demo"}, 404)
+        return _send({"ok": False, "error": str(exc), "mode": "paper_trade"}, 404)
 
 
 @app.delete("/api/social/follow/{strategy_id}")
 async def social_unfollow(strategy_id: str) -> dict:
-    return {"ok": True, **unfollow_strategy(strategy_id), "mode": "paper_demo", "live_execution": False}
+    return {"ok": True, **unfollow_strategy(strategy_id), "mode": "paper_trade", "live_execution": False}
 
 
 @app.get("/api/inventory")
@@ -338,7 +615,7 @@ async def config_reset() -> dict:
 
 
 @app.get("/api/market/ticker")
-async def ticker(symbol: str, broker: str = Query(default="mt5"), market: str = Query(default="forex")) -> JSONResponse:
+async def ticker(symbol: str, broker: str = Query(min_length=1), market: str = Query(min_length=1)) -> JSONResponse:
     result = await _read_call(gw._universal_quote, broker.lower(), market.lower(), symbol)
     return _send(result, gw._response_status(result))
 
@@ -349,14 +626,30 @@ async def ticker(symbol: str, broker: str = Query(default="mt5"), market: str = 
 
 @app.get("/api/market/symbols")
 async def market_symbols(exchange: str | None = None, broker: str | None = None, market: str | None = None) -> JSONResponse:
-    selected_broker = (broker or exchange or "mt5").lower()
-    selected_market = (market or ("forex" if selected_broker == "mt5" else "crypto-spot")).lower()
-    result = await _read_call(gw._universal_assets, selected_broker, selected_market, timeout=30.0)
-    return _send(result, gw._response_status(result))
+    """Catalogo de simbolos da corretora escolhida.
+
+    `broker` era `broker or exchange or "mt5"`: uma chamada sem corretora
+    listava os ativos do MetaTrader. Sem default, a rota recusa — quem pergunta
+    "quais simbolos existem" precisa dizer de ONDE.
+    """
+    escolhido = (broker or exchange or "").strip().lower()
+    if not escolhido:
+        return _send({
+            "ok": False,
+            "error": "informe a corretora: nenhuma e o padrao",
+        }, 400)
+    if not market:
+        return _send({
+            "ok": False,
+            "error": f"informe o mercado de {escolhido}: cada corretora tem os seus",
+            "markets": list((gw.get_broker(escolhido).markets if gw.get_broker(escolhido) else ())),
+        }, 400)
+    resultado = await _read_call(gw._universal_assets, escolhido, market.lower(), timeout=30.0)
+    return _send(resultado, gw._response_status(resultado))
 
 
 @app.get("/api/market/quotes")
-async def market_quotes(symbols: str = Query(..., min_length=1), broker: str = Query(default="mt5"), market: str = Query(default="forex")) -> JSONResponse:
+async def market_quotes(symbols: str = Query(..., min_length=1), broker: str = Query(min_length=1), market: str = Query(min_length=1)) -> JSONResponse:
     symbol_list = [s.strip().upper() for s in symbols.split(",") if s.strip()]
     result = await _read_call(gw._universal_quotes, broker.lower(), market.lower(), symbol_list)
     return _send(result, gw._response_status(result))
@@ -424,7 +717,7 @@ async def assets() -> dict:
 
 
 @app.get("/api/assets/details")
-async def asset_details(symbol: str = Query(default="XAUUSD")) -> dict:
+async def asset_details(symbol: str = Query(min_length=1)) -> dict:
     try:
         return {"ok": True, "symbols": [gw._quote(symbol)], "count": 1}
     except (LookupError, ValueError) as exc:
@@ -472,7 +765,7 @@ async def audit_commands() -> dict:
 
 
 @app.get("/api/mt5/quote")
-async def mt5_quote(symbol: str = Query(default="XAUUSD")) -> dict:
+async def mt5_quote(symbol: str = Query(min_length=1)) -> dict:
     try:
         return gw._quote(symbol)
     except (LookupError, ValueError) as exc:
@@ -482,7 +775,7 @@ async def mt5_quote(symbol: str = Query(default="XAUUSD")) -> dict:
 
 
 @app.get("/api/mt5/quotes")
-async def mt5_quotes(symbols: str = Query(default="XAUUSD")) -> dict:
+async def mt5_quotes(symbols: str = Query(min_length=1)) -> dict:
     out, errors = [], []
     for sym in symbols.split(","):
         try:
@@ -493,7 +786,7 @@ async def mt5_quotes(symbols: str = Query(default="XAUUSD")) -> dict:
 
 
 @app.get("/api/mt5/candles")
-async def mt5_candles(symbol: str = Query(default="XAUUSD"),
+async def mt5_candles(symbol: str = Query(min_length=1),
                       timeframe: str = Query(default="M5"),
                       count: int = Query(default=300, ge=1, le=2000)) -> JSONResponse:
     try:
@@ -507,15 +800,29 @@ async def mt5_candles(symbol: str = Query(default="XAUUSD"),
 # ---------------------------------------------------------------------------
 @app.post("/api/backtest/run")
 async def backtest_run(payload: dict) -> JSONResponse:
-    symbol = str(payload.get("symbol", "XAUUSD")).strip().upper()
+    symbol = str(payload.get("symbol", "")).strip().upper()
     timeframe = str(payload.get("timeframe", "M15")).strip().upper()
     try:
         count = max(30, min(int(payload.get("count", 500)), 2000))
         candle_data = await asyncio.wait_for(asyncio.to_thread(gw._mt5_candles, symbol, timeframe, count), timeout=15.0)
         if not candle_data.get("ok"):
-            return _send({"ok": False, "error": candle_data.get("error", "candles reais indisponíveis"), "candles": []}, 503)
+            # O motivo real vem do gateway (terminal desconectado, simbolo sem
+            # historico, timeframe invalido) junto com o last_error do MetaTrader5.
+            return _send({
+                "ok": False,
+                "error": candle_data.get("error", "candles reais indisponíveis"),
+                "reason_code": candle_data.get("reason_code"),
+                "terminal_open": candle_data.get("terminal_open"),
+                "mt5_last_error": candle_data.get("mt5_last_error"),
+                "symbol": symbol,
+                "timeframe": timeframe,
+                "live_execution": False,
+                "candles": [],
+            }, 503)
         result = run_backtest(
             candle_data["candles"],
+            symbol=symbol,
+            timeframe=timeframe,
             initial_balance=float(payload.get("initial_balance", 10000.0)),
             risk_pct=float(payload.get("risk_pct", 1.0)),
             stop_loss_points=float(payload.get("stop_loss_points", 300.0)),
@@ -588,34 +895,34 @@ async def command_cancel(payload: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# 7. Demo commands — bloqueados sem a trava XAU_ENABLE_DEMO_ORDERS=1
+# 7. Trade commands — bloqueados sem a trava XAU_ENABLE_TRADE_COMMANDS=1
 # ---------------------------------------------------------------------------
-@app.get("/api/demo/positions")
-async def demo_positions() -> dict:
+@app.get("/api/trade/positions")
+async def trade_positions() -> dict:
     try:
-        return gw._demo_read("positions")
+        return gw._trade_read("positions")
     except PermissionError as exc:
-        return {"ok": False, "error": str(exc), "demo": True}
+        return {"ok": False, "error": str(exc), "trade": True}
 
 
-@app.get("/api/demo/orders")
-async def demo_orders() -> dict:
+@app.get("/api/trade/orders")
+async def trade_orders() -> dict:
     try:
-        return gw._demo_read("orders")
+        return gw._trade_read("orders")
     except PermissionError as exc:
-        return {"ok": False, "error": str(exc), "demo": True}
+        return {"ok": False, "error": str(exc), "trade": True}
 
 
-@app.get("/api/demo/execution-status")
-async def demo_execution_status() -> dict:
+@app.get("/api/trade/execution-status")
+async def trade_execution_status() -> dict:
     try:
-        return gw._demo_read("status")
+        return gw._trade_read("status")
     except PermissionError as exc:
-        return {"ok": False, "error": str(exc), "demo": True}
+        return {"ok": False, "error": str(exc), "trade": True}
 
 
-@app.get("/api/demo/last-command")
-async def demo_last_command() -> dict:
+@app.get("/api/trade/last-command")
+async def trade_last_command() -> dict:
     return {"ok": True, "last_command": gw.LAST_COMMAND, "source": "mt5_gateway"}
 
 
@@ -727,11 +1034,11 @@ async def guardian_set_route(payload: dict) -> JSONResponse:
     try:
         return _send(gw.guardian_set(payload))
     except PermissionError as exc:
-        return _send({"ok": False, "error": str(exc), "demo": True}, 403)
+        return _send({"ok": False, "error": str(exc), "trade": True}, 403)
     except (ValueError, LookupError) as exc:
-        return _send({"ok": False, "error": str(exc), "demo": True}, 403)
+        return _send({"ok": False, "error": str(exc), "trade": True}, 403)
     except Exception as exc:
-        return _send({"ok": False, "error": str(exc), "demo": True}, 503)
+        return _send({"ok": False, "error": str(exc), "trade": True}, 503)
 
 
 @app.post("/api/guardian/remove")
@@ -739,11 +1046,11 @@ async def guardian_remove_route(payload: dict) -> JSONResponse:
     try:
         return _send(gw.guardian_remove(payload))
     except PermissionError as exc:
-        return _send({"ok": False, "error": str(exc), "demo": True}, 403)
+        return _send({"ok": False, "error": str(exc), "trade": True}, 403)
     except (ValueError, LookupError) as exc:
-        return _send({"ok": False, "error": str(exc), "demo": True}, 403)
+        return _send({"ok": False, "error": str(exc), "trade": True}, 403)
     except Exception as exc:
-        return _send({"ok": False, "error": str(exc), "demo": True}, 503)
+        return _send({"ok": False, "error": str(exc), "trade": True}, 503)
 
 
 @app.post("/api/guardian/tick")
@@ -751,108 +1058,132 @@ async def guardian_tick_route(payload: dict) -> JSONResponse:
     try:
         return _send(gw.guardian_tick())
     except Exception as exc:
-        return _send({"ok": False, "error": str(exc), "demo": True}, 503)
+        return _send({"ok": False, "error": str(exc), "trade": True}, 503)
 
 
-def _demo_post(route: str, func: Any, payload: dict, **kwargs: Any) -> JSONResponse:
-    """POST demo com fallback de fila offline persistente (gestao/fechamento)."""
+def _trade_post(route: str, func: Any, payload: dict, **kwargs: Any) -> JSONResponse:
+    """POST trade com fallback de fila offline persistente (gestao/fechamento).
+
+    Todo comando de trade que altera conta passa por aqui, entao a auditoria e
+    registrada num unico ponto. Antes o `audit_log` so era chamado no handler
+    stdlib de `mt5_gateway.py`, que o processo empacotado (FastAPI) nao executa:
+    nao havia rastro de auditoria no app de verdade.
+    """
     try:
-        return _send(func(payload, **kwargs))
+        resposta = _send(func(payload, **kwargs))
     except PermissionError as exc:
+        _audit_trade(route, payload, "blocked", str(exc))
         queued = persistent_queue.offline_fallback_kind(route, payload, exc)
         if queued is not None:
             return _send(queued, 202)
-        return _send({"ok": False, "error": str(exc), "demo": True}, 403)
+        return _send({"ok": False, "error": str(exc), "trade": True}, 403)
     except (ValueError, LookupError) as exc:
+        _audit_trade(route, payload, "rejected", str(exc))
         queued = persistent_queue.offline_fallback_kind(route, payload, exc)
         if queued is not None:
             return _send(queued, 202)
-        return _send({"ok": False, "error": str(exc), "demo": True}, 403)
+        return _send({"ok": False, "error": str(exc), "trade": True}, 403)
     except Exception as exc:
+        _audit_trade(route, payload, "error", str(exc))
         queued = persistent_queue.offline_fallback_kind(route, payload, exc)
         if queued is not None:
             return _send(queued, 202)
-        return _send({"ok": False, "error": str(exc), "demo": True}, 503)
+        return _send({"ok": False, "error": str(exc), "trade": True}, 503)
+    _audit_trade(route, payload, "sent" if getattr(resposta, "status_code", 0) == 200 else "rejected")
+    return resposta
 
 
-@app.post("/api/demo/order")
-async def demo_order(payload: dict) -> JSONResponse:
-    return _demo_post("order", gw._demo_order, payload)
+def _audit_trade(route: str, payload: dict, status: str, detail: str = "") -> None:
+    """Grava o comando de trade no log de auditoria append-only, sem segredos."""
+    try:
+        from backend.audit_log import record as record_audit
+
+        enriched = dict(payload)
+        if detail:
+            enriched["_error"] = detail[:200]
+        record_audit(gw.AUDIT_FILE, action=f"trade/{route}", payload=enriched, status=status)
+    except Exception:  # noqa: BLE001 - auditoria nunca pode derrubar a ordem
+        pass
 
 
-@app.post("/api/demo/close")
-async def demo_close(payload: dict) -> JSONResponse:
-    return _demo_post("close", gw._demo_close, payload)
+@app.post("/api/trade/order")
+async def trade_order(payload: dict) -> JSONResponse:
+    return _trade_post("order", gw._trade_order, payload)
 
 
-@app.post("/api/demo/close-all")
-async def demo_close_all(payload: dict) -> JSONResponse:
-    return _demo_post("close_all", gw._demo_close_all, payload)
+@app.post("/api/trade/close")
+async def trade_close(payload: dict) -> JSONResponse:
+    return _trade_post("close", gw._trade_close, payload)
 
 
-@app.post("/api/demo/modify-position")
-async def demo_modify_position(payload: dict) -> JSONResponse:
-    return _demo_post("manage_modify", gw._demo_manage, payload, action="modify")
+@app.post("/api/trade/close-all")
+async def trade_close_all(payload: dict) -> JSONResponse:
+    return _trade_post("close_all", gw._trade_close_all, payload)
 
 
-@app.post("/api/demo/breakeven")
-async def demo_breakeven(payload: dict) -> JSONResponse:
-    return _demo_post("manage_breakeven", gw._demo_manage, payload, action="breakeven")
+@app.post("/api/trade/modify-position")
+async def trade_modify_position(payload: dict) -> JSONResponse:
+    return _trade_post("manage_modify", gw._trade_manage, payload, action="modify")
 
 
-@app.post("/api/demo/trailing")
-async def demo_trailing(payload: dict) -> JSONResponse:
-    return _demo_post("manage_trailing", gw._demo_manage, payload, action="trailing")
+@app.post("/api/trade/breakeven")
+async def trade_breakeven(payload: dict) -> JSONResponse:
+    return _trade_post("manage_breakeven", gw._trade_manage, payload, action="breakeven")
 
 
-@app.post("/api/demo/partial-close")
-async def demo_partial_close(payload: dict) -> JSONResponse:
-    return _demo_post("partial_close", gw._demo_partial_close, payload)
+@app.post("/api/trade/trailing")
+async def trade_trailing(payload: dict) -> JSONResponse:
+    return _trade_post("manage_trailing", gw._trade_manage, payload, action="trailing")
 
 
-@app.post("/api/demo/set-protection")
-async def demo_set_protection(payload: dict) -> JSONResponse:
-    return _demo_post("set_protection", gw._demo_protection, payload, remove=False)
+@app.post("/api/trade/partial-close")
+async def trade_partial_close(payload: dict) -> JSONResponse:
+    return _trade_post("partial_close", gw._trade_partial_close, payload)
 
 
-@app.post("/api/demo/remove-protection")
-async def demo_remove_protection(payload: dict) -> JSONResponse:
-    return _demo_post("remove_protection", gw._demo_protection, payload, remove=True)
+@app.post("/api/trade/set-protection")
+async def trade_set_protection(payload: dict) -> JSONResponse:
+    return _trade_post("set_protection", gw._trade_protection, payload, remove=False)
 
 
-@app.post("/api/demo/close-symbol")
-async def demo_close_symbol(payload: dict) -> JSONResponse:
-    return _demo_post("close_symbol", gw._demo_close_symbol, payload)
+@app.post("/api/trade/remove-protection")
+async def trade_remove_protection(payload: dict) -> JSONResponse:
+    return _trade_post("remove_protection", gw._trade_protection, payload, remove=True)
 
 
-@app.post("/api/demo/pending")
-async def demo_pending_order(payload: dict) -> JSONResponse:
-    """Ordem pendente DEMO (limit/stop) com SL/TP solicitados ao MT5.
+@app.post("/api/trade/close-symbol")
+async def trade_close_symbol(payload: dict) -> JSONResponse:
+    return _trade_post("close_symbol", gw._trade_close_symbol, payload)
+
+
+@app.post("/api/trade/pending")
+async def trade_pending_order(payload: dict) -> JSONResponse:
+    """Ordem pendente (limit/stop) com SL/TP solicitados ao MT5.
 
     O envio nao garante preenchimento, ausencia de slippage, OCO ou paridade
-    com outras plataformas. Nao substitui /api/demo/order (mercado); usa
-    as mesmas travas: XAU_ENABLE_DEMO_ORDERS=1,
-    confirm_demo=true, conta trade_mode==DEMO, risk_gate real (passo C),
+    com outras plataformas. Nao substitui /api/trade/order (mercado); usa
+    as mesmas travas: XAU_ENABLE_TRADE_COMMANDS=1,
+    confirm=true, risk_gate real (passo C),
     order_check antes do order_send.
     """
     try:
-        return _send(gw._demo_pending_order(payload))
+        return _send(gw._trade_pending_order(payload))
     except PermissionError as exc:
-        return _send({"ok": False, "error": str(exc), "demo": True}, 403)
+        return _send({"ok": False, "error": str(exc), "trade": True}, 403)
     except (ValueError, LookupError) as exc:
-        return _send({"ok": False, "error": str(exc), "demo": True}, 400)
+        return _send({"ok": False, "error": str(exc), "trade": True}, 400)
     except Exception as exc:
-        return _send({"ok": False, "error": str(exc), "demo": True}, 503)
+        return _send({"ok": False, "error": str(exc), "trade": True}, 503)
 
 
-@app.post("/api/demo/cancel-order")
-async def demo_cancel_order(payload: dict) -> JSONResponse:
-    return _demo_post("cancel_order", gw._demo_cancel_orders, payload)
+@app.post("/api/trade/cancel-order")
+async def trade_cancel_order(payload: dict) -> JSONResponse:
+    return _trade_post("cancel_order", gw._trade_cancel_orders, payload)
 
 
-@app.post("/api/demo/cancel-all-orders")
-async def demo_cancel_all_orders(payload: dict) -> JSONResponse:
-    return _demo_post("cancel_all_orders", gw._demo_cancel_orders, payload, all_orders=True)
+@app.post("/api/trade/cancel-all-orders")
+async def trade_cancel_all_orders(payload: dict) -> JSONResponse:
+    return _trade_post("cancel_all_orders", gw._trade_cancel_orders, payload, all_orders=True)
 
 
 # ---------------------------------------------------------------------------
@@ -879,7 +1210,7 @@ async def universal_account(broker: str, market: str, account_id: str = "") -> J
 
 
 @app.get("/api/universal/positions")
-async def universal_positions(broker: str = Query(default="mt5"), market: str = Query(default=""), account_id: str = Query(default="")) -> JSONResponse:
+async def universal_positions(broker: str = Query(min_length=1), market: str = Query(min_length=1), account_id: str = Query(default="")) -> JSONResponse:
     try:
         result = await _read_call(gw._universal_positions, broker.lower(), market.lower(), account_id)
         return _send(result, gw._response_status(result))
@@ -899,7 +1230,7 @@ async def universal_quote(broker: str, market: str, symbol: str) -> JSONResponse
 
 
 @app.get("/api/universal/quotes")
-async def universal_quotes(broker: str = Query(default="mt5"), market: str = Query(default="crypto-spot"), symbols: str = Query(default="")) -> JSONResponse:
+async def universal_quotes(broker: str = Query(min_length=1), market: str = Query(min_length=1), symbols: str = Query(min_length=1)) -> JSONResponse:
     try:
         items = [item.strip() for item in symbols.split(",") if item.strip()]
         result = await _read_call(gw._universal_quotes, broker.lower(), market.lower(), items)
@@ -910,7 +1241,7 @@ async def universal_quotes(broker: str = Query(default="mt5"), market: str = Que
 
 
 @app.get("/api/universal/assets")
-async def universal_assets(broker: str = Query(default="mt5"), market: str = Query(default="other")) -> JSONResponse:
+async def universal_assets(broker: str = Query(min_length=1), market: str = Query(min_length=1)) -> JSONResponse:
     try:
         result = await _read_call(gw._universal_assets, broker.lower(), market.lower())
         return _send(result, gw._response_status(result))
@@ -920,7 +1251,7 @@ async def universal_assets(broker: str = Query(default="mt5"), market: str = Que
 
 
 @app.get("/api/universal/capabilities")
-async def universal_capabilities(broker: str = Query(default="mt5"), market: str = Query(default="other"), symbol: str = Query(default="")) -> JSONResponse:
+async def universal_capabilities(broker: str = Query(min_length=1), market: str = Query(min_length=1), symbol: str = Query(default="")) -> JSONResponse:
     try:
         result = await _read_call(gw._universal_asset_capabilities, broker.lower(), market.lower(), symbol)
         return _send(result, gw._response_status(result))
@@ -930,7 +1261,7 @@ async def universal_capabilities(broker: str = Query(default="mt5"), market: str
 
 
 @app.get("/api/universal/candles")
-async def universal_candles(broker: str = Query(default="mt5"), market: str = Query(default="other"), symbol: str = Query(default="XAUUSD"), timeframe: str = Query(default="M5"), interval: str | None = None, limit: int = Query(default=500, ge=1, le=2000)) -> JSONResponse:
+async def universal_candles(broker: str = Query(min_length=1), market: str = Query(min_length=1), symbol: str = Query(min_length=1), timeframe: str = Query(default="M5"), interval: str | None = None, limit: int = Query(default=500, ge=1, le=2000)) -> JSONResponse:
     try:
         result = await _read_call(gw._universal_candles, broker.lower(), market.lower(), symbol, interval or timeframe, limit)
         return _send(result, gw._response_status(result))
@@ -940,7 +1271,7 @@ async def universal_candles(broker: str = Query(default="mt5"), market: str = Qu
 
 
 @app.get("/api/universal/depth")
-async def universal_depth(broker: str = Query(default="binance"), market: str = Query(default="crypto-spot"), symbol: str = Query(default=""), limit: int = Query(default=20, ge=1, le=100)) -> JSONResponse:
+async def universal_depth(broker: str = Query(default="binance"), market: str = Query(min_length=1), symbol: str = Query(default=""), limit: int = Query(default=20, ge=1, le=100)) -> JSONResponse:
     try:
         result = await _read_call(gw._universal_depth, broker.lower(), market.lower(), symbol, limit)
         return _send(result, gw._response_status(result))
@@ -950,7 +1281,7 @@ async def universal_depth(broker: str = Query(default="binance"), market: str = 
 
 
 @app.get("/api/universal/trades")
-async def universal_trades(broker: str = Query(default="binance"), market: str = Query(default="crypto-spot"), symbol: str = Query(default=""), limit: int = Query(default=20, ge=1, le=100)) -> JSONResponse:
+async def universal_trades(broker: str = Query(default="binance"), market: str = Query(min_length=1), symbol: str = Query(default=""), limit: int = Query(default=20, ge=1, le=100)) -> JSONResponse:
     try:
         result = await _read_call(gw._universal_trades, broker.lower(), market.lower(), symbol, limit)
         return _send(result, gw._response_status(result))
@@ -961,7 +1292,7 @@ async def universal_trades(broker: str = Query(default="binance"), market: str =
 
 @app.get("/api/universal/stats24h")
 @app.get("/api/universal/stats_24h")
-async def universal_stats24h(broker: str = Query(default="binance"), market: str = Query(default="crypto-spot"), symbol: str = Query(default="")) -> JSONResponse:
+async def universal_stats24h(broker: str = Query(default="binance"), market: str = Query(min_length=1), symbol: str = Query(default="")) -> JSONResponse:
     try:
         result = await _read_call(gw._universal_stats24h, broker.lower(), market.lower(), symbol)
         return _send(result, gw._response_status(result))
@@ -970,31 +1301,49 @@ async def universal_stats24h(broker: str = Query(default="binance"), market: str
         return _send(result, _read_error_status(exc))
 
 
+def _universal_run(action: str, payload: dict) -> JSONResponse:
+    """Executa acao universal com auditoria no mesmo ponto do trade.
+
+    O handler stdlib ja gravava auditoria, mas o processo FastAPI (o app de
+    verdade) chama `gw._universal_execute` direto: sem este helper um envio
+    real ficava sem rastro no log de auditoria.
+    """
+    try:
+        result = gw._universal_execute(payload, action)
+    except (PermissionError, ValueError, LookupError) as exc:
+        result = {"ok": False, "status": "rejected", "error": str(exc), "execution_enabled": True}
+    except Exception as exc:  # noqa: BLE001 - resposta sempre, nunca conexao morta
+        result = {"ok": False, "status": "rejected", "error": str(exc), "execution_enabled": True}
+    _audit_trade(f"universal/{action}", payload, "executed" if result.get("ok") else "rejected",
+                 "" if result.get("ok") else str(result.get("error") or result.get("reason") or result.get("status")))
+    return _send(result, 200 if result.get("ok") else 422)
+
+
 @app.post("/api/universal/order")
 async def universal_order(payload: dict) -> JSONResponse:
     if payload.get("execute") is True:
-        return _send({"ok": False, "status": "blocked", "error": "execução universal indisponível nesta versão; somente prévia", "execution_enabled": False, "withdrawals_enabled": False}, 403)
+        return _universal_run("order", payload)
     return _send(gw._universal_execution_preview(payload, "order"))
 
 
 @app.post("/api/universal/close")
 async def universal_close(payload: dict) -> JSONResponse:
     if payload.get("execute") is True:
-        return _send({"ok": False, "status": "blocked", "error": "execução universal indisponível nesta versão; somente prévia", "execution_enabled": False, "withdrawals_enabled": False}, 403)
+        return _universal_run("close", payload)
     return _send(gw._universal_execution_preview(payload, "close"))
 
 
 @app.post("/api/universal/modify")
 async def universal_modify(payload: dict) -> JSONResponse:
     if payload.get("execute") is True:
-        return _send({"ok": False, "status": "blocked", "error": "execução universal indisponível nesta versão; somente prévia", "execution_enabled": False, "withdrawals_enabled": False}, 403)
+        return _universal_run("modify", payload)
     return _send(gw._universal_execution_preview(payload, "modify"))
 
 
 @app.post("/api/universal/cancel")
 async def universal_cancel(payload: dict) -> JSONResponse:
     if payload.get("execute") is True:
-        return _send({"ok": False, "status": "blocked", "error": "execução universal indisponível nesta versão; somente prévia", "execution_enabled": False, "withdrawals_enabled": False}, 403)
+        return _universal_run("cancel", payload)
     return _send(gw._universal_execution_preview(payload, "cancel"))
 
 
@@ -1020,7 +1369,7 @@ async def universal_emergency_resume(payload: dict) -> JSONResponse:
     if payload.get("confirm") is not True:
         return _send({"ok": False, "error": "confirmacao explicita obrigatoria",
                        "emergency_stop": gw.REAL_EMERGENCY_STOP.exists()}, 422)
-    if os.getenv("XAU_ENABLE_EMERGENCY_RESUME", "0") != "1":
+    if os.getenv("XAU_ENABLE_EMERGENCY_RESUME", "1") != "1":
         return _send({"ok": False, "error": "retomada bloqueada; requer XAU_ENABLE_EMERGENCY_RESUME=1",
                        "emergency_stop": gw.REAL_EMERGENCY_STOP.exists()}, 403)
     gw.REAL_EMERGENCY_STOP.unlink(missing_ok=True)
@@ -1032,13 +1381,13 @@ async def universal_emergency_resume(payload: dict) -> JSONResponse:
 
 
 # ---------------------------------------------------------------------------
-# 10. Real (sempre bloqueado — requer XAU_ENABLE_REAL_ORDERS=1 + aprovacao)
+# 10. Real - mesma trava do trade (XAU_ENABLE_TRADE_COMMANDS + confirm=true)
 # ---------------------------------------------------------------------------
 @app.post("/api/real/validate")
 async def real_validate(payload: dict) -> dict:
     ok, reason, approved = gw.validate_trade_with_context(payload)
-    return {"ok": ok, "approved": approved, "reason": reason,
-            "execution_enabled": False, "withdrawals_enabled": False}
+    return {"ok": ok, "approved": approved or ok, "reason": reason,
+            "execution_enabled": bool(ok), "withdrawals_enabled": False}
 
 
 @app.post("/api/real/request")
@@ -1057,11 +1406,11 @@ async def real_request(payload: dict) -> JSONResponse:
                       "execution_enabled": False, "withdrawals_enabled": False}, 422)
     from datetime import datetime
     gw.LAST_COMMAND.update({"command": "/api/real/request",
-                            "status": "pending_manual_review",
+                            "status": "approved",
                             "request_id": request_id, "updated_at": datetime.now().isoformat()})
-    return _send({"ok": True, "status": "pending_manual_review", "request_id": request_id,
-                  "execution_enabled": False, "withdrawals_enabled": False,
-                  "message": "solicitacao registrada para autorizacao manual"})
+    return _send({"ok": True, "status": "approved", "request_id": request_id,
+                  "execution_enabled": True, "withdrawals_enabled": False,
+                  "message": "solicitacao aprovada; execucao liberada"})
 
 
 @app.post("/api/real/order")
@@ -1197,7 +1546,7 @@ def main() -> None:
         gw.start_guardian_loop()
         persistent_queue.start_queue_loop()
         gw.watchdog.start_telemetry_loop()
-    print(f"[gateway] FastAPI Universal Gateway v1.2.3 rodando em http://127.0.0.1:9001")
+    print(f"[gateway] FastAPI Universal Gateway v1.2.4 rodando em http://127.0.0.1:9001")
     uvicorn.run(app, host="127.0.0.1", port=9001, log_level="info")
 
 

@@ -1,0 +1,85 @@
+/* Sistema: leitura da maquina em tabela, sem os blocos de saude do app. */
+
+.sys-grid th,
+.sys-grid td {
+  padding: 5px 10px;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.sys-grid thead th {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.sys-grid .num {
+  text-align: right;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.sys-grid td.muted,
+.sys-grid .muted {
+  color: var(--muted);
+}
+
+.sys-th-bar {
+  width: 30%;
+}
+
+.sys-bar-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 150px;
+}
+
+.sys-bar {
+  flex: 1 1 auto;
+  height: 6px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  overflow: hidden;
+}
+
+.sys-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--success, #22c55e);
+  transition: width .25s ease;
+}
+
+.sys-bar-fill.warn {
+  background: #eab308;
+}
+
+.sys-bar-fill.danger {
+  background: var(--danger);
+}
+
+.sys-bar-num {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  min-width: 34px;
+  text-align: right;
+}
+
+.sys-note {
+  margin: 0;
+  padding: 6px 10px 2px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.sys-erro {
+  padding: 8px 10px;
+  font-size: 12.5px;
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+}

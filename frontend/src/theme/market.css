@@ -302,29 +302,47 @@
   max-height: 260px;
 }
 
+/* Tira compacta: os indicadores ficam numa faixa unica, sem card proprio e
+   sem cabecalho repetido. O painel do ativo ja tem titulo; repetir "Indicadores
+   tecnicos" gastava uma linha inteira sem informacao nova. */
+.market-indicator-strip {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2, transparent);
+}
+
 .market-indicator-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(100px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(4, minmax(92px, 1fr));
+  gap: 6px;
+  flex: 1 1 100%;
 }
 
 .market-indicator-grid > div {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 12px;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 8px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
 }
 
 .market-indicator-grid span {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .market-indicator-grid strong {
   font-family: var(--mono);
-  font-size: 15px;
+  font-size: 14px;
 }
 
 .market-depth-grid {

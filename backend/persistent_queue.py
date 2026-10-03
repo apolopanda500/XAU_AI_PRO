@@ -99,7 +99,7 @@ def _mark(queue_id: str, status: str, error: str | None = None,
 
 # Erros definitivos: reenvio nunca resolveria (evita loop de retry inutil).
 _FATAL_MARKS = ("nao encontrada", "nao encontrado", "somente conta", "desabilitada",
-                "desabilitadas", "desabilitado", "confirm_demo", "confirm_real",
+                "desabilitadas", "desabilitado", "confirm", "confirm_real",
                 "simbolo indisponivel", "cotacao indisponivel", "obrigatorio",
                 "volume parcial", "exige")
 
@@ -129,44 +129,45 @@ def _runners_default() -> None:
     if _RUNNERS:
         return
     from backend import mt5_gateway as gw
-    register_runner("close", gw._demo_close)
-    register_runner("close_all", lambda p: gw._demo_close_all(p))
-    register_runner("close_symbol", gw._demo_close_symbol)
-    register_runner("partial_close", gw._demo_partial_close)
-    register_runner("manage_modify", lambda p: gw._demo_manage(p, "modify"))
-    register_runner("manage_breakeven", lambda p: gw._demo_manage(p, "breakeven"))
-    register_runner("manage_trailing", lambda p: gw._demo_manage(p, "trailing"))
-    register_runner("set_protection", gw._demo_protection)
-    register_runner("remove_protection", lambda p: gw._demo_protection(p, True))
-    register_runner("cancel_order", gw._demo_cancel_orders)
-    register_runner("cancel_all_orders", lambda p: gw._demo_cancel_orders(p, True))
+    register_runner("close", gw._trade_close)
+    register_runner("close_all", lambda p: gw._trade_close_all(p))
+    register_runner("close_symbol", gw._trade_close_symbol)
+    register_runner("partial_close", gw._trade_partial_close)
+    register_runner("manage_modify", lambda p: gw._trade_manage(p, "modify"))
+    register_runner("manage_breakeven", lambda p: gw._trade_manage(p, "breakeven"))
+    register_runner("manage_trailing", lambda p: gw._trade_manage(p, "trailing"))
+    register_runner("set_protection", gw._trade_protection)
+    register_runner("remove_protection", lambda p: gw._trade_protection(p, True))
+    register_runner("cancel_order", gw._trade_cancel_orders)
+    register_runner("cancel_all_orders", lambda p: gw._trade_cancel_orders(p, True))
 
 
 _KIND_BY_ROUTE = {
-    "/api/demo/close": "close",
-    "/api/demo/close-all": "close_all",
-    "/api/demo/close-symbol": "close_symbol",
-    "/api/demo/partial-close": "partial_close",
-    "/api/demo/modify-position": "manage_modify",
-    "/api/demo/breakeven": "manage_breakeven",
-    "/api/demo/trailing": "manage_trailing",
-    "/api/demo/set-protection": "set_protection",
-    "/api/demo/remove-protection": "remove_protection",
-    "/api/demo/cancel-order": "cancel_order",
-    "/api/demo/cancel-all-orders": "cancel_all_orders",
+    "/api/trade/close": "close",
+    "/api/trade/close-all": "close_all",
+    "/api/trade/close-symbol": "close_symbol",
+    "/api/trade/partial-close": "partial_close",
+    "/api/trade/modify-position": "manage_modify",
+    "/api/trade/breakeven": "manage_breakeven",
+    "/api/trade/trailing": "manage_trailing",
+    "/api/trade/set-protection": "set_protection",
+    "/api/trade/remove-protection": "remove_protection",
+    "/api/trade/cancel-order": "cancel_order",
+    "/api/trade/cancel-all-orders": "cancel_all_orders",
 }
 
 
 def offline_fallback_kind(kind: str, payload: dict, exc: Exception) -> dict | None:
     """Registra comando offline sem programar execucao automatica.
 
-    Retorna None quando: kind vazio/ordem (nunca enfileira), env DEMO off ou
-    terminal ONLINE (nesse caso o erro tem outra causa e segue o fluxo normal).
+    Retorna None quando: kind vazio/ordem (nunca enfileira), travas de comando
+    de ordem desligadas ou terminal ONLINE (nesse caso o erro tem outra causa e
+    segue o fluxo normal).
     """
     from backend import mt5_gateway as gw
     if not kind or kind == "order":
         return None
-    if os.getenv("XAU_ENABLE_DEMO_ORDERS", "0") != "1":
+    if (os.getenv("XAU_ENABLE_TRADE_COMMANDS", "1") != "1" and os.getenv("XAU_ENABLE_DEMO_ORDERS", "0") != "1"):
         return None
     try:
         mt5 = gw._mt5()

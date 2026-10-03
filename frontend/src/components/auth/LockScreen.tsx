@@ -1,38 +1,63 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { verificarPin } from '../../auth/auth';
+import {
+  estaBloqueado,
+  formatarEspera,
+  lerLockout,
+  limparFalhas,
+  registrarFalha,
+  tentativasRestantes,
+  type LockoutState,
+} from '../../auth/lockout';
 
 interface Props {
   onUnlock: () => void;
 }
 
-const MAX_TENTATIVAS = 5;
-
-// Tela de bloqueio por PIN: aparece ao iniciar (com PIN cadastrado) ou ao travar
+// Tela de bloqueio por PIN. O contador de tentativas e persistido, de modo que
+// reabrir o app nao concede tentativas extras a quem esta forçando o PIN.
 export default function LockScreen({ onUnlock }: Props) {
   const [pin, setPin] = useState('');
   const [erro, setErro] = useState<string | null>(null);
-  const [tentativas, setTentativas] = useState(0);
-  const [travado, setTravado] = useState(false);
+  const [estado, setEstado] = useState<LockoutState>(() => lerLockout());
+  const [restante, setRestante] = useState(0);
+
+  useEffect(() => {
+    function sincronizar() {
+      const agora = Date.now();
+      const atual = lerLockout();
+      setEstado(atual);
+      setRestante(Math.max(0, Math.ceil((atual.bloqueadoAte - agora) / 1000)));
+    }
+    sincronizar();
+    const timer = window.setInterval(sincronizar, 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const bloqueado = estaBloqueado(estado, Date.now());
 
   async function submeter(e: React.FormEvent) {
     e.preventDefault();
-    if (travado) return;
+    if (bloqueado) return;
     setErro(null);
     try {
       const ok = await verificarPin(pin);
       if (ok) {
+        limparFalhas();
+        setPin('');
         onUnlock();
-      } else {
-        const t = tentativas + 1;
-        setTentativas(t);
-        if (t >= MAX_TENTATIVAS) {
-          setTravado(true);
-          setErro('Muitas tentativas. Feche e reabra o aplicativo para tentar novamente.');
-        } else {
-          setErro(`PIN incorreto (${MAX_TENTATIVAS - t} tentativa(s) restante(s)).`);
-          setPin('');
-        }
+        return;
       }
+      const proximo = registrarFalha(estado, Date.now());
+      setEstado(proximo);
+      const espera = proximo.bloqueadoAte - Date.now();
+      if (espera > 0) {
+        setRestante(Math.ceil(espera / 1000));
+        setErro(`PIN incorreto. Acesso bloqueado por ${formatarEspera(espera)}.`);
+      } else {
+        setErro(`PIN incorreto (${tentativasRestantes(proximo)} tentativa(s) restante(s)).`);
+      }
+      setPin('');
     } catch (err) {
       setErro(`Erro ao verificar PIN: ${String(err)}`);
     }
@@ -54,14 +79,17 @@ export default function LockScreen({ onUnlock }: Props) {
             autoComplete="current-password"
             maxLength={8}
             autoFocus
+            disabled={bloqueado}
             value={pin}
             onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
           />
         </div>
         {erro && <span className="auth-erro">{erro}</span>}
         <div className="auth-actions">
-          <span className="muted">{travado ? 'Acesso bloqueado' : 'Sessao protegida por PIN'}</span>
-          <button className="btn primary" type="submit" disabled={travado || pin.length < 4}>
+          <span className="muted">
+            {bloqueado ? `Acesso bloqueado por ${restante}s` : 'Sessao protegida por PIN'}
+          </span>
+          <button className="btn primary" type="submit" disabled={bloqueado || pin.length < 4}>
             Desbloquear
           </button>
         </div>

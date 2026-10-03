@@ -25,43 +25,24 @@ from typing import Callable
 from app.components.tables import MarketTable
 from app.config_manager import get_config
 from app.market_data import MarketData
-from app.market_store import store_quotes, last_ticks
+from app.market_store import (
+    PROVENIENCE_LIVE,
+    PROVENIENCE_UNVERIFIED,
+    fallback_provenance,
+    last_ticks,
+    store_quotes,
+)
 from app.mt5_robot import MT5Robot
 from app.theme.mexc import Theme
 from app.components.button import ProButton
 from app.tabs.charts import ChartCanvas
 from app.data.assets import (get_default_symbols, search_assets, get_categories,
                              get_assets_by_category, get_tv_symbol, get_asset)
+from app.market_symbols import default_symbol_fallback
 
-DEFAULT_SYMBOLS = [
-    # Foco operacional do robo (F1: instancia unica, 11 simbolos oficiais)
-    "XAUUSD",
-    "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "NZDUSD",
-    "USDCHF", "USDBRL", "USDSEK", "USDCNH",
-    # Metais e energia (cobertura ouro/prata/petroleo)
-    "XAGUSD", "XPTUSD", "XPDUSD", "WTI", "BRENT", "USOIL", "UKOIL", "NG",
-    # Forex majors/crosses liquidos
-    "EURGBP", "EURJPY", "GBPJPY", "AUDJPY", "CADJPY", "AUDNZD", "USDMXN",
-    # Cripto principais (MT5 + fallback exchange)
-    "BTCUSD", "ETHUSD", "BNBUSD", "SOLUSD", "XRPUSD", "DOGEUSD", "ADAUSD",
-    "LTCUSD", "LINKUSD", "DOTUSD",
-    # Indices globais
-    "SPX500", "NAS100", "US30", "DAX40", "FTSE100", "NIKKEI225",
-    "BOVESPA", "US500", "US100",
-    # Acoes EUA + Brasil (day-trade e swing)
-    "AAPL", "MSFT", "NVDA", "TSLA", "GOOGL", "AMZN", "META",
-    "PETR4", "VALE3", "ITUB4", "BBDC4", "WEGE3",
-]
+DEFAULT_SYMBOLS: list[str] = []
 
-# Mapeamento para TradingView (simbolo do app -> feed corretora/exchange).
-TV_SYMBOL_MAP = {
-    "XAUUSD": "OANDA:XAUUSD", "XAUUSDC": "OANDA:XAUUSD", "GOLD": "OANDA:XAUUSD",
-    "BTCUSD": "BINANCE:BTCUSDT", "BTCUSDC": "BINANCE:BTCUSDT",
-    "ETHUSD": "BINANCE:ETHUSDT", "ETHUSDC": "BINANCE:ETHUSDT",
-    "EURUSD": "OANDA:EURUSD", "GBPUSD": "OANDA:GBPUSD", "USDJPY": "OANDA:USDJPY",
-    "AUDUSD": "OANDA:AUDUSD", "USDCAD": "OANDA:USDCAD", "NZDUSD": "OANDA:NZDUSD",
-    "USDCHF": "OANDA:USDCHF", "US30": "TVC:DJI", "SPX500": "TVC:SPX",
-    "NAS100": "TVC:NDX", "GER40": "XETR:DAX", "UK100": "TVC:UKX",
+TV_SYMBOL_MAP: dict[str, str] = {
 }
 
 
@@ -91,7 +72,7 @@ class TradingViewMarket(tk.Frame):
         self._running = False
         self._busy = False
         self._quotes: dict = {}
-        self._selected = "XAUUSD"
+        self._selected = default_symbol_fallback()
         self._watch_vars = {}
         self._symbols: list[str] = []
         # Cola thread-safe worker -> hilo principal (Tkinter).
@@ -259,8 +240,9 @@ class TradingViewMarket(tk.Frame):
         chart_head.pack(fill="x", pady=(10, 2))
         tk.Label(chart_head, text="Grafico", bg=Theme.CARD, fg=Theme.TEXT_SECONDARY,
                  font=(Theme.FONT_FAMILY, 8)).pack(side="left")
-        self.chart_tf_var = tk.StringVar(value="M5")
-        for _tf in ("M1", "M5", "M15", "H1", "H4", "D1"):
+        from app.market_symbols import DEFAULT_TIMEFRAME, TIMEFRAMES as _TFS
+        self.chart_tf_var = tk.StringVar(value="")
+        for _tf in [t for t in _TFS if t != "MN1"]:
             tk.Radiobutton(chart_head, text=_tf, variable=self.chart_tf_var, value=_tf,
                            bg=Theme.CARD, fg=Theme.TEXT_MUTED, selectcolor=Theme.PANEL,
                            activebackground=Theme.CARD, activeforeground=Theme.TEXT,
@@ -354,7 +336,8 @@ class TradingViewMarket(tk.Frame):
                     self._apply_quotes(item[1], item[2])
                 elif kind == "chart":
                     chart_kind = item[3] if len(item) > 3 else "candles"
-                    self._apply_chart(item[1], item[2], chart_kind)
+                    origem = item[4] if len(item) > 4 else None
+                    self._apply_chart(item[1], item[2], chart_kind, origem)
                 elif kind == "error":
                     self._show_fetch_error(item[1])
         except (queue.Empty, RuntimeError):
@@ -423,12 +406,17 @@ class TradingViewMarket(tk.Frame):
             self._queue.put(("quotes", quotes, payload))
             try:
                 candles = self._collect_candles(self._selected, self.chart_tf_var.get())
+                origem = {"live": True, "label": f"candles MT5 · {self.chart_tf_var.get()}", "provenance": "live"}
                 if not candles:
                     candles = last_ticks(self._selected, 80)
                     chart_kind = "line"
+                    # Fallback local: a tela precisa dizer se isso e mercado ao
+                    # vivo ou dado armazenado (lacuna C1). Sem esta distincao o
+                    # grafico mostraria tick de teste com aparencia de preco real.
+                    origem = fallback_provenance(self._selected)
                 else:
                     chart_kind = "candles"
-                self._queue.put(("chart", self._selected, candles, chart_kind))
+                self._queue.put(("chart", self._selected, candles, chart_kind, origem))
             except Exception:
                 pass
         except Exception as exc:  # noqa: BLE001 - error de red capturado
@@ -436,9 +424,11 @@ class TradingViewMarket(tk.Frame):
         finally:
             self._busy = False
 
-    def _collect_candles(self, symbol: str, timeframe: str = "M5", limit: int = 80) -> list[dict]:
+    def _collect_candles(self, symbol: str, timeframe: str = "", limit: int = 80) -> list[dict]:
         """Candles do simbolo via MT5 local (best-effort, worker thread)."""
-        base = symbol[:-1] if symbol[-1:].upper() == "C" and len(symbol) > 4 else symbol
+        from app.market_symbols import DEFAULT_TIMEFRAME, base_symbol
+        timeframe = timeframe or DEFAULT_TIMEFRAME
+        base = base_symbol(symbol)
         try:
             from app.mt5_lock import mt5_lock
             import MetaTrader5 as mt5
@@ -449,7 +439,7 @@ class TradingViewMarket(tk.Frame):
                 if not mt5.initialize():
                     return []
                 mt5.symbol_select(base, True)
-                rates = mt5.copy_rates_from_pos(base, tfmap.get(timeframe, mt5.TIMEFRAME_M5), 0, limit)
+                rates = mt5.copy_rates_from_pos(base, tfmap.get(timeframe) or mt5.TIMEFRAME_M5, 0, limit)
             if rates is None or not len(rates):
                 return []
             from datetime import datetime
@@ -464,14 +454,18 @@ class TradingViewMarket(tk.Frame):
         except Exception:
             return []
 
-    def _apply_chart(self, symbol: str, candles: list[dict], chart_kind: str = "candles") -> None:
+    def _apply_chart(self, symbol: str, candles: list[dict], chart_kind: str = "candles",
+                     origem: dict | None = None) -> None:
         try:
             if not candles:
                 self.chart_info.configure(text="sem dados")
                 return
             self.chart.set_data(candles, chart_kind)
-            suffix = "(ticks)" if chart_kind == "line" else ""
-            self.chart_info.configure(text="%d ponto(s) %s" % (len(candles), suffix))
+            # A origem entra no rodape do grafico: dado armazenado ou nao
+            # verificado nunca aparece com a etiqueta de mercado ao vivo.
+            rotulo = (origem or {}).get("label") or ("candles" if chart_kind == "candles" else "ticks locais")
+            sufixo = "" if chart_kind == "candles" else " · historico local"
+            self.chart_info.configure(text="%d ponto(s) · %s%s" % (len(candles), rotulo, sufixo))
         except tk.TclError:
             pass
 
@@ -511,7 +505,9 @@ class TradingViewMarket(tk.Frame):
             self.status_label.configure(
                 text="Sem cotacoes: verifique internet/MT5 (%s)" % self._selected)
         try:
-            store_quotes(list(quotes.values()))
+            # `live` so quando veio de uma fonte conectada agora; caso contrario
+            # fica `unverified` e o fallback do grafico se rotula sozinho.
+            store_quotes(list(quotes.values()), provenance=PROVENIENCE_LIVE if filled else PROVENIENCE_UNVERIFIED)
         except Exception:  # noqa: BLE001 - persistencia opcional
             pass
 

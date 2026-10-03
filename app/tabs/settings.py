@@ -165,7 +165,7 @@ class SettingsTab:
         req_card = Card(self.frame, title="Sobre o Robo + Requisitos Minimos e Recomendados")
         req_card.pack(fill="x", padx=24, pady=10)
         req_text = (
-            "XAU AI PRO v1.2.3 - robo + desk operacional para MetaTrader 5 (Windows 64-bit).\n"
+            "XAU AI PRO v1.2.4 - robo + desk operacional para MetaTrader 5 (Windows 64-bit).\n"
             "O EA (.ex5) executa a estrategia no MT5; este app monitora, audita e opera manualmente.\n"
             "----------------------------------------------------------------\n"
             "MINIMO: Windows 10 64-bit | 4 nucleos CPU | 8 GB RAM | 2 GB disco livre |\n"
@@ -175,7 +175,7 @@ class SettingsTab:
             "GPU dedicada (opcional, acelera treino IA) | monitor 1080p+.\n"
             "----------------------------------------------------------------\n"
             "MT5: conta demo antes do real | alavancagem conforme o risco |\n"
-            "AutoTrading liberado no terminal | EA anexado no XAUUSD M5 (F1: instancia unica).\n"
+            "AutoTrading liberado no terminal | EA anexado no simbolo/timeframe ativos (F1: instancia unica).\n"
             "Suporte: aba Conexoes (Integracoes) + Logs/Auditoria + Docs do instalador."
         )
         tk.Label(req_card.body, text=req_text, bg=Theme.CARD, fg=Theme.TEXT_SECONDARY,

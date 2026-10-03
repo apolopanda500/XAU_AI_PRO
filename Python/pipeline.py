@@ -330,6 +330,69 @@ def load_model(symbol: str, timeframe: str = "M5") -> Any:
     return model
 
 
+def preservar_governanca(meta_path: Path, novo_meta: dict[str, Any]) -> dict[str, Any]:
+    """Impede que este pipeline apague a porta de qualidade do `train_v2`.
+
+    Existem dois escritores de `*.meta.json` e eles disputam o mesmo arquivo:
+
+    - `Python/ai/train_v2.py` (via `scripts/treinar_ia.py`), que grava a
+      governanca de publicacao: `min_edge`, `publicable`, `publish_reason`,
+      `feature_hash` e os folds de walk-forward;
+    - este `pipeline.py` legado, que grava apenas `dataset_version` e
+      `model_version` para o MQL5 (ETAPA 15.3).
+
+    Sem esta guarda, `auto_retrain.py` reescrevia os metadados de um modelo
+    aprovado com um dicionario sem `min_edge` nem `publicable`. O
+    `backend/ai_inference.py` trata a ausencia de `publicable` como falso, mas
+    o `edge_min` sumia: a UI deixava de mostrar o piso de edge, e o inventario
+    perdia a razao da reprovacao. Pior: o `.pkl` legado nao passou pela porta
+    de edge, e sobrepos-lo sob um nome aprovado e a forma de publicar um modelo
+    reprovado.
+
+    Regra: os campos de governanca do `train_v2` sao a fonte da verdade e
+    nunca sao sobrescritos por este pipeline. O `.pkl`, nesse caso, tambem nao
+    pode ter substituido o modelo governado — entao o caller recebe o aviso
+    para nao publicar.
+    """
+    try:
+        if not meta_path.exists():
+            return novo_meta
+        atual = json.loads(meta_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, UnicodeError):
+        return novo_meta
+
+    if not isinstance(atual, dict):
+        return novo_meta
+
+    # Sem estes campos, o arquivo nao foi produzido pelo train_v2 e nao ha
+    # governanca a preservar: e um meta legado, e a sobrescrita e esperada.
+    if "min_edge" not in atual or "publicable" not in atual:
+        return novo_meta
+
+    governados = (
+        "min_edge", "publicable", "publish_reason",
+        "feature_version", "feature_hash", "feature_count",
+    )
+    preservado = dict(novo_meta)
+    for campo in governados:
+        if campo in atual:
+            preservado[campo] = atual[campo]
+    # As metricas de walk-forward (edge, baseline, folds) tambem vem do
+    # train_v2 e sao o que a tela usa para avaliar o modelo.
+    metrics_atual = atual.get("metrics")
+    if isinstance(metrics_atual, dict) and "folds" in metrics_atual:
+        preservado["metrics"] = metrics_atual
+    preservado["governado_por"] = "train_v2"
+    preservado["pipeline_sem_autorizacao"] = True
+    logger.warning(
+        "Governanca preservada de train_v2 em %s (publicable=%s, edge_min=%s). "
+        "O modelo deste pipeline NAO passou na porta de edge e nao substitui "
+        "o modelo governado; regenere com scripts/treinar_ia.py.",
+        meta_path.name, atual.get("publicable"), atual.get("min_edge"),
+    )
+    return preservado
+
+
 def load_model_meta(symbol: str, timeframe: str = "M5") -> dict[str, Any]:
     """ETAPA 15.3: metadados de governanca do modelo (.meta.json)."""
     path = get_model_path(symbol, timeframe).with_suffix(".meta.json")
@@ -437,8 +500,10 @@ def train_symbol_model(
             "model_version": APP_VERSION,
         }
         meta_path = get_model_path(symbol, timeframe).with_suffix(".meta.json")
-        meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
-        logger.info("Meta de governanca salva: %s", meta_path)
+        meta_path.write_text(
+            json.dumps(preservar_governanca(meta_path, meta), indent=2), encoding="utf-8"
+        )
+        logger.info("Meta de governanca salvo: %s", meta_path)
     except Exception as exc:
         logger.warning("Falha ao salvar meta de governanca %s: %s", symbol, exc)
 

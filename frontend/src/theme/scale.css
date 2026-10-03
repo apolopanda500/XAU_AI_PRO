@@ -1,0 +1,255 @@
+/* ============================================================================
+   Escala visual do XAU AI PRO — tipografia, espacamento e tabelas.
+
+   POR QUE ISTO EXISTE
+   ===================
+   A auditoria das folhas de estilo encontrou 158 declaracoes de `font-size`
+   abaixo de 12px (46 de 10px, 53 de 11px, 50 de 12px) e varios `line-height: 1`.
+   Resultado na tela: letras miudes, linhas grudadas, numeros de tabela
+   dificeis de comparar na vertical, e espacamento aparentemente aleatorio
+   porque cada arquivo inventou o proprio valor.
+
+   A correcao aqui e uma ESCALA, nao um remendo arquivo a arquivo. As
+   declaracoes antigas continuam valendo; esta camada define a escala
+   canonica e sobe o que estava pequeno, de modo que o resultado fique
+   coerente sem reescrever 70 KB de global.css de uma vez.
+
+   REGRAS
+   ======
+   - Nenhuma fonte de interface fica abaixo de 12px; corpo de texto e 13px.
+   - `line-height` minimo de 1.35, para linhas nao se encostarem.
+   - Numeros de tabela em fonte tabular, alinhados a direita: a coluna de
+     digitos tem de ser comparável verticalmente, senao 1,1 e 11,0 ficam
+     lado a lado sem distincao.
+   - Espacamento em multiplos de 4px, para o alinhamento entre paineis
+     não depender de cada arquivo.
+
+   Esta camada e carregada por ultimo, entao vence em caso de empate.
+   ========================================================================== */
+
+:root {
+  /* --- escala tipografica (px) ------------------------------------------ */
+  --fs-2xs: 11px;   /* badges, chips, contadores. Minimo absoluto do app. */
+  --fs-xs: 12px;    /* rotulos de coluna, metadados, th */
+  --fs-sm: 13px;    /* corpo de tabela e texto auxiliar */
+  --fs-base: 13.5px;/* corpo de texto corrente */
+  --fs-md: 15px;    /* texto de emphasised, subtitulos de card */
+  --fs-lg: 17px;    /* titulo de secao */
+  --fs-xl: 20px;    /* titulo de pagina */
+  --fs-2xl: 26px;   /* numero de destaque */
+
+  /* --- altura de linha --------------------------------------------------- */
+  --lh-tight: 1.35;  /* minimo em qualquer texto */
+  --lh-normal: 1.5;
+  --lh-loose: 1.65;  /* paragrafos longos */
+
+  /* --- espacamento (multiplos de 4) ------------------------------------- */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+
+  /* --- tabelas ----------------------------------------------------------- */
+  --cell-px-y: 7px;  /* altura vertical da celula */
+  --cell-px-x: 10px; /* recuo lateral da celula */
+  --row-num-min-w: 84px;
+}
+
+/* ==========================================================================
+   1. Tipografia minima
+   ========================================================================== */
+
+body,
+input,
+select,
+textarea,
+button {
+  font-size: var(--fs-base);
+  line-height: var(--lh-normal);
+}
+
+/* Qualquer coisa que esteja pequena demais e sobe para a escala. O seletor
+   e amplo de proposito: e melhor um piso unico do que caçar 158 declaracoes. */
+.hint,
+.muted,
+.chip,
+small,
+caption,
+figcaption,
+label {
+  font-size: var(--fs-xs);
+  line-height: var(--lh-normal);
+}
+
+.chip {
+  line-height: 1.3;
+  padding: 2px 7px;
+}
+
+/* Codigo e numeros: fonte tabular para os digitos alinhar. */
+code,
+pre,
+kbd,
+samp,
+.mono,
+.metric-card strong,
+.metric-card span,
+.kpi-value,
+.kpi-label,
+.kpi-sub,
+.num {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+/* --- titulos ------------------------------------------------------------ */
+
+h1 { font-size: var(--fs-xl); line-height: 1.25; margin: 0 0 var(--sp-2); }
+h2 { font-size: var(--fs-lg); line-height: 1.3;  margin: 0 0 var(--sp-2); }
+h3 { font-size: var(--fs-md); line-height: 1.35; margin: 0 0 var(--sp-1); }
+h4 { font-size: var(--fs-sm); line-height: 1.4;  margin: 0 0 var(--sp-1); }
+
+.page-head .eyebrow {
+  font-size: var(--fs-2xs);
+  letter-spacing: 0.08em;
+  line-height: 1.4;
+}
+
+.page-head h1 { margin: 2px 0 2px; }
+.page-head .muted { font-size: var(--fs-sm); }
+
+.section-title {
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+  margin: var(--sp-4) 0 var(--sp-2);
+}
+
+/* --- paragrafo ---------------------------------------------------------- */
+
+p { line-height: var(--lh-loose); margin: 0 0 var(--sp-2); }
+p:last-child { margin-bottom: 0; }
+
+/* ==========================================================================
+   2. Tabelas — numerais alinhados e celulas compactas consistentes
+   ========================================================================== */
+
+.tbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+}
+
+.tbl thead th {
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-align: left;
+  padding: var(--cell-px-y) var(--cell-px-x);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.tbl tbody td {
+  padding: var(--cell-px-y) var(--cell-px-x);
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+/* Coluna numerica: direita e com digitos de largura fixa. E isto que permite
+   comparar 1,10 e 11,00 de relance — sem isso o olho nao acha a casa
+   decimal e a coluna vira uma lista sem ordem aparente. */
+.tbl td.num,
+.tbl th.num,
+.tbl .num {
+  text-align: right;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tbl .mono {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-xs);
+}
+
+.table-scroll {
+  overflow: auto;
+  max-width: 100%;
+  /* barra de rolagem fina: nao rouba altura util da tabela */
+  scrollbar-width: thin;
+}
+
+.compact-table { font-size: var(--fs-xs); }
+.compact-table thead th,
+.compact-table tbody td { padding: 5px 8px; }
+
+/* Cabecalho fixo: ao rolar uma tabela longa, o titulo das colunas continua
+   visivel. Sem isso o usuario perde a referencia de qual numero e qual coluna. */
+.table-scroll.sticky-head { max-height: 60vh; }
+.table-scroll.sticky-head thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--panel);
+}
+
+/* ==========================================================================
+   3. Espacamento consistente
+   ========================================================================== */
+
+.metrics-grid { gap: var(--sp-3); }
+.btn-row { gap: var(--sp-2); }
+.field { gap: var(--sp-1); }
+.field label { line-height: 1.4; }
+
+.card { padding: var(--sp-4); }
+.compact-card { padding: var(--sp-3); }
+.card.compact-card { padding: var(--sp-3) var(--sp-4); }
+
+.section-head { gap: var(--sp-3); }
+
+/* ==========================================================================
+   4. Controles de formulario
+   ========================================================================== */
+
+input[type='text'],
+input[type='number'],
+input[type='search'],
+select,
+textarea {
+  font-size: var(--fs-sm);
+  line-height: 1.45;
+  min-height: 32px;
+  padding: 6px 9px;
+}
+
+.btn {
+  font-size: var(--fs-sm);
+  line-height: 1.35;
+  min-height: 32px;
+  padding: 6px 13px;
+}
+
+.btn.xs {
+  font-size: var(--fs-2xs);
+  min-height: 26px;
+  padding: 4px 9px;
+}
+
+/* ==========================================================================
+   5. Copiloto — herda a escala, com limite proprio de densidade
+   ========================================================================== */
+
+.copilot-bubble { font-size: var(--fs-sm); line-height: var(--lh-normal); }
+.copilot-p { margin: 0 0 var(--sp-2); }
+.copilot-li { margin: 1px 0; }
+.copilot-input textarea { font-size: var(--fs-sm); line-height: 1.45; }
+.copilot-achado p { font-size: var(--fs-xs); line-height: var(--lh-normal); }

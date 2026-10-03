@@ -21,6 +21,7 @@
       "icons/icon.ico"
     ],
     "resources": [
+      "Python/models/**/*",
       "core/xau-ai-pro-core.exe",
       "bridge/**/*"
     ],
@@ -32,12 +33,12 @@
   },
   "productName": "XAU AI PRO",
   "mainBinaryName": "XAU AI PRO",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "identifier": "com.xau-ai-pro.desktop",
   "plugins": {},
   "app": {
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:9001 http://localhost:9001 ws://127.0.0.1:9002 wss: https:; img-src 'self' data:; style-src 'self' 'unsafe-inline'"
+        "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:9001 http://localhost:9001 ws://127.0.0.1:9002 ws://localhost:9002 http://10.0.2.2:9001 ws://10.0.2.2:9002 https: wss:; img-src 'self' data:; style-src 'self' 'unsafe-inline'"
     },
     "windows": [
       {

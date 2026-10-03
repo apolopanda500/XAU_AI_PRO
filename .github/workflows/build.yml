@@ -109,8 +109,8 @@ jobs:
     runs-on: ubuntu-latest
     if: vars.VCR_ENABLED == 'true'
     env:
-      VERCEL_SCOPE: ${{ secrets.VERCEL_ORG_ID || 'team_m6XXhz0AuVtzK0zxtv96h03a' }}
-      VERCEL_PROJECT: ${{ secrets.VERCEL_PROJECT_ID || 'prj_RApeFNVlnOGYxtYcRDqaSUTIJD1G' }}
+      VERCEL_SCOPE: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT: ${{ secrets.VERCEL_PROJECT_ID }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4

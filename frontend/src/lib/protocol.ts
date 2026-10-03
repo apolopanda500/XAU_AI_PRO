@@ -1,11 +1,15 @@
-// Contrato TypeScript do protocolo v1 — espelho de core/src/protocol/mod.rs.
+﻿// Contrato TypeScript do protocolo v1 — espelho de core/src/protocol/mod.rs.
 // Gerado manualmente; qualquer mudança no Rust exige atualização aqui.
 // Envelope: `{ "protocol": "xau-ai-pro/1", "type": "<Variante>", ... }`
 
 export const PROTOCOL_VERSION = '1.0.0';
 export const PROTOCOL_ENVELOPE = 'xau-ai-pro/1';
 export const WS_PING_INTERVAL_MS = 30000;
-export const DEFAULT_SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XAUUSD', 'EURUSD', 'GBPUSD', 'USDJPY'];
+
+// Nao existe lista de simbolos no protocolo. O Core nao recebe um portfolio
+// fixo: o cliente assina o que o operador escolher na watchlist. Antes esta
+// lista era repetida aqui, em hooks/useAppStore.ts e em MarketTab.tsx, e
+// nenhuma das copias era a verdade.
 
 export type ClientKind = 'react' | 'ea_mt5' | 'cli' | 'unknown';
 

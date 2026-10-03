@@ -221,7 +221,8 @@ def evaluate_adapter(raw: Any, snapshot: dict[str, Any], now: datetime | None = 
         "account_login": account.get("login"),
         "account_server": account.get("server"),
         "account_currency": account.get("currency"),
-        "account_mode": "DEMO" if account.get("trade_mode") == 0 else "REAL_OR_UNKNOWN" if account.get("trade_mode") is not None else None,
+        # MetaTrader: trade_mode 0 = REAL, 1 = DEMO, 2 = CONTEST.
+        "account_mode": {0: "REAL", 1: "DEMO", 2: "CONTEST"}.get(account.get("trade_mode")) if account.get("trade_mode") is not None else None,
         "age_seconds": age_seconds,
         "ttl_seconds": adapter.get("ttl_seconds"),
         "sequence": adapter.get("sequence"),

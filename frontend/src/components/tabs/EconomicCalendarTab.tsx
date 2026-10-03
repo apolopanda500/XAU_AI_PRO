@@ -5,6 +5,8 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useEconomicData } from '../../hooks/useEconomicData';
+import { apiBase } from '../../lib/api';
+import '../../theme/calendar.css';
 import {
   EconomicEvent,
   FiltroCalendario,
@@ -24,6 +26,59 @@ const CORES_BADGE: Record<ImpactLevel, { bg: string; text: string }> = {
   medio: { bg: '#78350f', text: '#fbbf24' },
   alto: { bg: '#7f1d1d', text: '#fca5a5' },
 };
+
+export type DiaCalendario = {
+  /** yyyy-mm-dd — serve de key e garante ordem estável. */
+  chave: string;
+  /** "Hoje"/"Amanhã"/"Ontem" quando cabe, senão vazio. */
+  relato: string;
+  /** Data por extenso, em minúsculas (o CSS deixa a inicial maiúscula). */
+  data: string;
+  eventos: EconomicEvent[];
+};
+
+/**
+ * Agrupa os eventos por dia e ordena DO BAIXO PARA O ALTO.
+ *
+ * Antes o agrupamento usava a ordem de chegada da API, que vem agrupada por
+ * país/fonte: o dia 29 aparecia antes do 28 e o rótulo de dia subia fora de
+ * ordem na rolagem. Aqui os eventos são ordenados por horário primeiro —
+ * daí a ordem dos dias e a ordem deles dentro do dia caem sozinhas.
+ */
+export function agruparPorDia(
+  eventos: EconomicEvent[],
+  agora: Date = new Date(),
+): DiaCalendario[] {
+  const ordenados = [...eventos].sort((a, b) => a.horario.getTime() - b.horario.getTime());
+  const grupos = new Map<string, DiaCalendario>();
+
+  for (const evento of ordenados) {
+    const d = evento.horario;
+    const chave = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    let dia = grupos.get(chave);
+    if (!dia) {
+      dia = {
+        chave,
+        relato: relatoDia(d, agora),
+        data: d.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' }),
+        eventos: [],
+      };
+      grupos.set(chave, dia);
+    }
+    dia.eventos.push(evento);
+  }
+
+  return [...grupos.values()];
+}
+
+function relatoDia(d: Date, agora: Date): string {
+  const meioNoite = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const dias = Math.round((meioNoite(d) - meioNoite(agora)) / 86_400_000);
+  if (dias === 0) return 'Hoje';
+  if (dias === 1) return 'Amanhã';
+  if (dias === -1) return 'Ontem';
+  return '';
+}
 
 function CountdownEvento({ evento }: { evento: EconomicEvent }) {
   const [tempoRestante, setTempoRestante] = useState<string>('');
@@ -78,65 +133,36 @@ function CountdownEvento({ evento }: { evento: EconomicEvent }) {
   );
 }
 
-function EventoRow({ evento }: { evento: EconomicEvent }) {
-  const corImpacto = CORES_IMPACTO[evento.impacto];
-  const corBadge = CORES_BADGE[evento.impacto];
+function EventoRow({ evento, passado }: { evento: EconomicEvent; passado: boolean }) {
   const horaFormatada = evento.horario.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-
   return (
-    <div style={{
-      display: 'grid', gridTemplateColumns: '60px 40px 1fr 100px 80px 80px 80px',
-      gap: '10px', padding: '10px 12px',
-      backgroundColor: evento.divulgado ? '#111827' : '#1f2937',
-      borderRadius: '6px', borderLeft: `3px solid ${corImpacto}`,
-      alignItems: 'center', fontSize: '12px',
-    }}>
-      <span style={{ fontFamily: 'monospace', color: '#d1d5db', fontWeight: 600 }}>
-        {horaFormatada}
-      </span>
-      <span style={{ fontSize: '18px', textAlign: 'center' }}>{evento.bandeira}</span>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-        <span style={{ color: '#f3f4f6', fontWeight: 500 }}>{evento.titulo}</span>
-        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-          <span style={{ backgroundColor: corBadge.bg, color: corBadge.text, padding: '1px 6px', borderRadius: '3px', fontSize: '9px', fontWeight: 700 }}>
-            {LABELS_IMPACTO[evento.impacto].toUpperCase()}
-          </span>
-          {evento.divulgado && (
-            <span style={{ backgroundColor: '#064e3b', color: '#34d399', padding: '1px 6px', borderRadius: '3px', fontSize: '9px', fontWeight: 600 }}>
-              DIVULGADO
-            </span>
-          )}
-        </div>
+    <div className={`cal-row${passado ? ' passado' : ''}`}>
+      <span className="cal-row-time">{horaFormatada}</span>
+      <span className="cal-row-flag" title={evento.nomePais}>{evento.bandeira}</span>
+      <div className="cal-row-title">
+        <strong>{evento.titulo}</strong>
+        <span className="cal-row-note">
+          <span className={`cal-impact ${evento.impacto}`}>{LABELS_IMPACTO[evento.impacto]}</span>
+          {evento.divulgado ? ' divulgado' : ''}
+        </span>
       </div>
-      <span style={{ color: '#9ca3af', textAlign: 'center' }}>{evento.anterior ?? '-'}</span>
-      <span style={{ color: '#d1d5db', textAlign: 'center', fontWeight: 500 }}>{evento.consenso ?? '-'}</span>
-      <span style={{ color: evento.real ? '#34d399' : '#6b7280', textAlign: 'center', fontWeight: evento.real ? 600 : 400 }}>
-        {evento.real ?? '-'}
-      </span>
+      <span className="num muted">{evento.anterior ?? '—'}</span>
+      <span className="num">{evento.consenso ?? '—'}</span>
+      <span className="num" style={evento.real ? { color: 'var(--success, #34d399)' } : undefined}>{evento.real ?? '—'}</span>
     </div>
   );
 }
 
 export function EconomicCalendarTab() {
-  const [copilotPrompt, setCopilotPrompt] = useState('Quais eventos podem aumentar a volatilidade do XAUUSD e quais cuidados devo tomar?');
-  const [copilotReply, setCopilotReply] = useState('');
-  const [copilotLoading, setCopilotLoading] = useState(false);
-  const [copilotError, setCopilotError] = useState('');
+  // Estados do copiloto removidos em 2026-09-29 (ver o bloco dele no JSX).
   const [filtro, setFiltro] = useState<FiltroCalendario>({
     paises: [], impactos: [], dataInicio: null, dataFim: null,
   });
 
   const { eventos, carregando, erro, ultimaAtualizacao, proximoEventoAlto, refreshManual, totalEventos } = useEconomicData(filtro);
 
-  const eventosPorData = useMemo(() => {
-    const grupos: Record<string, EconomicEvent[]> = {};
-    eventos.forEach((evento) => {
-      const dataKey = evento.horario.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
-      if (!grupos[dataKey]) grupos[dataKey] = [];
-      grupos[dataKey].push(evento);
-    });
-    return grupos;
-  }, [eventos]);
+  // Dias em ordem crescente, eventos em ordem crescente dentro de cada dia.
+  const dias = useMemo(() => agruparPorDia(eventos), [eventos]);
 
   const togglePais = (codigo: string) => {
     setFiltro((prev) => ({
@@ -154,140 +180,101 @@ export function EconomicCalendarTab() {
 
   const limparFiltros = () => { setFiltro({ paises: [], impactos: [], dataInicio: null, dataFim: null }); };
 
-  const consultarCopiloto = async () => {
-    if (!copilotPrompt.trim() || !eventos.length) return;
-    setCopilotLoading(true); setCopilotError('');
-    const contexto = eventos.slice(0, 40).map((evento) => ({
-      horario: evento.horario.toISOString(), pais: evento.codigoPais, impacto: evento.impacto,
-      titulo: evento.titulo, anterior: evento.anterior, consenso: evento.consenso, real: evento.real,
-    }));
-    try {
-      const base = 'https://xau-ai-pro-api-apolopanda500.vercel.app';
-      const response = await fetch(`${base}/api/chat`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: `Analise somente os eventos econômicos reais abaixo para um trader de XAUUSD. Não dê ordem de compra/venda, não invente números e deixe claro quando não houver evidência. Pergunta: ${copilotPrompt}\nEventos: ${JSON.stringify(contexto)}` }),
-        signal: AbortSignal.timeout(30000),
-      });
-      const data = await response.json() as { reply?: string; error?: string };
-      if (!response.ok) throw new Error(data.error || `IA HTTP ${response.status}`);
-      setCopilotReply(data.reply || 'A IA não retornou uma análise.');
-    } catch (error) { setCopilotError(error instanceof Error ? error.message : 'Copiloto indisponível'); }
-    finally { setCopilotLoading(false); }
-  };
-
   if (erro) {
     return (
-      <div style={{ padding: '20px', color: '#fca5a5', textAlign: 'center' }}>
-        <p>Erro ao carregar calendário: {erro}</p>
-        <button type="button" onClick={refreshManual}>Tentar novamente</button>
+      <div className="card compact-card cal-copilot" role="alert">
+        <h3>Erro ao carregar o calendário</h3>
+        <p className="hint">{erro}</p>
+        <button className="btn sm ghost" type="button" onClick={refreshManual}>Tentar novamente</button>
       </div>
     );
   }
 
   return (
-    <div className="calendar-tab" style={{ display: 'flex', flexDirection: 'column', height: '100%', color: '#f3f4f6', fontSize: '13px' }}>
-      <div style={{ padding: '12px 16px', borderBottom: '1px solid #374151', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>📅 Calendário Econômico</h2>
-          <span style={{ color: '#9ca3af', fontSize: '11px' }}>{totalEventos} eventos</span>
+    <div className="calendar-tab">
+      <div className="cal-head">
+        <div>
+          <h2>Calendário Econômico</h2>
+          <span className="cal-head-count">{totalEventos} eventos</span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          {ultimaAtualizacao && (
-            <span style={{ color: '#6b7280', fontSize: '10px' }}>Atualizado: {ultimaAtualizacao.toLocaleTimeString('pt-BR')}</span>
-          )}
-          <button type="button" onClick={refreshManual} disabled={carregando} style={{ padding: '4px 10px', backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '4px', color: '#d1d5db', cursor: carregando ? 'not-allowed' : 'pointer', fontSize: '11px' }}>
-            {carregando ? '⏳' : '🔄'} Refresh
+        <div className="cal-head-actions">
+          {ultimaAtualizacao && <span className="muted">Atualizado {ultimaAtualizacao.toLocaleTimeString('pt-BR')}</span>}
+          <button className="btn xs ghost" type="button" onClick={refreshManual} disabled={carregando}>
+            {carregando ? 'Atualizando…' : 'Atualizar'}
           </button>
         </div>
       </div>
 
       {proximoEventoAlto && <CountdownEvento evento={proximoEventoAlto} />}
 
-      <div style={{ padding: '10px 16px', borderBottom: '1px solid #374151', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-          <span style={{ color: '#9ca3af', fontSize: '11px', minWidth: '40px' }}>País:</span>
+      <div className="cal-filters">
+        <div className="cal-filter-row">
+          <span className="cal-filter-label">País</span>
           {PAISES_SUPORTADOS.map((pais) => (
-          <button key={pais.codigo} type="button" onClick={() => togglePais(pais.codigo)} style={{
-              padding: '3px 8px', backgroundColor: filtro.paises.includes(pais.codigo) ? '#2563eb' : '#1f2937',
-              border: `1px solid ${filtro.paises.includes(pais.codigo) ? '#3b82f6' : '#374151'}`,
-              borderRadius: '4px', color: '#d1d5db', cursor: 'pointer', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px',
-            }}>
+            <button key={pais.codigo} type="button" onClick={() => togglePais(pais.codigo)}
+              className={`cal-chip ${filtro.paises.includes(pais.codigo) ? 'on' : ''}`}>
               {pais.bandeira} {pais.nome}
             </button>
           ))}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span style={{ color: '#9ca3af', fontSize: '11px', minWidth: '40px' }}>Impacto:</span>
+        <div className="cal-filter-row">
+          <span className="cal-filter-label">Impacto</span>
           {(['alto', 'medio', 'baixo'] as ImpactLevel[]).map((impacto) => (
-          <button key={impacto} type="button" onClick={() => toggleImpacto(impacto)} style={{
-              padding: '3px 8px',
-              backgroundColor: filtro.impactos.includes(impacto) ? CORES_IMPACTO[impacto] : '#1f2937',
-              border: `1px solid ${CORES_IMPACTO[impacto]}`,
-              borderRadius: '4px',
-              color: filtro.impactos.includes(impacto) ? '#000' : '#d1d5db',
-              cursor: 'pointer', fontSize: '11px', fontWeight: 600,
-            }}>
+            <button key={impacto} type="button" onClick={() => toggleImpacto(impacto)}
+              className={`cal-chip ${filtro.impactos.includes(impacto) ? 'on' : ''}`}>
               {LABELS_IMPACTO[impacto]}
             </button>
           ))}
           {(filtro.paises.length > 0 || filtro.impactos.length > 0) && (
-          <button type="button" onClick={limparFiltros} style={{ padding: '3px 8px', backgroundColor: 'transparent', border: '1px solid #6b7280', borderRadius: '4px', color: '#9ca3af', cursor: 'pointer', fontSize: '10px', marginLeft: 'auto' }}>
-              ✕ Limpar
-            </button>
+            <button className="cal-chip cal-chip-clear" type="button" onClick={limparFiltros}>Limpar</button>
           )}
         </div>
       </div>
 
-      <div className="card" style={{ margin: '12px 16px', padding: 12 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-          <div><h3 style={{ margin: 0 }}>Copiloto econômico</h3><span className="muted" style={{ fontSize: 11 }}>IA contextual baseada apenas nos eventos reais carregados</span></div>
-          <span className="chip warn">Somente análise</span>
-        </div>
-        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-          <input value={copilotPrompt} onChange={(event) => setCopilotPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void consultarCopiloto(); } }} placeholder="Pergunte sobre risco, volatilidade ou agenda..." style={{ flex: 1 }} />
-          <button className="btn sm primary" type="button" onClick={() => void consultarCopiloto()} disabled={copilotLoading || !eventos.length}>{copilotLoading ? 'Analisando...' : 'Analisar'}</button>
-        </div>
-        {copilotError && <div className="hint neg" role="alert" style={{ marginTop: 8 }}>Copiloto indisponível: {copilotError}</div>}
-        {copilotReply && <div className="placeholder" style={{ marginTop: 10, whiteSpace: 'pre-wrap', textAlign: 'left', alignItems: 'flex-start' }}>{copilotReply}</div>}
-        <div className="hint" style={{ marginTop: 8 }}>A IA não envia ordens, não altera o EA e não movimenta ativos. Chaves permanecem no backend.</div>
+      {/* O copiloto economically foi removido desta aba em 2026-09-29.
+
+          Ele nao e IA: `backend/copilot.py` classifica a pergunta por REGEX
+          (10 padroes em `INTENCOES`) e devolve um template preenchido com o
+          estado do sistema. Nao existe chamada a modelo de linguagem, chave de
+          API nem learned de nada. Prometer "analista" aqui era rotulo sem
+          lastro, e a agenda economica e uma tela de leitura: o operador quer
+          ver o evento, o impacto e quanto tempo falta, nao um paragrafo. */}
+
+      <div className="cal-columns">
+        <span className="num">Hora</span>
+        <span></span>
+        <span>Evento</span>
+        <span className="num">Anterior</span>
+        <span className="num">Consenso</span>
+        <span className="num">Real</span>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '60px 40px 1fr 100px 80px 80px 80px', gap: '10px', padding: '8px 12px', backgroundColor: '#111827', borderBottom: '1px solid #374151', fontSize: '10px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase' }}>
-        <span>Hora</span><span></span><span>Evento</span>
-        <span style={{ textAlign: 'center' }}>Anterior</span>
-        <span style={{ textAlign: 'center' }}>Consenso</span>
-        <span style={{ textAlign: 'center' }}>Real</span>
-      </div>
-
-      <div style={{ flex: 1, overflowY: 'auto', padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+      <div className="cal-body">
         {carregando && eventos.length === 0 ? (
-          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100px', color: '#6b7280' }}>
-            Carregando eventos...
-          </div>
-        ) : Object.entries(eventosPorData).length === 0 ? (
-          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100px', color: '#6b7280' }}>
-            Nenhum evento encontrado.
-          </div>
+          <div className="cal-state">Carregando eventos…</div>
+        ) : dias.length === 0 ? (
+          <div className="cal-state">Nenhum evento encontrado.</div>
         ) : (
-          Object.entries(eventosPorData).map(([data, eventosData]) => (
-            <div key={data}>
-              <div style={{ padding: '6px 0', color: '#9ca3af', fontSize: '11px', fontWeight: 600, textTransform: 'capitalize', borderBottom: '1px solid #374151', marginBottom: '6px' }}>
-                {data}
+          dias.map((dia) => (
+            <div key={dia.chave} className="cal-day">
+              <div className="cal-day-label">
+                {dia.relato && <span className={`cal-day-badge ${dia.relato.toLowerCase()}`}>{dia.relato}</span>}
+                <span className="cal-day-data">{dia.data}</span>
+                <span className="cal-day-count">
+                  {dia.eventos.length} {dia.eventos.length === 1 ? 'evento' : 'eventos'}
+                </span>
               </div>
-              {eventosData.map((evento) => (
-                <EventoRow key={evento.id} evento={evento} />
+              {dia.eventos.map((evento) => (
+                <EventoRow
+                  key={evento.id}
+                  evento={evento}
+                  passado={evento.horario.getTime() < Date.now()}
+                />
               ))}
             </div>
           ))
         )}
       </div>
-
-      <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.85; }
-        }
-      `}</style>
     </div>
   );
 }

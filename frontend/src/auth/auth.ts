@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 
 // Numero de iteracoes do PBKDF2 (referencia OWASP: >= 100k para SHA-256)
-const ITERACOES_PADRAO = 150_000;
+export const ITERACOES = 150_000;
 
 export interface AuthFile {
   salt_b64: string;
@@ -54,11 +54,11 @@ export async function carregarAuth(): Promise<AuthFile | null> {
 export async function definirPin(pin: string): Promise<void> {
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const saltB64 = bytesParaB64(salt);
-  const hashB64 = await derivarHash(pin, saltB64, ITERACOES_PADRAO);
+  const hashB64 = await derivarHash(pin, saltB64, ITERACOES);
   const payload: AuthFile = {
     salt_b64: saltB64,
     hash_b64: hashB64,
-    iterations: ITERACOES_PADRAO,
+    iterations: ITERACOES,
     created_at: new Date().toISOString(),
   };
   await invoke('save_auth', { payload });

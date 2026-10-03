@@ -1,122 +1,323 @@
-﻿import { useQuery } from '@tanstack/react-query';
-import { useEffect } from 'react';
+﻿// Sistema: o que a MAQUINA do usuario esta usando, e o desempenho do app.
+//
+// POR QUE SO ISSO
+// ===============
+// A aba tinha "Watchdog do EA", "Diagnostico do boot", "Telemetria" e
+// "Fila de comandos" — quatro blocos sobre a SAUDE DO APP, duplicados em
+// Log, na tela de boot e no painel da fila. Nenhum deles diz algo sobre a
+// maquina, que e o que a aba promete.
+//
+// A leitura vem do comando `hardware_telemetry` do Tauri, que consulta o
+// SO real (WMI no Windows, `/proc` e sensores no Linux, campos nativos no
+// Android). Se a maquina nao expoe um campo, a celula fica "--" e nao zero:
+// ausencia de dado nao e medida zero.
+//
+// Nada aqui executa ordem, alteracao no MT5 ou escrita em disco.
+//
+// POR QUE TEM CACHE AQUI TAMBEM
+// =============================
+// O comando ja guarda 8 s no lado Rust (TELEMETRY_CACHE), mas isso so evita
+// coletas DUPLICAS dentro de uma mesma abertura da aba. Trocar de aba e
+// voltar desmontava o componente: o estado voltava ao zero, a tabela inteira
+// aparecia "--" e uma nova leitura partia do zero — o usuario lia como
+// "recarregou sozinho". O cache de modulo abaixo mantem a ultima leitura
+// viva entre montagens, e o estado de carregamento diz quando o dado ainda
+// nao existe em vez de fingir que tudo esta em "--".
+//
+// O intervalo tambem nao roda com a janela oculta: sem isso o powershell
+// ficava abrindo em segundo plano sem ninguem olhar.
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { useCoreHealth, useWatchdog, useTelemetry, useTelemetryHistory, useQueue, useBoot } from '../hooks/queries';
-import { notify } from '../lib/notify';
+import { apiBase } from '../lib/api';
+import '../theme/system-machine.css';
 
-type H = { os?: string; architecture?: string; cpu_name?: string; gpu_name?: string; cpu_usage_percent?: number; cpu_cores?: number; memory_total_gb?: number; memory_available_gb?: number };
-
-const EA_LABEL: Record<string, string> = {
-  alive: 'Vivo', frozen: 'Travado (arquivo fresh, timestamp parado)',
-  stale: 'Offline (heartbeat antigo)', missing: 'Sem heartbeat (EA não iniciou)',
-  unknown: 'Indeterminado',
+type Hardware = {
+  os: string;
+  architecture: string;
+  cpu_name: string | null;
+  cpu_cores: number;
+  cpu_usage_percent: number | null;
+  memory_total_gb: number | null;
+  memory_available_gb: number | null;
+  disk_total_gb: number | null;
+  disk_free_gb: number | null;
+  cpu_temperature_c: number | null;
+  gpu_name: string | null;
+  gpu_available: boolean;
+  source: string;
 };
 
-// Mini-gráfico SVG da curva de equity a partir do histórico de snapshots.
-function EquitySpark({ histQ }: { histQ: ReturnType<typeof useTelemetryHistory> }) {
-  const rows = (histQ.data?.snapshots ?? []).filter((s) => typeof s.equity === 'number');
-  if (rows.length < 2) {
-    return <div className="card compact-card"><h2>Equity (histórico)</h2>
-      <div className="hint">Ainda sem pontos suficientes. O coletor registra um snapshot por minuto enquanto o gateway roda.</div></div>;
-  }
-  const W = 560, H = 96, PAD = 8;
-  const vals = rows.map((s) => s.equity as number);
-  const min = Math.min(...vals), max = Math.max(...vals);
-  const span = max - min || 1;
-  const pts = rows.map((s, i) => {
-    const x = PAD + (i / (rows.length - 1)) * (W - 2 * PAD);
-    const y = H - PAD - ((s.equity as number) - min) / span * (H - 2 * PAD);
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(' ');
-  const first = rows[0], last = rows[rows.length - 1];
-  const delta = (last.equity as number) - (first.equity as number);
-  const up = delta >= 0;
-  return <div className="card compact-card"><h2>Equity (histórico)</h2>
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} role="img" aria-label="Curva de equity">
-      <polyline points={pts} fill="none" stroke={up ? '#2fbf71' : '#e5484d'} strokeWidth={2} />
-    </svg>
-    <div className="hint">{rows.length} pontos · {min.toFixed(2)} – {max.toFixed(2)} · variação {up ? '+' : ''}{delta.toFixed(2)}</div>
-  </div>;
+// A leitura no Windows abre um powershell.exe e roda cinco consultas CIM.
+// Com 2s eram 30 processos por minuto e o app MORREU (os filhos ficaram
+// orfaos e todas as abas passaram a dizer "gateway indisponivel"). Alem do
+// cache de 8s no lado Rust, o intervalo aqui tambem e folgado: uso de CPU e
+// temperatura nao mudam em 2s. O gateway e medido separadamente, que e
+// barato e e o que o usuario precisa ver mexer.
+const REFRESH_MS = 10_000;
+// Vida da ultima leitura entre montagens da aba. Igual ao intervalo: o
+// proximo tick ja busca dados novos, mas voltar para a aba mostra a ultima
+// leitura na hora em vez de apagar a tela.
+const CACHE_MS = 10_000;
+
+type Leitura = {
+  hw: Hardware | null;
+  erro: string;
+  lidoEm: string;
+  latencia: number | null;
+  gatewayOk: boolean | null;
+};
+
+// Fora do componente de proposito: sobrevive a montagem/desmontagem da aba.
+let ultimaLeitura: Leitura = { hw: null, erro: '', lidoEm: '', latencia: null, gatewayOk: null };
+let ultimaLeituraEm = 0;
+
+/** Somente para teste: limpa o cache de modulo entre casos. */
+export function limparCacheSistema() {
+  ultimaLeitura = { hw: null, erro: '', lidoEm: '', latencia: null, gatewayOk: null };
+  ultimaLeituraEm = 0;
+}
+
+const cacheFresco = () => Date.now() - ultimaLeituraEm < CACHE_MS;
+
+const gb = (v: number | null | undefined) =>
+  v === null || v === undefined || !Number.isFinite(v) ? '--' : `${v.toFixed(1)} GB`;
+const pct = (v: number | null | undefined) =>
+  v === null || v === undefined || !Number.isFinite(v) ? '--' : `${v.toFixed(0)}%`;
+const val = (v: string | null | undefined) => (v && String(v).trim() ? String(v).trim() : '--');
+
+/** Barra de ocupacao. `None` = a maquina nao expoe o dado. */
+function Barra({ usado, total }: { usado: number | null; total: number | null }) {
+  if (usado === null || total === null || total <= 0) return <span className="muted">--</span>;
+  const p = Math.min(100, Math.max(0, (usado / total) * 100));
+  const nivel = p >= 90 ? 'danger' : p >= 75 ? 'warn' : 'ok';
+  return (
+    <span className="sys-bar-cell">
+      <span className="sys-bar"><span className={`sys-bar-fill ${nivel}`} style={{ width: `${p}%` }} /></span>
+      <span className="sys-bar-num">{p.toFixed(0)}%</span>
+    </span>
+  );
 }
 
 export default function SystemHealthOnly() {
-  // Telemetria local (Tauri) e saúde do core via react-query: cache, retry e refetch automático.
-  const hwQ = useQuery<H>({ queryKey: ['hardware'], queryFn: () => invoke<H>('hardware_telemetry'), refetchInterval: 30000, staleTime: 25000, retry: 1 });
-  const coreQ = useCoreHealth();
-  const wdQ = useWatchdog();
-  const telQ = useTelemetry(50);
-  const histQ = useTelemetryHistory(120);
-  const qQ = useQueue();
-  const bootQ = useBoot();
-  const boot = bootQ.data;
-  const bootSnap = boot?.snapshot ?? null;
-  const coreDown = coreQ.data === false;
-  const ea = wdQ.data;
-  const eaState = ea?.state ?? 'unknown';
+  // Estado inicial vindo do cache: abrir a aba ja mostra o ultimo valor.
+  const [hw, setHw] = useState<Hardware | null>(ultimaLeitura.hw);
+  const [erro, setErro] = useState(ultimaLeitura.erro);
+  const [lidoEm, setLidoEm] = useState(ultimaLeitura.lidoEm);
+  // Desempenho do app medido de verdade: quanto tempo o gateway leva para
+  // responder a cada leitura. Nao ha como o JavaScript ler a memoria do
+  // proprio processo, entao o que e medido aqui e a latencia real, que e o
+  // sintoma que o usuario sente quando o app trava.
+  const [latencia, setLatencia] = useState<number | null>(ultimaLeitura.latencia);
+  const [gatewayOk, setGatewayOk] = useState<boolean | null>(ultimaLeitura.gatewayOk);
+  // Diz quando ainda nao ha nada para mostrar. Sem isso a cabeca mostrava
+  // "Ao vivo" enquanto a tabela dizia "--" em tudo.
+  const [carregando, setCarregando] = useState(ultimaLeitura.hw === null);
+  const emVoo = useRef(false);
+  const lerRef = useRef<(forcado?: boolean) => void>(() => {});
+
+  const aplicar = useCallback((nova: Leitura) => {
+    ultimaLeitura = nova;
+    ultimaLeituraEm = Date.now();
+    setErro(nova.erro);
+    setLidoEm(nova.lidoEm);
+    setLatencia(nova.latencia);
+    setGatewayOk(nova.gatewayOk);
+    // So re-renderiza a tabela se os numeros mudaram de verdade: um tick que
+    // devolve a mesma leitura nao deve mexer na tela.
+    setHw((atual) => (
+      atual && nova.hw && JSON.stringify(atual) === JSON.stringify(nova.hw) ? atual : nova.hw
+    ));
+    setCarregando(false);
+  }, []);
+
   useEffect(() => {
-    if (coreDown) notify('Core XAU AI PRO', 'Gateway local indisponível (127.0.0.1:9001). Verifique se o core está em execução.');
-  }, [coreDown]);
-  const h = hwQ.data ?? null;
-  const mem = h?.memory_total_gb && h.memory_available_gb != null ? ((h.memory_total_gb - h.memory_available_gb) / h.memory_total_gb) * 100 : null;
-  const at = hwQ.dataUpdatedAt ? new Date(hwQ.dataUpdatedAt).toLocaleTimeString('pt-BR') : '--';
-  const core = coreQ.data === true ? 'Online' : coreDown ? 'Indisponível' : 'Verificando';
-  const busy = hwQ.isFetching || coreQ.isFetching;
-  const eaChip = eaState === 'alive' ? 'ok' : eaState === 'frozen' || eaState === 'stale' ? 'warn' : 'danger';
-  const hbAge = ea?.heartbeat_age_sec != null ? `${Math.round(ea.heartbeat_age_sec)}s` : '--';
-  return <div className="system-page">
-    {coreDown && <div className="core-down" role="alert"><span className="core-dot" /> Core local fora do ar — posições e cotações podem estar desatualizadas.</div>}
-    <div className="page-head"><div><h1>Sistema</h1><span className="muted">Saúde do aplicativo e desempenho do computador</span></div><div className="btn-row"><span className={`chip ${core === 'Online' ? 'ok' : 'warn'}`}>Core {core}</span><span className={`chip ${eaChip}`}>EA {EA_LABEL[eaState] ?? eaState}</span><span className={`chip ${(qQ.data?.pending ?? 0) > 0 ? 'warn' : 'ok'}`}>Fila {qQ.data?.pending ?? 0} pendente(s)</span><button type="button" className="btn primary" onClick={() => { void hwQ.refetch(); void coreQ.refetch(); void wdQ.refetch(); void telQ.refetch(); void qQ.refetch(); }} disabled={busy}>{busy ? 'Atualizando…' : 'Atualizar'}</button></div></div>
-    <EquitySpark histQ={histQ} />
-    <div className="metrics-grid">
-      <div className="card metric-card"><span className="muted">Equity agora</span><strong>{histQ.data?.last?.equity ?? '--'}</strong><small>Último snapshot</small></div>
-      <div className="card metric-card"><span className="muted">Posições</span><strong>{histQ.data?.last?.positions ?? '--'}</strong><small>Snapshots: {histQ.data?.count ?? 0}</small></div>
-      <div className="card metric-card"><span className="muted">Core</span><strong>{core}</strong><small>Gateway local 9001</small></div>
-      <div className="card metric-card"><span className="muted">CPU</span><strong>{h?.cpu_usage_percent == null ? '--' : `${h.cpu_usage_percent.toFixed(0)}%`}</strong><small>{h?.cpu_cores ?? '--'} núcleos</small></div>
-      <div className="card metric-card"><span className="muted">Memória</span><strong>{mem == null ? '--' : `${mem.toFixed(0)}%`}</strong><small>{h?.memory_total_gb?.toFixed(1) ?? '--'} GB total</small></div>
-      <div className="card metric-card"><span className="muted">Última leitura</span><strong>{at}</strong><small>Telemetria local</small></div>
-    </div>
-    <div className="card compact-card"><h2>Watchdog do EA</h2>
-      <table className="tbl compact-table"><thead><tr><th>Item</th><th>Valor</th></tr></thead>
-        <tbody>
-          <tr><td>Estado</td><td>{EA_LABEL[eaState] ?? eaState}</td></tr>
-          <tr><td>Idade do heartbeat</td><td>{hbAge} (TTL {ea?.ttl_sec ?? 120}s)</td></tr>
-          <tr><td>Idade do arquivo</td><td>{ea?.file_age_sec != null ? `${Math.round(ea.file_age_sec)}s` : '--'}</td></tr>
-        </tbody></table>
-      <div className="hint">Classificação: vivo (&lt; TTL) · travado (arquivo novo, timestamp parado) · offline (arquivo velho). Somente leitura — nunca envia comandos ao MT5.</div>
-    </div>
-    <div className="card compact-card"><h2>Diagnóstico do boot</h2>
-      {boot == null ? <div className="hint">Carregando relatório do boot…</div> :
-        <table className="tbl compact-table"><thead><tr><th>Item</th><th>Valor</th></tr></thead>
-          <tbody>
-            <tr><td>MT5 pronto</td><td>{boot.mt5_ready ? 'Sim' : 'Não'}</td></tr>
-            <tr><td>Equity no boot</td><td>{bootSnap?.equity ?? '--'}</td></tr>
-            <tr><td>Posições no boot</td><td>{bootSnap?.positions ?? '--'}</td></tr>
-            <tr><td>EA no boot</td><td>{EA_LABEL[bootSnap?.ea_state ?? 'unknown'] ?? bootSnap?.ea_state ?? '--'}</td></tr>
-          </tbody></table>}
-      <div className="hint">Reconciliação de intents + primeiro snapshot de telemetria, sem reexecutar loops. {boot?.error ? `Aviso: ${boot.error}` : ''}</div>
-    </div>
-    <div className="card compact-card"><h2>Telemetria (últimos eventos)</h2>
-      {(telQ.data?.events?.length ?? 0) === 0 ? <div className="hint">Sem eventos registrados ainda. Ações do Guardian e reconciliações aparecem aqui.</div> :
-        <table className="tbl compact-table"><thead><tr><th>Quando</th><th>Evento</th><th>Severidade</th><th>Detalhe</th></tr></thead>
-          <tbody>{telQ.data?.events?.map((ev, i) => <tr key={i}><td>{ev.ts_iso ? new Date(ev.ts_iso).toLocaleTimeString('pt-BR') : '--'}</td><td>{ev.kind}</td><td>{ev.severity}</td><td className="muted">{JSON.stringify(ev.data ?? {}).slice(0, 80)}</td></tr>)}</tbody>
-        </table>}
-    </div>
-    <div className="card compact-card"><h2>Fila de comandos (offline)</h2>
-      {(qQ.data?.recent?.length ?? 0) === 0 ? <div className="hint">Fila vazia. Comandos DEMO emitidos com o terminal MT5 offline ficam aqui e são reexecutados automaticamente quando ele volta (ordens novas ficam "skipped" para revisão manual).</div> :
-        <table className="tbl compact-table"><thead><tr><th>ID</th><th>Comando</th><th>Status</th><th>Tentativas</th><th>Erro</th></tr></thead>
-          <tbody>{qQ.data?.recent?.map((it) => <tr key={it.queue_id}><td className="muted">{it.queue_id}</td><td>{it.kind}</td><td><span className={`chip ${it.status === 'sent' ? 'ok' : it.status === 'pending' ? 'warn' : 'danger'}`}>{it.status}</span></td><td>{it.attempts}</td><td className="muted">{it.last_error ? String(it.last_error).slice(0, 60) : '--'}</td></tr>)}</tbody>
-        </table>}
-      <div className="hint">Pendentes: {qQ.data?.pending ?? 0} · Enviados: {qQ.data?.sent ?? 0} · Falhados: {qQ.data?.failed ?? 0} · Skipped: {qQ.data?.skipped ?? 0}</div>
-    </div>
-    <div className="card compact-card"><h2>Ambiente</h2>
-      <table className="tbl compact-table"><thead><tr><th>Item</th><th>Valor</th></tr></thead>
-        <tbody>
-          <tr><td>Sistema operacional</td><td>{h?.os ?? '--'}</td></tr>
-          <tr><td>Arquitetura</td><td>{h?.architecture ?? '--'}</td></tr>
-          <tr><td>Processador</td><td>{h?.cpu_name ?? '--'}</td></tr>
-          <tr><td>Placa de vídeo</td><td>{h?.gpu_name ?? '--'}</td></tr>
-        </tbody></table>
-    </div>
-    <div className="hint">Leitura automática a cada 30 segundos com cache local. O alerta do sistema operacional avisa quando o core sai do ar.</div>
-  </div>;
+    let vivo = true;
+    const ler = async (forcado = false) => {
+      if (emVoo.current) return;
+      if (!forcado && cacheFresco()) {
+        aplicar(ultimaLeitura);
+        return;
+      }
+      emVoo.current = true;
+      setCarregando(ultimaLeitura.hw === null);
+      const t0 = performance.now();
+      try {
+        const dados = await invoke<Hardware>('hardware_telemetry');
+        const r = await fetch(`${apiBase()}/api/health`, { signal: AbortSignal.timeout(4000) });
+        if (!vivo) return;
+        aplicar({
+          hw: dados,
+          erro: '',
+          lidoEm: new Date().toLocaleTimeString('pt-BR'),
+          latencia: performance.now() - t0,
+          gatewayOk: r.ok,
+        });
+      } catch (e) {
+        if (!vivo) return;
+        aplicar({
+          hw: ultimaLeitura.hw,
+          erro: e instanceof Error ? e.message : 'Falha ao ler a maquina',
+          lidoEm: new Date().toLocaleTimeString('pt-BR'),
+          latencia: performance.now() - t0,
+          gatewayOk: null,
+        });
+      } finally {
+        emVoo.current = false;
+      }
+    };
+    lerRef.current = ler;
+    void ler();
+    const t = window.setInterval(() => {
+      // Janela oculta nao gasta powershell: o tick de verdade e quando o
+      // usuario volta a olhar (abaixo, visibilitychange).
+      if (document.hidden) return;
+      void ler(true);
+    }, REFRESH_MS);
+    const aoVoltar = () => { if (!document.hidden) void ler(); };
+    document.addEventListener('visibilitychange', aoVoltar);
+    return () => {
+      vivo = false;
+      window.clearInterval(t);
+      document.removeEventListener('visibilitychange', aoVoltar);
+    };
+  }, [aplicar]);
+
+  const ramUsada = hw?.memory_total_gb != null && hw.memory_available_gb != null
+    ? Math.max(0, hw.memory_total_gb - hw.memory_available_gb)
+    : null;
+  const discoUsado = hw?.disk_total_gb != null && hw.disk_free_gb != null
+    ? Math.max(0, hw.disk_total_gb - hw.disk_free_gb)
+    : null;
+
+  return (
+    <main className="system-page">
+      <div className="page-head">
+        <div>
+          <span className="eyebrow">MAQUINA</span>
+          <h1>Sistema</h1>
+          <span className="muted">Leitura real do aparelho e desempenho do app</span>
+        </div>
+        <div className="btn-row">
+          <span className={`chip ${erro || carregando ? 'warn' : 'ok'}`}>
+            {carregando ? 'Lendo…' : erro ? 'Falha na leitura' : 'Ao vivo'}
+          </span>
+          {lidoEm && <span className="muted">{lidoEm}</span>}
+          <button
+            type="button"
+            className="btn xs ghost"
+            onClick={() => lerRef.current(true)}
+            disabled={carregando}
+            aria-label="Atualizar leitura da maquina"
+          >
+            {carregando ? 'Atualizando…' : 'Atualizar'}
+          </button>
+        </div>
+      </div>
+
+      {erro && <div className="card compact-card sys-erro" role="status">{erro}</div>}
+
+      <section className="card compact-card" aria-labelledby="sys-maquina">
+        <div className="section-head">
+          <h2 id="sys-maquina">Maquina</h2>
+          {hw?.source && <span className="chip">{hw.source}</span>}
+        </div>
+        <div className="table-scroll">
+          <table className="tbl compact-table sys-grid">
+            <caption className="sr-only">Especificacoes e uso atual da maquina</caption>
+            <thead>
+              <tr>
+                <th>Item</th><th>Modelo</th>
+                <th className="num">Total</th><th className="num">Livre</th>
+                <th className="sys-th-bar">Uso</th><th className="num">Extra</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Sistema</td>
+                <td>{val(hw?.os)}</td>
+                <td className="num muted">{val(hw?.architecture)}</td>
+                <td className="num muted">--</td>
+                <td className="muted">--</td>
+                <td className="num muted">--</td>
+              </tr>
+              <tr>
+                <td>Processador</td>
+                <td>{val(hw?.cpu_name)}</td>
+                <td className="num">{hw?.cpu_cores ? `${hw.cpu_cores} nucleos` : '--'}</td>
+                <td className="num muted">--</td>
+                <td className="muted">--</td>
+                <td className="num">{hw?.cpu_temperature_c != null ? `${hw.cpu_temperature_c.toFixed(0)} °C` : '--'}</td>
+              </tr>
+              <tr>
+                <td>CPU em uso</td>
+                <td className="muted">carga</td>
+                <td className="num muted">--</td>
+                <td className="num muted">--</td>
+                <td><Barra usado={hw?.cpu_usage_percent ?? null} total={100} /></td>
+                <td className="num">{pct(hw?.cpu_usage_percent)}</td>
+              </tr>
+              <tr>
+                <td>Video</td>
+                <td>{hw?.gpu_available ? val(hw?.gpu_name) : <span className="muted">nao exposto pelo sistema</span>}</td>
+                <td className="num muted">--</td>
+                <td className="num muted">--</td>
+                <td className="muted">--</td>
+                <td className="num muted">--</td>
+              </tr>
+              <tr>
+                <td>Memoria</td>
+                <td>RAM</td>
+                <td className="num">{gb(hw?.memory_total_gb)}</td>
+                <td className="num">{gb(hw?.memory_available_gb)}</td>
+                <td><Barra usado={ramUsada} total={hw?.memory_total_gb ?? null} /></td>
+                <td className="num muted">--</td>
+              </tr>
+              <tr>
+                <td>Disco</td>
+                <td>Sistema (C:)</td>
+                <td className="num">{gb(hw?.disk_total_gb)}</td>
+                <td className="num">{gb(hw?.disk_free_gb)}</td>
+                <td><Barra usado={discoUsado} total={hw?.disk_total_gb ?? null} /></td>
+                <td className="num muted">--</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="card compact-card" aria-labelledby="sys-app">
+        <div className="section-head">
+          <h2 id="sys-app">Desempenho do app</h2>
+          <span className={`chip ${gatewayOk === null ? 'warn' : gatewayOk ? 'ok' : 'danger'}`}>
+            {gatewayOk === null ? 'Sem leitura' : gatewayOk ? 'Gateway ok' : 'Gateway sem resposta'}
+          </span>
+        </div>
+        <div className="table-scroll">
+          <table className="tbl compact-table sys-grid">
+            <caption className="sr-only">Desempenho medido do aplicativo</caption>
+            <thead>
+              <tr><th>Medida</th><th className="num">Valor</th><th>Referencia</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Latencia de leitura</td>
+                <td className="num">{latencia != null ? `${latencia.toFixed(0)} ms` : '--'}</td>
+                <td className="muted">tempo de hardware + gateway, medido a cada {REFRESH_MS / 1000}s</td>
+              </tr>
+              <tr>
+                <td>Intervalo de atualizacao</td>
+                <td className="num">{(REFRESH_MS / 1000).toFixed(0)} s</td>
+                <td className="muted">esta aba</td>
+              </tr>
+              <tr>
+                <td>Origem da leitura</td>
+                <td className="num">{val(hw?.source)}</td>
+                <td className="muted">WMI no Windows, /proc no Linux, campos nativos no Android</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  );
 }

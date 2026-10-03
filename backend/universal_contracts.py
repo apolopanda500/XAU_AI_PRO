@@ -237,7 +237,20 @@ def validate_read_scope(broker: str, market: str, symbol: str = "") -> dict[str,
 
 
 def execution_policy() -> dict[str, bool]:
-    return {"read_enabled": True, "order_enabled": False, "withdrawals_enabled": False, "manual_confirmation_required": True}
+    """Politica de execucao considerando as gates de cada corretora.
+
+    `order_enabled` deriva do estado real das gates (padrao ligado), nao de
+    uma constante. Saque e transferencia nao entram nesta decisao: continuam
+    fixos em False.
+    """
+    from backend.broker_registry import execution_enabled as gate_broker
+
+    return {
+        "read_enabled": True,
+        "order_enabled": any(gate_broker(broker) for broker in ("mt5", "mexc", "binance", "bybit", "okx")),
+        "withdrawals_enabled": False,
+        "manual_confirmation_required": True,
+    }
 
 
 @dataclass(frozen=True)

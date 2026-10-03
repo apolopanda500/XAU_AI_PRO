@@ -8,11 +8,27 @@ use tracing::info;
 use crate::config::MT5Config;
 use crate::protocol::{AccountInfo, OrderRequest, OrderResponse, Position, Quote};
 
-/// Bridge para comunicação com MT5
+/// Bridge para comunicação com o gateway local do XAU AI PRO.
+///
+/// O comentario antigo desta linha dizia "o EA MQL5 pode expor uma API local".
+/// Quem ocupa a porta 9001 e o **gateway Python** (empacotado como
+/// `mt5-gateway.exe`), nao o EA. Isso fazia o core chamar rotas que o
+/// gateway nao tem.
 #[derive(Clone)]
 pub struct MT5Bridge {
     config: MT5Config,
     base_url: String,
+    /// O token NAO fica em campo proprio: e aplicado como header
+    /// `Authorization` na CONSTRUCAO deste client, e `reqwest::Client` envia
+    /// esse header em toda requisicao que ele faz.
+    ///
+    /// Antes havia `token: Option<String>` aqui, preenchido e nunca lido. O
+    /// `cargo clippy -- -D warnings` reprovava o build inteiro por isso
+    /// (`field 'token' is never read`). Pior: o comentario do campo prometia
+    /// que o token era repassado, e o unico lugar onde ele de fato era
+    /// usado era o construtor do client, duas linhas acima. Campo morto com
+    /// documentacao que descreve comportamento alheio — exatamente o
+    /// padrao que a auditoria ja registrou duas vezes neste projeto.
     client: reqwest::Client,
 }
 
@@ -23,11 +39,28 @@ impl MT5Bridge {
             .clone()
             .unwrap_or_else(|| "http://127.0.0.1:9001".to_string());
 
-        info!("MT5Bridge iniciando — URL base: {}", base_url);
+        let token = std::env::var("XAU_GATEWAY_TOKEN")
+            .ok()
+            .filter(|value| !value.trim().is_empty());
 
-        let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(5))
-            .build()?;
+        info!(
+            "MT5Bridge iniciando — URL base: {} (token: {})",
+            base_url,
+            if token.is_some() { "sim" } else { "nao" }
+        );
+
+        let mut builder = reqwest::Client::builder().timeout(std::time::Duration::from_secs(5));
+        if let Some(value) = token.as_deref() {
+            builder = builder.default_headers(
+                [(
+                    reqwest::header::AUTHORIZATION,
+                    format!("Bearer {value}").parse()?,
+                )]
+                .into_iter()
+                .collect(),
+            );
+        }
+        let client = builder.build()?;
 
         let bridge = Self {
             config: config.clone(),
@@ -42,9 +75,14 @@ impl MT5Bridge {
         Ok(bridge)
     }
 
-    /// Verifica saúde da conexão
+    /// Verifica saúde da conexão.
+    ///
+    /// A rota e `/api/health`. O caminho `/health` devolvia 404: o gateway
+    /// expoe `/` e `/api/health` (mt5_gateway.py) e FastAPI expoe
+    /// `/api/health`. Com o 404 o `MT5Bridge::new` falhava, `bridge` ficava
+    /// `None` para sempre e o WebSocket 9002 nao entregava nenhuma cotacao.
     pub async fn health_check(&self) -> anyhow::Result<bool> {
-        let url = format!("{}/health", self.base_url);
+        let url = format!("{}/api/health", self.base_url);
         match self.client.get(&url).send().await {
             Ok(resp) if resp.status().is_success() => Ok(true),
             Ok(resp) => Err(anyhow::anyhow!("MT5 health check: HTTP {}", resp.status())),

@@ -33,7 +33,12 @@
     ambas    -> o padrao; assina os dois
 
 .PARAMETER ReleaseRoot
-    Pasta montada no formato esperado por scripts/assinar_release.ps1.
+    Pasta de release. O layout separa as plataformas:
+
+      release\1.2.3\windows\   exe, msi, nsis, gateway, core, instalador
+      release\1.2.3\android\   apk
+
+    Apontar para 'release\1.2.3' e o script resolve a subpasta da plataforma.
 
 .PARAMETER Apk
     Caminho do APK a assinar. Se omitido, procura em Temp\opencode\artifacts.
@@ -78,6 +83,29 @@ function Get-BuildTool([string]$Name) {
     return $path
 }
 
+# JDK 21 fora do %TEMP%: a limpeza automatica do Windows ja levou uma copia
+# que estava em Temp, quebrando o build do Gradle. %LOCALAPPDATA% sobrevive.
+function Get-Jdk21 {
+    $toolchain = Join-Path $env:LOCALAPPDATA 'XAU_AI_PRO\toolchain'
+    $marcador = Join-Path $toolchain 'JAVA_HOME.txt'
+    $candidatos = @()
+    # O zip do Temurin extrai uma pasta versionada (jdk-21.0.12.1+1) e o nome
+    # muda a cada atualizacao, entao o path real fica num marcador.
+    if (Test-Path -LiteralPath $marcador) { $candidatos += (Get-Content -LiteralPath $marcador -Raw).Trim() }
+    $candidatos += @(
+        (Join-Path $toolchain 'jdk'),
+        (Join-Path $env:TEMP 'opencode\jdk21-temurin\jdk'),
+        'C:\Program Files\Android\Android Studio\jbr'
+    )
+    foreach ($c in $candidatos) {
+        if (-not $c) { continue }
+        if ((Test-Path (Join-Path $c 'bin\java.exe')) -and (Test-Path (Join-Path $c 'lib\jvm.cfg'))) {
+            return $c
+        }
+    }
+    throw 'JDK 17+ nao encontrado. Grave o path em %LOCALAPPDATA%\XAU_AI_PRO\toolchain\JAVA_HOME.txt.'
+}
+
 # --- credenciais (mesma fonte do restante do projeto) ------------------------
 
 function Get-SecretValue([string]$Key) {
@@ -102,16 +130,42 @@ function Invoke-WindowsSigning {
 
     $signtool = Get-SignTool
     $root = (Resolve-Path -LiteralPath $ReleaseRoot).Path
+    # Layout separado: aceita 'release\1.2.3' ou 'release\1.2.3\windows'
+    if (Test-Path (Join-Path $root 'windows')) { $root = Join-Path $root 'windows' }
+
+    # Os nomes dos instaladores carregam a versao no proprio arquivo. ate
+    # 2026-09-29 eles estavam fixos em 1.2.3 aqui, entao uma release nova
+    # abortava com "artefato ausente" mesmo com os arquivos corretamente
+    # gerados: o script procurava o nome da versao antiga. A versao vem do
+    # arquivo VERSION da raiz, que e a fonte usada por `sync_version.py` e
+    # pelo `release_production.cmd`.
+    $versao = '0.0.0'
+    $arquivoVersao = Join-Path $Repo 'VERSION'
+    if (Test-Path -LiteralPath $arquivoVersao) {
+        $versao = (Get-Content -LiteralPath $arquivoVersao -Raw).Trim()
+    }
+    if ($versao -notmatch '^\d+\.\d+\.\d+') {
+        throw "VERSION invalido em $arquivoVersao : '$versao'"
+    }
+    Write-Host "  versao da release: $versao"
 
     $alvos = @(
         'pyinstaller-XAU_AI_PRO\XAU_AI_PRO.exe',
         'xau-ai-pro-core.exe',
         'bridge\mt5-gateway.exe',
         'tauri\XAU AI PRO.exe',
-        'tauri\bundle\msi\XAU AI PRO_1.2.3_x64_en-US.msi',
-        'tauri\bundle\nsis\XAU AI PRO_1.2.3_x64-setup.exe',
-        'XAU_AI_PRO_Setup_1.2.3.exe'
-    ) | ForEach-Object { Join-Path $root $_ } | Where-Object { Test-Path -LiteralPath $_ }
+        "tauri\XAU AI PRO_${versao}_x64_en-US.msi",
+        "tauri\XAU AI PRO_${versao}_x64-setup.exe",
+        "XAU_AI_PRO_Setup_${versao}.exe"
+    ) | ForEach-Object { Join-Path $root $_ }
+
+    # Falha barulhenta: pular um artefato em silencio produz uma release
+    # parcialmente assinada, que e pior do que nao assinar nada.
+    $faltando = $alvos | Where-Object { -not (Test-Path -LiteralPath $_) }
+    if ($faltando) {
+        foreach ($f in $faltando) { Write-Host "  AUSENTE: $f" -ForegroundColor Red }
+        throw " $($faltando.Count) artefato(s) esperado(s) nao existe(m) em $root. Release abortada."
+    }
 
     if (-not $alvos) { throw "nenhum artefato Windows encontrado em $root" }
 
@@ -176,9 +230,8 @@ function Invoke-AndroidSigning {
         "$apkPath.signed"
     }
 
-    # O Java do PATH pode ser o 8 ou o 25; o apksigner precisa de 17+.
-    $jdk = Join-Path $env:TEMP 'opencode\jdk21-temurin\jdk'
-    if (Test-Path (Join-Path $jdk 'bin\java.exe')) { $env:JAVA_HOME = $jdk }
+    # O Java do PATH pode ser o 8, e o apksigner precisa de 17+.
+    $env:JAVA_HOME = Get-Jdk21
     $env:Path = "$($env:JAVA_HOME)\bin;$env:Path"
 
     Write-Host "  alignando: $(Split-Path $apkPath -Leaf)"

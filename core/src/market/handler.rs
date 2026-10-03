@@ -7,7 +7,7 @@ use tokio::time::Duration;
 
 use super::state::{encode_message, push_text, send_error, WsSender};
 use crate::protocol::{
-    error_codes, ClientKind, HelloMessage, WsCommand, WsMessage, DEFAULT_SYMBOLS, PROTOCOL_VERSION,
+    error_codes, ClientKind, HelloMessage, WsCommand, WsMessage, PROTOCOL_VERSION,
     WS_PING_INTERVAL_MS,
 };
 
@@ -82,7 +82,8 @@ pub async fn answer_hello(sender: &mut WsSender) {
     let msg = WsMessage::Hello(HelloMessage {
         version: PROTOCOL_VERSION.into(),
         core_version: crate::VERSION.into(),
-        symbols: DEFAULT_SYMBOLS.iter().map(|s| (*s).to_string()).collect(),
+        // Vazio de proposito: os simbolos assinados sao os que o cliente pedir.
+        symbols: Vec::new(),
         ping_interval_ms: WS_PING_INTERVAL_MS,
     });
     push_text(sender, encode_message(&msg)).await;

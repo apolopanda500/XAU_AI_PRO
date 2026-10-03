@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Any
 
@@ -23,12 +24,34 @@ EXCHANGE_MARKETS = ("crypto-spot", "crypto-futures")
 MT5_CAPABILITIES = ("assets", "quotes", "batch_quotes", "candles", "account", "positions", "orders", "history", "journal")
 EXCHANGE_CAPABILITIES = ("assets", "quotes", "batch_quotes", "candles", "depth", "trades", "stats24h", "account", "positions", "history")
 
+# Trava de execucao por corretora. Padrao "1": app desbloqueado. Definir "=0"
+# volta a bloquear aquela corretora sem alterar codigo.
+EXECUTION_GATES: dict[str, str] = {
+    "mexc": "XAU_ENABLE_MEXC_EXECUTION",
+    "binance": "XAU_ENABLE_BINANCE_EXECUTION",
+    "bybit": "XAU_ENABLE_BYBIT_EXECUTION",
+    "okx": "XAU_ENABLE_OKX_EXECUTION",
+    "mt5": "XAU_ENABLE_MT5_EXECUTION",
+}
+
+# Acoes que cada corretora expoe quando a gate dela esta ligada.
+EXECUTION_ACTIONS: dict[str, tuple[str, ...]] = {
+    "mt5": ("order", "close", "modify", "cancel"),
+    "mexc": ("order",),
+    "binance": ("order",),
+    "bybit": ("order",),
+    "okx": ("order",),
+}
+
 BROKERS: dict[str, BrokerDefinition] = {
-    "mt5": BrokerDefinition("mt5", "MetaTrader 5", MT5_MARKETS, ("forex", "metal", "index", "equity", "commodity", "bond", "crypto", "other"), True, True, True, False, False, "active"),
-    "binance": BrokerDefinition("binance", "Binance", EXCHANGE_MARKETS, ("crypto",), True, True, False, False, False, "active"),
-    "mexc": BrokerDefinition("mexc", "MEXC", EXCHANGE_MARKETS, ("crypto",), True, True, False, False, False, "active"),
-    "bybit": BrokerDefinition("bybit", "Bybit", EXCHANGE_MARKETS, ("crypto",), True, True, False, False, False, "code_only"),
-    "okx": BrokerDefinition("okx", "OKX", EXCHANGE_MARKETS, ("crypto",), True, True, False, False, False, "code_only"),
+    "mt5": BrokerDefinition("mt5", "MetaTrader 5", MT5_MARKETS, ("forex", "metal", "index", "equity", "commodity", "bond", "crypto", "other"), True, True, True, True, True, "active"),
+    "binance": BrokerDefinition("binance", "Binance", EXCHANGE_MARKETS, ("crypto",), True, True, False, True, True, "active"),
+    "mexc": BrokerDefinition("mexc", "MEXC", EXCHANGE_MARKETS, ("crypto",), True, True, False, True, True, "active"),
+    # Bybit e OKX passaram a active para dados publicos depois que os clientes
+    # responderam a API publica real (catalogo, ticker, klines, depth, trades).
+    # A leitura de conta continua dependendo de credencial configurada pelo usuario.
+    "bybit": BrokerDefinition("bybit", "Bybit", EXCHANGE_MARKETS, ("crypto",), True, True, False, True, True, "active"),
+    "okx": BrokerDefinition("okx", "OKX", EXCHANGE_MARKETS, ("crypto",), True, True, False, True, True, "active"),
     "bitget": BrokerDefinition("bitget", "Bitget", EXCHANGE_MARKETS, ("crypto",), True, False, False, False, False, "planned"),
     "coinbase": BrokerDefinition("coinbase", "Coinbase", EXCHANGE_MARKETS, ("crypto",), True, False, False, False, False, "planned"),
     "kraken": BrokerDefinition("kraken", "Kraken", EXCHANGE_MARKETS, ("crypto",), True, False, False, False, False, "planned"),
@@ -118,6 +141,25 @@ def capabilities_for(broker: str, market: str) -> tuple[str, ...]:
     return tuple(MARKET_CAPABILITIES.get(scope["broker"], {}).get(scope["market"], ()))
 
 
+def execution_enabled(broker: str) -> bool:
+    """Gate de execucao da corretora. Padrao ligado (app desbloqueado)."""
+    normalized = str(broker or "").strip().lower()
+    if normalized not in BROKERS or not BROKERS[normalized].execution:
+        return False
+    gate = EXECUTION_GATES.get(normalized)
+    if not gate:
+        return False
+    return os.getenv(gate, "1") == "1"
+
+
+def execution_capabilities(broker: str) -> list[str]:
+    """Acoes executaveis da corretora agora; [] quando a gate esta desligada."""
+    normalized = str(broker or "").strip().lower()
+    if not execution_enabled(normalized):
+        return []
+    return list(EXECUTION_ACTIONS.get(normalized, ()))
+
+
 def capability_matrix(include_planned: bool = False) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for definition in BROKERS.values():
@@ -125,13 +167,22 @@ def capability_matrix(include_planned: bool = False) -> list[dict[str, Any]]:
             continue
         for market in definition.markets:
             capabilities = tuple(MARKET_CAPABILITIES.get(definition.id, {}).get(market, ()))
+            execution = execution_capabilities(definition.id)
             rows.append({
                 "broker": definition.id,
                 "market": market,
                 "status": definition.status,
-                "read_only": definition.status in {"active", "code_only"},
+                # read_only so e verdadeiro quando a corretora nao tem nenhuma
+                # acao de execucao liberada. Saque e transferencia ficam fora
+                # desta variavel: continuam False no maximo.
+                "read_only": not execution,
+                # `public_data` e o que responde a coluna "Leitura" da matriz:
+                # existe dado publico desta corretora sem credencial. `read_only`
+                # acima NAO serve para isso — ele mede ausencia de execucao, e
+                # usar os dois como sinonimo invertia o sentido do documento.
+                "public_data": bool(definition.public_data),
                 "capabilities": list(capabilities),
-                "execution": [],
+                "execution": execution,
                 "withdrawals": False,
                 "transfers": False,
             })

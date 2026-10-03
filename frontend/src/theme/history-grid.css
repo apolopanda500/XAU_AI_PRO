@@ -1,0 +1,96 @@
+/* Tabela do Histórico: densa, alinhada e com numeracao tabular.
+   O `.tbl` global usa celulas de 40px e fonte herdada; numa lista de hundreds
+   de operacoes isso vira uma lista rolagem infinita sem leitura util. Aqui a
+   linha cai para 30px, numeros ficam em coluna tabular e as datas ganham
+   largura fixa para nao dançar a cada linha.
+
+   `.dense-grid` e a MESMA regra com outro nome: as tabelas do Robô (ativos e
+   motor de operação) usam as mesmas medidas, para a tela nao trocar de
+   densidade ao mudar de aba. `.history-grid` fica como apelido do Histórico,
+   que e onde a classe nasceu. */
+
+.history-grid th,
+.dense-grid th,
+.history-grid td,
+.dense-grid td {
+  padding: 5px 10px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.history-grid thead th,
+.dense-grid thead th {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface, #0f172a);
+}
+
+.history-grid .num,
+.dense-grid .num {
+  text-align: right;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  /* Sem isso cada casa tem largura diferente e a coluna "nao alinha". */
+  font-feature-settings: 'tnum' 1;
+}
+
+.history-grid td.mono,
+.dense-grid td.mono,
+.history-grid .history-when {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: 0;
+}
+
+.history-deals tbody tr:hover {
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+
+.history-deals tbody tr.history-row-positive td:first-child {
+  box-shadow: inset 2px 0 0 var(--success, #22c55e);
+}
+
+.history-deals tbody tr.history-row-negative td:first-child {
+  box-shadow: inset 2px 0 0 var(--danger);
+}
+
+.history-deals tbody td strong {
+  font-size: 12.5px;
+  letter-spacing: 0;
+}
+
+.history-table-card {
+  max-height: 62vh;
+  overflow: auto;
+}
+
+/* Sem selecao: antes clicar numa linha marcava um subconjunto e mudava tres
+   numeros no topo. A linha inteira e clicavel de novo, so para copiar. */
+.history-deals tbody tr {
+  cursor: default;
+}
+
+.acum-table-card h2 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin: 0 0 6px;
+}
+
+.csv-note {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin: 6px 0 0;
+}

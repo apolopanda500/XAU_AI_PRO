@@ -9,35 +9,48 @@ import pytest
 from backend import fastapi_gateway
 
 
-def test_capabilities_declara_travas_reais_e_saques_bloqueados() -> None:
+def test_capabilities_declara_execucao_real_e_saques_bloqueados() -> None:
     data = asyncio.run(fastapi_gateway.capabilities())
 
     assert data["ok"] is True
     assert data["source"] == "fastapi_gateway"
-    assert data["real_orders_enabled"] is False
+    assert data["real_orders_enabled"] is True
+    assert data["live_execution_enabled"] is True
     assert data["withdrawals_enabled"] is False
+    assert data["transfers_enabled"] is False
     assert data["matrix"]
-    assert all(row["execution"] == [] for row in data["matrix"])
+    assert all(row["execution"] for row in data["matrix"])
     assert all(row["withdrawals"] is False and row["transfers"] is False for row in data["matrix"])
+    assert "trade/order" in data["trade_commands"]
+    assert "start" in data["ea_commands"]
     assert data["third_party_ea"]["commands"] is False
 
 
-@pytest.mark.parametrize("handler", [fastapi_gateway.universal_order,
-                                     fastapi_gateway.universal_close,
-                                     fastapi_gateway.universal_modify,
-                                     fastapi_gateway.universal_cancel])
-def test_fastapi_universal_nao_encaminha_execucao(handler, monkeypatch) -> None:
-    from backend.universal_router import UniversalRouter
+def test_fastapi_universal_encaminha_execucao(monkeypatch):
+    """execute=true roteia de verdade, em vez de devolver 403 'somente previa'."""
+    from fastapi.testclient import TestClient
 
-    def proibido(*args, **kwargs):
-        raise AssertionError("roteador não deve receber execução")
+    import backend.fastapi_gateway as fgw
 
-    monkeypatch.setattr(UniversalRouter, "execute", proibido)
-    response = asyncio.run(handler({"execute": True, "authorize_execution": True,
-                                    "confirm_live": True, "request_id": "teste"}))
-    data = json.loads(response.body)
-    assert response.status_code == 403
-    assert data["status"] == "blocked" and data["execution_enabled"] is False
+    vistos = []
+
+    def _executor(payload, action):
+        vistos.append(action)
+        return {"ok": True, "status": "executed", "action": action}
+
+    monkeypatch.setattr(fgw.gw, "_universal_execute", _executor)
+    cliente = TestClient(fgw.app)
+    for acao, rota in (("order", "/api/universal/order"),
+                       ("close", "/api/universal/close"),
+                       ("modify", "/api/universal/modify"),
+                       ("cancel", "/api/universal/cancel")):
+        resposta = cliente.post(rota, json={"execute": True, "broker": "mt5",
+                                            "market": "forex", "symbol": "XAUUSD",
+                                            "account_id": "mt5:active"})
+        assert resposta.status_code == 200, (rota, resposta.text)
+        assert resposta.json()["ok"] is True
+        assert vistos, "o executor nao foi chamado"
+        assert resposta.json().get("status") != "blocked"
 
 
 def test_fastapi_real_bloqueado_independente_do_ambiente(monkeypatch) -> None:

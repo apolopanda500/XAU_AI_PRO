@@ -63,12 +63,31 @@ def login(email: str, password: str) -> tuple[str, int]:
 
 
 def authenticate(token: str) -> int:
+    """Resolve uma sessao. NUNCA levanta excecao de banco.
+
+    Este caminho e o fallback do middleware de auth: quando o Bearer nao bate
+    com o token da sessao, o FastAPI tenta resolver como sessao remota. Se o
+    SQLite nao pode ser aberto (diretorio de install somente-leve, caminho
+    invalido, permissao), `_db()` estourava `sqlite3.OperationalError` e a
+    requisicao voltava 500 com traceback no log — em vez de 401.
+
+    Falha de armazenamento aqui significa "nao deu para confirmar a sessao",
+    e a resposta correta e negar. Erro de banco vira PermissionError, que o
+    middleware traduz em 401.
+    """
     token_hash = hashlib.sha256(token.encode()).hexdigest()
-    with _db() as db:
-        row = db.execute("SELECT user_id,expires_at FROM sessions WHERE token_hash=?", (token_hash,)).fetchone()
-        if not row or row[1] <= int(time()):
-            raise PermissionError("sessão inválida ou expirada")
-        return int(row[0])
+    try:
+        db = _db()
+    except sqlite3.Error as exc:
+        raise PermissionError("sessão não verificável") from exc
+    try:
+        with db:
+            row = db.execute("SELECT user_id,expires_at FROM sessions WHERE token_hash=?", (token_hash,)).fetchone()
+    except sqlite3.Error as exc:
+        raise PermissionError("sessão não verificável") from exc
+    if not row or row[1] <= int(time()):
+        raise PermissionError("sessão inválida ou expirada")
+    return int(row[0])
 
 
 def logout(token: str) -> None:

@@ -25,6 +25,10 @@ import './theme/clock.css';
 import './theme/mini-info.css';
 import './theme/level1.css';
 import './theme/guardian.css';
+// Escala visual: tipografia minima, espacamento em multiplos de 4 e tabelas
+// com numerais tabulares. Carregada por ULTIMO de proposito — assim ela
+// vence as folhas que inventaram valores proprios. Ver theme/scale.css.
+import './theme/scale.css';
 
 
 // Ajusta para Tauri (mobile viewport)
@@ -53,7 +57,7 @@ async function waitForGateway() {
       };
       if (response.ok && payload.ok === true
         && payload.source === 'mt5_gateway'
-        && payload.gateway_build === 'xau-ai-pro-1.2.3-universal-20260918') return;
+        && payload.gateway_build === 'xau-ai-pro-1.2.4-universal-20260928') return;
       retry = false;
       throw new Error('identidade do gateway local invalida');
     } catch (error) {

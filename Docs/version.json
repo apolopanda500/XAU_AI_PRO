@@ -1,8 +1,8 @@
 {
-  "version": "1.2.3",
+  "version": "1.2.4",
   "name": "XAU AI PRO",
   "identifier": "com.xau-ai-pro.desktop",
   "mainBinaryName": "XAU AI PRO",
   "gateway_build_suffix": "universal",
-  "updated_at": "2026-09-18"
+  "updated_at": "2026-09-28"
 }

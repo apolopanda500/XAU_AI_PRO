@@ -1,3 +1,24 @@
+"""Planos locais e o que cada um destrava de verdade.
+
+O QUE ESTE MODULO FAZ
+=====================
+Catalogo Free / VIP / VIPS, assinatura local persistida com assinatura
+criptografica, e a funcao `has_entitlement` que o `backend/plano_gate.py`
+consulta para destravar ou recusar cada rota.
+
+FREE — NUNCA USA MULTI (2026-10-02)
+==================================
+Decisao do dono: *"FREE nao pode usar multi"*.
+
+Antes o catalogo nao tinha nenhuma chave de modelo. `multi_account` (varias
+contas) e `multi_model` (varios modelos) sao coisas diferentes e a confusao
+entre as duas ja fez o app prometer um recurso que nao destravava nada.
+
+`multi_model` e o unico caminho para `MULTI_<GRUPO>_<TF>` em
+`backend/ai_inference.py`. No Free ele e `False` SEMPRE, e a funcao
+`pode_usar_multi_modelo` em `backend/acesso.py` reforca isso: mesmo que
+alguem adultere o `subscriptions.json`, a porta nao abre.
+"""
 from __future__ import annotations
 
 import copy
@@ -17,11 +38,29 @@ _DEFAULT_USER_ID = "local"
 _STATE_VERSION = 2
 _ACTIVE_STATUSES = {"active", "local_active"}
 
+# CATALOGO DE PLANOS — Free / VIP / VIPS
+# ================================
+# Por que os nomes mudaram
+# -----------------------
+# Os nomes antigos (Pro / Business) descreviam o tamanho da empresa que
+# compraria. Os nomes novos descrevem o NIVEL de acesso, que e o que o
+# operador escolhe por causa do produto. "VIP" e "VIPS" se entendem sem
+# explicacao: e a escada de recursos.
+#
+# O que NAO mudou: a trava de saque, transferencia e dinheiro real. Ela nao
+# passa por plano em nenhuma das entradas do catalogo. Ver `AGENTS.md`.
+#
+# COMPATIBILIDADE
+# ---------------
+# O id `business` era o plano salvo na maquina antes desta mudanca. Sem
+# migracao, `_normalized_record` devolveria None para ele e o usuario cairia
+# para Free sem avisar. `_MIGRACAO_PLANOS` traduz o id antigo para o novo
+# antes da validacao, entao ninguem perde o que tinha.
 _PLAN_CATALOG: dict[str, dict[str, Any]] = {
     "free": {
         "id": "free",
         "name": "Free",
-        "description": "Operação local básica em paper/demo.",
+        "description": "Operacao local basica em paper/demo.",
         "reference_price_monthly": 0,
         "currency": "BRL",
         "billing_mode": "local_only",
@@ -34,16 +73,17 @@ _PLAN_CATALOG: dict[str, dict[str, Any]] = {
             "ai_signals": True,
             "economic_calendar": False,
             "multi_account": False,
+            "multi_model": False,
             "social_paper": False,
             "priority_support": False,
         },
-        "limits": {"workspaces": 1, "alerts": 10, "ai_signals_per_day": 25, "paper_strategies": 0},
-        "features": ["Paper/demo", "Mercado principal", "Alertas de preço", "IA básica"],
+        "limits": {"workspaces": 1, "alerts": 10, "ai_signals_per_day": 25, "paper_strategies": 0, "multi_models": 0},
+        "features": ["Paper/demo", "Mercado principal", "Alertas de preco", "IA basica"],
     },
-    "pro": {
-        "id": "pro",
-        "name": "Pro",
-        "description": "Desk local completo para estudo, automação paper e análise avançada.",
+    "vip": {
+        "id": "vip",
+        "name": "VIP",
+        "description": "Desk local completo para estudo, automacao paper e analise avancada.",
         "reference_price_monthly": 49,
         "currency": "BRL",
         "billing_mode": "local_only",
@@ -56,16 +96,17 @@ _PLAN_CATALOG: dict[str, dict[str, Any]] = {
             "ai_signals": True,
             "economic_calendar": True,
             "multi_account": True,
+            "multi_model": True,
             "social_paper": True,
             "priority_support": False,
         },
-        "limits": {"workspaces": 5, "alerts": 100, "ai_signals_per_day": 500, "paper_strategies": 3},
-        "features": ["Tudo do Free", "Analytics avançado", "Calendário econômico", "Social paper", "5 workspaces"],
+        "limits": {"workspaces": 5, "alerts": 100, "ai_signals_per_day": 500, "paper_strategies": 3, "multi_models": 2},
+        "features": ["Tudo do Free", "Analytics avancado", "Calendario economico", "Social paper", "5 workspaces", "2 modelos multi (PRO)"],
     },
-    "business": {
-        "id": "business",
-        "name": "Business",
-        "description": "Operação local ampliada para estratégias paper e análise de equipe.",
+    "vips": {
+        "id": "vips",
+        "name": "VIPS",
+        "description": "Operacao local ampliada para estrategias paper e analise de equipe.",
         "reference_price_monthly": 149,
         "currency": "BRL",
         "billing_mode": "local_only",
@@ -78,13 +119,23 @@ _PLAN_CATALOG: dict[str, dict[str, Any]] = {
             "ai_signals": True,
             "economic_calendar": True,
             "multi_account": True,
+            "multi_model": True,
             "social_paper": True,
             "priority_support": True,
         },
-        "limits": {"workspaces": 20, "alerts": 1000, "ai_signals_per_day": 5000, "paper_strategies": 20},
-        "features": ["Tudo do Pro", "20 workspaces", "20 estratégias paper", "Auditoria avançada", "Suporte prioritário"],
+        "limits": {"workspaces": 20, "alerts": 1000, "ai_signals_per_day": 5000, "paper_strategies": 20, "multi_models": 8},
+        "features": ["Tudo do VIP", "20 workspaces", "20 estrategias paper", "8 modelos multi (PRO)", "Auditoria avancada", "Suporte prioritario"],
     },
 }
+
+# id antigo -> id novo. Aplicado em `_normalized_record`, antes de validar
+# contra o catalogo. Um id desconhecido que NAO esta aqui continua sendo
+# descartado — a migracao mapeia renome, e nao inventa plano.
+_MIGRACAO_PLANOS: dict[str, str] = {
+    "pro": "vip",
+    "business": "vips",
+}
+
 
 
 def _now() -> str:
@@ -128,6 +179,13 @@ def _normalized_record(value: Any) -> dict[str, Any] | None:
     if not isinstance(value, dict):
         return None
     plan_id = str(value.get("plan_id", "")).strip().lower()
+    # Migracao de id: o plano gravado antes do renome (pro / business) ainda
+    # precisa valer. Sem esta linha, o registro do usuario deixaria de casar
+    # com o catalogo, `_normalized_record` devolveria None, e ele cairia para
+    # Free sem nenhum aviso — a perda silenciosa que o projeto ja registrou
+    # duas vezes (ver `Docs/SESSAO_20260930.md` secao 3, governanca dos
+    # metadados de modelo apagada por um script legado).
+    plan_id = _MIGRACAO_PLANOS.get(plan_id, plan_id)
     if plan_id not in _PLAN_CATALOG:
         return None
     status = str(value.get("status", "local_active")).strip().lower()
@@ -238,7 +296,7 @@ def get_subscription(user_id: str | None = None) -> dict[str, Any]:
             "plan": copy.deepcopy(plan),
             "entitlements": copy.deepcopy(plan["entitlements"]) if effective else {},
             "limits": copy.deepcopy(plan["limits"]) if effective else {"workspaces": 1, "alerts": 0, "ai_signals_per_day": 0, "paper_strategies": 0},
-            "execution_mode": "paper_demo",
+            "execution_mode": "paper_trade",
             "live_execution": False,
             "withdrawals_enabled": False,
             "transfers_enabled": False,
@@ -253,6 +311,11 @@ def get_subscription(user_id: str | None = None) -> dict[str, Any]:
 def activate_local_plan(plan_id: str, user_id: str | None = None, expires_at: str | None = None) -> dict[str, Any]:
     uid = _user_id(user_id)
     normalized = str(plan_id or "").strip().lower()
+    # Mesma migracao de `_normalized_record`: um cliente com o id antigo no
+    # corpo do POST ativa o plano novo em vez de receber 422. A tela web ja
+    # envia o id novo; aqui o que importa e o usuario que ainda tem o id
+    # antigo gravado, ou uma chamada antiga em cache.
+    normalized = _MIGRACAO_PLANOS.get(normalized, normalized)
     if normalized not in _PLAN_CATALOG:
         raise ValueError(f"plano inválido: {plan_id}")
     expiry = str(expires_at).strip() if expires_at else None

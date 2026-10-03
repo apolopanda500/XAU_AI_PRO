@@ -52,9 +52,11 @@ def test_place_order_nasce_dry_run(http_stub):
     assert payload["execute"] is False  # freio 1: toda ordem nasce dry-run
 
 
-def test_place_order_bloqueado_sem_env(http_stub):
+def test_place_order_bloqueado_sem_env(http_stub, monkeypatch):
+    # Freio 2: com XAU_MCP_TRADING=0 o MCP nao manda ordem nenhuma.
+    monkeypatch.setattr(mcp, "TRADING_HABILITADO", False)
     resultado = mcp.tool_call("place_order", {"symbol": "XAUUSD", "execute": True})
-    assert resultado.get("bloqueado") is True  # freio 2: exige XAU_MCP_TRADING=1
+    assert resultado.get("bloqueado") is True
     assert not http_stub  # nenhuma ordem saiu do MCP
 
 
@@ -73,15 +75,62 @@ def test_request_id_unico_por_chamada(http_stub):
 
 
 def test_close_position_respeita_travas(http_stub, monkeypatch):
-    mcp.tool_call("close_position", {"ticket": 1, "symbol": "XAUUSD"})
+    """Mesmas travas, e agora com a corretora obrigatoria.
+
+    O teste chamava `close_position` sem `broker` e o MCP usava o default
+    "mt5". Agora a corretora e exigida: uma chamada sem corretora e recusada
+    antes de qualquer rota, e o teste precisa dizer para ONDE esta fechando.
+    """
+    monkeypatch.setattr(mcp, "TRADING_HABILITADO", False)
+    escopo = {"broker": "binance", "market": "crypto-spot"}
+
+    # Sem corretora: recusa na porta, sem tocar em rota nenhuma.
+    resultado = mcp.tool_call("close_position", {"ticket": 1, "symbol": "BTCUSDT"})
+    assert resultado.get("ok") is False
+    assert "corretora" in resultado["error"].lower()
+    assert not http_stub
+
+    # Dry-run por padrao.
+    mcp.tool_call("close_position", {"ticket": 1, "symbol": "BTCUSDT", **escopo})
     _, payload = http_stub[-1]
-    assert payload["execute"] is False  # dry-run por padrão
-    resultado = mcp.tool_call("close_position", {"ticket": 1, "symbol": "XAUUSD", "execute": True})
-    assert resultado.get("bloqueado") is True  # sem env, bloqueia
+    assert payload["execute"] is False  # dry-run por padrao
+
+    resultado = mcp.tool_call(
+        "close_position", {"ticket": 1, "symbol": "BTCUSDT", "execute": True, **escopo})
+    assert resultado.get("bloqueado") is True  # com XAU_MCP_TRADING=0, bloqueia
+
     monkeypatch.setattr(mcp, "TRADING_HABILITADO", True)
-    mcp.tool_call("close_position", {"ticket": 1, "symbol": "XAUUSD", "execute": True})
+    mcp.tool_call(
+        "close_position", {"ticket": 1, "symbol": "BTCUSDT", "execute": True, **escopo})
     _, payload = http_stub[-1]
     assert payload["execute"] is True
+    assert payload["broker"] == "binance"
+
+
+def test_ferramentas_de_leitura_exigem_corretora(http_stub):
+    """account_summary, list_positions e get_quote sem default.
+
+    As tres usavam `args.get("broker", "mt5")`. Sem corretora, o MCP precisa
+    recusar - quem pede saldo, posicao ou cotacao tem de dizer de ONDE.
+    """
+    for nome, argumentos in (
+        ("account_summary", {}),
+        ("list_positions", {}),
+        ("get_quote", {"symbol": "BTCUSDT"}),
+    ):
+        resultado = mcp.tool_call(nome, argumentos)
+        assert resultado.get("ok") is False, nome
+        assert "corretora" in resultado["error"].lower(), nome
+    assert not http_stub, "nenhuma requisicao pode sair sem corretora definida"
+
+
+def test_catalogo_de_corretoras_vem_do_registro():
+    """A lista de corretoras do MCP nao pode ser escrita a mao."""
+    from backend.broker_registry import BROKERS
+
+    esperado = {d.id for d in BROKERS.values() if d.public_data}
+    assert set(mcp.BROKERS_EXECUCAO) == esperado
+    assert len(esperado) >= 5, "o catalogo do projeto lista 9 corretoras"
 
 
 def test_ferramenta_desconhecida(http_stub):
@@ -89,6 +138,8 @@ def test_ferramenta_desconhecida(http_stub):
 
 
 def test_emergency_resume_bloqueado_sem_trava(http_stub, monkeypatch):
+    monkeypatch.setattr(mcp, "TRADING_HABILITADO", False)
+    monkeypatch.setenv("XAU_ENABLE_EMERGENCY_RESUME", "0")
     resultado = mcp.tool_call("emergency_resume", {})
     assert resultado.get("bloqueado") is True
     assert not http_stub

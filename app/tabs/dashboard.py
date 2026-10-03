@@ -42,7 +42,7 @@ class DashboardTab:
         header.body.pack_forget()
         tk.Label(header, text="Painel de Trading", bg=Theme.CARD, fg=Theme.TEXT,
                  font=(Theme.FONT_FAMILY, 20, "bold")).pack(anchor="w", padx=20, pady=(14, 0))
-        tk.Label(header, text="XAUUSD · execução assistida · dados validados pelo MT5",
+        tk.Label(header, text="Ativo · execução assistida · dados validados pelo MT5",
                  bg=Theme.CARD, fg=Theme.TEXT_SECONDARY,
                  font=(Theme.FONT_FAMILY, 9)).pack(anchor="w", padx=20, pady=(2, 14))
         self.last_update = tk.Label(header, text="Aguardando primeira leitura", bg=Theme.CARD,

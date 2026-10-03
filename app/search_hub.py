@@ -83,12 +83,10 @@ def search_chats(query: str) -> list[dict[str, Any]]:
 
 
 def search_symbols(query: str) -> list[dict[str, Any]]:
-    """Pesquisa ativos: simbolos MT5 (se conectado) + lista padrao."""
+    """Pesquisa ativos: simbolos MT5 (se conectado). Sem lista fixa — tudo vem da corretora/config."""
     query = (query or "").strip().upper()
-    default = ["XAUUSD", "XAUUSDc", "XAGUSD", "WTI", "BRENT",
-               "BTCUSD", "ETHUSD", "SOLUSD", "XRPUSD", "DOGEUSD",
-               "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "NZDUSD", "USDCAD", "USDCHF",
-               "US30", "NAS100", "SPX500", "DAX40", "FTSE100", "GER40", "UK100"]
+    from app.config_manager import get_config
+    default = [str(s).upper() for s in (get_config().get("market", "symbols", default=[]) or [])]
     out = []
     for s in default:
         if not query or query in s:

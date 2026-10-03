@@ -47,20 +47,46 @@ def test_normalize_rule_rejects_invalid():
             pass
 
 
-def test_status_blocked_without_demo_env():
+def _com_gate_de_trade(valor: str):
+    """Troca a gate de trade e devolve um restaurador (roda em __main__ tambem)."""
+    anterior = os.environ.get("XAU_ENABLE_TRADE_COMMANDS")
+    demo = os.environ.get("XAU_ENABLE_DEMO_ORDERS")
+    os.environ["XAU_ENABLE_TRADE_COMMANDS"] = valor
     os.environ.pop("XAU_ENABLE_DEMO_ORDERS", None)
-    status = g.guardian_status()
-    assert status["guardian"] == "blocked_demo_orders"
-    assert status["demo_only"] is True
+
+    def restaurar() -> None:
+        if anterior is None:
+            os.environ.pop("XAU_ENABLE_TRADE_COMMANDS", None)
+        else:
+            os.environ["XAU_ENABLE_TRADE_COMMANDS"] = anterior
+        if demo is None:
+            os.environ.pop("XAU_ENABLE_DEMO_ORDERS", None)
+        else:
+            os.environ["XAU_ENABLE_DEMO_ORDERS"] = demo
+
+    return restaurar
+
+
+def test_status_blocked_without_demo_env():
+    restaurar = _com_gate_de_trade("0")
+    try:
+        status = g.guardian_status()
+        assert status["guardian"] == "blocked_trade_orders"
+        assert status["trade_only"] is True
+    finally:
+        restaurar()
 
 
 def test_set_requires_demo_env():
-    os.environ.pop("XAU_ENABLE_DEMO_ORDERS", None)
+    restaurar = _com_gate_de_trade("0")
     try:
-        g.guardian_set({"ticket": 1})
-        raise AssertionError("deveria recusar sem XAU_ENABLE_DEMO_ORDERS=1")
-    except PermissionError:
-        pass
+        try:
+            g.guardian_set({"ticket": 1})
+            raise AssertionError("deveria recusar com XAU_ENABLE_TRADE_COMMANDS=0")
+        except PermissionError:
+            pass
+    finally:
+        restaurar()
 
 
 def test_tick_vazio_ok():
@@ -86,7 +112,7 @@ def test_persistencia_roundtrip():
 def test_intent_log_basico():
     from backend import intent_log
     intent_log.INTENT_FILE = Path(os.environ["XAU_INTENT_FILE"])
-    intent_id = intent_log.record_intent("demo_order", {"symbol": "XAUUSD"}, status="pending")
+    intent_id = intent_log.record_intent("trade_order", {"symbol": "XAUUSD"}, status="pending")
     pend = intent_log.pending_intents()
     assert any(e["intent_id"] == intent_id for e in pend)
     snap = intent_log.snapshot(10)
@@ -97,7 +123,7 @@ def test_reconcile_classifica_unknown():
     from backend import intent_log
     intent_log.INTENT_FILE = Path(os.environ["XAU_INTENT_FILE"])
     velho = intent_log.time_now() - 1000.0
-    intent_id = intent_log.record_intent("demo_order", {"symbol": "XAUUSD"}, status="pending")
+    intent_id = intent_log.record_intent("trade_order", {"symbol": "XAUUSD"}, status="pending")
     # reescreve o arquivo forçando timestamp antigo no evento pending
     linhas = intent_log.INTENT_FILE.read_text(encoding="utf-8").splitlines()
     novas = []

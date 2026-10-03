@@ -5,6 +5,16 @@
 # publicacao da imagem no Vercel Container Registry (VCR).
 # ============================================================
 
+> **AVISO - 2026-09-26:** os instaladores automaticos deste guia foram removidos
+> (`Tools/install_docker_windows.ps1`, `Tools/install_docker.bat`,
+> `Tools/pos_reboot_docker.ps1`, `Tools/post_docker_cli_setup.ps1`,
+> `Tools/vercel_vcr_setup.ps1`, `setup-vercel.bat`). Eram instaladores silenciosos
+> que baixavam e executavam binarios, com execucao no boot, e nao ha nenhuma
+> garantia de assinatura verificavel. Instale Docker Desktop manualmente pelo
+> site oficial e use `docker login` no seu proprio terminal. A lista esta
+> bloqueada em `.gitignore` e `scripts/validate_release.ps1` reprova a release
+> se algum deles voltar.
+
 ## Resumo
 
 O projeto XAU_AI_PRO usa containers de tres formas:
@@ -174,8 +184,11 @@ como Vercel Functions ou Vercel Sandbox.
 ```powershell
 # Projeto Vercel
 #   projectName: xau-ai-pro-api
-#   projectId:   prj_RApeFNVlnOGYxtYcRDqaSUTIJD1G
-#   orgId:       team_m6XXhz0AuVtzK0zxtv96h03a
+#   projectId:   <o id aparece em Project Settings > General, apos o link>
+#   orgId:       <o id aparece em vercel whoami / Settings da equipe>
+#
+# Estes dois NAO ficam neste arquivo: sao identificadores de conta e o
+# gitleaks os marca. Copie do painel da Vercel.
 
 vercel whoami   # deve mostrar: rickjax123-6204
 vercel link     # se ainda nao estiver linkado

@@ -11,7 +11,7 @@ from app import subscriptions
 def test_planos_exigem_modos_paper(tmp_path, monkeypatch):
     monkeypatch.setenv("XAU_SUBSCRIPTION_FILE", str(tmp_path / "subscriptions.json"))
     plans = subscriptions.list_plans()
-    assert {plan["id"] for plan in plans} == {"free", "pro", "business"}
+    assert {plan["id"] for plan in plans} == {"free", "vip", "vips"}
     assert all(plan["billing_mode"] == "local_only" for plan in plans)
     assert all(plan["commercial_signature"] is False for plan in plans)
     assert len({plan["catalog_sha256"] for plan in plans}) == 1
@@ -19,11 +19,11 @@ def test_planos_exigem_modos_paper(tmp_path, monkeypatch):
 
 def test_ativa_plano_localmente(tmp_path, monkeypatch):
     monkeypatch.setenv("XAU_SUBSCRIPTION_FILE", str(tmp_path / "subscriptions.json"))
-    result = subscriptions.activate_local_plan("pro", "user-1")
-    assert result["plan_id"] == "pro"
+    result = subscriptions.activate_local_plan("vip", "user-1")
+    assert result["plan_id"] == "vip"
     assert result["entitlements"]["advanced_analytics"] is True
     assert result["live_execution"] is False
-    assert json.loads((tmp_path / "subscriptions.json").read_text(encoding="utf-8"))["users"]["user-1"]["plan_id"] == "pro"
+    assert json.loads((tmp_path / "subscriptions.json").read_text(encoding="utf-8"))["users"]["user-1"]["plan_id"] == "vip"
 
 
 def test_plano_invalido_nao_altera_arquivo(tmp_path, monkeypatch):
@@ -51,9 +51,9 @@ def test_endpoints_de_planos_e_social_sao_locais(tmp_path, monkeypatch):
 def test_integridade_adulterada_retorna_free(tmp_path, monkeypatch):
     path = tmp_path / "subscriptions.json"
     monkeypatch.setenv("XAU_SUBSCRIPTION_FILE", str(path))
-    subscriptions.activate_local_plan("pro", "user-1")
+    subscriptions.activate_local_plan("vip", "user-1")
     persisted = json.loads(path.read_text(encoding="utf-8"))
-    persisted["users"]["user-1"]["plan_id"] = "business"
+    persisted["users"]["user-1"]["plan_id"] = "vips"
     path.write_text(json.dumps(persisted), encoding="utf-8")
     result = subscriptions.get_subscription("user-1")
     assert result["plan_id"] == "free"
@@ -64,8 +64,8 @@ def test_integridade_adulterada_retorna_free(tmp_path, monkeypatch):
 
 def test_plano_expirado_nao_concede_entitlements(tmp_path, monkeypatch):
     monkeypatch.setenv("XAU_SUBSCRIPTION_FILE", str(tmp_path / "subscriptions.json"))
-    result = subscriptions.activate_local_plan("pro", "user-1", expires_at="2020-01-01T00:00:00Z")
-    assert result["requested_plan_id"] == "pro"
+    result = subscriptions.activate_local_plan("vip", "user-1", expires_at="2020-01-01T00:00:00Z")
+    assert result["requested_plan_id"] == "vip"
     assert result["effective_plan_id"] == "free"
     assert result["status"] == "expired"
     assert subscriptions.has_entitlement("social_paper", "user-1") is False

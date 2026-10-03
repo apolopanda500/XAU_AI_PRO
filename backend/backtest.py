@@ -47,9 +47,126 @@ def _normalise_candles(candles: list[dict[str, Any]]) -> list[dict[str, float]]:
     return normalized
 
 
+# --------------------------------------------------------------------------
+# Decisao: o MODELO treinado, nao uma heuristica local
+# --------------------------------------------------------------------------
+# Antes desta mudanca, `run_backtest` decidia compra e venda por uma regra fixa
+# (`RSI < 35` com cruzamento de MACD) e nao carregava nenhum `.pkl`. A tela
+# mostrava, portanto, o desempenho de uma estrategia que NAO e a IA que opera
+# a conta: o operador julgava o modelo por um numero sem relacao com ele. Pior,
+# como a heuristica e rara, o resultado costumeiro era zero trade com 0% de
+# acerto, e `tests/test_backtest.py` nunca verificou `trade_count`, entao um
+# backtest que nao abre posicao nenhuma passava como saudavel.
+#
+# A decisao agora vem do mesmo artefato que `backend/ai_inference.py` usa ao
+# vivo, pelas mesmas features e na mesma ordem do treino. Sem modelo publicado
+# para o par pedido, o backtest NAO inventa sinal: devolve o motivo, para a
+# interface dizer que nao mediu nada em vez de exibir um numero falso.
+
+
+def _decisao_do_modelo(
+    symbol: str,
+    timeframe: str,
+    candles: list[dict[str, float]],
+) -> tuple[list[dict[str, Any]] | None, dict[str, Any]]:
+    """Sinais do modelo publicado e a procedencia da decisao.
+
+    Retorna `(sinais, info)`. `sinais` e None quando nao ha modelo publicado,
+    e `info["reason"]` diz exatamente por que.
+    """
+    info: dict[str, Any] = {
+        "symbol": symbol.upper(),
+        "timeframe": timeframe.upper(),
+        "decision_source": "model",
+        "model": "",
+        "feature_hash": "",
+    }
+    try:
+        import numpy as np
+        import pandas as pd
+
+        from backend import ai_inference
+        from Python.ai import train_v2 as t
+    except ImportError as exc:  # pragma: no cover - depende do ambiente
+        info.update(decision_source="indisponivel", reason=f"dependencia ausente: {exc}")
+        return None, info
+
+    if timeframe.upper() not in t.MINUTOS_TIMEFRAME:
+        info.update(decision_source="indisponivel", reason=f"timeframe nao suportado: {timeframe.upper()}")
+        return None, info
+
+    modelo, meta = ai_inference._carregar(symbol, timeframe)
+    if modelo is None:
+        info.update(
+            decision_source="indisponivel",
+            reason=meta.get("publish_reason") or "modelo nao publicado ou ausente",
+        )
+        return None, info
+
+    try:
+        # Mesmo DataFrame que o treino e a inferencia ao vivo usam.
+        base = pd.DataFrame(candles)
+        for coluna, valor in (
+            ("Time", pd.RangeIndex(len(base))),
+            ("Open", base["open"]),
+            ("High", base["high"]),
+            ("Low", base["low"]),
+            ("Close", base["close"]),
+            ("Volume", 0.0),
+            ("ATR", np.nan),
+            ("ADX", np.nan),
+            ("RSI", np.nan),
+        ):
+            if coluna not in base.columns:
+                base[coluna] = valor
+
+        janela = t.reamostrar(base, timeframe)
+        derivada = t.construir_features(janela)
+        derivada = derivada.replace([np.inf, -np.inf], np.nan).dropna(subset=t.FEATURES)
+        if derivada.empty:
+            info.update(decision_source="indisponivel", reason="features incompletas apos derivacao")
+            return None, info
+
+        try:
+            modelo.n_jobs = 1
+        except Exception:
+            pass
+        probs = modelo.predict_proba(derivada[t.FEATURES])
+        decisoes = probs.argmax(axis=1)
+
+        sinais: list[dict[str, Any]] = []
+        # Deslocamento entre a serie de entrada e a serie derivada: as
+        # primeiras linhas morrem no warm-up das features. Sem isso, a decisao
+        # do modelo seria lida no candle errado.
+        offset = len(base) - len(derivada)
+        for posicao in range(len(derivada)):
+            probs_linha = probs[posicao]
+            sinais.append({
+                "index": posicao + offset,
+                "signal": {0: "SELL", 1: "NEUTRAL", 2: "BUY"}.get(int(decisoes[posicao]), "NEUTRAL"),
+                "confidence": float(max(probs_linha)) * 100.0,
+            })
+        info.update(
+            model=f"{symbol.upper()}_{timeframe.upper()}",
+            feature_hash=str(t.feature_hash()),
+            edge=(meta.get("metrics") or {}).get("edge"),
+            accuracy=(meta.get("metrics") or {}).get("accuracy"),
+            min_edge=meta.get("min_edge"),
+            publicable=bool(meta.get("publicable")),
+            rows_evaluated=len(derivada),
+            warmup_offset=offset,
+        )
+        return sinais, info
+    except Exception as exc:  # pragma: no cover - defensivo
+        info.update(decision_source="indisponivel", reason=f"falha ao inferir: {exc}")
+        return None, info
+
+
 def run_backtest(
     candles: list[dict[str, Any]],
     *,
+    symbol: str,
+    timeframe: str = "M15",
     initial_balance: float = 10_000.0,
     risk_pct: float = 1.0,
     stop_loss_points: float = 300.0,
@@ -59,6 +176,21 @@ def run_backtest(
     spread_points: float = 0.0,
     max_volume: float = 0.10,
 ) -> dict[str, Any]:
+    """Mede o MODELO publicado, nao uma heuristica local.
+
+    `symbol` e OBRIGATORIO (antes tinha `= "XAUUSD"`). Um backtest de ouro
+    apresentado sem dizer qual ativo mediu faz o operador julgar o modelo por
+    um numero que nao pediu. A regra do projeto: nenhum simbolo e presumido.
+
+    O backtest tambem nao decide sozinho: `point` e `contract_size` variam por
+    classe de ativo (forex tem pip e swap, metal tem contrato de 100 oz,
+    indice tem tick de 0,5). Deixados no padrao, sao o chamador que tem de
+    dizer — e enquanto ele nao disser, o resultado declara os valores usados
+    em `params`, para nenhum numero aparecer sem contexto.
+    """
+    simbolo = str(symbol or "").strip().upper()
+    if not simbolo:
+        raise ValueError("informe o simbolo: o projeto nao presume ativo padrao")
     if len(candles) < 30:
         raise ValueError("são necessários pelo menos 30 candles")
     values = _normalise_candles(candles)
@@ -67,18 +199,26 @@ def run_backtest(
     if risk_pct > 10 or stop_loss_points <= 0 or take_profit_points <= 0 or max_volume <= 0 or spread_points < 0:
         raise ValueError("parâmetros de risco fora do intervalo permitido")
 
-    closes = [candle["close"] for candle in values]
-    rsi = _rsi(closes)
-    fast = _ema(closes, 12)
-    slow = _ema(closes, 26)
-    macd = [a - b for a, b in zip(fast, slow)]
-    signal_line = _ema(macd, 9)
+    # O sinal vem do modelo publicado. Sem modelo, NAO existe sinal: o
+    # resultado sai honesto, com zero trades e o motivo, em vez de uma curva
+    # de equidade que sobe porque um gerador de numero aleatorio foi usado
+    # como se fosse estrategia.
+    # `t.construir_features` descarta as primeiras linhas (janelas de
+    # warm-up do RSI/ATR/ewm). Como os sinais ficam indexados pela posicao da
+    # serie derivada, o deslocamento tem de ser conhecido senao a decisao do
+    # modelo seria atribuida ao candle errado.
+    # Usa `simbolo` (normalizado e validado), nao o `symbol` cru: e o mesmo
+    # ativo, mas um so caminho de normalizacao no arquivo inteiro.
+    sinais, info = _decisao_do_modelo(simbolo, timeframe, values)
+    sinais_por_indice = {s["index"]: s for s in (sinais or [])}
+
     balance = float(initial_balance)
     position: dict[str, Any] | None = None
     trades: list[dict[str, Any]] = []
     equity_curve = [balance]
 
-    for index in range(26, len(values)):
+    total = len(values)
+    for index in range(total):
         candle = values[index]
         if position is not None:
             direction = position["direction"]
@@ -96,11 +236,13 @@ def run_backtest(
                 equity_curve.append(balance)
             continue
 
-        crossover_up = macd[index] > signal_line[index] and macd[index - 1] <= signal_line[index - 1]
-        crossover_down = macd[index] < signal_line[index] and macd[index - 1] >= signal_line[index - 1]
-        direction = "buy" if rsi[index] < 35 and crossover_up else "sell" if rsi[index] > 65 and crossover_down else None
-        if direction is None:
+        # Entrada somente onde o modelo publicado decidiu. `indices` mapeia a
+        # posicao na serie de features para o candle original; a serie
+        # derivada pode ser menor que a serie de entrada.
+        sinal = sinais_por_indice.get(index)
+        if sinal is None or sinal["signal"] not in ("BUY", "SELL"):
             continue
+        direction = "buy" if sinal["signal"] == "BUY" else "sell"
         stop_distance = stop_loss_points * point
         target_distance = take_profit_points * point
         risk_amount = balance * risk_pct / 100.0
@@ -111,6 +253,7 @@ def run_backtest(
             "entry_index": index,
             "entry": entry,
             "quantity": quantity,
+            "confidence": sinal["confidence"],
             "stop": entry - stop_distance if direction == "buy" else entry + stop_distance,
             "target": entry + target_distance if direction == "buy" else entry - target_distance,
         }
@@ -149,4 +292,11 @@ def run_backtest(
         "profit_factor": gross_profit / gross_loss if gross_loss else None,
         "max_drawdown_pct": max_drawdown,
         "equity_curve": equity_curve,
+        # Procedencia da decisao. A interface tem de poder dizer de onde veio
+        # o numero: `decision_source` = "model" significa que o .pkl publicado
+        # decidiu; "indisponivel" significa que NAO foi medido o modelo, e o
+        # motivo esta em `reason`. Sem isso a tela mostra uma curva e o
+        # operador a le como desempenho da IA.
+        **info,
+        "measured": info.get("decision_source") == "model",
     }

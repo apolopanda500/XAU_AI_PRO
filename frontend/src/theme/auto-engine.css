@@ -1,0 +1,127 @@
+/* Painel de operacao automatica: limites em grade apertada, decisoes em
+   tabela densa. O painel precisa caber junto do comando e do mini terminal sem
+   empurrar o resto da aba para baixo. */
+
+.auto-engine-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  gap: 6px;
+}
+
+.auto-engine-grid .field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.auto-engine-grid .field > span {
+  color: var(--muted);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.auto-engine-grid input {
+  padding: 4px 7px;
+  font-size: 13px;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.auto-engine-decisoes {
+  margin-top: 8px;
+  max-height: 190px;
+}
+
+.auto-engine-decisoes th,
+.auto-engine-decisoes td {
+  padding: 3px 8px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.auto-engine-decisoes td.num,
+.auto-engine-decisoes th.num {
+  text-align: right;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Par do motor: ativo + periodo (a escolha de QUAL modelo roda). Os selects
+   ocupam a mesma grade dos limites para nao virar uma linha a mais de UI. */
+.auto-engine-par {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  margin-bottom: 4px;
+}
+
+.auto-engine-par select {
+  padding: 4px 7px;
+  font-size: 13px;
+  min-height: 28px;
+}
+
+.auto-engine-par-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
+  padding-bottom: 2px;
+}
+
+/* BOTOES DE COMANDO DO MOTOR (2026-09-30)
+   ------------------------------------------
+   Antes eram tres botoes `sm` em uma linha, com a mesma aparencia, e dois
+   deles ("Aplicar" e "Ligar") faziam coisas diferentes. O operador clicava em
+   "Ligar" sem "Aplicar" e o motor seguia operando o par antigo.
+
+   Agora o caminho principal e um botao so, com o rotulo dizendo o que FAZ.
+   O espaco entre eles e fixo para os rotulos nunca quebrarem de linha: um
+   botao que muda de largura quando o texto muda obriga o operador a mirar. */
+.auto-engine-acoes {
+  margin-top: 10px;
+  gap: 8px;
+}
+
+.auto-engine-acoes .btn {
+  min-width: 132px;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+/* O botao principal ocupa o lugar de destaque; o de parada vai para a borda
+   oposta, que e onde a mao do operador ja esta quando algo deu errado. */
+.auto-engine-acoes .btn.danger {
+  margin-left: auto;
+  background: transparent;
+  border-color: var(--danger, #b91c1c);
+  color: var(--danger, #b91c1c);
+}
+
+.auto-engine-acoes .btn.danger:hover:not(:disabled) {
+  background: var(--danger, #b91c1c);
+  color: #fff;
+}
+
+/* Desabilitado = acao impossivel agora. Precisa parecer isso, e nao apenas
+   esmaecido: antes "Ligar" ficava cinza com o motor ligado e o operador
+   achava que era clique perdido. */
+.auto-engine-acoes .btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* While ocupado, nenhum botao aceita segundo clique: dois POSTs de
+   /api/auto/config seguidos gravariam o par duas vezes. */
+.auto-engine-acoes .btn:not(:disabled) {
+  cursor: pointer;
+}

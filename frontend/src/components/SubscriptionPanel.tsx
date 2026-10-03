@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+﻿import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiBase } from '../lib/api';
+import '../theme/plans-table.css';
 
 type Plan = {
   id: string;
@@ -36,7 +37,7 @@ export default function SubscriptionPanel() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [strategies, setStrategies] = useState<Strategy[]>([]);
-  const [status, setStatus] = useState('Carregando planos locais...');
+  const [status, setStatus] = useState('Carregando planos locais…');
   const loadGeneration = useRef(0);
 
   const load = useCallback(async () => {
@@ -65,7 +66,7 @@ export default function SubscriptionPanel() {
 
   const activate = async (planId: string) => {
     loadGeneration.current += 1;
-    setStatus('Ativando plano local...');
+    setStatus('Ativando plano local…');
     try {
       const response = await fetch(`${api}/api/subscriptions/activate`, {
         method: 'POST',
@@ -85,7 +86,7 @@ export default function SubscriptionPanel() {
 
   const follow = async (strategyId: string) => {
     loadGeneration.current += 1;
-    setStatus('Atualizando estratégia paper...');
+    setStatus('Atualizando estratégia paper…');
     try {
       const response = await fetch(`${api}/api/social/follow`, {
         method: 'POST',
@@ -103,45 +104,76 @@ export default function SubscriptionPanel() {
   };
 
   return (
-    <div className="card settings-card subscription-panel">
-      <div className="section-head">
-        <div>
-          <h2>Planos locais e Social Paper</h2>
-          <span className="muted">Preferência local de recursos; não é licença comercial nem cobrança</span>
-        </div>
-        <span className="chip warn">paper/demo</span>
+    <div className="subscription-panel">
+      <p className="hint settings-hint">
+        Preferência local de recursos. Não é licença comercial nem cobrança. Copy trading real permanece bloqueado.
+      </p>
+
+      <div className="table-scroll">
+        <table className="tbl compact-table plans-grid">
+          <caption className="sr-only">Planos locais disponíveis</caption>
+          <thead>
+            <tr>
+              <th>Plano</th>
+              <th className="num">Referência</th>
+              <th>Inclui</th>
+              <th>Estado</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {plans.map((plan) => {
+              const ativo = subscription?.plan_id === plan.id;
+              return (
+                <tr key={plan.id} className={ativo ? 'selected' : ''}>
+                  <td><strong>{plan.name}</strong><br /><span className="muted">{plan.description}</span></td>
+                  <td className="num">{plan.reference_price_monthly === 0 ? 'Grátis' : `${plan.currency} ${plan.reference_price_monthly}`}</td>
+                  <td className="plans-features">{plan.features.join(' · ')}</td>
+                  <td><span className={`chip ${ativo ? 'ok' : 'warn'}`}>{ativo ? 'ativo' : 'local'}</span></td>
+                  <td>
+                    <button type="button" className="btn xs primary" onClick={() => void activate(plan.id)} disabled={ativo}>
+                      {ativo ? 'Ativo' : 'Ativar'}
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+            {!plans.length && <tr><td colSpan={5}>Nenhum plano lido do gateway.</td></tr>}
+          </tbody>
+        </table>
       </div>
-      <div className="plan-grid">
-        {plans.map((plan) => (
-          <article className={`plan-card ${subscription?.plan_id === plan.id ? 'selected' : ''}`} key={plan.id}>
-            <div className="plan-head">
-              <h3>{plan.name}</h3>
-              <strong>{plan.reference_price_monthly === 0 ? 'Grátis' : `Referência: ${plan.currency} ${plan.reference_price_monthly}/mês`}</strong>
-            </div>
-            <p>{plan.description}</p>
-            <ul>
-              {plan.features.map((feature) => <li key={feature}>{feature}</li>)}
-            </ul>
-            <button type="button" className="btn primary sm" onClick={() => void activate(plan.id)}>
-              {subscription?.plan_id === plan.id ? 'Plano ativo' : 'Ativar localmente'}
-            </button>
-          </article>
-        ))}
+
+      <div className="table-scroll">
+        <table className="tbl compact-table plans-grid">
+          <caption className="sr-only">Estratégias compartilhadas</caption>
+          <thead>
+            <tr>
+              <th>Estratégia</th>
+              <th>Risco</th>
+              <th>Ativos</th>
+              <th>Tempo</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {strategies.map((strategy) => (
+              <tr key={strategy.id}>
+                <td><strong>{strategy.name}</strong><br /><span className="muted">{strategy.description}</span></td>
+                <td><span className="chip">{strategy.risk_profile}</span></td>
+                <td>{strategy.symbols.join(' · ')}</td>
+                <td>{strategy.timeframes.join(' / ')}</td>
+                <td>
+                  <button type="button" className="btn xs ghost" disabled={!strategy.available || strategy.following} onClick={() => void follow(strategy.id)}>
+                    {strategy.following ? 'Seguindo' : strategy.available ? 'Seguir' : 'Requer VIP'}
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {!strategies.length && <tr><td colSpan={5}>Nenhuma estratégia publicada.</td></tr>}
+          </tbody>
+        </table>
       </div>
-      <div className="section-title">Social Paper</div>
-      <p className="hint">Compartilhamento local de estratégias para estudo. Copy trading real permanece bloqueado.</p>
-      <div className="strategy-grid">
-        {strategies.map((strategy) => (
-          <div className="strategy-card" key={strategy.id}>
-            <div><strong>{strategy.name}</strong><span className="chip">{strategy.risk_profile}</span></div>
-            <p>{strategy.description}</p>
-            <small>{strategy.symbols.join(' · ')} · {strategy.timeframes.join(' / ')}</small>
-            <button type="button" className="btn ghost sm" disabled={!strategy.available || strategy.following} onClick={() => void follow(strategy.id)}>
-              {strategy.following ? 'Seguindo no paper' : strategy.available ? 'Seguir no paper' : 'Requer Pro'}
-            </button>
-          </div>
-        ))}
-      </div>
+
       {status && <div className="hint" role="status">{status}</div>}
     </div>
   );

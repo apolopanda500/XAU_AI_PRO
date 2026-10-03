@@ -99,12 +99,36 @@ def test_binance_quote_combines_book_and_stats(monkeypatch):
     }
 
 
-def test_capability_matrix_is_single_and_fail_closed():
+def test_capability_matrix_is_single_and_fail_closed(monkeypatch):
     matrix = capability_matrix()
     assert {row["broker"] for row in matrix} == {"mt5", "binance", "mexc", "bybit", "okx"}
-    assert all(row["execution"] == [] for row in matrix)
+    # App desbloqueado: toda corretora ativa expoe execucao e sai de somente-leitura.
+    assert all(row["execution"] for row in matrix)
     assert all(row["withdrawals"] is False for row in matrix)
-    assert next(row for row in matrix if row["broker"] == "bybit")["status"] == "code_only"
+    assert all(row["status"] == "active" for row in matrix)
+    assert all(row["read_only"] is False for row in matrix)
+    assert all(row["transfers"] is False for row in matrix)
+
+    # A gate continua sendo a etapa explicita: desligada, a corretora volta a
+    # ser somente leitura sem mudar uma linha de codigo.
+    for gate in ("XAU_ENABLE_MT5_EXECUTION", "XAU_ENABLE_BINANCE_EXECUTION",
+                 "XAU_ENABLE_MEXC_EXECUTION", "XAU_ENABLE_BYBIT_EXECUTION",
+                 "XAU_ENABLE_OKX_EXECUTION"):
+        monkeypatch.setenv(gate, "0")
+    degraded = capability_matrix()
+    assert all(row["execution"] == [] for row in degraded)
+    assert all(row["read_only"] is True for row in degraded)
+    assert all(row["withdrawals"] is False for row in degraded)
+
+
+def test_planned_brokers_stay_out_of_the_matrix():
+    # Corretoras apenas planejadas nao podem aparecer como disponiveis.
+    with_planned = capability_matrix(include_planned=True)
+    estados = {row["status"] for row in with_planned}
+    assert "planned" in estados
+    planejadas = {row["broker"] for row in with_planned if row["status"] == "planned"}
+    assert planejadas == {"bitget", "coinbase", "kraken", "kucoin"}
+    assert all(row["capabilities"] == [] for row in with_planned if row["status"] == "planned")
 
 
 def test_asset_capability_matrix_reflects_mt5_trade_mode():

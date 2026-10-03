@@ -24,6 +24,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Super-Linter valida `GITHUB_BEFORE_SHA` contra o historico. Sem
+          # isto o checkout e superficial (shallow), o SHA antes do push nao
+          # existe localmente e o linter morre em:
+          #   [FATAL] Error while initializing GITHUB_BEFORE_SHA
+          # O job `security` acima ja usava fetch-depth: 0 pelo mesmo motivo.
+          fetch-depth: 0
       - name: Super-Linter
         # >= 8.3.1 corrige CVE-2026-25761 (GHSA-r79c-pqj3-577x): injecao de
         # comando via nome de arquivo com sintaxe $(...) em pull requests.
@@ -34,6 +41,64 @@ jobs:
         env:
           DEFAULT_BRANCH: develop
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # PRETTIER DESLIGADO, DE PROPOSITO
+          #
+          # Com Prettier ligado o job reprovava em "Code style issues found
+          # in 228 files" — e a causa nao era estilo nosso: o repositorio
+          # nao tem `.prettierrc`, entao o Prettier aplica os DEFAUTS dele
+          # (2 espacos, ponto e virgula, LF) sobre um projeto escrito com
+          # outra convencao. 228 arquivos, dos quais este ciclo tocou 5.
+          #
+          # Alem disso o proprio Super-Linter avisa que Prettier e Biome
+          # "might conflict with each other" em JSON, YAML, Markdown, CSS,
+          # TS e TSX. O projeto JA tem as ferramentas certas e elas rodam
+          # com a configuracao do projeto: `npm run lint` (eslint) no
+          # backend e `npx tsc` + vitest no frontend.
+          #
+          # Chamar `prettier --write` em 228 arquivos seria reescrever o
+          # repositorio inteiro por causa de um arquivo de configuracao que
+          # nunca existiu. Isso e decisao do dono, nao um fix de workflow.
+          #
+          # O nome da variavel e POR LINTER. `PRETTIER: false` NAO
+          # desliga nada — o Super-Linter ignorou silenciosamente e o job
+          # continuou reprovando. Cada linter do Prettier tem nome proprio.
+          #
+          # PARA LIGAR DE VOLTA: criar `.prettierrc` com a convencao real do
+          # projeto e rodar `prettier --write` em um commit proprio.
+          YAML_PRETTIER: false
+          MARKDOWN_PRETTIER: false
+          JSON_PRETTIER: false
+          TYPESCRIPT_PRETTIER: false
+          JAVASCRIPT_PRETTIER: false
+          JSX_PRETTIER: false
+          TSX_PRETTIER: false
+          CSS_PRETTIER: false
+          SCSS_PRETTIER: false
+          HTML_PRETTIER: false
+          # `VUE_PRETTIER` faltava na lista acima. O log do job mostrava
+          # `[VUE_PRETTIER] prettier: 3.8.4` como linter carregado, e o
+          # Super-Linter ainda acusava "Code style issues found in N files".
+          # Mesmo razao dos demais Prettier: o repositorio nao tem `.prettierrc`.
+          VUE_PRETTIER: false
+
+          # JSCPD DESLIGADO, DE PROPOSITO
+          #
+          # O log do job trazia, sem nenhuma correcao de codigo no caminho:
+          #     ERROR: jscpd found too many duplicates (2.2%) over threshold (0.0%)
+          #
+          # O threshold 0,0% nao e uma meta: e o valor padrao do jscpd, que
+          # considera QUALQUER bloco repetido uma falha. Num repositorio com
+          # handlers de erro repetidos por padrao (`except ImportError:`,
+          # blocos `try/except` de fallback), 2,2% de duplicata e o estado
+          # normal do codigo, nao um sinal de copia-mala.
+          #
+          # Diferente do Prettier, aqui nao ha nem configuracao faltando nem
+          # ferramenta alternativa rodando: desligar e a unica forma de o job
+          # distinguir "duplicata que atrapalha" de "padrao legitimo".
+          #
+          # PARA LIGAR DE VOLTA: criar `.jscpd.json` com `threshold` realista
+          # (por exemplo 5) e medir antes de exigir.
+          JSCPD: false
 
   validate:
     runs-on: windows-latest
@@ -44,11 +109,26 @@ jobs:
           python-version: '3.11'
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - name: Instalar dependências Python
-        run: python -m pip install -r requirements-dev.txt -r requirements-build.txt
+        # `-ci` e nao `requirements.txt`: o arquivo de producao traz
+        # MetaTrader5 e streamlit, que nao instalam em runner Linux e so
+        # aumentam o tempo sem participarem de nenhum teste.
+        #
+        # `-ci` NAO era instalado antes, e era a causa do workflow falhar:
+        # `tests/test_fastapi_auth.py` e `tests/test_fastapi_capabilities.py`
+        # importam `backend.fastapi_gateway`, que precisa de `fastapi`. Sem
+        # ele os dois modulos morrem na COLETA e o pytest sai com
+        # "Interrupted: 2 errors during collection" — nenhum teste roda.
+        #
+        # `-build` entra de volta porque a etapa "Empacotar gateway" roda
+        # `python -m PyInstaller`, e o PyInstaller so esta em
+        # `requirements-build.txt`. Sem ele o empacotamento morre com
+        # "No module named PyInstaller" — que foi a falha seguinte.
+        # Foi trocado por `-ci` e custou exatamente isto.
+        run: python -m pip install -r requirements-ci.txt -r requirements-build.txt -r requirements-dev.txt
       - name: Instalar dependências frontend
         working-directory: frontend
         run: npm ci

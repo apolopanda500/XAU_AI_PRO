@@ -1,0 +1,23 @@
+# Por que este arquivo existe
+# ===========================
+# `cargo test` falhava em 30/09/2026 com:
+#
+#     LINK : fatal error LNK1140: limite excedido para o banco de dados do
+#     programa; vínculo com /PDB:NONE
+#
+# O Tauri traz uma arvore de dependencias enorme ( wry, tauri-runtime-wry,
+# windows crate, tokio...). O PDB gerado estoura o limite do formato do
+# Visual Studio e o Windows recusa o link — e nao e falta de espaco em disco.
+#
+# `/PDB:NONE` nao altera o binario gerado: so deixa de gravar o PDB, que
+# serve para depuracao simbolica. Build e instalador ficam identicos sem ele.
+#
+# A alternativa seria `split-debuginfo`, que divide o arquivo em varios —
+# mais lento e igualmente sem resolver o limite. Aqui o objetivo e compilar.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "link-arg=/PDB:NONE"]
+
+[build]
+# Sem isto o `target/` cresce para GB dentro do disco de codigo. Ver
+# `AGENTS.md` — o cache do Rust vive em `Temp\cargo-target`.
+target-dir = "../../Temp/cargo-target"

@@ -205,3 +205,12 @@ Configure no Sentry Dashboard:
 4. Monitore metricas
 
 **Sistema pronto para producao!** 🚀📈
+
+<!-- status-real-2026-09-27 -->
+
+## Status real (2026-09-27)
+
+"Sistema pronto para producao" nao se sustenta. Ver
+`INTEGRACAO_SENTRY_COMPLETA.md` e `CONVERSAHOJE.txt` para o inventario
+completo. Resumo: `PRODUCTION CANDIDATE`; endurance e forward test nunca
+rodaram; PF 0,46; 8 condicoes de seguranca abertas; assinatura de teste.

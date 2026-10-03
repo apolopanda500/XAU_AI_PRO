@@ -30,15 +30,27 @@ def _prepare_path() -> Path:
 
 
 def save_connection(connection_id: str, broker: str, market: str, api_key: str, api_secret: str, api_passphrase: str = "") -> None:
-    if not all(isinstance(value, str) and value.strip() for value in (connection_id, broker, market, api_key, api_secret)):
-        raise ValueError("connection_id, broker, market, api_key e api_secret sao obrigatorios")
+    """Grava uma conexao. Credencial vazia e legitima para corretora de sessao.
+
+    Corretoras que autenticam pela sessao do terminal (MT5) nao tem API key.
+    Antes elas nem passavam por aqui — a conexao MT5 vivia fora deste store —
+    e a validacao recusava credencial vazia. Agora que MT5 entra no mesmo
+    fluxo, gravar string vazia no DPAPI seria gasto e mentira: o arquivo
+    diria ter uma credencial que nao existe.
+
+    Por isso o campo so e gravado quando tem conteudo, e a listagem diz
+    `credential_source` para a interface nao pedir o que nao existe.
+    """
+    if not all(isinstance(value, str) and value.strip() for value in (connection_id, broker, market)):
+        raise ValueError("connection_id, broker e market sao obrigatorios")
     data = {}
     path = _prepare_path()
     if path.exists(): data = json.loads(path.read_text(encoding="utf-8"))
     previous = data.get(connection_id, {})
-    record = {"broker": broker, "market": market, "active": previous.get("active", True), "api_key": _protect(api_key.strip()), "api_secret": _protect(api_secret.strip())}
-    if isinstance(api_passphrase, str) and api_passphrase.strip():
-        record["api_passphrase"] = _protect(api_passphrase.strip())
+    record = {"broker": broker, "market": market, "active": previous.get("active", True), "credential_source": "api_key" if api_key.strip() else "session"}
+    for campo, valor in (("api_key", api_key), ("api_secret", api_secret), ("api_passphrase", api_passphrase)):
+        if isinstance(valor, str) and valor.strip():
+            record[campo] = _protect(valor.strip())
     data[connection_id] = record
     temp = path.with_suffix(".dpapi.tmp")
     temp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
@@ -47,7 +59,23 @@ def save_connection(connection_id: str, broker: str, market: str, api_key: str, 
 def list_connections() -> list[dict[str, object]]:
     path = _path()
     if not path.exists(): return []
-    data = json.loads(path.read_text(encoding="utf-8")); return [{"id": k, "broker": v.get("broker", ""), "market": v.get("market", ""), "configured": True, "active": v.get("active", True)} for k, v in data.items()]
+    data = json.loads(path.read_text(encoding="utf-8"))
+    saida = []
+    for chave, registro in data.items():
+        linha = {
+            "id": chave,
+            "broker": registro.get("broker", ""),
+            "market": registro.get("market", ""),
+            "configured": bool(registro.get("api_key")),
+            "active": registro.get("active", True),
+        }
+        # `credential_source` diz a interface o que pedir: sem ele, a tela
+        # mostraria campo de API key para uma conexao que nao tem.
+        linha["credential_source"] = registro.get("credential_source") or (
+            "api_key" if registro.get("api_key") else "session"
+        )
+        saida.append(linha)
+    return saida
 
 
 def resolve_connection(account_id: str, broker: str, market: str) -> dict[str, object]:
@@ -85,6 +113,11 @@ def load_connection_credentials_full(connection_id: str) -> tuple[str, str, str]
     item = data.get(connection_id)
     if not item:
         raise LookupError("Conexão não encontrada.")
+    # Corretora de sessao nao tem credencial gravada. Devolver vazio e o
+    # resultado correto; o chamador (`connection_service.action`) nem chega
+    # aqui para essas, porque valida pela sessao do terminal.
+    if not item.get("api_key"):
+        return "", "", ""
     passphrase = _unprotect(item["api_passphrase"]) if item.get("api_passphrase") else ""
     return _unprotect(item["api_key"]), _unprotect(item["api_secret"]), passphrase
 

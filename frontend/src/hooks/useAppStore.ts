@@ -1,5 +1,6 @@
-import { create } from 'zustand';
+﻿import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { normalizeSymbols } from '../lib/constants';
 
 export type TabType =
   | 'dashboard'
@@ -14,9 +15,57 @@ export type TabType =
   | 'alert'
     | 'analytics'
   | 'calendar'
-  | 'ai';
+  | 'ai'
+  | 'vips';
 
 export type ThemeName = 'dark' | 'xau_dark' | 'btc_dark' | 'light' | 'ocean_dark' | 'emerald_dark' | 'rose_dark' | 'violet_dark';
+
+// Sub-aba ativa dentro da aba Operar. Persiste para que sair e voltar nao
+// empurre o operador de volta para o topo da pilha.
+//
+// OPERAR PRIMEIRO
+// ===============
+// O app e um desk de operacao: o operador abre para operar. A primeira
+// sub-aba e "Operar" e junta o que a mao usa todo dia — o ON/OFF do motor
+// automatico, as posicoes ao vivo (Mini Terminal) e a mesa de ordem manual.
+// As pecas sao as mesmas telas de sempre, apenas reunidas: nenhum componente
+// novo, nenhuma funcao nova.
+//   Operar   → automatico ligado?, posicoes abertas, comprar/vender a mercado
+//   Sinal    → qual ativo usar, qual modelo roda e o que ele prevê
+//   EA       → o que existe no terminal MT5, heartbeat e comandos
+//   Copiloto → conversa e achados do EA
+// A aba ROBÔ virou UMA SÓ em 2026-09-29.
+//
+// Antes: 'operar' | 'sinal' | 'ea' (+ 'copiloto', removido por nao ser IA — o
+// `backend/copilot.py` classifica a pergunta por regex e devolve template).
+// Separar "Sinal" e "EA" obrigava o operador a trocar de tela para responder
+// "qual ativo e modelo?" e "quanto posso arriscar?" — duas perguntas que
+// precisam da mesma resposta na mesma hora.
+//
+// O tipo continua com um unico valor porque o `localStorage` de quem usou as
+// versoes antigas ainda guarda 'sinal'/'ea'; `LEGADO_ROBOT_SUB` mapeia tudo
+// para 'operar', entao ninguem fica preso numa aba que nao existe mais.
+export type RobotSub = 'operar';
+export const ROBOT_SUBS: RobotSub[] = ['operar'];
+
+// Nomes antigos persistidos no localStorage de quem usou as versoes de quatro
+// e cinco sub-abas. TODOS caem em 'operar', que e a unica aba que existe
+// agora: sem este mapa, trocar de versao deixaria o operador preso num
+// `robotSub` que nao e mais valido e a tela apareceria vazia.
+// Exportado porque o teste de RobotTabs fixa a correspondencia.
+export const LEGADO_ROBOT_SUB: Record<string, RobotSub> = {
+  modelo: 'operar',
+  ativos: 'operar',
+  sinal: 'operar',
+  ea: 'operar',
+  copiloto: 'operar',
+  operacao: 'operar',
+  ordem: 'operar',
+  automacao: 'operar',
+  mesa: 'operar',
+  risco: 'operar',
+  guardian: 'operar',
+};
 
 export interface Quote {
   broker?: string;
@@ -123,11 +172,12 @@ export interface Settings {
   discordActive: boolean;
 }
 
-export const DEFAULT_MARKET_WATCHLIST = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XAUUSD', 'EURUSD', 'GBPUSD', 'USDJPY'];
-
-const normalizeSymbols = (symbols: string[]): string[] => [...new Set(
-  symbols.map((symbol) => String(symbol ?? '').trim().toUpperCase()).filter(Boolean),
-)].slice(0, 24);
+// Watchlist e normalizacao vem de lib/constants.ts (fonte unica). Antes eram
+// listas locais duplicadas que comecavam em BTCUSDT.
+// Nao ha mais watchlist fixa no codigo. A lista nasce vazia e o operador
+// escolhe o que assinar; DEFAULT_MARKET_WATCHLIST fica como alias vazio
+// para nao quebrar consumidores antigos.
+export const DEFAULT_MARKET_WATCHLIST: readonly string[] = [];
 
 const quoteKey = (quote: Quote): string => [
   String(quote.broker ?? '').trim().toLowerCase(),
@@ -174,11 +224,13 @@ interface AppState {
   addQuote: (quote: Quote) => void;
   selectedSymbol: string;
   setSelectedSymbol: (symbol: string) => void;
+  robotSub: RobotSub;
+  setRobotSub: (sub: RobotSub) => void;
   // Lista de interesse do usuário. Persiste mesmo que nenhuma corretora esteja conectada.
   marketWatchlist: string[];
   setMarketWatchlist: (symbols: string[]) => void;
   // Símbolos que o painel de mercado quer receber em tempo real (watchlist + seleção).
-  // Vazio = usa DEFAULT_SYMBOLS do protocolo.
+  // Vazio = o Core nao recebe assinatura ate o operador escolher.
   subscribeSymbols: string[];
   setSubscribeSymbols: (symbols: string[]) => void;
   wsConnected: boolean;
@@ -209,7 +261,7 @@ interface AppState {
 export const useAppStore = create<AppState>()(
   persist(
     (set) => ({
-      activeTab: 'portfolio',
+      activeTab: 'robot',
       setActiveTab: (tab) => set({ activeTab: tab }),
       quotes: [],
       setQuotes: (quotes) => set({ quotes }),
@@ -220,7 +272,10 @@ export const useAppStore = create<AppState>()(
       // O produto é universal; XAUUSD é apenas uma opção do catálogo.
       selectedSymbol: '',
       setSelectedSymbol: (symbol) => set({ selectedSymbol: symbol }),
-      marketWatchlist: DEFAULT_MARKET_WATCHLIST,
+      // A aba ROBÔ tem uma unica sub-aba, então o store sempre abre nela.
+      robotSub: 'operar',
+      setRobotSub: (sub) => set({ robotSub: sub }),
+      marketWatchlist: [],
       setMarketWatchlist: (symbols) => set({ marketWatchlist: normalizeSymbols(symbols) }),
       subscribeSymbols: [],
       setSubscribeSymbols: (symbols) => set({ subscribeSymbols: normalizeSymbols(symbols) }),
@@ -253,6 +308,7 @@ export const useAppStore = create<AppState>()(
       partialize: (state) => ({
         activeTab: state.activeTab,
         selectedSymbol: state.selectedSymbol,
+        robotSub: state.robotSub,
         marketWatchlist: state.marketWatchlist,
         subscribeSymbols: state.subscribeSymbols,
         settings: state.settings,
@@ -272,6 +328,14 @@ export const useAppStore = create<AppState>()(
           // Compatibilidade segura: versoes antigas podiam persistir auto-connect=true.
           // A inicializacao do MT5 exige acao explicita do usuario.
           settings: { ...DEFAULT_SETTINGS, ...(p.settings ?? {}), marketAutoRefresh: true, mt5AutoConnect: false },
+          // Valor persistido de uma versao antiga ou corrompido cai na primeira
+          // sub-aba; os nomes da versao de cinco viram os quatro novos.
+          robotSub: (() => {
+            const salvo = String(p.robotSub ?? '');
+            const legado = LEGADO_ROBOT_SUB[salvo] as RobotSub | undefined;
+            if (legado) return legado;
+            return ROBOT_SUBS.includes(salvo as RobotSub) ? (salvo as RobotSub) : 'operar';
+          })(),
         } as AppState;
       },
     },

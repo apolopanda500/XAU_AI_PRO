@@ -7,18 +7,21 @@
 [✓] Validar compatibilidade somente leitura com EAs de terceiros sem modificar MQL5/Experts
 [✓] Consolidar assinaturas locais e matriz de capacidades por corretora/ativo
 [✓] Executar ciclo limpo de build: testes, lint, typecheck, Rust, gateway, Tauri e instaladores
-[✓] Validar bundles/EXEs em instalação limpa e confirmar zero regressões, erros e avisos [CONCLUIDO 25/09 - smoke test em dir isolado]
+[~] Validar bundles/EXEs: executado em DIRETORIO ISOLADO, nao em VM ou maquina
+     Windows limpa. O Gate D de ACOMPANHAMENTO_OFICIAL_PC_20260921.md:247 pede VM:
+     ainda NAO cumprido.
 [✓] Revisar diff e provar que nenhum arquivo MQL5/Experts foi alterado
 [✓] Instalar e validar Android SDK/API 36, Build Tools 36 e NDK 28.2
 [✓] Adaptar bootstrap Tauri desktop/mobile e validar 35 testes frontend
 [✓] Gerar APK aarch64; bloqueado por Java 25 incompatível com Gradle 8.14.3 [RESOLVIDO 25/09/2026]
-[✓] Reconstruir e assinar os artefatos Windows finais após a limpeza [CONCLUIDO 25/09 - 7 artefatos assinados]
+[~] Reconstruir e assinar os artefatos Windows finais apos a limpeza
+     [PARCIAL 25/09 - artefatos gerados, assinatura e de teste]
 [✓] Assinar, instalar e executar o app final pelo atalho [CONCLUIDO 25/09 - NSIS + smoke + desinstalacao]
 [✓] Finalizar benchmark 2026, relatório de UI/UX e notas de produto [CONCLUIDO 25/09 - 3 docs criados]
 [✓] Revisar staging, criar commit e fazer push sem segredos/artefatos [CONCLUIDO 25/09 - 51f53d5 + 1582971]
 
 ## Registro 2026-09-25 (tarde) - APK Android gerado e assinado
-[✓] Instalar Temurin JDK 21.0.12.1 LTS (path sem '+') e usar so na sessao do build
+[✓] Instalar Temurin JDK 21.0.12.1 LTS (path sem '+') e usar so na sessão do build
 [✓] Liberar espaco: remover release/ (0.48 GB, stale) e src-tauri/target/release (0.76 GB, regeneravel)
 [✓] Preservado frontend/src-tauri/target/aarch64-linux-android (0.70 GB) - Rust reaproveitado
 [✓] Build: npm run tauri -- android build --ci --target aarch64 --apk => exit 0 em 14m43s
@@ -44,15 +47,22 @@
 [✓] Varredura de segredos: nenhum .env/keystore/.pem/.jks rastreado ou untracked
 [✓] Espaco final: 6,22 GB -> 3,47 GB apos builds Rust
 [✓] Achado: app/data/marketdata.db (2,9 MB) segue RASTREADO apesar de .gitignore ter *.db [CONCLUIDO 25/09 - git rm --cached]
-[•] Achado: 23.820 ticks no DB com fontes MT5/HTTP/Binance/Yahoo - confirmar data de origem [REQUER CONHECIMENTO DO USUARIO]
+[•] Achado: 23.820 ticks no DB com fontes MT5/HTTP/Binance/Yahoo - confirmar data de origem [CONCLUIDO 25/09 - usuario confirmou DADOS DE TESTE]
 [✓] Artefatos Windows (gateway, launcher, MSI, NSIS) ainda nao reconstruidos [CONCLUIDO 25/09]
 
 ## Registro 2026-09-25 19:00 - Todas as pendencias executadas
 [✓] Desrastreado app/data/marketdata.db (git rm --cached); arquivo preservado em disco
 [✓] Build completo: core Rust, gateway PyInstaller, launcher PyInstaller, Inno, Tauri MSI e NSIS
-[✓] 7 artefatos assinados com Authenticode SHA256 + timestamp DigiCert RFC3161
-[✓] release/1.2.3/release-manifest.json gerado com hashes de todos os artefatos
-[✓] Defender: "found no threats", exit 0, nos 7 artefatos
+[~] 8 artefatos assinados com Authenticode SHA256 + timestamp RFC3161, com certificado
+     AUTOASSINADO de teste (Status=UnknownError por definicao, reputacao zero). Nao e
+     assinatura publica. O conflito A1 (assinatura) vs B3 (Windows gratis) segue
+     sem decisao do dono.
+[✗] release/1.2.3/release-manifest.json NAO EXISTE.
+     Afirmacao de 25/09 sem artefato em disco. Ha 8 artefatos em release/1.2.3;
+     falta gerar e publicar o manifesto com os hashes SHA-256.
+[~] Defender: "found no threats", exit 0, no escopo dos artefatos de release/1.2.3.
+     Isso NAO equivale ao "full scan offline com 0 deteccoes" exigido por
+     RELATORIO_AUDITORIA_SEGURANCA.md:196.
 [✓] Smoke test: NSIS instalado em diretorio isolado, executado pelo atalho do Desktop
 [✓] Portas 9001 (bridge) e 9002/9003 (core) assumidas pelos FILHOS do app; arvore pai/filho correta
 [✓] Auth exigida: /health, /api/boot e core retornaram 401 sem token
@@ -80,3 +90,91 @@
 [•] Matriz de capabilities por corretora/ativo (exigida por A3) ainda nao publicada
 [•] Lacuna C1: market_ticks sem coluna de procedencia; fallback do grafico nao rotula a origem
 [•] main 70 commits atras de develop; GitLab aceitando push direto em develop sem MR
+
+## Registro 2026-09-25 -> 26/09/2026 - Sessao de correcao e recombinacao
+Estado do codigo ao iniciar: `ee90466` (9 commits a frente de toda a documentacao).
+Validacao ao FINAL desta sessao: Python 419 passed | frontend 125 passed | tsc limpo |
+eslint limpo | cargo fmt/check/test ok (38) | pylint 10.00/10 | validate_release aprovada.
+
+### Seguranca do app (frontend)
+[✓] PIN: desativar/trocar agora exige o PIN ATUAL (antes aceitava qualquer 4-8 digitos)
+[✓] AuthGate nao apaga mais o auth.json: o PIN e determinado pelo arquivo em disco, nunca pelo store do front
+[✓] Tentativas de PIN persistem: 5 tentativas + espera progressiva (30s, 60s, 120s... 30min) que sobrevive ao fechamento do app
+[✓] Adicionado fluxo de troca de PIN (antes so havia criar e remover)
+[✓] 25 testes novos de auth (pin, lockout, AuthGate)
+
+### Corretoras (verificado contra as APIs reais, nao em teste)
+[✓] OKX devolvia HTTP 403 em TODA a API publica: faltava User-Agent. Corrigido - 1415 instrumentos, ticker, klines, depth, trades
+[✓] OKX nomeia o par com hifen (BTC-USDT) e futures como -SWAP; convertido para a forma canonica (BTCUSDT)
+[✓] Bybit e OKX promovidos de code_only para active em broker_registry.py
+[✓] trades e stats24h tinham allowlist hardcoded (binance/mexc) que desligava Bybit e OKX; trocada por checagem real de metodo
+[✓] Resposta devolve sempre o simbolo pedido em `symbol` e guarda o id da corretora em `source_symbol`
+[✓] 25 testes novos de cobertura de corretoras
+
+### Interface
+[✓] Robô: catalogo vem de /api/universal/assets (a lista de simbolos fixa no front foi removida)
+[✓] Robô: Bybit e OKX aparecem no seletor; antes so havia MT5, MEXC e Binance
+[✓] Robô: cotacao em lote para as exchanges (antes uma requisicao por simbolo)
+[✓] Robô: estado "operavel" por ativo e a restricao real da corretora; sem cotacao mostra "--", nunca zero
+[✓] Versao da UI corrigida (1.2.0 -> 1.2.3) e gerada de Docs/version.json com teste anti-divergencia
+[✓] Botoes de ordem renomeados para "Simular ..." com aviso explicito: a UI nao promete envio
+[✓] CSP gerada por build (frontend/scripts/apply-csp.mjs) e RECUSA texto claro quando XAU_BUILD_TARGET=production
+
+### Dados
+[✓] C1 fechada: market_ticks tem coluna `provenance` (live/unverified) com migracao sem perda
+[✓] fallback do grafico rotula a origem: "ao vivo", "historico local de Ns" ou "DADOS NAO VERIFICADOS"
+[✓] `last_ticks` devolve a procedencia por ponto; 11 testes
+
+### Diagnostico
+[✓] /api/backtest/run devolvia 503 sem motivo. Agora traz reason_code, terminal_open e mt5_last_error
+[✓] _mt5_candles separava mal "terminal fechado" de "simbolo invalido"; o simbolo tambem nao era aparado
+[✓] 7 testes de diagnostico de candles
+
+### Risco e execucao
+[✓] Matriz de rejeicao completa (46 testes): ordem real sempre recusada, demo exige 4 travas,
+    adaptadores exigem request_id+confirmacao, router exige autorizacao explicita, saques bloqueados
+
+### Scripts e automacao
+[✓] REMOVIDOS por serem perigosos: cmd.exe na raiz, XAU_AI_PRO_START.vbs (autostart),
+    overnight_session.ps1 (deadline vencido), ciclo_limpo_123.py (limpeza automatica),
+    pos_reboot_docker.ps1 (execucao no boot), post_docker_cli_setup.ps1 e install_docker*
+    (instaladores silenciosos), setup/connect_sandbox_claude (terceiros),
+    vercel_vcr_setup.ps1 e setup-vercel.bat
+[✓] ACHADO DE SEGURANCA: o cmd.exe solto na raiz (344 KB) estava SENDO EXECUTADO pelo
+    MoNotificationUx.exe do Office, que o resolveu pelo diretorio de trabalho em vez do
+    System32. Sombreamento de caminho. Processo encerrado e arquivo removido.
+[✓] installer.iss: atalhos apontam direto para o EXE; removida a entrada "iniciar automaticamente"
+[✓] .gitignore bloqueia os 12 scripts/binarios removidos
+[✓] validate_release.ps1 REPROVA a release se qualquer um deles reaparecer
+[✓] NOVO scripts/preflight.py: falha cedo e com mensagem clara (disco, ferramentas, portas,
+    guarda MQL5, scripts bloqueados, flags de dinheiro real, versao). 28 testes
+[✓] validate_release.ps1 agora roda o preflight antes de tudo
+[✓] limpeza_segura.ps1: novo -DebugCache, -Only e -DryRun explicito
+[✓] git gc: pack de 485 MiB -> 114 MiB e 229 MiB de lixo temporario eliminado
+[✓] Docker_GUIDE.md: aviso de que os instaladores automaticos foram removidos
+
+### Documentacao
+[✓] Docs/MATRIZ_CAPABILIDADES.md gerado de broker_registry.py (com --check)
+[✓] PLANO_CORRECAO.md, ROADMAP_V1.0.md, STATUS_ATUAL.md e REFERENCE_NOTES.md marcados OBSOLETOS
+    (os dois primeiros mandavam editar .mqh do MQL5, o que e proibido)
+[✓] TROUBLESHOOTING_NEW_BROKER.md marcado: as linhas de Config.mqh citadas estavam erradas
+
+## Pendencias que permanecem apos 2026-09-26
+[XX] APK no emulador: BLOQUEADO por disco. O preflight exige 8 GB e ha 6,86 GB.
+     O AVD xau_test (x86_64) sobe e registra no adb, mas o APK existente e aarch64.
+     Precisa: (1) liberar ~2 GB, (2) build --target x86_64, (3) instalar e testar
+     com VITE_API_BASE=http://10.0.2.2:9001
+[•] Assinatura Windows publica: conflito A1 (assinatura) vs B3 (gratis) sem resposta.
+     Opcoes: abrir em OSS (US$ 0), CA comercial (US$ 70-400/ano) ou publicar sem assinar
+[•] Assinatura Android para Google Play: keystore de release + conta (US$ 25)
+[•] Gate E: forward test em conta DEMO XM Global. NADA executado ate hoje
+[•] Endurance 24h/72h/7d: nunca executada (CP1-CP5 vazios)
+[•] Profit Factor 0.46 com 57% de acerto: reprovado economicamente
+[•] 8 condicoes de seguranca para dinheiro real, todas abertas
+     (ver RELATORIO_AUDITORIA_SEGURANCA.md:187-199)
+[•] Achados de risco que vivem em MQL5/Experts (KCI zerado, CheckRiskPerSymbol stub,
+    preset .set com AllowMinLotOverride=true e risco 1,0%): NAO CORRIGIVEIS sem
+    autorizacao explicita do dono, pois a pasta e intocavel
+[•] gh auth login para auditar pip/cargo/github-actions e fechar o alerta Dependabot
+[•] Decidir o papel de main e do GitLab (D2). Hoje main == develop em ee90466
+[•] Commit das ~57 alteracoes pendentes: nao houve commit nesta sessao

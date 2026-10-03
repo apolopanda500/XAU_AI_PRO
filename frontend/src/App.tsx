@@ -8,43 +8,35 @@ import UserSessionGate from './components/auth/UserSessionGate';
 import QuantumBackground from './components/QuantumBackground';
 import Sidebar from './components/Sidebar';
 import TopNav from './components/TopNav';
-import PortfolioHomeClean from './components/tabs/PortfolioHomeSafe';
-import MarketTab from './components/tabs/MarketTab';
-import RobotTableCommands from './components/RobotAssetTableFixed';
-import RobotCommandActions from './components/RobotCommandActions';
-import GuardianManager from './components/GuardianManager';
-import DemoOrderPanel from './components/DemoOrderPanel';
-import UniversalLiveTerminal from './components/UniversalLiveTerminalLatest';
+import PortfolioHome from './components/tabs/PortfolioHomeSafe';
+import RobotTabs from './components/RobotTabs';
 import HistoryTab from './components/tabs/HistoryTab';
-import SystemMonitorUniversalTab from './components/SystemHealthOnly';
-import SettingsTab from './components/SettingsCoreSimple';
-import SubscriptionPanel from './components/SubscriptionPanel';
+import SystemHealth from './components/SystemHealthOnly';
+import SettingsCore from './components/SettingsCore';
 import ExitAppButton from './components/ExitAppButton';
-import ConnectedDevicesPanel from './components/ConnectedDevicesPanel';
-import SystemStartupSync from './components/SystemStartupSync';
-import ConnectionManager from './components/ConnectionSettings';
-import StrategyTesterTab from './components/tabs/StrategyTesterTab';
-import RiskTab from './components/tabs/RiskTab';
-import AlertTab from './components/tabs/AlertTab';
-import AIControlTab from './components/tabs/AIControlTab';
-import AnalyticsTab from './components/tabs/AnalyticsTab';
 import EconomicCalendarTab from './components/tabs/EconomicCalendarTab';
+import VipsTab from './components/VipsTab';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 
 function renderActiveTab(tab: TabType): ReactNode {
   switch (tab) {
-    case 'portfolio': return <PortfolioHomeClean />;
-    case 'market': return <MarketTab />;
-    case 'robot': return <><RobotTableCommands /><RobotCommandActions /><DemoOrderPanel /><GuardianManager /><UniversalLiveTerminal /></>;
+    case 'portfolio': return <PortfolioHome />;
+    // A aba Operar tem quatro sub-abas (Operar | Sinal | EA | Copiloto) e
+    // abre na primeira: motor automatico, posicoes ao vivo e ordem manual.
+    // Cada painel segue dentro da sua barreira de erro: um painel que
+    // falhasse desmontava a arvore React inteira e a aba ficava branca - o
+    // usuario perdia o app sem saber qual era o culpado.
+    case 'robot': return <RobotTabs />;
+    // Performance & Analytics foi fundida no Histórico: as duas telas
+    // analisam a mesma coisa — as operações realizadas.
     case 'history': return <HistoryTab />;
-    case 'system': return <SystemMonitorUniversalTab />;
-    case 'settings': return <><ConnectionManager /><ConnectedDevicesPanel /><SubscriptionPanel /><SettingsTab /><ExitAppButton /></>;
-    case 'strategy-tester': return <StrategyTesterTab />;
-    case 'risk': return <RiskTab />;
-    case 'alert': return <AlertTab />;
-    case 'analytics': return <AnalyticsTab />;
+    case 'system': return <SystemHealth />;
+    case 'settings': return <><SettingsCore /><ExitAppButton /></>;
     case 'calendar': return <EconomicCalendarTab />;
-    case 'ai': return <AIControlTab />;
+    // VIPS: progressao por volume, medida no audit.jsonl real. Fica separada
+    // do plano (Free/VIP/VIPS) porque sao coisas diferentes: o plano e
+    // preferencia local, o nivel aqui e conquistado operando.
+    case 'vips': return <VipsTab />;
     default: return null;
   }
 }
@@ -72,7 +64,6 @@ export default function App() {
 
   return <>
     <QuantumBackground density={60} speed={1} />
-    <SystemStartupSync />
     <UserSessionGate>
       <AuthGate>
         <div className="app-shell">

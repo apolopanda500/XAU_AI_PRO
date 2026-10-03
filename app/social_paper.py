@@ -19,8 +19,8 @@ _STRATEGIES: tuple[dict[str, Any], ...] = (
         "name": "Trend Filter",
         "description": "Perfil de tendência com confirmação de timeframe superior.",
         "risk_profile": "conservative",
-        "timeframes": ["M15", "H1", "H4"],
-        "symbols": ["XAUUSD", "EURUSD"],
+        "timeframes": [],
+        "symbols": [],
         "paper_only": True,
     },
     {
@@ -28,8 +28,8 @@ _STRATEGIES: tuple[dict[str, Any], ...] = (
         "name": "Mean Reversion",
         "description": "Perfil de reversão à média para estudo em paper/demo.",
         "risk_profile": "moderate",
-        "timeframes": ["M5", "M15"],
-        "symbols": ["XAUUSD"],
+        "timeframes": [],
+        "symbols": [],
         "paper_only": True,
     },
     {
@@ -37,8 +37,8 @@ _STRATEGIES: tuple[dict[str, Any], ...] = (
         "name": "Session Breakout",
         "description": "Perfil de rompimento de sessão com spread e horário sob observação.",
         "risk_profile": "moderate",
-        "timeframes": ["M5", "M15"],
-        "symbols": ["XAUUSD", "GBPUSD"],
+        "timeframes": [],
+        "symbols": [],
         "paper_only": True,
     },
 )
@@ -92,7 +92,7 @@ def follow_strategy(strategy_id: str, user_id: str | None = None) -> dict[str, A
         ids.add(normalized)
         data[_user_id(user_id)] = sorted(ids)
         _save(data)
-    return {**copy.deepcopy(strategy), "following": True, "execution_mode": "paper_demo", "live_execution": False}
+    return {**copy.deepcopy(strategy), "following": True, "execution_mode": "paper_trade", "live_execution": False}
 
 
 def unfollow_strategy(strategy_id: str, user_id: str | None = None) -> dict[str, Any]:
@@ -103,4 +103,4 @@ def unfollow_strategy(strategy_id: str, user_id: str | None = None) -> dict[str,
         ids.discard(normalized)
         data[_user_id(user_id)] = sorted(ids)
         _save(data)
-    return {"strategy_id": normalized, "following": False, "execution_mode": "paper_demo", "live_execution": False}
+    return {"strategy_id": normalized, "following": False, "execution_mode": "paper_trade", "live_execution": False}
