@@ -7,7 +7,25 @@ on:
 permissions:
   contents: read
 jobs:
+  segredos:
+    # Roda em todo push para main/develop e em todo pull_request: e a primeira
+    # barreira do repositorio. Sem ela, um `.env` com chave so apareceria no
+    # alerta de seguranca, depois de ja estar publicado.
+    name: Segredos
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout completo (historico)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Varredura de segredos (historico completo)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: false
+
   rust:
+    needs: segredos
     runs-on: windows-latest
     defaults:
       run:
@@ -22,6 +40,7 @@ jobs:
       - run: cargo test --locked
       - run: cargo clippy --locked -- -D warnings
   frontend:
+    needs: segredos
     runs-on: windows-latest
     defaults:
       run:

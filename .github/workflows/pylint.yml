@@ -20,8 +20,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  segredos:
+    name: Segredos
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout completo (historico)
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Varredura de segredos (historico completo)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: false
+
   pylint:
     name: Análise estática (Python 3.11)
+    needs: segredos
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

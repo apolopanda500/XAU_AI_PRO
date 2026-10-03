@@ -27,7 +27,8 @@ Thumbs.db
 .env.mexc
 .env.binance.local
 .env.integrations
-.env.integrations.example
+# `.env.integrations.example` NAO e ignorado de proposito: o arquivo de exemplo
+# e a documentacao das variaveis de integracao e precisa estar no repositorio.
 
 # Python
 __pycache__/
@@ -77,6 +78,11 @@ Logs/*
 .vercel.backup-*
 .vercel.backup*
 .env*
+# A regra acima `.env*` e generica e vem depois das especificas, entao tambem
+# engolia os arquivos `.example` — que sao a documentacao das variaveis e
+# precisam ser versionados. Sem esta excecao o `.env.example` depended do
+# historico para continuar rastreado: um `git clone` novo nao o traria.
+!.env*.example
 .slack_watcher_offset
 Ultimate/.slack_watcher_offset
 installer/cert/ 

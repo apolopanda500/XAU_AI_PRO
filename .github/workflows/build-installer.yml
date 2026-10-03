@@ -10,8 +10,31 @@ permissions:
   contents: write
 
 jobs:
+  segredos:
+    # Este workflow empacota o instalador que chega na maquina do usuario.
+    # Sem varredura de segredo aqui, uma credencial commitada por engano entraria
+    # no binario e na release sem ninguem ver. Roda antes de qualquer build.
+    name: Segredos
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout completo (historico)
+        uses: actions/checkout@v4
+        with:
+          # O gitleaks so ve o que esta no historico. Sem `fetch-depth: 0` a
+          # busca fica restrita ao ultimo commit e passa por cima de um
+          # segredo que entrou e saiu antes.
+          fetch-depth: 0
+      - name: Varredura de segredos (historico completo)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Impede o job de publicar o relatorio em Run Analysis mesmo
+          # quando o repositorio e privado.
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: false
+
   build:
     name: EXE + Setup (Windows)
+    needs: segredos
     runs-on: windows-latest
     steps:
       - name: Checkout
