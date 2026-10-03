@@ -3,12 +3,11 @@
 Atualizado em **03/10/2026**. Este mapa existe porque a pasta chegou a ter
 61 arquivos com quatro "FINAL" e cinco "HANDOFF" disputando o mesmo assunto.
 
-**Comece por:** [`SESSAO_20261004_COOLDOWN_MARGEM_E_EA_COMPILANDO.md`](./SESSAO_20261004_COOLDOWN_MARGEM_E_EA_COMPILANDO.md) —
+**Comece por:** [`CONVERSA_20261003_04_DO_WINDOWS_AO_APP_PRONTO.md`](./CONVERSA_20261003_04_DO_WINDOWS_AO_APP_PRONTO.md) —
+**a conversa do ciclo na ordem**, os 7 defeitos medidos e a lista real do que
+falta.
+Depois: [`SESSAO_20261004_COOLDOWN_MARGEM_E_EA_COMPILANDO.md`](./SESSAO_20261004_COOLDOWN_MARGEM_E_EA_COMPILANDO.md) —
 a trava de margem **já existia**: o defeito era o EA insistir a cada 2-3 s.
-Cooldown por símbolo com backoff 60 s→1 h, EA compilando (0 erros), e um erro
-de compilação pré-existente que ninguém via.
-Depois: [`SESSAO_20261003_NOITE_MERGE_E_BROKER_ERROR.md`](./SESSAO_20261003_NOITE_MERGE_E_BROKER_ERROR.md) —
-o merge em `main` e a leitura dos 4.246 `BROKER_ERROR` (CSV em UTF-16).
 
 ---
 
@@ -16,7 +15,7 @@ o merge em `main` e a leitura dos 4.246 `BROKER_ERROR` (CSV em UTF-16).
 
 | Documento | Quando | Sobre |
 |---|---|---|
-| **`SESSAO_20261004_COOLDOWN_MARGEM_E_EA_COMPILANDO.md`** | 04/10 madrugada | **`MarginChecker` com cooldown por símbolo e backoff 60 s→1 h (redução de 3.191× nas recusas). `OrderSendResult()` não existe em MQL5 e quebrava a compilação desde `dbdce10`. `0 errors, 0 warnings`.** Leitura de entrada. |
+| **`CONVERSA_20261003_04_DO_WINDOWS_AO_APP_PRONTO.md`** | 03→04/10 | **A conversa na ordem: 6 pedidos, 7 defeitos medidos, o cooldown de margem (3.191×), o EA que não compilava desde `dbdce10`, e as 7 pendências reais.** Leitura de entrada. |
 | **`SESSAO_20261003_NOITE_MERGE_E_BROKER_ERROR.md`** | 03/10 noite | **Merge `develop` → `main` (`46fd23b`, 4 conflitos de lockfile) e a causa raiz dos 4.246 `BROKER_ERROR`: 4.165 `EXEC_NO_MARGIN` entre 03h–05h. Conta DEMO preservada.** |
 |---|---|---|
 | **`SESSAO_20261003_TARDE_BUILD_APAGAVA_MODELOS.md`** | 03/10 tarde | **O `robocopy /MIR` que apagava da pasta do `.spec` os 3 modelos MULTI a cada build; o cron que lê a branch errada; os 199 `ERROR` de ACL corrompida. `833 passed`.** Leitura de entrada. |
