@@ -44,7 +44,20 @@ $allowed = @(
     # arquivo e o PDB e escrito em disco mesmo assim. Cresce a cada build:
     # 11,2 MB em 29/09, 88 MB em 30/09. Nao e versaoado, nao e lido por nada
     # e `cargo build` o recria quando preciso. Ver `Docs\SESSAO_20260930_CICLO_LIMPO.md` 3.2.
-    'frontend\src-tauri\NONE'
+    'frontend\src-tauri\NONE',
+    # Cache de bytecode do Python (`.gitignore:187`, `__pycache__/`).
+    #
+    # Estava no `.gitignore` e NAO na allowlist desta limpeza, que e o
+    # caminho oficial do projeto: o cache nao entra no git e nao era removido
+    # por nenhum caminho, entao acumulava silenciosamente. Medido em
+    # 04/10/2026: 21 pastas dentro do repositorio.
+    #
+    # A entrada e por PADRAO e nao por caminho fixo porque `__pycache__`
+    # aparece em `Python/`, `app/`, `backend/`, `scripts/` e `tests/`, e um
+    # item fixo por diretorio seriam cinco linhas para cobrir o mesmo padrao.
+    # `.venv` e `node_modules` NAO sao alcancados: o padrao e relativo a raiz
+    # e o cache do ambiente virtual e reaproveitado de proposito.
+    '__pycache__'
 )
 if ($BuildArtifacts) {
     $allowed += @('build', 'dist', 'core\target', 'frontend\src-tauri\target', 'Temp\cargo-target')
@@ -65,6 +78,25 @@ if ($PrebuildBackups) {
     $allowed += @(Get-ChildItem -LiteralPath (Join-Path $rootPath 'Logs') -Directory -Filter 'backup_prebuild_*' -ErrorAction SilentlyContinue | ForEach-Object {
         $_.FullName.Substring($rootPath.Length).TrimStart('\')
     })
+}
+
+# Expande o placeholder `__pycache__` para os diretorios reais.
+#
+# `$allowed` acima e uma lista de caminhos RELATIVOS, e `Test-Path` nao aceita
+# curinga. Sem esta expansao a entrada `'__pycache__'` seria um caminho que
+# nao existe e nao apagaria nada — silenciosamente, que e pior do que erro.
+#
+# `.venv` e `node_modules` ficam de fora: sao dependencias instaladas, nao
+# cache deste repositorio, e o cache do ambiente virtual e reaproveitado de
+# proposito entre execucoes.
+$padroes = @($allowed | Where-Object { $_ -like '*__pycache__*' })
+if ($padroes.Count -gt 0) {
+    $achados = Get-ChildItem -LiteralPath $rootPath -Directory -Recurse -Filter '__pycache__' -Force -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -notmatch '[\\/]\.venv[\\/]' -and $_.FullName -notmatch '[\\/]node_modules[\\/]' }
+    $relativos = @($achados | ForEach-Object { $_.FullName.Substring($rootPath.Length).TrimStart('\') })
+    # Remove o placeholder e poe os caminhos reais, mantendo a allowlist
+    # como fonte da verdade (o `-Only` continua validando contra ela).
+    $allowed = @($allowed | Where-Object { $_ -notlike '*__pycache__*' }) + $relativos
 }
 
 Write-Host "Raiz: $rootPath"
