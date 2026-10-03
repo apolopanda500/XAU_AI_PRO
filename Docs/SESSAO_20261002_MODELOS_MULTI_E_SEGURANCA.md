@@ -56,6 +56,51 @@ o que `ai_inference._resolver_modelos()` resolve.
 `\x00`: `AUDUSD` virava `" A U D U S D "`. A auditoria acusava "193 simbolos"
 cheios de lixo e **0 linhas uteis**.
 
+### 2.2b Uma linha com data no ano 1 matava o treino do FIAT
+
+Este e o defeito mais caro do ciclo, e ele **nao aparecia em lugar nenhum**: o
+processo nao travava por falta de memoria, ele morria com `ArrayMemoryError` e
+a causa real estava tres camadas acima.
+
+```
+Time cru: '4 13:05:00'   ->  pandas parseia: 0001-01-04 13:05:00
+```
+
+**1 linha em 49.365.** Uma so. E ela estraga o reamostramento inteiro porque
+`resample()` usa o **span** entre `min` e `max` para criar os bins: de 1 ate
+2026 dao 2.025 anos, e um bin por minuto disso sao **71.028.348 linhas** — o
+numero exato da mensagem de erro.
+
+Tres hipoteses erradas antes da causa:
+
+| Hipotese | Por que estava errada |
+|---|---|
+| "Falta de memoria" | Era, mas nao por acumulo. `gc.collect()` nao mudou nada — mesmo 542 MiB, mesmo 71028348. |
+| "O `replace([inf,-inf], nan)` copia a base" | Custo real, mas nao a causa do estouro. |
+| "O encoding do dataset esta errado" | O `detectar_encoding` errava mesmo (ver 2.2c), mas corrigido o encoding os anos continuavam em 1 — **o defeito era o dado, nao a leitura.** |
+
+Encadeamento:
+
+```
+1 linha '4 13:05:00' -> parse: 0001-01-04 -> min() = ano 1
+                     -> resample cria 1 bin por minuto do span
+                     -> 71.028.348 linhas -> ArrayMemoryError: 542 MiB
+```
+
+Corrigido em `_descartar_timestamps_impossiveis`: janela 1990-2035 aplicada
+**na carga**, com o numero de descartadas impresso no log. Foram **18 linhas em
+676.732** (0,00003%). Os edges melhoraram depois disso: FIAT +0,185 e METALS
++0,250, contra +0,057 e +0,063 na rodada que sofria do defeito.
+
+### 2.2c O `detectar_encoding` errava em arquivo sem BOM
+
+`dataset_limpo.csv` e **UTF-8 COM BOM** (`EF BB BF`) e `dataset.csv` e
+**UTF-16 LE** (`FF FE`) — medidos em byte. A heuristica antiga contava bytes
+nulos em posicao impar, o que so distingue UTF-16 de ASCII: nos arquivos ja
+limpos ela declarava UTF-16 sem ser.
+
+Agora: BOM manda; sem BOM, a **tentativa de decodificar** e a prova (o primeiro
+campo de um CSV de mercado comeca com data).
 ### 2.3 Features nao estacionarias tornam MULTI impossivel
 
 `FEATURES` comeca com preco absoluto. XAUUSD ≈ 2000, EURUSD ≈ 1,08. Um modelo
@@ -177,6 +222,40 @@ Toda perda de ciclo veio daqui, nao do codigo estar errado:
 
 A regra que daqui pra frente: **medir o artefato final, nao o codigo que o
 gera.**
+
+### 7.1 Um erro meu que custou um build inteiro
+
+O primeiro `build_app.bat` desta sessao **falhou na etapa [7/7]**. A causa nao
+foi falta de espaco, como o log sugeria:
+
+```
+error: proc macro panicked
+  --> src\main.rs:957:14
+   |
+957 |         .run(tauri::generate_context!())
+   = help: message: The `frontendDist` configuration is set to
+          `"../dist"` but this path doesn't exist
+```
+
+**Eu tinha apagado `frontend/dist` na limpeza para liberar espaco**, achando
+que era cache regeneravel. O `tauri.conf.json` aponta `frontendDist` para
+`../dist`, entao o build morre no `generate_context!()`.
+
+Duas leituras erradas minhas no mesmo minuto, que valem registrar:
+
+| O que eu fiz | Por que errou |
+|---|---|
+| Apaguei `frontend/dist` para liberar disco | `frontendDist` do Tauri le essa pasta. **Nao e cache: e entrada do build.** |
+| Quase apaguei `dist/mt5-gateway` achando que era redundante | o `robocopy` do passo [6/7] põe o exe em `bridge/mt5-gateway.exe` (raiz), nao em `bridge/mt5-gateway/`. **Verifiquei antes de apagar.** |
+
+O que salvou o segundo foi ter conferido `Test-Path
+'frontend\src-tauri\bridge\mt5-gateway.exe'` antes do `Remove-Item`. Um `-Force`
+sem verificacao teria custado os 3 modelos e o gateway inteiro, e o build
+ainda teria passado adiante.
+
+**A regra:** antes de apagar algo grande durante um build, confirmar que o
+build ja copiou para o destino final. Cache que o build ainda vai ler nao e
+cache.
 **Nomes limpos, sem sufixo de timeframe:** `MULTI_CRYPTO`, nao
 `MULTI_CRYPTO_H1`. E o que o dono pediu — um artefato, todos os horarios.
 

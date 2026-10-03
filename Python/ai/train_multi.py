@@ -44,6 +44,7 @@ USO
 from __future__ import annotations
 
 import argparse
+import gc
 import json
 import os
 import sys
@@ -146,7 +147,45 @@ def _carregar(classe: str) -> pd.DataFrame:
     # formatos ("2026-01-02 09:05:00" e "2026.09.16 04:55:00") porque os dois
     # arquivos veio de produtor diferentes.
     df["Time"] = pd.to_datetime(df["Time"], errors="coerce", format="mixed")
-    return df.dropna(subset=["Time", "Open", "High", "Low", "Close"])
+    df = df.dropna(subset=["Time", "Open", "High", "Low", "Close"])
+    return _descartar_timestamps_impossiveis(df)
+
+
+#: Uma data so e plausivel nesta janela. O dataset e de 2026; a faixa e larga
+#: de proposito para nao eliminar dado legitimo de um produtor antigo.
+JANELA_TEMPORAL = ("1990-01-01", "2035-12-31")
+
+
+def _descartar_timestamps_impossiveis(df: pd.DataFrame) -> pd.DataFrame:
+    """Remove a data quebrada que envenena todo o reamostramento.
+
+    MEDIDO (2026-10-02): o `dataset_limpo.csv` tem **1 linha em 49.365** com
+    `Time = "4 13:05:00"` — um corte do produtor, sem ano. O pandas parseia
+    como `0001-01-04 13:05:00` (ano 1, sem reclamar).
+
+    Uma linha so nao estraga o reamostramento inteiro, porque
+    `resample()` usa o **span** entre `min` e `max` para criar os bins: de 1
+    ate 2026 dao 2.025 anos, e um bin por minuto disso sao as 71.028.348
+    linhas que estouraram a RAM no treino do FIAT
+    (`ArrayMemoryError: Unable to allocate 542. MiB`).
+
+    A alternativa — filtrar no `min()`/`max()` do resample — esconderia o dado
+    ruim mas deixaria a causa. Aqui a linha some do conjunto, que e o que a
+    governanca de dados pede.
+    """
+    if df.empty:
+        return df
+    inicio, fim = pd.Timestamp(JANELA_TEMPORAL[0]), pd.Timestamp(JANELA_TEMPORAL[1])
+    dentro = df["Time"].between(inicio, fim)
+    if dentro.all():
+        return df
+    descartadas = int((~dentro).sum())
+    print(
+        f"    timestamps fora de {JANELA_TEMPORAL[0]}..{JANELA_TEMPORAL[1]}: "
+        f"{descartadas} linha(s) descartada(s)",
+        flush=True,
+    )
+    return df[dentro].reset_index(drop=True)
 
 
 def montar_base(bronze: pd.DataFrame, classe: str) -> pd.DataFrame:
@@ -182,13 +221,18 @@ def montar_base(bronze: pd.DataFrame, classe: str) -> pd.DataFrame:
             valores = base[colunas].to_numpy(dtype="float64", na_value=np.nan)
             base.loc[:, colunas] = base[colunas].mask(np.isinf(valores))
             base = base.dropna(subset=colunas)
-            # Solta o bloco anterior cedo: com 10 simbolos x 4 timeframes, manter
-            # todos os `base` vivos ate o fim e o que estoura a memoria.
-            del agregada
+            del agregada, valores
             if len(base) < MIN_AMOSTRAS:
                 continue
             base = base.sort_values("Time")  # ordem cronologica entre timeframes
             blocos.append(base)
+            # O `ArrayMemoryError` nasce ANTES daqui, dentro do
+            # `resample().agg("mean")` do pandas. Manter todas as fatiadas
+            # vivas ate o `concat` final significa que as duas copias coexistem
+            # no fim, e com 10 pares x 4 timeframes isso estoura a RAM.
+            # `gc.collect()` devolve ao SO o que o pandas ainda segura da
+            # fatiada anterior; sem ele o processo mantem tudo ate o fim.
+            gc.collect()
     if not blocos:
         return pd.DataFrame()
     return pd.concat(blocos, ignore_index=True)

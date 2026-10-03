@@ -15,7 +15,9 @@ foi fechado.
 
 | Documento | Quando | Sobre |
 |---|---|---|
-| **`CONVERSA_20261002_DO_WINDOWS_AO_APP.md`** | 02/10 | **A conversa do ciclo, na ordem: 12 pedidos, o que cada um virou e o que ficou aberto.** Leitura de entrada. |
+| **`SESSAO_20261002_MODELOS_MULTI_E_SEGURANCA.md`** | 02/10 noite | **O ciclo dos 3 modelos MULTI: os 4 defeitos que so apareceram na medicao, o bundle do instalador, a seguranca verificada e o que ficou em aberto.** Leitura de entrada. |
+| **`PLANO_MESTRE_20261002.md`** | 02/10 | Plano dos 8 ciclos: VIP, modelos multi, operação multi-asset. |
+| **`CONVERSA_20261002_DO_WINDOWS_AO_APP.md`** | 02/10 | **A conversa do ciclo, na ordem: 12 pedidos, o que cada um virou e o que ficou aberto.** |
 | **`SESSAO_20261001_VALIDACAO_10_10.md`** | 01/10 noite | **16 camadas validadas 10/10, a coluna "Leitura" da matriz estava invertida, e a sub-aba VIPs ganhou a escada inteira.** |
 | **`SESSAO_20261001_VALIDACAO_E_PUSH.md`** | 01/10 | **Sessão completa: do build travado ao VIP por volume. 13 commits, tudo medido.** |
 | **`VIP_PROGRESSAO.md`** | 01/10 | **Pesquisa: como PrimeXBT, IC Markets e IBKR estruturam nível por volume.** Referência, não registro. |

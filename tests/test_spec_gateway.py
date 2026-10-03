@@ -162,3 +162,29 @@ def test_destino_bate_com_o_que_ai_inference_procura():
     assert any(resolvido.glob("*.meta.json")) or any(resolvido.glob("*.pkl")), (
         f"ai_inference resolveu para {resolvido}, que nao tem nenhum artefato"
     )
+
+
+def test_bundle_pyinstaller_tem_os_modelos():
+    """O artefato final, medido — nao o codigo que o produz.
+
+    Verificado em 02/10/2026: o `datas.append` estava certo, mas este teste
+    procurava em `dist/mt5-gateway/Python/models`. O PyInstaller deposita
+    `datas` em `_internal/`, entao a busca devolvia zero e o instalador saia
+    sem os 3 modelos MULTI sem nenhum aviso no log.
+
+    E por isso que a regra do ciclo e: medir o artefato, nao o codigo.
+    """
+    bundle = RAIZ / "dist" / "mt5-gateway"
+    if not bundle.is_dir():
+        pytest.skip("bundle ainda nao construido ( rode scripts/build_app.bat )")
+
+    # PyInstaller coloca `datas` em `_internal/`. Aceita os dois para o teste
+    # nao depender do layout interno.
+    candidatos = [bundle / "Python" / "models", bundle / "_internal" / "Python" / "models"]
+    com_modelos = [c for c in candidatos if c.is_dir() and any(c.glob("MULTI_*.pkl"))]
+    assert com_modelos, (
+        "o bundle nao tem nenhum MULTI_*.pkl em "
+        + " nem ".join(str(c.relative_to(RAIZ)) for c in candidatos)
+        + " — o instalador vai sair sem os modelos e o app instalado mostrara "
+        "'modelos nao carregam', sem excecao em lugar nenhum"
+    )
