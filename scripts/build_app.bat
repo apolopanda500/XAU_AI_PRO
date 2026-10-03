@@ -88,15 +88,87 @@ if %ERRORLEVEL% geq 8 (
     exit /b 1
 )
 if not exist "%ROOT%\frontend\src-tauri\Python\models" mkdir "%ROOT%\frontend\src-tauri\Python\models"
-REM /XD _backup* impede que um backup de metadados (criado quando um pipeline
-REM legado corrompe a governanca) entre no bundle. Em 2026-09-29 o backup foi
-REM para dentro de Python\models e o MSI novo o empacotou no app instalado,
-REM onde nao serve para nada. Backup pertence em Temp\, nao na pasta de modelos.
-robocopy "%ROOT%\Python\models" "%ROOT%\frontend\src-tauri\Python\models" /MIR /XD _backup* /XF *.tmp /NFL /NDL /NJH /NJS /NP
+
+REM ---------------------------------------------------------------------------
+REM POR QUE ESTE PASSO USA /E E NAO /MIR  (corrigido em 03/10/2026)
+REM ---------------------------------------------------------------------------
+REM `/MIR` ESPELHA: apaga no destino tudo que nao esta na origem. E a origem
+REM aqui (`Python\models`, raiz) tem 72 arquivos e ZERO `MULTI_*`; os tres
+REM modelos MULTI sao publicados por `train_multi.MODELOS_DIR` (linha 80) em
+REM `frontend\src-tauri\Python\models` — o proprio DESTINO deste comando.
+REM
+REM Resultado medido em 03/10/2026: com `/MIR`, o passo [6/7] apaga os 3
+REM `MULTI_*.pkl` + `MULTI_*.meta.json` (174 MB) da pasta que
+REM `mt5-gateway.spec:24` empacota e que `tauri.conf.json` inclui como
+REM `Python/models/**/*`. Os artefatos so sobreviviam em `dist\`, `bridge\` e
+REM `Temp\cargo-target\release\bridge\`, por accidento de outro passo.
+REM
+REM E o defeito 7.2 de `Docs\SESSAO_20261002_MODELOS_MULTI_E_SEGURANCA.md`:
+REM os modelos somem e o BUILD PASSA LIMPO, sem excecao e sem log. As tres
+REM ocorrencias descritas naquele doc foram creditadas a remocao manual de
+REM `dist\`. A remocao manual foi um dos fatores, mas a causa ESTAVEL — a que
+REM repete o defeito em qualquer build — e esta linha.
+REM
+REM `/E` copia subpastas e arquivos sem apagar o que ja existe no destino.
+REM O espelhamento era desnecessario aqui: os dois lados sao pastas de
+REM modelo, e apagar um `.pkl` ja treinado nunca e o que se quer ao empacotar.
+REM
+REM O `/XD _backup*` segue necessario: em 2026-09-29 um backup de metadados
+REM foi criado dentro de `Python\models` e o MSI novo o empacotou no app
+REM instalado, onde nao serve para nada. Backup pertence em `Temp\`.
+robocopy "%ROOT%\Python\models" "%ROOT%\frontend\src-tauri\Python\models" /E /XD _backup* /XF *.tmp /NFL /NDL /NJH /NJS /NP
 if %ERRORLEVEL% geq 8 (
     echo ERRO: Nao foi possivel sincronizar os modelos
     exit /b 1
 )
+
+REM ---------------------------------------------------------------------------
+REM TRAVA DE ARTEFATO: o build NAO passa se os MULTI nao estiverem no destino
+REM ---------------------------------------------------------------------------
+REM Este e o passo que o `robocopy` acima NAO pode cumprir: ele so copia
+REM `Python\models` para frente e nao sabe o que precisa existir no destino.
+REM A trava fica aqui, depois da copia, medindo o ARTEFATO FINAL — a regra
+REM do ciclo de 02/10 ("medir o artefato final, nao o codigo que o gera").
+REM
+REM Sem esta trava o defeito volta a ser invisivel: o `robocopy` termina com
+REM codigo 0, o script segue para [7/7] e o instalador sai sem os 3 modelos.
+REM
+REM Cada modelo exige o `.pkl` E o `.meta.json`: o `.pkl` e o que o
+REM `joblib.load` le, e o `.meta.json` e o que declara timeframe e classe para
+REM o runtime (ver `Python\ai\train_multi.py:449-454`, que escreve os dois).
+REM
+REM Implementado como subrotina, e nao com `!VAR!` dentro do `for`: o script
+REM roda sob `setlocal` SEM delayed expansion, e liga-lo agora mudaria a
+REM interpretacao de `!` no `echo` do resto do build.
+set "MODELOS_DESTINO=%ROOT%\frontend\src-tauri\Python\models"
+for %%M in (MULTI_CRYPTO MULTI_FIAT MULTI_METALS) do (
+    if not exist "%MODELOS_DESTINO%\%%M.pkl" (
+        echo ERRO: modelo ausente: "%MODELOS_DESTINO%\%%M.pkl"
+        goto :erro_modelos_multi
+    )
+    if not exist "%MODELOS_DESTINO%\%%M.meta.json" (
+        echo ERRO: metadados ausentes: "%MODELOS_DESTINO%\%%M.meta.json"
+        goto :erro_modelos_multi
+    )
+)
+echo Modelos MULTI presentes no destino: OK.
+goto :modelos_ok
+
+:erro_modelos_multi
+echo.
+echo ERRO: os 3 modelos MULTI nao estao todos em "%MODELOS_DESTINO%".
+echo.
+echo O instalador sairia SEM os modelos MULTI e o app instalado diria
+echo "modelos nao carregam" sem nenhuma excecao. Treine antes de empacotar:
+echo     .venv\Scripts\python.exe Python\ai\train_multi.py
+echo.
+echo Se os `.pkl` existem em outro lugar (por exemplo em
+echo frontend\src-tauri\bridge\_internal\Python\models\), restaure-os nesta
+echo pasta antes de repetir o build. NAO apague o destino para "limpar": foi
+echo essa remocao que repetiu o defeito tres vezes.
+exit /b 1
+
+:modelos_ok
 
 REM Build e bundle Tauri (MSI/NSIS)
 echo [7/7] Gerando bundle Tauri...

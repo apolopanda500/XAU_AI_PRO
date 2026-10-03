@@ -252,6 +252,45 @@ O que salvou o segundo foi ter conferido `Test-Path
 'frontend\src-tauri\bridge\mt5-gateway.exe'` antes do `Remove-Item`. Um `-Force`
 sem verificacao teria custado os 3 modelos e o gateway inteiro, e o build
 ainda teria passado adiante.
+### 7.2 O mesmo defeito aconteceu TRES vezes — e o registro e o que quebra o ciclo
+
+O `robocopy /MIR` do passo [6/7] espelha `dist/mt5-gateway` em
+`frontend/src-tauri/bridge`. `/MIR` **apaga o que nao esta na origem**. Como o
+`dist` e gerado pelo passo [5/7], se o passo [5] rodar sem os `.pkl` — ou se o
+`dist` for removido antes do [6/7] — o espelho leva os **modelos embora**.
+
+Foi o que aconteceu **tres vezes neste ciclo**:
+
+| Build | Como os modelos sumiram |
+|---|---|
+| 1 | `.spec` sem `datas` — nunca chegaram ao `dist` |
+| 2 | removi `dist/` manualmente para liberar disco, antes do [6/7] |
+| 3 | mesma remocao, durante o build em andamento |
+
+Nas tres o sintoma era identico e enganoso: **o build passava limpo**. O
+`bridge/` ficava com 36 `.pkl` (os unitarios) e zero `MULTI_*`, e o app
+instalado diria *"modelos nao carregam"* sem nenhuma excecao.
+
+**O que quebra o ciclo e ter o nome do sintoma escrito no doc.** Sem o
+registro, a terceira ocorrencia teria sido tratada como um problema novo e
+mais um build seria perdido.
+
+### 7.3 Cache que o build ainda vai ler nao e cache
+
+No build 3 eu apaguei `Temp/cargo-target/release/deps` (1,48 GB) **enquanto
+o `rustc` do desktop ainda ia ler os `.rlib`** dali:
+
+```
+rustc ... --extern tauri=...\Temp\cargo-target\release\deps\libtauri.rlib
+```
+
+O build morreu com `exit code: 101` — nao por disco, mas porque apaguei a
+entrada dele. E era exatamente a regra que eu tinha acabado de escrever no
+doc deste ciclo.
+
+**A regra que funciona:** durante um build, o unico comando seguro e o
+`Select-String` no log. Nada de `Remove-Item`. Se o disco aperta, a solucao e
+esperar o build terminar e limpar depois.
 
 **A regra:** antes de apagar algo grande durante um build, confirmar que o
 build ja copiou para o destino final. Cache que o build ainda vai ler nao e

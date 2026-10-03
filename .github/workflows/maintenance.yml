@@ -21,19 +21,58 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          # O workflow e AGENDADO. Workflow agendado roda sempre na branch
-          # DEFAULT do repositorio, e a default e `main` — nao `develop`.
+          # ---------------------------------------------------------------------
+          # POR QUE `ref: develop` (medido em 03/10/2026 - leia antes de "simplificar")
+          # ---------------------------------------------------------------------
+          # O workflow e AGENDADO. Workflow agendado executa o YAML que esta na
+          # branch DEFAULT do repositorio, e a default deste repositorio e `main`.
           #
-          # `main` esta 39 commits atras de `develop`, entao o cron executava
-          # um codigo de 01/10 e falhava com:
-          #     ModuleNotFoundError: No module named 'fastapi'
-          # `requirements-ci.txt` na `main` NAO tem `fastapi`; na `develop` tem.
-          # Ou seja: falhava por rodar codigo velho, nao por defeito do codigo.
+          # JA HOUVE DUAS CORRECOES NESSE MESMO PONTO, E AS DUAS FICARAM PARCIAS:
           #
-          # O `ref` explicito manda o cron validar a branch de trabalho, que e
-          # a mesma que o Super-Linter deste repositorio declara em
-          # `DEFAULT_BRANCH: develop`.
+          # 1. `ref: develop` foi acrescentado (commit e857528) porque o cron
+          #    executava codigo de 01/10 e falhava com
+          #        ModuleNotFoundError: No module named 'fastapi'
+          #    `requirements-ci.txt` na `main` NAO tem `fastapi`; na `develop` tem.
+          #    O sintoma e identico ao de um defeito de codigo e nao e: e codigo velho.
+          #
+          # 2. MAS o `ref: develop` so funciona se ESTE YAML chegar na `main`. Em
+          #    03/10/2026 a `main` estava 53 commits atras, entao o GitHub executava
+          #    a VERSAO ANTIGA deste arquivo - sem o `ref` - e o cron reprovou de novo
+          #    com o MESMO ModuleNotFoundError, abrindo a issue #25.
+          #
+          # MEDIDO (03/10/2026):
+          #   gh repo view --json defaultBranchRef            ->  main
+          #   `ref:` em origin/main/.../maintenance.yml       ->  0 ocorrencias
+          #   `ref:` em origin/develop/.../maintenance.yml    ->  1 ocorrencia
+          #   commits de develop nao mergeados em main       ->  53
+          #
+          # OU SEJA: enquanto este arquivo nao estiver na branch default, o `ref`
+          # abaixo NAO EXISTE para o agendamento. Nao e bug do GitHub, e alei.
+          #
+          # CORRECAO DE VERDADE: mergear `develop` na branch default. Ate la este
+          # cron falha todo dia as 10:17 UTC por rodar codigo velho. O passo
+          # "Diagnosticar branch" abaixo existe para que a proxima falha diga a
+          # CAUSA, em vez de custar outra investigacao do zero.
           ref: develop
+      - name: Diagnosticar branch (a causa real quando o cron reprova)
+        run: |
+          # Se o `ref: develop` acima nao surtiu efeito, a causa e quase sempre a
+          # mesma: o YAML veio da branch default e nao da develop. Dizer isso no
+          # log economiza a sessao inteira de investigacao seguinte.
+          ATUAL=$(git rev-parse --abbrev-ref HEAD)
+          echo "branch em execucao: $ATUAL @ $(git rev-parse --short HEAD)"
+          if [ "$ATUAL" != "develop" ]; then
+            echo ""
+            echo "::error::O cron rodou '$ATUAL', nao 'develop'."
+            echo "::error::Workflow agendado usa o YAML da branch DEFAULT do repositorio."
+            echo "::error::Se 'ref: develop' nao surtiu efeito, este YAML esta VELHO na default."
+            echo "::error::Correcao: mergear 'develop' na branch default. Nao e bug de codigo."
+            DEFAULT=$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name 2>/dev/null || echo main)
+            echo "::error::Branch default: $DEFAULT"
+            git fetch origin "$DEFAULT" --depth=50 2>/dev/null || true
+            echo "::error::Commits da develop que faltam na default:"
+            git log --oneline "origin/$DEFAULT..HEAD" 2>/dev/null | head -20 || true
+          fi
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"

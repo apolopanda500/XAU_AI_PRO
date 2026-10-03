@@ -1,13 +1,14 @@
 # Índice de Docs — XAU AI PRO
 
-Atualizado em **30/09/2026**. Este mapa existe porque a pasta chegou a ter
+Atualizado em **03/10/2026**. Este mapa existe porque a pasta chegou a ter
 61 arquivos com quatro "FINAL" e cinco "HANDOFF" disputando o mesmo assunto.
 
-**Comece por:** [`LEVANTAMENTO_20260930.md`](./LEVANTAMENTO_20260930.md) —
-paridade entre corretoras, os dois defeitos que a tela esconde (ativo
-inventado e motor que opera a corretora errada) e as etapas propostas.
-Depois: [`SESSAO_20260930.md`](./SESSAO_20260930.md) — como o build 1.2.4
-foi fechado.
+**Comece por:** [`SESSAO_20261003_TARDE_BUILD_APAGAVA_MODELOS.md`](./SESSAO_20261003_TARDE_BUILD_APAGAVA_MODELOS.md) —
+os 3 defeitos medidos nesta tarde: o `build_app.bat` que apagava os 3 modelos
+MULTI a cada build, o cron que roda uma branch 53 commits velha, e os 199
+`ERROR` de ACL corrompida que não eram teste quebrado.
+Depois: [`SESSAO_20261003_CI_VERMELHO_E_LEITURA_DOCS.md`](./SESSAO_20261003_CI_VERMELHO_E_LEITURA_DOCS.md) —
+a leitura dos 58 docs e os 3 workflows vermelhos da manhã.
 
 ---
 
@@ -15,7 +16,9 @@ foi fechado.
 
 | Documento | Quando | Sobre |
 |---|---|---|
-| **`SESSAO_20261002_MODELOS_MULTI_E_SEGURANCA.md`** | 02/10 noite | **O ciclo dos 3 modelos MULTI: os 4 defeitos que so apareceram na medicao, o bundle do instalador, a seguranca verificada e o que ficou em aberto.** Leitura de entrada. |
+| **`SESSAO_20261003_TARDE_BUILD_APAGAVA_MODELOS.md`** | 03/10 tarde | **O `robocopy /MIR` que apagava da pasta do `.spec` os 3 modelos MULTI a cada build; o cron que lê a branch errada; os 199 `ERROR` de ACL corrompida. `833 passed`.** Leitura de entrada. |
+| **`SESSAO_20261003_CI_VERMELHO_E_LEITURA_DOCS.md`** | 03/10 manhã | **Os 3 workflows vermelhos: um corrigido (teste media artefato fora do git), um sem patch no upstream, um que é decisão do dono. Plus a leitura dos 58 docs.** |
+| **`SESSAO_20261002_MODELOS_MULTI_E_SEGURANCA.md`** | 02/10 noite | **O ciclo dos 3 modelos MULTI: os 4 defeitos que so apareceram na medicao, o bundle do instalador, a seguranca verificada e o que ficou em aberto.** |
 | **`PLANO_MESTRE_20261002.md`** | 02/10 | Plano dos 8 ciclos: VIP, modelos multi, operação multi-asset. |
 | **`CONVERSA_20261002_DO_WINDOWS_AO_APP.md`** | 02/10 | **A conversa do ciclo, na ordem: 12 pedidos, o que cada um virou e o que ficou aberto.** |
 | **`SESSAO_20261001_VALIDACAO_10_10.md`** | 01/10 noite | **16 camadas validadas 10/10, a coluna "Leitura" da matriz estava invertida, e a sub-aba VIPs ganhou a escada inteira.** |
