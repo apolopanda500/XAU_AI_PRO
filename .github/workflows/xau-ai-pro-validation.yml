@@ -139,6 +139,27 @@ jobs:
         run: |
           npx tsc --noEmit
           npm run build
+      # Os `.pkl` e `.meta.json` sao artefatos de TREINO e nao vao no git
+      # (`.gitignore:49`). Num checkout limpo a pasta
+      # `frontend/src-tauri/Python/models` nao existe, e o PyInstaller aborta:
+      #   ERROR: Unable to find '...frontend\src-tauri\Python\models'
+      #          when adding binary and data files.
+      #
+      # A pasta e criada aqui para o empacotamento PROSSEGUIR e o CI validar o
+      # que da para validar no runner: que o `.spec` compila e que o gateway e
+      # gerado. O bundle deste runner sai SEM os modelos - que e o estado real
+      # de qualquer maquina que nao treinou - e nao finge o contrario. O
+      # instalador que o dono usa sai de `scripts/build_app.bat`, na maquina de
+      # operacao, onde os 3 modelos MULTI estao presentes.
+      - name: Preparar pasta de modelos
+        shell: pwsh
+        run: |
+          $destino = 'frontend/src-tauri/Python/models'
+          if (!(Test-Path $destino)) {
+            New-Item -ItemType Directory -Path $destino -Force | Out-Null
+            Write-Host "[AVISO] $destino nao existe: artefatos de treino nao vao no git."
+            Write-Host "[AVISO] O bundle deste runner sai SEM os modelos; o .spec compila e o gateway e gerado."
+          }
       - name: Empacotar gateway
         run: python -m PyInstaller --noconfirm mt5-gateway.spec
       - name: Verificar artefato do gateway
