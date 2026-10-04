@@ -19,21 +19,6 @@ except Exception:
 BASE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = BASE_DIR.parent
 
-# Sentry: importar sentry_config inicializa o SDK automaticamente (auto-init no final do modulo).
-try:
-    from sentry_config import capture_training_error, capture_prediction_error
-except ImportError:
-    logging.warning("Sentry nao disponivel - instale com: pip install sentry-sdk")
-
-try:
-    from sentry_config import start_sentry_session, end_sentry_session
-except Exception:
-    def start_sentry_session():  # noqa: E305
-        pass
-
-    def end_sentry_session():  # noqa: E305
-        pass
-
 COMMANDS = ("train", "predict", "dashboard", "help")
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -58,7 +43,6 @@ def main() -> None:
 
     sys.path.append(str(BASE_DIR))
 
-    start_sentry_session()
     try:
         if arg == "predict":
             import predict
@@ -79,11 +63,7 @@ def main() -> None:
     except SystemExit:
         raise
     except Exception:
-        # Nao fecha a sessao aqui: a excecao nao tratada abaixo faz o
-        # excepthook do SDK marcar a sessao como 'crashed' (Release Health).
         raise
-    else:
-        end_sentry_session()
 
 
 if __name__ == "__main__":

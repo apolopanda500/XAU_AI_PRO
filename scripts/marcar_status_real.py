@@ -5,6 +5,9 @@ Cada item foi conferido em disco ou no codigo antes de entrar aqui:
 1. INTEGRACAO_SENTRY_COMPLETA.md:170 - "TUDO PRONTO PARA PRODUCAO!" sem gate nem
    evidencia. Contraria LAUDO_FINAL_AUDITORIA.md:18 e
    ACOMPANHAMENTO_OFICIAL_PC_20260921.md:430 ("nao aprovado ainda").
+   > ATUALIZADO 04/10/2026: o arquivo foi REMOVIDO do repositorio junto com o
+   > Sentry. O aviso abaixo continua no dicionario porque o script e
+   > idempotente e simplesmente pula quem nao existe (ver `main()`).
 2. RESUMO_INTEGRACAO.md:207 - "Sistema pronto para producao!".
 3. LAUDO_FINAL_AUDITORIA.md:117 - "APROVADA (10/10)" na camada de execucao
    financeira, no mesmo documento que diz (linha 18) que dinheiro real nao esta

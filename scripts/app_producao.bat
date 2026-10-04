@@ -83,7 +83,7 @@ REM `main.rs` nao. Este bloco cobre o lado Python sem fingir que cobre o Rust.
 if exist "%ROOT%\.env" (
     echo [producao] .env encontrado - lado Python.
 ) else (
-    echo [AVISO] .env ausente. O lado Python rodara sem Sentry e sem config.
+    echo [AVISO] .env ausente. O lado Python rodara sem configuracao.
 )
 
 REM ---------------------------------------------------------------------------

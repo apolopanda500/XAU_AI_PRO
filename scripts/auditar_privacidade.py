@@ -32,19 +32,14 @@ CODIGO_DO_APP = [
 ]
 
 # Termos que exigem verificacao, nao busca textual. A primeira versao deste
-# script acusou 5 falsos positivos e serves de alerta: "sentry.io" numa URL de
-# teste de integracao nao e telemetria, `withdrawal_allowed() -> False` e a
-# trava e nao a rota, e `api_key` numa assinatura HMAC nao e vazamento.
-# Por isso cada item abaixo tem uma funcao que decide de verdade.
+# script acusou falsos positivos: `withdrawal_allowed() -> False` e a trava e
+# nao a rota, e `api_key` numa assinatura HMAC nao e vazamento. Por isso cada
+# item abaixo tem uma funcao que decide de verdade.
 RASTREADORES = (
     "google-analytics", "googletagmanager", "mixpanel", "amplitude",
     "posthog", "segment.io", "heap.io", "hotjar", "fullstory", "logrocket",
     "datadog", "newrelic", "bugsnag", "appcenter", "firebase",
 )
-
-# Env de integracao que o operador configura (aba Integracoes). Testar se o
-# Sentry responde e legitimo; o que nao pode e o app falar com ele sozinho.
-SENTRY = ("sentry",)
 
 OK, FALHA = "  [OK    ]", "  [FALHA ]"
 _erros: list[str] = []
@@ -98,34 +93,6 @@ def auditar_rastreadores() -> None:
     )
 
 
-def auditar_sentry() -> None:
-    """Sentry so pode existir no treino e no testador de integracao.
-
-    Duas situacoes aceitas, porque nenhuma envia dado do usuario:
-      - `sentry_config.py` e amigos: pipeline de treino, fora do instalador.
-      - `app/integrations_client.py`: testa se a credencial do operador
-        responde. O operador configura; o app nao reporta sozinho.
-    """
-    print("\n2) SENTRY (existe no repo, nao no app)")
-    aceitos = {"sentry_config.py", "event_sentry_bridge.py", "integrations_client.py",
-               "train.py", "predict.py", "validation.py", "auto_retrain.py"}
-    offenders: list[str] = []
-    for arquivo in _arquivos_codigo():
-        if arquivo.suffix != ".py" or arquivo.name in aceitos:
-            continue
-        if re.search(r"^\s*(?:import|from)\s+sentry", _ler(arquivo), re.M):
-            offenders.append(str(arquivo.relative_to(RAIZ)))
-    _registrar(
-        not offenders,
-        "sentry_sdk so no treino e no testador de integracao",
-        "; ".join(offenders[:3]) if offenders
-        else "sentry_config.py nao entra em mt5-gateway.spec",
-    )
-    spec = RAIZ / "mt5-gateway.spec"
-    if spec.exists():
-        _registrar("sentry" not in _ler(spec).lower(), "mt5-gateway.spec nao empacota sentry")
-
-
 def auditar_saque() -> None:
     """Saque nao existe. A trava `withdrawal_allowed() -> False` e o oposto.
 
@@ -166,10 +133,10 @@ def auditar_rede() -> None:
     print("\n4) DESTINOS DE REDE NO CODIGO DO APP")
     permitidos = ("127.0.0.1", "localhost", "tauri.localhost", "binance.com",
                   "mexc.com", "bybit", "okx.com", "github.com", "gitlab.com",
-                  "vercel.app", "api.openai.com", "figma.com", "stooq.com",
-                  "tradingview.com", "slack.com", "sentry.io",
+                  "api.openai.com", "figma.com", "stooq.com",
+                  "tradingview.com",
                   "api.alternative.me", "exemplo.com", "meuserver.com",
-                  "kilosessions.ai", "outro-site.com", "api.vercel.com")
+                  "outro-site.com")
     # IP privado/loopback em string de configuracao nao e destino de saida.
     privado = re.compile(r"^(\d{1,3}\.){3}\d{1,3}$")
     # Ferramentas de desenvolvimento. O `integrations_client.py` so valida a URL
@@ -271,7 +238,6 @@ def main() -> int:
     print("Confere o que a tela 'Confianca & Responsavel' afirma ao usuario.")
     print("=" * 74)
     auditar_rastreadores()
-    auditar_sentry()
     auditar_saque()
     auditar_rede()
     auditar_credencial()

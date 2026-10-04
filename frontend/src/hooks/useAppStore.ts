@@ -171,8 +171,6 @@ export interface Settings {
   aiEnabled: boolean;
   aiModel: string;
   aiInterval: number;
-  slackWebhook: string;
-  slackActive: boolean;
   telegramToken: string;
   telegramChatId: string;
   telegramActive: boolean;
@@ -222,8 +220,6 @@ export const DEFAULT_SETTINGS: Settings = {
   aiEnabled: true,
   aiModel: 'xau-pro-v2',
   aiInterval: 60,
-  slackWebhook: '',
-  slackActive: false,
   telegramToken: '',
   telegramChatId: '',
   telegramActive: false,

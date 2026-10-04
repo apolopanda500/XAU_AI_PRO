@@ -1,4 +1,16 @@
-name: CI/CD - XAU AI PRO (GitHub + Vercel + Sentry)
+name: Validacao e Empacotamento - XAU AI PRO
+
+# O job `deploy-vercel` e o `preview-deploy` foram REMOVIDOS em 04/10/2026.
+#
+# O projeto passou a ser 100% local, com GitHub e GitLab como unicos canais. A
+# CLI da Vercel e o Nitro sairam do repositorio, entao nenhum deploy hosted
+# existe mais para esses jobs executarem. Eles nao eram fallback: eram o unico
+# caminho de deploy, e dependiam de secrets (VERCEL_TOKEN, VERCEL_ORG_ID,
+# VERCEL_PROJECT_ID) que nao devem mais existir no repositorio.
+#
+# O job `validate-and-package` foi MANTIDO de proposito: e o que roda a suite
+# Python e produz o bundle. Apagar este workflow inteiro derrubaria a unica
+# validacao de Python do CI principal.
 
 on:
   push:
@@ -11,9 +23,6 @@ on:
 env:
   NODE_VERSION: "22"
   PYTHON_VERSION: "3.11"
-  # ⚠️ Domínio real do projeto Vercel (com sufixo da team). O domínio
-  # "xau-ai-pro-api.vercel.app" NÃO existe (sem o sufixo da team).
-  API_URL: https://xau-ai-pro-api-apolopanda500.vercel.app
 
 concurrency:
   group: cicd-${{ github.ref }}
@@ -67,184 +76,3 @@ jobs:
           name: pkg-${{ steps.package.outputs.name }}
           path: dist/*.zip
           retention-days: 30
-
-  deploy-vercel:
-    name: Deploy Vercel
-    needs: validate-and-package
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
-    env:
-      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      # SEM VALOR DE FALLBACK. Antes era
-      # `${{ secrets.VERCEL_ORG_ID || 'team_m6XX...' }}`, com o id da
-      # organizacao em texto puro no repositorio. Isso e segredo
-      # versionado: o gitleaks do Super-Linter sinalizou e o id ficaria no
-      # historico para sempre mesmo depois de remover a linha.
-      #
-      # Org e Project sao identificadores, nao credenciais — mas sao
-      # exigidos pela CLI da Vercel e, juntos com um token vazado,_ENABLE_
-      # deploy em conta errada. Ficam em Secrets, sem excecao.
-      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-      # Webhook do Slack definido no nível do JOB para ser visível nas condições "if"
-      # (aceita SLACK_WEBHOOK ou SLACK_WEBHOOK_URL)
-      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK || secrets.SLACK_WEBHOOK_URL }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-      - name: Setup Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-      - name: Guard - Verificar token Vercel
-        run: |
-          if [ -z "$VERCEL_TOKEN" ]; then
-            echo "::error::Secret VERCEL_TOKEN ausente. Crie em https://vercel.com/account/tokens e adicione nos Secrets do repo."
-            exit 1
-          fi
-          if [ -z "$VERCEL_ORG_ID" ] || [ -z "$VERCEL_PROJECT_ID" ]; then
-            echo "::error::Secrets VERCEL_ORG_ID e VERCEL_PROJECT_ID ausentes. Adicione nos Secrets do repo."
-            exit 1
-          fi
-          echo "Token OK | Org=$VERCEL_ORG_ID | Proj=$VERCEL_PROJECT_ID"
-      - name: Notificar Slack (início do deploy)
-        if: env.SLACK_WEBHOOK_URL != ''
-        uses: slackapi/slack-github-action@v4.0.0
-        with:
-          payload: |
-            {
-              "text": ":rocket: Deploy XAU AI PRO iniciado",
-              "blocks": [
-                {"type":"section","text":{"type":"mrkdwn","text":":rocket: *Deploy XAU AI PRO iniciado*"}},
-                {"type":"section","text":{"type":"mrkdwn","text":"*Branch:* `${{ github.ref_name }}`\n*Commit:* `${{ github.sha }}`\n*Run:* #${{ github.run_number }}\n*Link:* https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"}}
-              ]
-            }
-          webhook-type: incoming-webhook
-      - name: Instalar dependências backend
-        run: |
-          cd backend
-          npm install --no-audit --no-fund
-      - name: Deploy produção (Vercel CLI oficial)
-        # ✅ Executa DENTRO de backend/ (o projeto xau-ai-pro-api NÃO tem Root
-        # Directory configurado, então não gera "backend/backend"). Isso garante
-        # que o build Nitro (nitro build) rode de verdade — o deploy da raiz
-        # gerava um build estático vazio.
-        # Obs 2: o CLI do `--prod` pode ficar pendurado aguardando o check
-        # "deployment-alias" (pending). Usamos `timeout` + grep para extrair a
-        # URL e depois aguardamos READY via API antes de promover.
-        working-directory: backend
-        run: |
-          set -o pipefail
-          # 1) Cria o deployment (limite de tempo para não prender o job)
-          timeout 180 npx vercel@59.9.1 --prod --force --yes --token "$VERCEL_TOKEN" 2>&1 | tee deploy-output.log || true
-          URL=$(grep -oiE 'https://[a-zA-Z0-9.-]+\.vercel\.app' deploy-output.log | tail -n 1 || true)
-          if [ -z "$URL" ]; then
-            echo "::error::URL de deploy não encontrada no log do Vercel"
-            exit 1
-          fi
-          echo "DEPLOY_URL=$URL" >> "$GITHUB_ENV"
-          echo "Deployment URL: $URL"
-          # 2) Aguardar o deployment atingir READY (poll via API REST — mais
-          # confiável que o `vercel inspect`, cuja saída formata o estado como
-          # "● Ready" e não é capturado por grep de palavras).
-          # O endpoint v13 aceita a URL do deployment diretamente.
-                    # Estrategia: vercel inspect --json (primitivo mas confiavel); fallback API v13
-          READY=0
-          for i in $(seq 1 30); do
-            STATE=$(npx vercel@59.9.1 inspect "$URL" --json --token "$VERCEL_TOKEN" 2>/dev/null | \
-              python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('readyState',''))" 2>/dev/null || true)
-            if [ -z "$STATE" ]; then
-              STATE=$(curl -sS -H "Authorization: Bearer $VERCEL_TOKEN" \
-                "https://api.vercel.com/v13/deployments/${URL}?teamId=${VERCEL_ORG_ID}" 2>/dev/null | \
-                python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('readyState',''))" 2>/dev/null || true)
-            fi
-            echo "[$i] readyState: ${STATE:-aguardando...}"
-            if [ "$STATE" = "READY" ]; then echo "Deployment READY"; READY=1; break; fi
-            if [ "$STATE" = "ERROR" ] || [ "$STATE" = "CANCELED" ]; then echo "::error::Deployment $STATE"; exit 1; fi
-            sleep 10
-          done
-          if [ "$READY" != "1" ]; then echo "::warning::Timeout aguardando READY - proseguindo para promote"; fi
-
-          # 3) Promove explicitamente (contorna o check deployment-alias que fica
-          #    pending no auto-assign de projetos sem microfrontends)
-          npx vercel@59.9.1 promote "$URL" --yes --token "$VERCEL_TOKEN" || \
-            echo "::warning::Promoção automática falhou - promote manual no dashboard"
-      - name: Smoke test pós-deploy (gate)
-        # Gate duro: se a API não ficar saudável após o promote, o job falha
-        # (a notificação de falha do Slack no passo seguinte cobre o alerta —
-        # substitui o antigo job healthcheck, que duplicava a verificação).
-        run: |
-          for i in $(seq 1 12); do
-            if curl -fsSL "$API_URL/api/health" | grep -q '"ok":true'; then
-              echo "Healthcheck OK (tentativa $i)"; exit 0
-            fi
-            sleep 10
-          done
-          echo "::error::API não ficou saudável após o deploy ($API_URL/api/health)"
-          exit 1
-      - name: Coletar URL do deploy p/ notificação
-        id: notify
-        run: |
-          DEPLOY_URL="${DEPLOY_URL:-$API_URL}"
-          echo "deploy_url=$DEPLOY_URL" >> "$GITHUB_OUTPUT"
-          echo "commit=${GITHUB_SHA:0:7}" >> "$GITHUB_OUTPUT"
-          echo "ref=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
-          echo "run=${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
-      - name: Notificar Slack (sucesso)
-        if: success() && env.SLACK_WEBHOOK_URL != ''
-        uses: slackapi/slack-github-action@v4.0.0
-        with:
-          payload: |
-            {
-              "text": ":white_check_mark: Deploy XAU AI PRO OK",
-              "blocks": [
-                {"type":"section","text":{"type":"mrkdwn","text":":white_check_mark: *Deploy XAU AI PRO OK*"}},
-                {"type":"section","text":{"type":"mrkdwn","text":"*Projeto:* xau-ai-pro-api\n*Branch:* `${{ steps.notify.outputs.ref }}`\n*Commit:* `${{ steps.notify.outputs.commit }}`\n*Run:* #${{ steps.notify.outputs.run }}\n*Deploy:* ${{ steps.notify.outputs.deploy_url }}"}}
-              ]
-            }
-          webhook-type: incoming-webhook
-      - name: Notificar Slack (falha)
-        # Tolerante a ausência do secret: não falha quando SLACK_WEBHOOK não existe
-        if: failure() && env.SLACK_WEBHOOK_URL != ''
-        uses: slackapi/slack-github-action@v4.0.0
-        with:
-          payload: |
-            {
-              "text": ":x: Falha no deploy XAU AI PRO",
-              "blocks": [
-                {"type":"section","text":{"type":"mrkdwn","text":":x: *Falha no deploy XAU AI PRO*"}},
-                {"type":"section","text":{"type":"mrkdwn","text":"*Branch:* `${{ github.ref_name }}`\n*Run:* #${{ github.run_number }}\n*Veja:* https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"}}
-              ]
-            }
-          webhook-type: incoming-webhook
-
-  preview-deploy:
-    name: Preview Deploy (PR / develop)
-    needs: validate-and-package
-    runs-on: ubuntu-latest
-    # Roda em PRs para main E em pushes para develop (preview/staging do backend).
-    # Em pushes a develop o Vercel CLI gera um deployment de preview com URL
-    # unica (--yes aceita os prompts padrao), sem tocar em producao.
-    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/develop'
-    env:
-      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-      - name: Setup Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-      - name: Guard token
-        run: test -n "$VERCEL_TOKEN" || { echo "::error::Configure o secret VERCEL_TOKEN"; exit 1; }
-      - name: Instalar dependências backend
-        run: |
-          cd backend
-          npm install --no-audit --no-fund
-      - name: Preview (Vercel CLI)
-        # Executa dentro de backend/ para o build Nitro correto (mesma razão
-        # do deploy de produção acima)
-        working-directory: backend
-        run: npx vercel@59.9.1 --yes --token "$VERCEL_TOKEN"

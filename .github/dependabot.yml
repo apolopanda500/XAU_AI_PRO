@@ -30,10 +30,6 @@ updates:
     allow:
       - dependency-type: "direct"
       - dependency-type: "transitive"
-    ignore:
-      # crewai travado a versao 1.15.20 por compatibilidade com o layout CrewAI
-      - dependency-name: "crewai"
-        versions: ["1.x"]
 
   # ============================================================
   # Node.js / npm: backend/package.json

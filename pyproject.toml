@@ -27,7 +27,6 @@ dependencies = [
     "streamlit>=1.30",
     "litellm>=1.0",
     "openai>=1.0",
-    "sentry-sdk>=2.0",
     "MetaTrader5>=5.0.45",
     "python-dateutil>=2.8",
     "six>=1.16",
@@ -52,7 +51,6 @@ plotly = ">=5.20"
 streamlit = ">=1.30"
 litellm = ">=1.0"
 openai = ">=1.0"
-sentry-sdk = ">=2.0"
 MetaTrader5 = ">=5.0.45"
 python-dateutil = ">=2.8"
 six = ">=1.16"
@@ -61,9 +59,6 @@ mcp = ">=1.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = ">=8.0"
-
-[tool.crewai]
-type = "crew"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

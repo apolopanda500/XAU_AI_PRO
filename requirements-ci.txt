@@ -8,7 +8,6 @@ requests
 Pillow
 python-dotenv
 pydantic
-sentry-sdk>=2.44.0
 
 # O gateway HTTP é `backend/fastapi_gateway.py`, e a suíte o importa de
 # verdade: `tests/test_fastapi_auth.py` e `tests/test_fastapi_capabilities.py`

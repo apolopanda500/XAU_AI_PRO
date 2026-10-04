@@ -7,7 +7,7 @@ const fs = require('fs');
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 require('dotenv').config({ path: path.join(__dirname, '.env.local') });
-// Tambem carrega .env da RAIZ do projeto (onde ficam SENTRY_DSN, SLACK, GITHUB)
+// Tambem carrega .env da RAIZ do projeto (onde ficam GITHUB_TOKEN e as chaves de exchange)
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 require('dotenv').config({ path: path.join(__dirname, '..', '.env.local') });
 require('dotenv').config({ path: path.join(__dirname, '..', '.env.integrations') });
@@ -57,9 +57,6 @@ setInterval(async () => {
   }
 }, 5000);
 const PORT = process.env.PORT || 3001;
-// 17.4+: Sentry ativo se DSN configurado e SDK instalado (nunca quebra o boot)
-const sentryClient = integrations.initSentry();
-if (sentryClient) console.log('[integrations] Sentry ativo com DSN');
 
 const DATA_DIR = resolveDataDir();
 
@@ -383,7 +380,7 @@ gatewayCommandRoutes.forEach((pathname) =>
   }),
 );
 
-// 17.4+: status REAL das integracoes (valida GitHub via API, verifica SDK Sentry)
+// Status REAL das integracoes (hoje: GitHub, GitLab, Figma e MCP)
 app.get('/api/integrations', async (req, res) => {
   try {
     const st = await integrations.getIntegrationsStatus();
@@ -393,16 +390,6 @@ app.get('/api/integrations', async (req, res) => {
   }
 });
 
-// 17.5: envia um teste real no canal do Slack (retorna ok/erro do webhook)
-app.post('/api/integrations/slack/test', async (req, res) => {
-  const result = await integrations.sendSlackTest();
-  res.json(result);
-});
-// 17.6: teste do inbound webhook do Kilo (retorna ok/status do servico de captura)
-app.post('/api/integrations/kilo/test', async (req, res) => {
-  const result = await integrations.sendKiloTest();
-  res.json(result);
-});
 app.get('/api/events', (req, res) => res.json(readEvents(parseInt(req.query.limit) || 100)));
 app.get('/api/events/latest', (req, res) => {
   const { source, events } = readEvents(1);
@@ -557,30 +544,6 @@ io.on('connection', (socket) => {
       ai,
       dominios: buildDomains(events),
     });
-    // 17.5: alerta Slack na transicao para estado critico (uma vez por estado)
-    try {
-      const critical = ['ERROR', 'OFFLINE', 'SAFE', 'DEGRADED'];
-      if (
-        critical.includes(st.estado) &&
-        global.__lastAlertedState !== st.estado &&
-        integrations.slackConfigured()
-      ) {
-        global.__lastAlertedState = st.estado;
-        const razoes = (st.reasons || []).join(', ') || 'sem detalhe';
-        integrations
-          .sendSlack(
-            `:warning: XAU AI PRO entrou em estado *${st.estado}* (${razoes}) - ${new Date().toISOString()}`,
-          )
-          .then((r) => {
-            if (!r.ok)
-              console.error('[slack] falha ao notificar estado critico:', r.error || r.status);
-          });
-      } else if (!critical.includes(st.estado)) {
-        global.__lastAlertedState = st.estado;
-      }
-    } catch (e) {
-      console.error('[slack] erro no alerta automatico:', e.message);
-    }
   };
   push();
   // Estado operacional nao precisa de polling agressivo; reduzimos CPU/aquecimento

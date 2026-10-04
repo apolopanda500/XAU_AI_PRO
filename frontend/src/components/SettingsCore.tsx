@@ -234,7 +234,7 @@ export default function SettingsCore() {
         {/*
           A SECAO DE NOTIFICACOES FOI REMOVIDA.
 
-          Os 10 campos de Slack / Telegram / Discord nao tinham consumidor: o
+          Os campos de Slack / Telegram / Discord nao tinham consumidor: o
           `lib/notify.ts` so emite notificacao nativa do sistema operacional, via
           Tauri. Nenhum fetch era feito para webhook nenhum. Alem disso, "Sons
           de alerta" e "Notificações do sistema" apareciam aqui E em Preferências,

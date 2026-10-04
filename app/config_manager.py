@@ -80,7 +80,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "backend_port": 8000,
         "dashboard_port": 8501,
         "litellm_port": 4000,
-        "backend_url": "https://xau-ai-pro-ci56i6oj4-apolopanda500.vercel.app",
+        "backend_url": "http://127.0.0.1:9001",
         "backend_api_key": "",
         "ai_enabled": False,
         "ai_base_url": "",

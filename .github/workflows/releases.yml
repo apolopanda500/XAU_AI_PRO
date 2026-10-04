@@ -2,12 +2,13 @@
 #
 #  * Mensal (1º dia, 08:00 UTC): cria um RELEASE DRAFT com o CHANGELOG.md como
 #    notas — pronto para revisão/publicação manual.
-#  * O health check diário da API vive no maintenance.yml (10:17 UTC), que
-#    também roda testes/lint/audit — centralizado para não duplicar jobs.
+#  * A validacao diaria (testes/lint/audit) vive no maintenance.yml (10:17 UTC),
+#    centralizado para não duplicar jobs.
 #
-# Secrets/variaveis:
-#   vars.API_URL        -> URL da API em produção (ex.: https://xau-ai-pro-api-apolopanda500.vercel.app)
-#   GITHUB_TOKEN        -> disponibilizado automaticamente pelo GitHub Actions
+# O projeto e 100% local: nao ha API hospedada para health check. O sinal de
+# problema e a issue que o maintenance.yml abre sozinho.
+#
+# GITHUB_TOKEN -> disponibilizado automaticamente pelo GitHub Actions
 name: Releases (draft mensal)
 
 "on":

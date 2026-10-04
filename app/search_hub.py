@@ -55,7 +55,7 @@ def search_agents(query: str) -> list[dict[str, Any]]:
 
 
         ("tools", "Ferramentas: utilitarios e operacoes"),
-        ("integrations", "Integracoes: MCP, GitHub, Slack, Sentry"),
+        ("integrations", "Integracoes: GitHub, GitLab, Figma e MCP"),
 
         ("system", "Sistema: monitoramento, logs e diagnostico"),
         ("charts", "Graficos: analise tecnica visual"),

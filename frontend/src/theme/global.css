@@ -162,6 +162,22 @@ a {
   --ok: #22c55e;
   --warn: #eab308;
   --danger: #ef4444;
+
+  /* Escala de espacoamento (multiplos de 4px). Antes cada componente
+     escrevia o pixel; com a escala, uma mudanca de densidade e uma
+     alteracao no token, nao em 40 lugares. Ver os tokens/modes do Figma:
+     o valor vem de um nome, e o valor concreto e trocavel por tema. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  /* Foco visivel e unico. Todo elemento interativo usa este token, para
+     que o anel de foco tenha a mesma forma em toda a app - antes ele era
+     herdado do navegador e mudava de thicken entre botao e link. */
+  --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--primary);
 }
 
 /* ---------- Temas ---------- */
@@ -294,14 +310,20 @@ a {
 }
 
 .nav-item {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 9px 10px;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
   color: var(--muted);
   white-space: nowrap;
   text-align: left;
+}
+
+.nav-item:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 .nav-item:hover {
@@ -309,10 +331,25 @@ a {
   color: var(--text);
 }
 
+/* Aba ativa: cor + barra lateral + peso. A cor sozinha nao distingue a aba
+   ativa para quem tem daltonismo, e o peso sozinho some quando o operador
+   olha para o conteudo. A barra e o sinal que sobra em contraste baixo. */
 .nav-item.active {
   background: var(--panel2);
   color: var(--primary);
   font-weight: 600;
+}
+
+.nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 60%;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--primary);
 }
 
 .nav-icon {

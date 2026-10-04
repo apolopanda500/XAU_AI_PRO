@@ -64,12 +64,14 @@ vez disso, siga os passos abaixo:
 - Credenciais de broker (MT5 conta, senha, servidor)
 
 Use **GitHub Secrets** para:
-- `SENTRY_AUTH_TOKEN`
 - `DOCKER_PAT`
-- `VERCEL_TOKEN`
-- `VERCEL_ORG_ID` / `VERCEL_PROJECT_ID`
-- `SLACK_WEBHOOK_URL`
 - `CLINE_API_KEY` / `OPENAI_API_KEY`
+
+> Vercel, Sentry, Slack e Kilo sairam do projeto em 04/10/2026. Os secrets
+> `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`, `SENTRY_AUTH_TOKEN` e
+> `SLACK_WEBHOOK_URL` **nao devem ser recriados**. As regras do `.gitleaks.toml`
+> que caçam esses formatos continuam ativas, para pegar um token vazado no
+> historico git — mesmo sem serviço consumindo.
 
 ## Segurança Operacional
 
