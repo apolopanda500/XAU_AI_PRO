@@ -40,10 +40,20 @@ def risco(ok=True, open_positions=0, daily_trades=0):
 
 
 def enviar_espiao(chamadas: list[dict], resposta=None):
+    """Captura o payload que o motor entrega ao caminho de ordem.
+
+    O motor envia os NOMES CANONICOS (`quantity`/`stop_loss`/`take_profit`),
+    que sao os que o `UniversalOrderRequest` le. Antes este duble lia
+    `payload["sl"]` e os testes abaixo conferiam `p["volume"]`: ou seja, o
+    proprio teste fixava o vocabulario errado como se fosse o esperado, e o
+    motor nao conseguia enviar ordem nenhuma sem que nada reprovasse.
+    Ver `tests/test_contrato_do_motor.py` para a prova de que isso era o bug.
+    """
     def _enviar(payload):
         chamadas.append(payload)
         return resposta if resposta is not None else {
-            "ok": True, "order": 1, "retcode": 10009, "price": payload["sl"],
+            "ok": True, "order": 1, "retcode": 10009,
+            "price": payload["stop_loss"],
         }
     return _enviar
 
@@ -231,8 +241,8 @@ class TestOperaQuandoDeve:
         assert p["symbol"] == ATIVO
         assert p["side"] == "BUY"
         assert p["confirm"] is True
-        assert p["sl"] < p["tp"], "BUY tem SL abaixo e TP acima"
-        assert p["volume"] > 0
+        assert p["stop_loss"] < p["take_profit"], "BUY tem SL abaixo e TP acima"
+        assert p["quantity"] > 0
         assert p["origin"] == "motor_auto"
 
     def test_venda_tem_sl_acima_e_tp_abaixo(self):
@@ -243,7 +253,7 @@ class TestOperaQuandoDeve:
             enviar_espiao(chamadas), risco)
         p = chamadas[0]
         assert p["side"] == "SELL"
-        assert p["sl"] > p["tp"]
+        assert p["stop_loss"] > p["take_profit"]
 
     def test_protecao_vem_do_atr_real(self):
         m = motor_pronto(sl_atr=2.0, tp_atr=4.0)
@@ -253,8 +263,8 @@ class TestOperaQuandoDeve:
             enviar_espiao(chamadas), risco)
         p = chamadas[0]
         # BUY: sl = preco - 2*ATR, tp = preco + 4*ATR
-        assert p["sl"] == pytest.approx(4300.0 - 10.0, abs=0.01)
-        assert p["tp"] == pytest.approx(4300.0 + 20.0, abs=0.01)
+        assert p["stop_loss"] == pytest.approx(4300.0 - 10.0, abs=0.01)
+        assert p["take_profit"] == pytest.approx(4300.0 + 20.0, abs=0.01)
 
     def test_volume_respeita_banca_e_risco(self):
         m = motor_pronto(banca=1000.0, risco_por_trade_pct=1.0, sl_atr=1.0)
@@ -265,7 +275,7 @@ class TestOperaQuandoDeve:
         p = chamadas[0]
         # risco = 1000 * 1% = 10; distancia = 5 => volume = 2, mas o teto
         # do gateway e 0.10.
-        assert p["volume"] == pytest.approx(0.10, abs=0.01)
+        assert p["quantity"] == pytest.approx(0.10, abs=0.01)
 
     def test_registra_decisao_com_proveniencia(self):
         m = motor_pronto()

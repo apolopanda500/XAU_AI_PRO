@@ -207,7 +207,40 @@ class UniversalOrderRequest:
         if side not in {"buy", "sell"} or order_type not in {"market", "limit", "stop", "stop_limit"}:
             raise ValueError("side ou order_type inválido")
         symbol = scope["symbol"]
-        quantity = float(payload.get("quantity", 0))
+        # DOIS VOCABULARIOS, UM SO CONTRATO
+        # ================================
+        # O gateway fala `quantity`/`stop_loss`/`take_profit`; o motor automatico
+        # e o painel falam `volume`/`sl`/`tp`. Sao o MESMO campo com dois nomes.
+        #
+        # POR QUE ISSO EXISTIU (medido em 04/10/2026)
+        # -------------------------------------------
+        # `auto_engine.ciclo_unico` montava `volume`/`sl`/`tp` e o contrato lia
+        # `quantity`/`stop_loss`/`take_profit`. Resultado: `quantity` chegava
+        # vazio, `0 <= 0` disparava a recusa, e o erro que o operador via era
+        #
+        #     envio falhou: symbol e quantity são obrigatórios
+        #
+        # —— NUNCA em conta de corretora, de timeframe ou de flag. Era
+        # desacamento de nome, e nao tinha como ser resolvido pela configuracao.
+        # Nenhum ciclo do motor automatico passou do envio ate aqui.
+        #
+        # A CORRECAO TEM DUAS DEFESES
+        # --------------------------
+        # 1. Aqui: o contrato ACEITA os dois nomes. Um chamador legado nao vira
+        #    mais ordem quebrada, vira ordem aceita.
+        # 2. No `auto_engine`: o motor passa a enviar o nome canonico.
+        #
+        # REGRA DE PRECEDENCIA: quando os dois nomes vem no mesmo payload, o
+        # canonico vence. Sem isso, `volume` divergente de `quantity` seria
+        # escolhido por ordem de leitura, e o resultado dependeria do dicionario
+        # — o tipo de bug que so aparece em producao.
+        raw_quantity = payload.get("quantity", payload.get("volume"))
+        raw_stop = payload.get("stop_loss", payload.get("sl"))
+        raw_take = payload.get("take_profit", payload.get("tp"))
+        try:
+            quantity = float(raw_quantity or 0)
+        except (TypeError, ValueError):
+            raise ValueError("quantity deve ser numérico") from None
         if not symbol or len(symbol) > 40 or not math.isfinite(quantity) or quantity <= 0:
             raise ValueError("symbol e quantity são obrigatórios")
         price = payload.get("price")
@@ -221,8 +254,8 @@ class UniversalOrderRequest:
         account_id = str(payload.get("account_id", "")).strip()
         if not account_id or len(account_id) > 160:
             raise ValueError("account_id é obrigatório")
-        stop_loss = payload.get("stop_loss")
-        take_profit = payload.get("take_profit")
+        stop_loss = raw_stop
+        take_profit = raw_take
         for name, value in (("stop_loss", stop_loss), ("take_profit", take_profit)):
             if value is not None and (not math.isfinite(float(value)) or float(value) <= 0):
                 raise ValueError(f"{name} inválido")

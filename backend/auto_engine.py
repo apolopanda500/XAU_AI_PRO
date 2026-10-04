@@ -411,12 +411,24 @@ class MotorAuto:
                 self._vistos = {k: v for k, v in self._vistos.items() if v >= corte}
 
         # 7. Envio pelo caminho de ordem do gateway (que revalida tudo).
+        #
+        # NOMES CANONICOS DO CONTRATO, NAO O VOCABULARIO DO PAINEL
+        # ============================================================
+        # Aqui usava `volume`/`sl`/`tp`. O `UniversalOrderRequest` le
+        # `quantity`/`stop_loss`/`take_profit`, entao `quantity` chegava vazio e
+        # TODA ordem morria com "symbol e quantity sao obrigatorios" — visivel
+        # na tela como "envio falhou". Nao era conta, corretora ou EA: era
+        # desacamento de nome.
+        #
+        # O contrato agora aceita os dois nomes (ver `universal_contracts`), mas
+        # o motor envia o canonico de proposito: dois lugares falando o mesmo
+        # idioma e o que impede o desacamento de voltar.
         payload = {
             "symbol": simbolo,
             "side": sinal,
-            "volume": volume,
-            "sl": round(sl, 2),
-            "tp": round(tp, 2),
+            "quantity": volume,
+            "stop_loss": round(sl, 2),
+            "take_profit": round(tp, 2),
             "confirm": True,
             "request_id": f"auto-{slot}",
             "origin": "motor_auto",
