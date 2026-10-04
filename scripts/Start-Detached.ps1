@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Inicia um processo de forma DESTACADA da sessao que o chamou.
 
