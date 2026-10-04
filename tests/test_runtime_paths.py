@@ -2,7 +2,7 @@ from pathlib import Path
 
 
 def test_mql_data_path_matches_installed_mt5_layout() -> None:
-    from app.utils.paths import get_base_dir, get_mql_data_path
+    from backend.planos.caminhos import get_base_dir, get_mql_data_path
 
     base = get_base_dir()
     data_path = get_mql_data_path()

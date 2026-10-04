@@ -7,12 +7,6 @@ ci:
     - '.github/workflows/**'
     - '.github/labeler.yml'
 
-docker:
-- changed-files:
-  - any-glob-to-any-file:
-    - 'backend/Dockerfile'
-    - '.github/workflows/build.yml'
-
 mql5:
 - changed-files:
   - any-glob-to-any-file:

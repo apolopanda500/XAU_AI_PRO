@@ -72,7 +72,7 @@ def _candidate_paths() -> list[Path]:
 
     # 2. Espelho local do projeto (fallback)
     try:
-        from app.utils.paths import get_mql_data_path
+        from backend.planos.caminhos import get_mql_data_path
         paths.append(get_mql_data_path() / EVENT_CSV)
     except Exception:
         pass

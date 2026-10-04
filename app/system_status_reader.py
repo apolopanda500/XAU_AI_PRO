@@ -18,7 +18,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from app.utils.paths import get_mql_data_path
+from backend.planos.caminhos import get_mql_data_path
 
 HEARTBEAT_MAX_AGE_SEC = 120  # EA grava a cada ~30s; 120s = tolerancia
 

@@ -17,7 +17,7 @@ _APP_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(_APP_ROOT) in _sys.path:
     _sys.path.remove(str(_APP_ROOT))
 _sys.path.insert(0, str(_APP_ROOT))
-from app.utils.paths import get_config_path, get_mql_data_path  # noqa: E402
+from backend.planos.caminhos import get_config_path, get_mql_data_path  # noqa: E402
 
 # Motor MCP local (Sequential Thinking etc.)
 try:
@@ -34,7 +34,7 @@ except Exception:
 try:
     from app.search_hub import search_all, quick_summary
     from app.ai_memory import think, recall, remember, start_keepalive
-    from app.economic_calendar import event_summary, upcoming_events
+    from backend.planos.economic_calendar import event_summary, upcoming_events
     from app.mt5_sync import to_export
     EXTRA_LAYERS = True
 except Exception:

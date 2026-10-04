@@ -1501,7 +1501,7 @@ def _economic_alerts_within(hours: float = 6.0, tz: str = "BRT") -> list[dict]:
     Fonte: app/economic_calendar.alerts_within. Usado pelo endpoint
     /api/economic/alerts como trigger de notificacao no app (Tauri).
     """
-    from app.economic_calendar import alerts_within
+    from backend.planos.economic_calendar import alerts_within
 
     hours = max(0.0, min(float(hours), 72.0))
     return alerts_within(hours=hours, tz=tz or "BRT")
@@ -1513,7 +1513,7 @@ def _economic_calendar(limit: int = 30, tz: str = "BRT", days: int = 14) -> dict
     Fonte unica: app/economic_calendar.py. Os horarios sao estimativas baseadas
     em padroes de calendario; o payload marca isso explicitamente em 'disclaimer'.
     """
-    from app.economic_calendar import upcoming_events
+    from backend.planos.economic_calendar import upcoming_events
 
     limit = max(1, min(int(limit), 200))
     days = max(1, min(int(days), 60))
@@ -2648,16 +2648,16 @@ class Handler(BaseHTTPRequestHandler):
             from backend.acesso import acesso
             self._send(200, {"ok": True, **acesso()}); return
         if parsed.path == "/api/subscriptions/plans":
-            from app.subscriptions import list_plans
+            from backend.planos.subscriptions import list_plans
             self._send(200, {"ok": True, "plans": list_plans(),
                              "billing": "not_configured", "live_execution": False,
                              "withdrawals_enabled": False}); return
         if parsed.path == "/api/subscriptions/me":
-            from app.subscriptions import get_subscription
+            from backend.planos.subscriptions import get_subscription
             self._send(200, {"ok": True, "subscription": get_subscription(),
                              "live_execution": False, "withdrawals_enabled": False}); return
         if parsed.path == "/api/social/strategies":
-            from app.social_paper import list_strategies
+            from backend.planos.social_paper import list_strategies
             self._send(200, {"ok": True, "strategies": list_strategies(),
                              "mode": "paper_trade", "live_execution": False,
                              "withdrawals_enabled": False}); return
@@ -3137,7 +3137,7 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/subscriptions/activate":
             length = int(self.headers.get("Content-Length", "0"))
             payload = json.loads(self.rfile.read(length) or b"{}")
-            from app.subscriptions import activate_local_plan
+            from backend.planos.subscriptions import activate_local_plan
             try:
                 assinatura = activate_local_plan(str(payload.get("plan_id", "")))
             except ValueError as exc:
@@ -3149,7 +3149,7 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/social/follow":
             length = int(self.headers.get("Content-Length", "0"))
             payload = json.loads(self.rfile.read(length) or b"{}")
-            from app.social_paper import follow_strategy
+            from backend.planos.social_paper import follow_strategy
             # `follow_strategy(strategy_id, user_id=None)`: o segundo argumento e
             # o usuario, nao um booleano "seguindo". Passar `bool(...)` aqui
             # transformava o id do usuario em True/False e quebrava o estado.

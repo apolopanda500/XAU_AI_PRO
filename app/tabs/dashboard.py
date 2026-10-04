@@ -256,7 +256,7 @@ class DashboardTab:
             return [("Backend API", "ERRO DE LEITURA", "bad")]
 
     def _collect_calendar(self) -> list[str]:
-        from app.economic_calendar import event_summary
+        from backend.planos.economic_calendar import event_summary
         return event_summary(tz="BRT")
 
     def _collect_sync(self) -> dict[str, Any]:

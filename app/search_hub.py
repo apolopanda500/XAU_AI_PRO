@@ -115,7 +115,7 @@ def search_calendar(query: str = "") -> list[dict[str, Any]]:
     """Pesquisa eventos do calendario economico proximos."""
     out: list[dict[str, Any]] = []
     try:
-        from app.economic_calendar import upcoming_events
+        from backend.planos.economic_calendar import upcoming_events
         for ev in upcoming_events(limit=12):
             hay = f"{ev.get('title','')} {ev.get('currency','')}".lower()
             if not query or query.lower() in hay:

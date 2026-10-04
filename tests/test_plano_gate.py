@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import pytest
 
-from app import subscriptions
+from backend.planos import subscriptions
 from backend import plano_gate
 from backend.mt5_gateway import _ROTAS_GET, _ROTAS_POST
 

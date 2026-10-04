@@ -28,7 +28,7 @@ from app.market_data import MarketData
 from app.mt5_robot import MT5Robot
 from app.theme.mexc import Theme
 from app.utils.async_ui import run_bg
-from app.utils.paths import get_data_dir
+from backend.planos.caminhos import get_data_dir
 
 # Caminho do audit do EA (gerado pelo MQL5) - busca em varias localizacoes
 _RES = Path(__file__).resolve()

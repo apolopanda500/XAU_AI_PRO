@@ -44,7 +44,7 @@ class TestFreeNuncaUsaMulti:
     """Regra 1, com reforco duplo."""
 
     def test_catalogo_free_tem_multi_model_desligado(self):
-        from app.subscriptions import _PLAN_CATALOG
+        from backend.planos.subscriptions import _PLAN_CATALOG
 
         assert _PLAN_CATALOG["free"]["entitlements"]["multi_model"] is False
         assert _PLAN_CATALOG["free"]["limits"]["multi_models"] == 0

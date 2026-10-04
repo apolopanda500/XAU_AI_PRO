@@ -32,7 +32,7 @@ app = FastAPI(title="XAU AI PRO API", version="1.2.0")
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
-from app.utils.paths import get_mql_data_path
+from backend.planos.caminhos import get_mql_data_path
 
 DATA_DIR = get_mql_data_path()
 try:

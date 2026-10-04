@@ -16,7 +16,7 @@ from typing import Any, Callable
 
 from app.components.cards import Card, SecondaryButton, AccentButton
 from app.theme.mexc import Theme
-from app.utils.paths import get_data_dir
+from backend.planos.caminhos import get_data_dir
 
 from app.data.indicators import _sma, _ema, _rsi  # noqa: E402,F401 (deduplicado)
 

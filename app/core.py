@@ -31,7 +31,7 @@ from app.tabs.strategy_tester import StrategyTester
 from app.tabs.robot_vision import RobotVision
 from app.theme.mexc import Theme
 from app.components.button import ProButton
-from app.utils.paths import ensure_paths
+from backend.planos.caminhos import ensure_paths
 from app.runtime_metrics import set_gui_fps
 
 

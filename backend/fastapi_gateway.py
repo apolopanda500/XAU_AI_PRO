@@ -33,8 +33,8 @@ from backend import watchdog
 from backend.backtest import run_backtest
 from backend.third_party_ea import evaluate_all as evaluate_third_party_ea
 from Python.model_registry import model_catalog
-from app.social_paper import follow_strategy, following_strategies, list_strategies, unfollow_strategy
-from app.subscriptions import activate_local_plan, get_subscription, list_plans
+from backend.planos.social_paper import follow_strategy, following_strategies, list_strategies, unfollow_strategy
+from backend.planos.subscriptions import activate_local_plan, get_subscription, list_plans
 from backend import remote_auth
 
 API_TOKEN = gw.API_TOKEN

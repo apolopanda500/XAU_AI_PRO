@@ -328,15 +328,23 @@ def _guard_tick_rule(gw, mt5, ticket: int, rule: dict, actions: list) -> None:
     min_dist = (meta.get("stops_level", 0) * meta.get("point", 0.0)) or 0.0
     gain = (market - entry) if side == "BUY" else (entry - market)
     pos_time = _num(getattr(pos, "time", 0.0), 0.0)
+    # `st` PRECISA existir antes do primeiro uso. A linha `st["position_time"]`
+    # vinha ANTES do `st = STATE.setdefault(...)`, entao este caminho levava
+    # `NameError` em tempo de execucao — e a linha seguinte sobrescrevia o
+    # estado, entao o partial ja registrado sumia.
+    #
+    # A ordem foi invertida em 04/10/2026 ao acrescentar o tempo real de
+    # abertura da posicao. `flake8 --select=F821` pegou; nenhum teste exercita
+    # o Guardian com posicao aberta.
+    st = STATE.setdefault(ticket, {"executed_partials": [], "peak_distance": 0.0,
+                                   "peak_profit": 0.0, "breakeven_done": False,
+                                   "opened_at": _now_iso()})
     if pos_time > 0:
         try:
             st["position_time"] = datetime.fromtimestamp(pos_time).isoformat()
             st["opened_at"] = st["position_time"]  # tempo REAL de abertura da posicao
         except (OSError, OverflowError, ValueError):
             pass
-    st = STATE.setdefault(ticket, {"executed_partials": [], "peak_distance": 0.0,
-                                   "peak_profit": 0.0, "breakeven_done": False,
-                                   "opened_at": _now_iso()})
     st["peak_distance"] = max(_num(st.get("peak_distance"), 0.0), gain)
     st["peak_profit"] = max(_num(st.get("peak_profit"), 0.0), profit)
 

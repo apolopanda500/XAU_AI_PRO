@@ -203,7 +203,8 @@ a {
   --primary-contrast: #ffffff;
 }
 
-[data-theme='xau_dark'] {
+[data-theme='xau_dark'],
+[data-theme='xau'] {
   --bg: #14100a;
   --panel: #1d1810;
   --panel2: #241d13;
@@ -214,7 +215,8 @@ a {
   --primary-contrast: #1d1810;
 }
 
-[data-theme='btc_dark'] {
+[data-theme='btc_dark'],
+[data-theme='btc'] {
   --bg: #0c0f14;
   --panel: #13171f;
   --panel2: #191f2a;
@@ -237,6 +239,59 @@ a {
   --ok: #1a7f37;
   --warn: #b26a00;
   --danger: #c93b34;
+}
+
+/* Temas restantes do design system Figma (docs/FIGMA_DESIGN_SYSTEM.md).
+   Sem estes blocos, useTheme aplicava data-theme sem variaveis e a aba
+   herdava o tema anterior em silencio. Valores reais medidos em 04/10/2026.
+   Cada seletor tem o apelido curto da Figma (ex: "ocean") porque o
+   sincronizador gera [data-theme="ocean"] a partir de cor/ocean/bg. */
+[data-theme='ocean_dark'],
+[data-theme='ocean'] {
+  --bg: #07141f;
+  --panel: #0d1c2b;
+  --panel2: #122535;
+  --border: #1d3a52;
+  --text: #e3f1fb;
+  --muted: #7fa5c0;
+  --primary: #22d3ee;
+  --primary-contrast: #07141f;
+}
+
+[data-theme='emerald_dark'],
+[data-theme='emerald'] {
+  --bg: #071510;
+  --panel: #0d2019;
+  --panel2: #122a20;
+  --border: #1d4434;
+  --text: #e2f7ec;
+  --muted: #7db8a0;
+  --primary: #34d399;
+  --primary-contrast: #071510;
+}
+
+[data-theme='rose_dark'],
+[data-theme='rose'] {
+  --bg: #16070c;
+  --panel: #220d15;
+  --panel2: #2b1220;
+  --border: #471f30;
+  --text: #f9e8ee;
+  --muted: #c08a9c;
+  --primary: #fb7185;
+  --primary-contrast: #16070c;
+}
+
+[data-theme='violet_dark'],
+[data-theme='violet'] {
+  --bg: #0e0a1a;
+  --panel: #171029;
+  --panel2: #1e1536;
+  --border: #2e2153;
+  --text: #ece6fa;
+  --muted: #a394cf;
+  --primary: #a78bfa;
+  --primary-contrast: #0e0a1a;
 }
 
 /* ---------- Utilitarios ---------- */

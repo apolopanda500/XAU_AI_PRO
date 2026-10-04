@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from app import subscriptions
+from backend.planos import subscriptions
 
 
 def test_planos_exigem_modos_paper(tmp_path, monkeypatch):

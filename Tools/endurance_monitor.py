@@ -25,7 +25,7 @@ BASE = Path(__file__).resolve().parents[1]
 if str(BASE) not in sys.path:
     sys.path.insert(0, str(BASE))
 
-from app.utils.paths import get_mql_data_path
+from backend.planos.caminhos import get_mql_data_path
 
 DATA_DIR = get_mql_data_path()
 OUT = BASE / "Logs" / "endurance_metrics.jsonl"

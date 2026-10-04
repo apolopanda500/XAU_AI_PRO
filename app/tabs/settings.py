@@ -14,7 +14,7 @@ from app.components.cards import Card, PrimaryButton, SecondaryButton, AccentBut
 from app.config_manager import get_config
 from app.market_data import MarketData
 from app.mt5_robot import MT5Robot
-from app.subscriptions import activate_local_plan, get_subscription, list_plans
+from backend.planos.subscriptions import activate_local_plan, get_subscription, list_plans
 from app.theme.mexc import Theme
 
 
@@ -285,7 +285,7 @@ class SettingsTab:
 
     def refresh_storage(self) -> None:
         from app.market_store import get_market_db_path
-        from app.utils.paths import get_data_dir
+        from backend.planos.caminhos import get_data_dir
         data_dir = get_data_dir()
         database = get_market_db_path()
         usage = shutil.disk_usage(data_dir)

@@ -61,7 +61,7 @@ def plano_atual(user_id: str | None = None) -> dict[str, Any]:
     nao pode liberar recurso pago. Fail-closed.
     """
     try:
-        from app.subscriptions import get_subscription
+        from backend.planos.subscriptions import get_subscription
 
         assinatura = get_subscription(user_id)
     except Exception:  # noqa: BLE001 - assinatura e acessoria, e fail-closed

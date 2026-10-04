@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from app.config_manager import get_config
-from app.utils.paths import get_base_dir, get_data_dir, get_mql_data_path
+from backend.planos.caminhos import get_base_dir, get_data_dir, get_mql_data_path
 
 
 LEARNING_HISTORY_FILE = get_data_dir() / "learning_history.json"

@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from app.utils.paths import get_config_path
+from backend.planos.caminhos import get_config_path
 
 
 DEFAULT_CONFIG: dict[str, Any] = {

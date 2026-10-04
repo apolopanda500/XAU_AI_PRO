@@ -31,7 +31,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from app.utils.paths import get_data_dir
+from backend.planos.caminhos import get_data_dir
 
 _LOCK = threading.RLock()
 _DEFAULT_USER_ID = "local"

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from app import social_paper, subscriptions
+from backend.planos import social_paper, subscriptions
 
 
 def test_social_requires_entitlement(tmp_path, monkeypatch):

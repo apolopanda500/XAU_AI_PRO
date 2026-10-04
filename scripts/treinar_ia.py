@@ -107,7 +107,7 @@ def main() -> int:
         base = df[df["Symbol"].astype(str).str.upper() == simbolo.upper()]
         base = base.sort_values("Time").reset_index(drop=True)
         if base.empty:
-            print(f"\n{symbolo}: sem linhas no dataset")
+            print(f"\n{simbolo}: sem linhas no dataset")
             continue
         print(f"\n=== {simbolo} ({len(base):,} candles M5) ===")
         print(f"{'tf':<5}{'acc':>8}{'f1':>8}{'edge':>9}{'treino':>9}{'teste':>8}  disposicao")

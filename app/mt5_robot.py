@@ -16,7 +16,7 @@ from typing import Any
 
 from app.config_manager import get_config
 from app.mt5_lock import mt5_lock
-from app.utils.paths import get_mql_data_path, get_python_dir
+from backend.planos.caminhos import get_mql_data_path, get_python_dir
 
 
 TERMINAL_CANDIDATES = [

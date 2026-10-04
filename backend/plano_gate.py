@@ -60,7 +60,7 @@ def planos_que_liberam(feature: str) -> list[str]:
 
     Usado pela UI para dizer "libera no Pro" em vez de "erro".
     """
-    from app.subscriptions import list_plans
+    from backend.planos.subscriptions import list_plans
 
     alvo = entitlement_de(feature)
     return [
@@ -78,7 +78,7 @@ def verificar(feature: str, user_id: str | None = None) -> tuple[bool, dict[str,
     motivo — travar o usuario por erro de disco seria pior que o inverso.
     A trava de dinheiro real nao passa por aqui.
     """
-    from app.subscriptions import has_entitlement
+    from backend.planos.subscriptions import has_entitlement
 
     try:
         liberado = has_entitlement(entitlement_de(feature), user_id)

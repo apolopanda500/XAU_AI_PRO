@@ -31,9 +31,9 @@ vez disso, siga os passos abaixo:
 ### Escopo
 
 **Em escopo**:
-- Vulnerabilidades em código Python (app/, Python/, src/)
-- Vulnerabilidades em código JavaScript/Node.js (backend/)
-- Problemas de configuração de segurança (workflows, Docker)
+- Vulnerabilidades em código Python (app/, Python/)
+- Vulnerabilidades em código JavaScript/Node.js (backend/, frontend/)
+- Problemas de configuração de segurança (workflows do GitHub)
 - Credenciais expostas ou secretos hardcoded
 
 **Fora de escopo**:
