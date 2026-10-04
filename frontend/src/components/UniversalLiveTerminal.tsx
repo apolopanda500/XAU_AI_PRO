@@ -46,6 +46,50 @@ type Account = {
 // podiam resolver o mesmo par para mercados diferentes.
 import { escopoAtivo as activeAccount } from '../lib/escopoAtivo';
 
+type DecisaoMotor = {
+  timestamp?: string;
+  sinal?: string;
+  symbol?: string;
+  timeframe?: string;
+  motivo?: string;
+  confianca?: number;
+  edge?: number | null;
+  modelo?: string;
+};
+
+/**
+ * Uma decisao do motor, com os nomes do BACKEND.
+ *
+ * POR QUE EXISTE
+ * ==============
+ * A tela lia `d.ts`, `d.side` e `d.simbolo`. O `Decisao` do backend envia
+ * `timestamp`, `sinal` e `symbol`. Os tres nomes do painel nao existem no
+ * payload, e o resultado era o sintoma do dono: a coluna "Decisao" mostrava
+ * `--` e "sem sinal", e "quando" mostrava a hora atual em vez da do ciclo
+ * (`new Date(undefined)` e invalido e caia no `now`).
+ *
+ * REGRA: PRECEDENCIA DO CANONICO
+ * -------------------------------
+ * Quando os dois nomes vem, o do backend vence. A alternativa — o primeiro
+ * que aparecer — faria o resultado depender da ordem das chaves do objeto,
+ * que o `JSON.parse` nao garante. O mesmo formato de precedencia foi aplicado
+ * em `UniversalOrderRequest.from_payload` para `quantity`/`volume`.
+ */
+export function normalizarDecisao(bruto: Record<string, unknown> | null | undefined): DecisaoMotor {
+  const d = (bruto ?? {}) as Record<string, unknown>;
+  const texto = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
+  return {
+    timestamp: texto(d.timestamp) || texto(d.ts),
+    sinal: texto(d.sinal) || texto(d.side),
+    symbol: texto(d.symbol) || texto(d.simbolo),
+    timeframe: texto(d.timeframe),
+    motivo: texto(d.motivo),
+    confianca: typeof d.confianca === 'number' ? d.confianca : 0,
+    edge: typeof d.edge === 'number' ? d.edge : null,
+    modelo: texto(d.modelo),
+  };
+}
+
 export default function UniversalLiveTerminal() {
   const statusQ = useCoreStatus();
   const accountQ = useAccount();
@@ -127,19 +171,32 @@ export default function UniversalLiveTerminal() {
     //
     // Entra aqui pelo mesmo caminho do resto: a mesma fonte (`autoQ`), sem
     // polling novo — seria o mesmo endpoint lido duas vezes.
-    for (const d of (auto?.decisoes ?? []).slice(0, 6)) {
-      const quando = d.ts ? new Date(String(d.ts)) : now;
+    //
+    // OS NOMES DESACARAM (corrigido em 04/10/2026)
+    // -------------------------------------------
+    // A tela lia `d.ts`, `d.side` e `d.simbolo`. O `Decisao` do backend manda
+    // `timestamp`, `sinal` e `symbol` — tres nomes que nao existem no payload.
+    // O resultado era exatamente o sintoma do dono: a coluna "Decisao" mostrava
+    // "--" e "sem sinal", e "quando" mostrava a hora atual em vez da hora do
+    // ciclo, porque `new Date(undefined)` e invalido e caia no `now`.
+    //
+    // `normalizarDecisao` aceita os DOIS nomes. Sem isso, corrigir o nome na
+    // tela quebraria o outro consumidor, e vice-versa: e a terceira vez que o
+    // mesmo par de nomes diverge (`volume`/`quantity`, `ts`/`timestamp`).
+    for (const bruto of (auto?.decisoes ?? []).slice(0, 6)) {
+      const d = normalizarDecisao(bruto);
+      const quando = d.timestamp ? new Date(d.timestamp) : now;
       const valido = !Number.isNaN(quando.getTime());
-      const rotulo = [d.simbolo, d.timeframe].filter(Boolean).join(' ') || '--';
-      const resposta = d.side ? `${d.side} ${fmtNum(d.confianca, 1)}%` : 'sem sinal';
+      const rotulo = [d.symbol, d.timeframe].filter(Boolean).join(' ') || '--';
+      const resposta = d.sinal ? `${d.sinal} ${fmtNum(d.confianca, 1)}%` : 'sem sinal';
       rows.push({
-        id: `auto-${d.ts ?? rotulo}`,
+        id: `auto-${d.timestamp ?? rotulo}`,
         source: 'MOTOR',
         info: `${rotulo} · ${resposta} · ${d.motivo || 'sem motivo'}`,
         at: valido ? quando : now,
-        // Uma decisao com `side` e uma acao do modelo; sem `side` e recusa ou
-        // erro, que o operador precisa distinguir de uma ordem.
-        kind: d.side ? 'TRADES' : /erro|recus|fail/i.test(String(d.motivo ?? '')) ? 'ERROR' : 'WARN',
+        // Uma decisao com `sinal` e uma acao do modelo; sem `sinal` e recusa
+        // ou erro, que o operador precisa distinguir de uma ordem.
+        kind: d.sinal ? 'TRADES' : /erro|recus|fail/i.test(String(d.motivo ?? '')) ? 'ERROR' : 'WARN',
       });
     }
 

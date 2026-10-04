@@ -570,15 +570,35 @@ class MotorAuto:
             if volume <= 0:
                 return self._registrar(Decisao(
                     agora, simbolo, timeframe, False, "lote zerado", sinal, confianca, edge, modelo=modelo_ciclo))
+            # SL/TP em DOIS formatos: preco cheio (SL 4130 num ouro a 4140)
+            # ou distancia (SL 10 = 10 abaixo do preco). Preco cheio vence
+            # quando ja e coerente; senao os valores viram distancia. Sem
+            # isso o operador que digita "10" recebe recusa e nao entende.
+            def _coerente(s: float, t: float) -> bool:
+                if sinal == "BUY":
+                    return s < preco < t
+                return t < preco < s
+            if not _coerente(sl, tp) and sl > 0 and tp > 0:
+                # Distancia so quando os valores clearly nao sao preco (menos
+                # da metade do preco atual). Sem isso, um SL 4130 digitado com
+                # o preco ja em 4160 viraria "distancia 4130" e a ordem sairia
+                # com protecao a milhares de distancia.
+                if max(sl, tp) < preco * 0.5:
+                    if sinal == "BUY":
+                        sl, tp = round(preco - sl, 2), round(preco + tp, 2)
+                    else:
+                        sl, tp = round(preco + sl, 2), round(preco - tp, 2)
             if sinal == "BUY" and not (sl < preco < tp):
                 return self._registrar(Decisao(
                     agora, simbolo, timeframe, False,
-                    f"para BUY exija SL < preco < TP (SL {sl}, preco {preco}, TP {tp})",
+                    f"para BUY use preco cheio (SL {sl}, preco {preco}, TP {tp}) "
+                    f"ou distancia (ex.: SL 10, TP 20 do preco {preco})",
                     sinal, confianca, edge, modelo=modelo_ciclo))
             if sinal == "SELL" and not (tp < preco < sl):
                 return self._registrar(Decisao(
                     agora, simbolo, timeframe, False,
-                    f"para SELL exija TP < preco < SL (TP {tp}, preco {preco}, SL {sl})",
+                    f"para SELL use preco cheio (TP {tp}, preco {preco}, SL {sl}) "
+                    f"ou distancia (ex.: SL 10, TP 20 do preco {preco})",
                     sinal, confianca, edge, modelo=modelo_ciclo))
             risco_moeda = 0.0
             distancia = abs(preco - sl)

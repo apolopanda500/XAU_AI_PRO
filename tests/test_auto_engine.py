@@ -327,6 +327,34 @@ class TestOperaQuandoDeve:
         assert d.agir is False
         assert "SL" in d.motivo
 
+    def test_modo_simples_aceita_distancia(self):
+        """SL 10 / TP 20 com preco 4300 vira SL 4290 / TP 4320 no BUY."""
+        m = MotorAuto()
+        m.simbolo = ATIVO
+        m.timeframe = PERIODO
+        m.limites = LimitesAuto(lote=0.01, sl_preco=10.0, tp_preco=20.0)
+        chamadas: list[dict] = []
+        d = m.ciclo_unico(
+            lambda s, t: InferenciaFalsa(signal="BUY", price=4300.0, atr=5.0,
+                                         confianca=72.0, edge=0.12),
+            enviar_espiao(chamadas), risco)
+        assert d.agir is True, d.motivo
+        assert chamadas[0]["stop_loss"] == pytest.approx(4290.0)
+        assert chamadas[0]["take_profit"] == pytest.approx(4320.0)
+
+    def test_distancia_absurda_nao_vira_preco(self):
+        """SL 4310 com preco 4300 nao e distancia: recusa com exemplo."""
+        m = MotorAuto()
+        m.simbolo = ATIVO
+        m.timeframe = PERIODO
+        m.limites = LimitesAuto(lote=0.01, sl_preco=4310.0, tp_preco=4320.0)
+        d = m.ciclo_unico(
+            lambda s, t: InferenciaFalsa(signal="BUY", price=4300.0, atr=5.0,
+                                         confianca=72.0, edge=0.12),
+            enviar_espiao([]), risco)
+        assert d.agir is False
+        assert "distancia" in d.motivo.lower()
+
     def test_banca_de_1_dolar_tem_piso_de_lote(self):
         """Conta de $1: o volume fracionario nao pode arredondar para zero."""
         m = motor_pronto(banca=1.0, risco_por_trade_pct=1.0, sl_atr=1.0)

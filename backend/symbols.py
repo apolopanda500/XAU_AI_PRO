@@ -39,9 +39,19 @@ QUOTES: tuple[str, ...] = tuple(sorted(
 #: leitura (`XAUUSD.pro` continua ouro). `MICRO`/`MINI` mudam o CONTRATO,
 #: nao o nome: a base extraida e a mesma, e quem decide se opera o contrato
 #: fracionario e o catalogo da corretora, nao este modulo.
-SUFIXOS_CORRETORA: tuple[str, ...] = (".PRO", "_M", "_C", "MICRO", "MINI")
+#:
+#: `.M`/`.C` entram porque a XM Global usa essa grafia nos pares de forex
+#: (`EURUSD.m`, `GBPUSD.c`) e em metais (`XAUUSD.m`). Sem eles, o `canonico`
+#: devolvia `EURUSD.` — com o ponto grudado no nome — e o par nao casava com
+#: nenhum modelo do catalogo: a tela nao encontrava artefato para um ativo que
+#: existe. Medido em 04/10/2026.
+SUFIXOS_CORRETORA: tuple[str, ...] = (
+    ".PRO", "_M", "_C", "MICRO", "MINI", ".M", ".C", ".ECN", ".RAW",
+)
 
 #: Separadores que o operador digita e as venues nao aceitam.
+#: O ponto NAO entra aqui de proposito: ele e parte do nome do contrato na XM
+#: (`EURUSD.m`), e remove-lo antes de tirar o sufixo apagaria o proprio sufixo.
 SEPARADORES: str = "/-_ "
 
 #: Marcador de contrato perpetuo em algumas venues.

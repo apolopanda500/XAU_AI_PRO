@@ -62,8 +62,8 @@ type Limites = {
 // decide se a ordem sai — e era justamente o que nao tinha campo.
 const CAMPOS_SIMPLES: Array<{ chave: keyof Limites; rotulo: string; dica: string; passo: number }> = [
   { chave: 'lote', rotulo: 'Quantidade (lote)', dica: 'A partir de 0.01 — sem minimo de banca', passo: 0.01 },
-  { chave: 'sl_preco', rotulo: 'Stop Loss (preco)', dica: 'Preco de protecao', passo: 0.1 },
-  { chave: 'tp_preco', rotulo: 'Take Profit (preco)', dica: 'Preco do alvo', passo: 0.1 },
+  { chave: 'sl_preco', rotulo: 'Stop Loss', dica: 'Preco cheio (4130) ou distancia (10)', passo: 0.1 },
+  { chave: 'tp_preco', rotulo: 'Take Profit', dica: 'Preco cheio (4150) ou distancia (20)', passo: 0.1 },
 ];
 
 const CAMPOS_RISCO: Array<{ chave: keyof Limites; rotulo: string; dica: string; passo: number }> = [
