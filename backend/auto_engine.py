@@ -50,34 +50,67 @@ class LimitesAuto:
     que aceita perder; o motor nao tem opinion a respeito, apenas o respeita.
     """
 
-    #: Banco declarado pelo operador (moeda da conta).
-    banca: float = 20.0
+    #: Banco declarado pelo operador (moeda da conta). ZERO = nao declarado.
+    banca: float = 0.0
     #: Percentual da banca arriscado por operacao.
-    risco_por_trade_pct: float = 1.0
+    risco_por_trade_pct: float = 0.0
     #: Confianca minima do modelo para operar (probabilidade real, 0-100).
-    confianca_minima: float = 55.0
+    confianca_minima: float = 0.0
     #: Edge minimo aceitavel do modelo.
-    edge_minimo: float = 0.05
+    edge_minimo: float = 0.0
     #: Numero maximo de posicoes simultaneas.
-    max_posicoes: int = 2
+    max_posicoes: int = 0
     #: Numero maximo de operacoes por dia.
-    max_operacoes_dia: int = 20
+    max_operacoes_dia: int = 0
     #: Perda maxima diaria como percentual da banca. Ao atingir, o motor para.
-    perda_diaria_max_pct: float = 2.0
+    perda_diaria_max_pct: float = 0.0
     #: Multiplicador de ATR usado no Stop Loss.
-    sl_atr: float = 1.5
+    sl_atr: float = 0.0
     #: Multiplicador de ATR usado no Take Profit.
-    tp_atr: float = 3.0
+    tp_atr: float = 0.0
     #: Intervalo minimo entre duas avaliacoes do mesmo simbolo.
-    intervalo_minutos: int = 15
+    intervalo_minutos: int = 0
+
+    #: Rotulo de cada campo: o erro diz o que FALTA, nao "valor invalido".
+    ROTULOS = {
+        "banca": "banca",
+        "risco_por_trade_pct": "risco por operacao (%)",
+        "confianca_minima": "confianca minima (%)",
+        "edge_minimo": "edge minimo",
+        "max_posicoes": "maximo de posicoes",
+        "max_operacoes_dia": "maximo de operacoes por dia",
+        "perda_diaria_max_pct": "perda diaria maxima (%)",
+        "sl_atr": "multiplicador de ATR do stop loss",
+        "tp_atr": "multiplicador de ATR do take profit",
+        "intervalo_minutos": "intervalo entre avaliacoes (minutos)",
+    }
 
     def valido(self) -> tuple[bool, str]:
-        if self.banca <= 0:
-            return False, "banca tem de ser maior que zero"
+        """Zero e AUSENTE, nao "pode ser zero".
+
+        Antes a mensagem dizia "banca tem de ser maior que zero" para quem
+        digitou 0 e para quem digitou -5 — o operador nao sabia se tinha
+        escolhido o valor ou se o sistema tinha preenchido por ele.
+        """
+        faltando = [
+            self.ROTULOS[nome]
+            for nome in self.ROTULOS
+            if getattr(self, nome) == 0
+        ]
+        if faltando:
+            return False, (
+                "defina no painel de operacao automatica: "
+                + ", ".join(faltando)
+                + " — nenhum valor vem por padrao"
+            )
+        if self.banca < 0:
+            return False, "banca nao pode ser negativa"
         if not 0 < self.risco_por_trade_pct <= 10:
-            return False, "risco por trade tem de estar entre 0 e 10%"
+            return False, "risco por operacao tem de estar entre 0 e 10%"
         if not 0 < self.confianca_minima <= 100:
             return False, "confianca minima tem de estar entre 0 e 100"
+        if not 0 < self.edge_minimo <= 1:
+            return False, "edge minimo tem de estar entre 0 e 1"
         if self.max_posicoes < 1:
             return False, "maximo de posicoes tem de ser ao menos 1"
         if self.max_operacoes_dia < 1:

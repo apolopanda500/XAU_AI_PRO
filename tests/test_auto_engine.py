@@ -66,9 +66,15 @@ def motor_pronto(**kwargs) -> MotorAuto:
     m = MotorAuto()
     m.simbolo = ATIVO
     m.timeframe = PERIODO
+    # TODOS os campos sao preenchidos aqui, porque `LimitesAuto()` nasce ZERADO
+    # desde 04/10/2026. E o que o motor deve receber: limite escolhido, nunca
+    # palpite do codigo. O helper existe para o teste NAO precisar repetir os
+    # dez valores — mas continua sendo explicito o que esta em jogo.
     m.limites = LimitesAuto(
         banca=20.0, risco_por_trade_pct=1.0, confianca_minima=55.0,
         edge_minimo=0.05, max_posicoes=2, max_operacoes_dia=20,
+        perda_diaria_max_pct=2.0, sl_atr=1.5, tp_atr=3.0,
+        intervalo_minutos=15,
     )
     for k, v in kwargs.items():
         setattr(m.limites, k, v)
@@ -79,36 +85,43 @@ def motor_pronto(**kwargs) -> MotorAuto:
 
 
 class TestLimites:
-    def test_padrao_e_valido(self):
-        ok, motivo = LimitesAuto().valido()
-        assert ok, motivo
+    def test_padrao_nao_e_valido(self):
+        """`LimitesAuto()` nasce ZERADO e NAO pode operar.
 
-    @pytest.mark.parametrize("campo,valor", [
-        ("banca", 0), ("banca", -5),
-        ("risco_por_trade_pct", 0), ("risco_por_trade_pct", 50),
-        ("confianca_minima", 0), ("confianca_minima", 150),
-        ("max_posicoes", 0),
-        ("max_operacoes_dia", 0),
-        ("perda_diaria_max_pct", 0), ("perda_diaria_max_pct", 200),
-        ("sl_atr", 0), ("tp_atr", -1),
-        ("intervalo_minutos", 0),
-    ])
-    def test_rejeita_valor_fora_da_faixa(self, campo, valor):
-        limites = LimitesAuto(**{campo: valor})
-        ok, _ = limites.valido()
-        assert ok is False, f"{campo}={valor} deveria ser rejeitado"
+        Este teste afirmava o contrario (`test_padrao_e_valido`): o padrao era
+        valido porque vinha com banca=20 e perda diaria=2%. O dono pediu zero
+        em tudo, e com razao: o operador via na tela numeros que nao tinha
+        escolhido, e o motor operava com o risco de outra pessoa.
+        """
+        ok, motivo = LimitesAuto().valido()
+        assert ok is False
+        assert "nenhum valor vem por padrao" in motivo
+
+    def test_erro_nomeia_os_campos_que_faltam(self):
+        """A mensagem diz o que preencher, nao "valor invalido"."""
+        _, motivo = LimitesAuto(banca=1000.0).valido()
+        for campo in ("confianca minima", "edge minimo", "maximo de posicoes"):
+            assert campo in motivo, f"{campo} nao listado: {motivo}"
+
+    def test_um_campo_preenchido_nao_basta(self):
+        ok, _ = LimitesAuto(max_operacoes_dia=10).valido()
+        assert ok is False
 
     def test_perda_diaria_alta_e_aceita(self):
-        # O operador avancido pode escolher risco alto. O motor tem de
-        # respeitar a escolha, nao景色 silosamente estreitar o intervalo.
-        ok, _ = LimitesAuto(perda_diaria_max_pct=20.0).valido()
-        assert ok is True
+        # O operador avancado escolhe o risco alto. O motor respeita a
+        # escolha em vez de estreitar o intervalo silenciosamente.
+        ok, motivo = LimitesAuto(
+            banca=1000.0, risco_por_trade_pct=1.0, confianca_minima=55.0,
+            edge_minimo=0.05, max_posicoes=2, max_operacoes_dia=20,
+            sl_atr=1.5, tp_atr=3.0, intervalo_minutos=15,
+            perda_diaria_max_pct=20.0,
+        ).valido()
+        assert ok is True, motivo
 
 
 # ------------------------------------------------------- nao abre quando nao deve
 
 
-class TestNaoAbreSemSinal:
     def test_sem_inferencia_nao_opera(self):
         m = motor_pronto()
         chamadas: list[dict] = []

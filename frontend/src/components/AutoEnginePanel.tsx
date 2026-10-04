@@ -98,17 +98,28 @@ function num(v: string): number {
 }
 
 export default function AutoEnginePanel() {
-  const [limites, setLimites] = useState<Limites>({
-    banca: 20,
-    risco_por_trade_pct: 1,
-    confianca_minima: 55,
-    edge_minimo: 0.05,
-    max_posicoes: 2,
-    max_operacoes_dia: 20,
-    perda_diaria_max_pct: 2,
-    sl_atr: 1.5,
-    tp_atr: 3,
-    intervalo_minutos: 15,
+  // NENHUM DEFAULT. Todos os limites nascem em zero.
+//
+// Antes vinham preenchidos: banca 20, confianca 55, intervalo 15 min,
+// sl_atr 1.5, tp_atr 3. O operador via esses numeros na tela e ligava o motor
+// sem saber que estava operando com o risco de outra pessoa.
+//
+// Zero aqui tambem evita o outro bug: o intervalo fixo em 15 minutos e
+// absurdo em H4 e curto demais em M5. Cada par e cada modelo tem a sua
+// paciencia, e a escolha e do operador. O backend foi zerado no mesmo dia
+// (ver `backend/auto_engine.py::LimitesAuto`), senao a tela dizia "nao
+// escolhido" e o motor operava com o valor antigo assim mesmo.
+const [limites, setLimites] = useState<Limites>({
+    banca: 0,
+    risco_por_trade_pct: 0,
+    confianca_minima: 0,
+    edge_minimo: 0,
+    max_posicoes: 0,
+    max_operacoes_dia: 0,
+    perda_diaria_max_pct: 0,
+    sl_atr: 0,
+    tp_atr: 0,
+    intervalo_minutos: 0,
   });
   const [status, setStatus] = useState('');
   const [ocupado, setOcupado] = useState(false);
