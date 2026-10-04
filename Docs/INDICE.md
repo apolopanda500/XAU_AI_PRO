@@ -8,6 +8,9 @@ Atualizado em **03/10/2026**. Este mapa existe porque a pasta chegou a ter
 falta.
 Depois: [`SESSAO_20261004_COOLDOWN_MARGEM_E_EA_COMPILANDO.md`](./SESSAO_20261004_COOLDOWN_MARGEM_E_EA_COMPILANDO.md) —
 a trava de margem **já existia**: o defeito era o EA insistir a cada 2-3 s.
+Segurança: [`CODE_SCANNING.md`](./CODE_SCANNING.md) — os 19 alertas do CodeQL,
+o que era real (travessia de caminho até execução de código) e o que ele só
+reporta.
 
 ---
 

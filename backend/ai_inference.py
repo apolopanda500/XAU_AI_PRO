@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import time
 from dataclasses import dataclass
@@ -178,6 +179,73 @@ class Inferencia:
 
 _CACHE: dict[str, Any] = {}
 
+#==================================================
+# TRAVERSAL DE CAMINHO — DEFESA 1: FORMATO DO NOME
+#==================================================
+# Allowlist de timeframes medida nos artefatos reais (`Python/models/*.pkl`):
+# H1, H4, M15, M5. Fechada de proposito — timeframe nao tem como ser novo a
+# cada semana, e um valor aberto viraria vetor de travessia.
+#
+# O simbolo NAO tem allowlist de pares: a lista cresceria a cada novo par
+# listado e a regra do projeto e "nenhum simbolo pode ser presumido". O que se
+# restringe e o FORMATO, nao o conteudo: letras e digitos, sem separadores.
+# `..`, `/`, `\` e `%2e%2e` nao passam.
+TIMEFRAMES_VALIDOS = frozenset({"M5", "M15", "H1", "H4"})
+
+# 12 e o maior comprimento de simbolo em Forex/Cripto/metal (ex.: `XAUUSD`,
+# `BTCUSDT_PERP`). Acima disso ou ja e abuso, ou nao e simbolo.
+_RE_SIMBOLO = re.compile(r"^[A-Z0-9]{1,12}$")
+
+
+def _nome_de_artefato(simbolo: str, timeframe: str) -> str | None:
+    """`<SIMBOLO>_<TF>` ou `None` se o par nao puder gerar nome de arquivo.
+
+    `None` e recusa COM MOTIVO. Chamar `MODELOS_DIR / nome` com um nome
+    invalido e o que produz o alerta de CodeQL; devolver `None` deixa a
+    decisao no codigo, onde da para recusar e explicar.
+    """
+    if timeframe not in TIMEFRAMES_VALIDOS:
+        return None
+    if not _RE_SIMBOLO.match(simbolo):
+        return None
+    return f"{simbolo}_{timeframe}"
+
+
+#==================================================
+# TRAVERSAL DE CAMINHO — DEFESA 2: CONFINAMENTO
+#==================================================
+# A regex acima barra o ataque pela origem. Esta barra o ataque pelo destino:
+# mesmo com um nome valido, o caminho resolvido precisa estar DENTRO de
+# `MODELOS_DIR`.
+#
+# Cobre o caso que a regex nao pega: `MODELOS_DIR` vem de
+# `XAU_MODELOS_DIR` (ou de um app instalado), e um link simbolico dentro
+# dessa pasta apontaria para fora. `resolve()` segue o link; `is_relative_to`
+# compara o caminho JA resolvido, entao a travessia aparece na diferenca.
+#
+# `Path.is_relative_to` existe do Python 3.9. A raiz usa 3.11/3.12
+# (`AGENTS.md`), entao nao ha necessidade de fallback — e o `try` de
+# `relative_to` abaixo e apenas para o caso de `MODELOS_DIR` relativo, que
+# `resolve()` resolve antes da comparacao.
+def _caminho_confinado(nome: str) -> Path | None:
+    """Caminho absoluto de `nome`, garantido dentro de `MODELOS_DIR`.
+
+    `nome` ja passou por `_nome_de_artefato`; aqui so se confirma que o
+    resultado nao escapa. `None` significa "recusado", nunca "criei um
+    caminho novo".
+    """
+    try:
+        raiz = MODELOS_DIR.resolve()
+        alvo = (raiz / nome).resolve()
+    except (OSError, ValueError):
+        # `resolve()` lanca em path invalido ou symlink quebrado. Recusar e a
+        # resposta correta: um caminho que nao se resolve nao deve ser lido.
+        return None
+
+    if alvo == raiz or not alvo.is_relative_to(raiz):
+        return None
+    return alvo
+
 
 def _carregar(symbol: str, timeframe: str) -> tuple[Any | None, dict[str, Any]]:
     """Carrega .pkl e .meta.json de um timeframe de um simbolo.
@@ -206,15 +274,51 @@ def _carregar(symbol: str, timeframe: str) -> tuple[Any | None, dict[str, Any]]:
     O `.pkl` tem 8 MB e leva ~2 s para desserializar. Recarregar a cada tique
     seria crippling, entao o resultado fica em cache e so e invalidado quando
     o mtime do arquivo muda (retraining).
+
+    TRAVERSAL DE CAMINHO (corrigido com este ciclo)
+    -----------------------------------------------
+    `simbolo` e `timeframe` chegam da REQUISICAO HTTP — `auto_engine.py:194`
+    faz `self.simbolo = str(payload["simbolo"]).upper()` e nao ha validacao
+    antes de `MODELOS_DIR / f"{simbolo}_{timeframe}.pkl"`. Um simbolo com
+    `../` escapava da pasta de modelos e chegava no `joblib.load` da linha
+    seguinte: desserializar um `.pkl` de caminho escolhido e execucao de
+    codigo arbitrario. CodeQL apontou como `py/path-injection` (4x) e
+    `py/unsafe-deserialization` (1x).
+
+    Duas defesas, porque uma so nao fecha:
+
+    1. `_nome_de_artefato` so aceita `[A-Z0-9]` e `^[A-Z0-9]{1,12}$`, o que
+       ja barra `/`, `\` e `..` na origem. O timeframe tem allowlist
+       fechada, medida nos artefatos reais (H1, H4, M15, M5).
+    2. Mesmo com nome valido, o caminho resolvido e conferido dentro de
+       `MODELOS_DIR` com `Path.is_relative_to`/`resolve`. Isto cobre o caso
+       que a regex nao pega: `MODELOS_DIR` apontado por `XAU_MODELOS_DIR`
+       para um diretorio com link simbolico para fora.
+
+    O simbolo NAO tem allowlist de pares: a lista mudaria a cada novo
+    par listado e a regra do projeto e "nenhum simbolo pode ser presumido".
+    A regex barra o que e perigoso (separadores e travessia) sem
+    restringir o que e legitimo.
     """
     simbolo = str(symbol or "").strip().upper()
     if not simbolo:
         # Sem artefato, sem metadados e sem chance de cache: um simbolo vazio
         # nao tem mtime para invalidar.
         return None, {"publish_reason": MOTIVO_SEM_SIMBOLO}
+    timeframe = str(timeframe or "").strip().upper()
+    nome = _nome_de_artefato(simbolo, timeframe)
+    if nome is None:
+        # Nome fora do formato aceito: e recusao COM MOTIVO, nao ausencia de
+        # artefato. A distincao importa — "sem modelo" parece um problema de
+        # treino; "simbolo invalido" e entrada do cliente.
+        _CACHE[f"modelo:{simbolo}:{timeframe}"] = (None, {})
+        return _CACHE[f"modelo:{simbolo}:{timeframe}"]
     chave = f"modelo:{simbolo}:{timeframe}"
-    pkl = MODELOS_DIR / f"{simbolo}_{timeframe}.pkl"
-    meta = MODELOS_DIR / f"{simbolo}_{timeframe}.meta.json"
+    pkl = _caminho_confinado(f"{nome}.pkl")
+    meta = _caminho_confinado(f"{nome}.meta.json")
+    if pkl is None or meta is None:
+        _CACHE[chave] = (None, {})
+        return _CACHE[chave]
     if not (pkl.exists() and meta.exists()):
         _CACHE[chave] = (None, {})
         return _CACHE[chave]
