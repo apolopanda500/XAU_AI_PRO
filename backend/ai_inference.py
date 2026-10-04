@@ -392,7 +392,41 @@ def _carregar(symbol: str, timeframe: str) -> tuple[Any | None, dict[str, Any]]:
             _CACHE[chave] = (None, {**m, "publish_reason": motivo_integridade}, mtime)
             return _CACHE[chave][0], _CACHE[chave][1]
         # Treino so e aceito se passou na porta de qualidade.
-        modelo = None if not m.get("publicable") else joblib.load(pkl)
+        #
+        # codeql[py/unsafe-deserialization] acesso ao modelo ja e verificado
+        #
+        # POR QUE A SUPressAO E JUSTA, E NAO UM ESCONDERDOR
+        # ================================================
+        # O CodeQL acusa por ANALISE DE FLUXO: `simbolo` chega do pedido HTTP e
+        # alcanca `joblib.load(pkl)`, entao conclui "dado nao-confiavel vira
+        # desserializacao". E isso esta certo sobre o QUE a regra ve, e errado
+        # sobre o que o codigo faz — a regra nao raciocina sobre helper nenhum.
+        #
+        # TRES DEFESAS, todas ANTES do load:
+        #  1. `_nome_de_artefato` barra na ORIGEM: regex `^[A-Z0-9]{1,12}$`
+        #     mais allowlist fechada de timeframe. `..`, `/` e `\` nao passam.
+        #  2. `_caminho_confinado` barra no DESTINO: o caminho resolvido
+        #     precisa estar dentro de MODELOS_DIR (resolve + is_relative_to,
+        #     com `resolve` seguindo link simbolico).
+        #  3. `conferir(pkl, m)` barra no CONTEUDO: SHA-256 do `.pkl` gravado
+        #     no `.meta.json` no treino e conferido antes do load. Divergencia
+        #     recusa com motivo e o arquivo nao e desserializado.
+        #     Ver `Python/integridade_modelo.py`.
+        #
+        # A 1 e a 2 existem desde o commit e0dbf0a e NUNCA resolveram o alerta.
+        # A regra `py/path-injection` ja foi reescrita na forma que o CodeQL
+        # reconhece justamente porque ele nao segue o helper — e mesmo assim o
+        # `py/unsafe-deserialization` continuou accusing. E o mesmo motivo.
+        #
+        # O QUE A SUPressAO NAO COBRE (e por que e aceitavel aqui)
+        # =========================================================
+        # Nao ha assinatura digital: um atacante com escrita na pasta de
+        # modelos E no `.meta.json` passaria. O modelo e treinado nesta
+        # maquina e versionado no git; a defesa e contra troca de arquivo, erro
+        # de copia e artefato vindo de outra maquina — nao contra um atacante
+        # com escrita no disco. Assinatura exigiria chave privada fora do
+        # repositorio e assinatura por build, desproporcional aqui.
+        modelo = None if not m.get("publicable") else joblib.load(pkl)  # codeql[py/unsafe-deserialization] tres defesas acima; ver justificativa
         _CACHE[chave] = (modelo, m, mtime)
     except Exception:
         _CACHE[chave] = (None, {}, mtime)
