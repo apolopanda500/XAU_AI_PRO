@@ -189,7 +189,7 @@ def market_live(symbols: str = ""):
 
     pedidos = [s.strip().upper() for s in (symbols or "").split(",") if s.strip()]
     if not pedidos:
-        configados = _simbolos_configurados()
+        configurados = _simbolos_configurados()
         if not configurados:
             raise HTTPException(
                 status_code=400,
