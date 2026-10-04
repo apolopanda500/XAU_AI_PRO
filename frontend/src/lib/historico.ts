@@ -49,9 +49,7 @@ export function toNumber(value: unknown): number {
   if (typeof value === 'number') return value;
   if (typeof value !== 'string' || !value.trim()) return Number.NaN;
   const cleaned = value.replace(/\s/g, '');
-  const normalized = cleaned.includes(',')
-    ? cleaned.replace(/\./g, '').replace(',', '.')
-    : cleaned;
+  const normalized = cleaned.includes(',') ? cleaned.replace(/\./g, '').replace(',', '.') : cleaned;
   return Number(normalized);
 }
 
@@ -221,9 +219,7 @@ export function useHistorico(options: HistoricoOptions = {}): HistoricoState {
       // via a mesma operacao duas vezes na tabela.
       setDeals(deduplicar(plano));
 
-      const contagem = coletados
-        .map((c) => `${c.broker}: ${c.deals.length}`)
-        .join('  |  ');
+      const contagem = coletados.map((c) => `${c.broker}: ${c.deals.length}`).join('  |  ');
       setStatus(
         falhas.length
           ? `${contagem || 'sem fontes'}  |  falhas parciais: ${falhas.join(' | ')}`

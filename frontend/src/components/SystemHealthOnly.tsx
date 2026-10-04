@@ -92,7 +92,9 @@ function Barra({ usado, total }: { usado: number | null; total: number | null })
   const nivel = p >= 90 ? 'danger' : p >= 75 ? 'warn' : 'ok';
   return (
     <span className="sys-bar-cell">
-      <span className="sys-bar"><span className={`sys-bar-fill ${nivel}`} style={{ width: `${p}%` }} /></span>
+      <span className="sys-bar">
+        <span className={`sys-bar-fill ${nivel}`} style={{ width: `${p}%` }} />
+      </span>
       <span className="sys-bar-num">{p.toFixed(0)}%</span>
     </span>
   );
@@ -124,9 +126,9 @@ export default function SystemHealthOnly() {
     setGatewayOk(nova.gatewayOk);
     // So re-renderiza a tabela se os numeros mudaram de verdade: um tick que
     // devolve a mesma leitura nao deve mexer na tela.
-    setHw((atual) => (
-      atual && nova.hw && JSON.stringify(atual) === JSON.stringify(nova.hw) ? atual : nova.hw
-    ));
+    setHw((atual) =>
+      atual && nova.hw && JSON.stringify(atual) === JSON.stringify(nova.hw) ? atual : nova.hw,
+    );
     setCarregando(false);
   }, []);
 
@@ -173,7 +175,9 @@ export default function SystemHealthOnly() {
       if (document.hidden) return;
       void ler(true);
     }, REFRESH_MS);
-    const aoVoltar = () => { if (!document.hidden) void ler(); };
+    const aoVoltar = () => {
+      if (!document.hidden) void ler();
+    };
     document.addEventListener('visibilitychange', aoVoltar);
     return () => {
       vivo = false;
@@ -182,12 +186,14 @@ export default function SystemHealthOnly() {
     };
   }, [aplicar]);
 
-  const ramUsada = hw?.memory_total_gb != null && hw.memory_available_gb != null
-    ? Math.max(0, hw.memory_total_gb - hw.memory_available_gb)
-    : null;
-  const discoUsado = hw?.disk_total_gb != null && hw.disk_free_gb != null
-    ? Math.max(0, hw.disk_total_gb - hw.disk_free_gb)
-    : null;
+  const ramUsada =
+    hw?.memory_total_gb != null && hw.memory_available_gb != null
+      ? Math.max(0, hw.memory_total_gb - hw.memory_available_gb)
+      : null;
+  const discoUsado =
+    hw?.disk_total_gb != null && hw.disk_free_gb != null
+      ? Math.max(0, hw.disk_total_gb - hw.disk_free_gb)
+      : null;
 
   return (
     <main className="system-page">
@@ -214,7 +220,11 @@ export default function SystemHealthOnly() {
         </div>
       </div>
 
-      {erro && <div className="card compact-card sys-erro" role="status">{erro}</div>}
+      {erro && (
+        <div className="card compact-card sys-erro" role="status">
+          {erro}
+        </div>
+      )}
 
       <section className="card compact-card" aria-labelledby="sys-maquina">
         <div className="section-head">
@@ -226,9 +236,12 @@ export default function SystemHealthOnly() {
             <caption className="sr-only">Especificacoes e uso atual da maquina</caption>
             <thead>
               <tr>
-                <th>Item</th><th>Modelo</th>
-                <th className="num">Total</th><th className="num">Livre</th>
-                <th className="sys-th-bar">Uso</th><th className="num">Extra</th>
+                <th>Item</th>
+                <th>Modelo</th>
+                <th className="num">Total</th>
+                <th className="num">Livre</th>
+                <th className="sys-th-bar">Uso</th>
+                <th className="num">Extra</th>
               </tr>
             </thead>
             <tbody>
@@ -246,19 +259,29 @@ export default function SystemHealthOnly() {
                 <td className="num">{hw?.cpu_cores ? `${hw.cpu_cores} nucleos` : '--'}</td>
                 <td className="num muted">--</td>
                 <td className="muted">--</td>
-                <td className="num">{hw?.cpu_temperature_c != null ? `${hw.cpu_temperature_c.toFixed(0)} °C` : '--'}</td>
+                <td className="num">
+                  {hw?.cpu_temperature_c != null ? `${hw.cpu_temperature_c.toFixed(0)} °C` : '--'}
+                </td>
               </tr>
               <tr>
                 <td>CPU em uso</td>
                 <td className="muted">carga</td>
                 <td className="num muted">--</td>
                 <td className="num muted">--</td>
-                <td><Barra usado={hw?.cpu_usage_percent ?? null} total={100} /></td>
+                <td>
+                  <Barra usado={hw?.cpu_usage_percent ?? null} total={100} />
+                </td>
                 <td className="num">{pct(hw?.cpu_usage_percent)}</td>
               </tr>
               <tr>
                 <td>Video</td>
-                <td>{hw?.gpu_available ? val(hw?.gpu_name) : <span className="muted">nao exposto pelo sistema</span>}</td>
+                <td>
+                  {hw?.gpu_available ? (
+                    val(hw?.gpu_name)
+                  ) : (
+                    <span className="muted">nao exposto pelo sistema</span>
+                  )}
+                </td>
                 <td className="num muted">--</td>
                 <td className="num muted">--</td>
                 <td className="muted">--</td>
@@ -269,7 +292,9 @@ export default function SystemHealthOnly() {
                 <td>RAM</td>
                 <td className="num">{gb(hw?.memory_total_gb)}</td>
                 <td className="num">{gb(hw?.memory_available_gb)}</td>
-                <td><Barra usado={ramUsada} total={hw?.memory_total_gb ?? null} /></td>
+                <td>
+                  <Barra usado={ramUsada} total={hw?.memory_total_gb ?? null} />
+                </td>
                 <td className="num muted">--</td>
               </tr>
               <tr>
@@ -277,7 +302,9 @@ export default function SystemHealthOnly() {
                 <td>Sistema (C:)</td>
                 <td className="num">{gb(hw?.disk_total_gb)}</td>
                 <td className="num">{gb(hw?.disk_free_gb)}</td>
-                <td><Barra usado={discoUsado} total={hw?.disk_total_gb ?? null} /></td>
+                <td>
+                  <Barra usado={discoUsado} total={hw?.disk_total_gb ?? null} />
+                </td>
                 <td className="num muted">--</td>
               </tr>
             </tbody>
@@ -296,13 +323,19 @@ export default function SystemHealthOnly() {
           <table className="tbl compact-table sys-grid">
             <caption className="sr-only">Desempenho medido do aplicativo</caption>
             <thead>
-              <tr><th>Medida</th><th className="num">Valor</th><th>Referencia</th></tr>
+              <tr>
+                <th>Medida</th>
+                <th className="num">Valor</th>
+                <th>Referencia</th>
+              </tr>
             </thead>
             <tbody>
               <tr>
                 <td>Latencia de leitura</td>
                 <td className="num">{latencia != null ? `${latencia.toFixed(0)} ms` : '--'}</td>
-                <td className="muted">tempo de hardware + gateway, medido a cada {REFRESH_MS / 1000}s</td>
+                <td className="muted">
+                  tempo de hardware + gateway, medido a cada {REFRESH_MS / 1000}s
+                </td>
               </tr>
               <tr>
                 <td>Intervalo de atualizacao</td>

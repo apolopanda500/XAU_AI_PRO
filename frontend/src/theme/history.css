@@ -1,56 +1,190 @@
 /* Melhorias da aba Histórico: acumulados, seleção e status de fontes */
-.history-status-row { display: flex; align-items: center; gap: 10px; margin: 4px 0 12px; flex-wrap: wrap; }
-.history-status-row .muted { font-size: 12.5px; }
-.acum-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 14px; }
-.acum-cell { background: var(--panel-2, rgba(255,255,255,.03)); border: 1px solid var(--border, rgba(255,255,255,.08)); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
-.acum-cell span { font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted, #8b93a7); }
-.acum-cell strong { font-size: 16px; font-variant-numeric: tabular-nums; }
-.acum-cell small { font-size: 11.5px; color: var(--muted, #8b93a7); }
-.acum-pos { color: var(--ok, #2ecc71); }
-.acum-neg { color: var(--danger, #e74c3c); }
-.acum-total-cell { grid-column: 1 / -1; }
-.acum-table-card { margin-bottom: 14px; }
-.acum-total-row td { font-weight: 700; border-top: 2px solid var(--border, rgba(255,255,255,.12)); }
-.acum-table-card table { table-layout: fixed; min-width: 760px; }
-.acum-table-card th, .acum-table-card td { vertical-align: middle; }
-.acum-table-card th:first-child, .acum-table-card td:first-child { width: 18%; text-align: left; }
-.acum-table-card th:not(:first-child), .acum-table-card td:not(:first-child) { width: 13.66%; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.acum-table-card td:nth-child(3) { font-weight: 700; }
-.acum-table-card td.acum-pos { color: #35d28f !important; font-weight: 700; }
-.acum-table-card td.acum-neg { color: #ff5c74 !important; font-weight: 700; }
+.history-status-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 12px;
+  flex-wrap: wrap;
+}
+.history-status-row .muted {
+  font-size: 12.5px;
+}
+.acum-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.acum-cell {
+  background: var(--panel-2, rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.acum-cell span {
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted, #8b93a7);
+}
+.acum-cell strong {
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+.acum-cell small {
+  font-size: 11.5px;
+  color: var(--muted, #8b93a7);
+}
+.acum-pos {
+  color: var(--ok, #2ecc71);
+}
+.acum-neg {
+  color: var(--danger, #e74c3c);
+}
+.acum-total-cell {
+  grid-column: 1 / -1;
+}
+.acum-table-card {
+  margin-bottom: 14px;
+}
+.acum-total-row td {
+  font-weight: 700;
+  border-top: 2px solid var(--border, rgba(255, 255, 255, 0.12));
+}
+.acum-table-card table {
+  table-layout: fixed;
+  min-width: 760px;
+}
+.acum-table-card th,
+.acum-table-card td {
+  vertical-align: middle;
+}
+.acum-table-card th:first-child,
+.acum-table-card td:first-child {
+  width: 18%;
+  text-align: left;
+}
+.acum-table-card th:not(:first-child),
+.acum-table-card td:not(:first-child) {
+  width: 13.66%;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.acum-table-card td:nth-child(3) {
+  font-weight: 700;
+}
+.acum-table-card td.acum-pos {
+  color: #35d28f !important;
+  font-weight: 700;
+}
+.acum-table-card td.acum-neg {
+  color: #ff5c74 !important;
+  font-weight: 700;
+}
 .acum-table-card td:nth-child(3).acum-pos,
-.acum-table-card td:nth-child(3).acum-neg { text-shadow: 0 0 10px currentColor; }
-.acum-table-card tbody tr:has(td.acum-pos) { box-shadow: inset 3px 0 #35d28f; }
-.acum-table-card tbody tr:has(td.acum-neg) { box-shadow: inset 3px 0 #ff5c74; }
+.acum-table-card td:nth-child(3).acum-neg {
+  text-shadow: 0 0 10px currentColor;
+}
+.acum-table-card tbody tr:has(td.acum-pos) {
+  box-shadow: inset 3px 0 #35d28f;
+}
+.acum-table-card tbody tr:has(td.acum-neg) {
+  box-shadow: inset 3px 0 #ff5c74;
+}
 /* `.chip.mt5` e `.chip.neutral` foram para theme/global.css junto com os
    demais tons: o vocabulario do chip de status e de um lugar so. */
-.sel-chip { display: inline-flex; align-items: center; gap: 8px; background: var(--panel-2, rgba(255,255,255,.04)); border: 1px solid var(--border, rgba(255,255,255,.1)); border-radius: 999px; padding: 4px 12px; font-size: 12px; cursor: pointer; user-select: none; }
-.sel-chip input { accent-color: var(--accent, #f0a620); }
-.sel-chip .sum { color: var(--muted, #8b93a7); font-variant-numeric: tabular-nums; }
-.sel-chip .sum.pos { color: var(--ok, #2ecc71); }
-.sel-chip .sum.neg { color: var(--danger, #e74c3c); }
-.history-selection-card { margin-bottom: 14px; }
-.history-selection-list { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.csv-note { font-size: 12px; color: var(--muted, #8b93a7); margin-top: 10px; }
+.sel-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--panel-2, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+.sel-chip input {
+  accent-color: var(--accent, #f0a620);
+}
+.sel-chip .sum {
+  color: var(--muted, #8b93a7);
+  font-variant-numeric: tabular-nums;
+}
+.sel-chip .sum.pos {
+  color: var(--ok, #2ecc71);
+}
+.sel-chip .sum.neg {
+  color: var(--danger, #e74c3c);
+}
+.history-selection-card {
+  margin-bottom: 14px;
+}
+.history-selection-list {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.csv-note {
+  font-size: 12px;
+  color: var(--muted, #8b93a7);
+  margin-top: 10px;
+}
 
 /* Histórico operacional: leitura compacta, sem mensagens auxiliares na tabela. */
 .quantum-history .history-status-row,
-.quantum-history .csv-note { display: none; }
-.quantum-history .history-table-card { border: 1px solid rgba(148,163,184,.18); border-radius: 12px; }
-.quantum-history .history-table-card table { border-collapse: separate; border-spacing: 0; }
-.quantum-history .history-table-card th { height: 36px; padding: 8px 10px; text-align: left; letter-spacing: .04em; }
-.quantum-history .history-table-card td { height: 40px; padding: 9px 10px; border-top: 1px solid rgba(148,163,184,.09); vertical-align: middle; }
+.quantum-history .csv-note {
+  display: none;
+}
+.quantum-history .history-table-card {
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 12px;
+}
+.quantum-history .history-table-card table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.quantum-history .history-table-card th {
+  height: 36px;
+  padding: 8px 10px;
+  text-align: left;
+  letter-spacing: 0.04em;
+}
+.quantum-history .history-table-card td {
+  height: 40px;
+  padding: 9px 10px;
+  border-top: 1px solid rgba(148, 163, 184, 0.09);
+  vertical-align: middle;
+}
 .quantum-history .history-table-card th:nth-child(5),
 .quantum-history .history-table-card th:nth-child(6),
 .quantum-history .history-table-card th:nth-child(7),
 .quantum-history .history-table-card td:nth-child(5),
 .quantum-history .history-table-card td:nth-child(6),
-.quantum-history .history-table-card td:nth-child(7) { text-align: right; }
-.quantum-history .history-table-card td:nth-child(7) { font-weight: 700; }
-.quantum-history .history-row-positive td:nth-child(7) { color: #22c55e !important; }
-.quantum-history .history-row-negative td:nth-child(7) { color: #ef4444 !important; }
-.quantum-history .history-row-neutral td:nth-child(7) { color: #94a3b8 !important; }
-.quantum-history .history-error { border-left: 3px solid #ef4444; }
+.quantum-history .history-table-card td:nth-child(7) {
+  text-align: right;
+}
+.quantum-history .history-table-card td:nth-child(7) {
+  font-weight: 700;
+}
+.quantum-history .history-row-positive td:nth-child(7) {
+  color: #22c55e !important;
+}
+.quantum-history .history-row-negative td:nth-child(7) {
+  color: #ef4444 !important;
+}
+.quantum-history .history-row-neutral td:nth-child(7) {
+  color: #94a3b8 !important;
+}
+.quantum-history .history-error {
+  border-left: 3px solid #ef4444;
+}
 
 /* TABELA COMPACTA E GAVETAS POR DIA (2026-09-30)
    -----------------------------------------------

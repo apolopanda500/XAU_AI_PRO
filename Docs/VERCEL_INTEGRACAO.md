@@ -4,9 +4,9 @@
 
 ## URLs de Produção
 
-| Projeto Vercel | URL | Uso |
-|---|---|---|
-| `xau-ai-pro` | https://xau-ai-pro-apolopanda500.vercel.app | API Backend (Nitro + Workflows) |
+| Projeto Vercel   | URL                                             | Uso                                          |
+| ---------------- | ----------------------------------------------- | -------------------------------------------- |
+| `xau-ai-pro`     | https://xau-ai-pro-apolopanda500.vercel.app     | API Backend (Nitro + Workflows)              |
 | `xau-ai-pro-api` | https://xau-ai-pro-api-apolopanda500.vercel.app | API Backend (deploy CLI da pasta `backend/`) |
 
 ## Endpoints disponíveis (serverless)

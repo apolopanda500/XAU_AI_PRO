@@ -15,11 +15,51 @@ const { default: RobotModelPanel } = await import('./RobotModelPanel');
 const { useAppStore } = await import('../hooks/useAppStore');
 
 const MODELOS = [
-  { id: 'ATIVO_A_60', symbol: 'ATIVOA', timeframe: 'H1', accuracy: 0.71, edge: 0.11, pkl_present: true, publicable: true },
-  { id: 'ATIVO_A_240', symbol: 'ATIVOA', timeframe: 'H4', accuracy: 0.66, edge: 0.07, pkl_present: true, publicable: true },
-  { id: 'ATIVOB_60', symbol: 'ATIVOB', timeframe: 'H1', accuracy: 0.62, edge: 0.04, pkl_present: true, publicable: true },
-  { id: 'ATIVOB_240', symbol: 'ATIVOB', timeframe: 'H4', accuracy: 0.58, edge: 0.03, pkl_present: true, publicable: true },
-  { id: 'ATIVOC_60', symbol: 'ATIVOC', timeframe: 'H1', accuracy: 0.6, edge: 0.05, pkl_present: true, publicable: true },
+  {
+    id: 'ATIVO_A_60',
+    symbol: 'ATIVOA',
+    timeframe: 'H1',
+    accuracy: 0.71,
+    edge: 0.11,
+    pkl_present: true,
+    publicable: true,
+  },
+  {
+    id: 'ATIVO_A_240',
+    symbol: 'ATIVOA',
+    timeframe: 'H4',
+    accuracy: 0.66,
+    edge: 0.07,
+    pkl_present: true,
+    publicable: true,
+  },
+  {
+    id: 'ATIVOB_60',
+    symbol: 'ATIVOB',
+    timeframe: 'H1',
+    accuracy: 0.62,
+    edge: 0.04,
+    pkl_present: true,
+    publicable: true,
+  },
+  {
+    id: 'ATIVOB_240',
+    symbol: 'ATIVOB',
+    timeframe: 'H4',
+    accuracy: 0.58,
+    edge: 0.03,
+    pkl_present: true,
+    publicable: true,
+  },
+  {
+    id: 'ATIVOC_60',
+    symbol: 'ATIVOC',
+    timeframe: 'H1',
+    accuracy: 0.6,
+    edge: 0.05,
+    pkl_present: true,
+    publicable: true,
+  },
 ];
 
 const chamadas: string[] = [];
@@ -50,7 +90,7 @@ describe('RobotModelPanel — ativo e modelo coerentes', () => {
 
   it('lista so os ativos que tem modelo, em ordem alfabetica', async () => {
     montar();
-    const ativo = await screen.findByLabelText('Ativo do robo') as HTMLSelectElement;
+    const ativo = (await screen.findByLabelText('Ativo do robo')) as HTMLSelectElement;
     await waitFor(() => expect(ativo.options.length).toBe(3));
     expect(ativo.value).toBe('ATIVOA');
     expect([...ativo.options].map((o) => o.value)).toEqual(['ATIVOA', 'ATIVOB', 'ATIVOC']);
@@ -58,7 +98,7 @@ describe('RobotModelPanel — ativo e modelo coerentes', () => {
 
   it('envia o symbol do ativo escolhido, nao um ativo fixo', async () => {
     montar();
-    const ativo = await screen.findByLabelText('Ativo do robo') as HTMLSelectElement;
+    const ativo = (await screen.findByLabelText('Ativo do robo')) as HTMLSelectElement;
     await waitFor(() => expect(ativo.options.length).toBe(3));
     fireEvent.change(ativo, { target: { value: 'ATIVOB' } });
 
@@ -78,13 +118,21 @@ describe('RobotModelPanel — ativo e modelo coerentes', () => {
 
   it('trocar de ativo nao deixa o modelo do ativo anterior', async () => {
     montar();
-    const ativo = await screen.findByLabelText('Ativo do robo') as HTMLSelectElement;
+    const ativo = (await screen.findByLabelText('Ativo do robo')) as HTMLSelectElement;
     await waitFor(() => expect(ativo.options.length).toBe(3));
     fireEvent.change(ativo, { target: { value: 'ATIVOB' } });
-    await waitFor(() => expect((screen.getByLabelText('Modelo do robo') as HTMLSelectElement).value).toBe('ATIVOB_60'));
+    await waitFor(() =>
+      expect((screen.getByLabelText('Modelo do robo') as HTMLSelectElement).value).toBe(
+        'ATIVOB_60',
+      ),
+    );
 
     fireEvent.change(ativo, { target: { value: 'ATIVOC' } });
-    await waitFor(() => expect((screen.getByLabelText('Modelo do robo') as HTMLSelectElement).value).toBe('ATIVOC_60'));
+    await waitFor(() =>
+      expect((screen.getByLabelText('Modelo do robo') as HTMLSelectElement).value).toBe(
+        'ATIVOC_60',
+      ),
+    );
     expect(useAppStore.getState().selectedSymbol).toBe('ATIVOC');
   });
 });

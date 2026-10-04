@@ -4,11 +4,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { apiBase, wsUrl } from '../lib/api';
 import { useAppStore } from './useAppStore';
-import {
-  PROTOCOL_VERSION,
-  WS_PING_INTERVAL_MS,
-  type WsMessageV1,
-} from '../lib/protocol';
+import { PROTOCOL_VERSION, WS_PING_INTERVAL_MS, type WsMessageV1 } from '../lib/protocol';
 import { normalizeSymbols } from '../lib/constants';
 
 const getWsUrl = (): string => wsUrl();
@@ -28,13 +24,7 @@ export function useMarketWebSocket() {
   const retryRef = useRef<number>(0);
   const pingTimer = useRef<number | null>(null);
   const helloOk = useRef<boolean>(false);
-  const {
-    setQuotes,
-    setWsConnected,
-    setAccount,
-    setPositions,
-    setSystemState,
-  } = useAppStore();
+  const { setQuotes, setWsConnected, setAccount, setPositions, setSystemState } = useAppStore();
   const quoteBufferRef = useRef<Map<string, WsMessageV1>>(new Map());
   const renderFrameRef = useRef<number | null>(null);
   // Ultima lista enviada ao Core; evita Subscribe redundante a cada clique.
@@ -90,7 +80,10 @@ export function useMarketWebSocket() {
           }
           break;
         case 'Quote':
-          quoteBufferRef.current.set(String((msg as unknown as { symbol?: string }).symbol ?? ''), msg);
+          quoteBufferRef.current.set(
+            String((msg as unknown as { symbol?: string }).symbol ?? ''),
+            msg,
+          );
           scheduleQuoteFlush();
           break;
         case 'Account':
@@ -99,10 +92,7 @@ export function useMarketWebSocket() {
         case 'PositionUpdate': {
           const { positions } = useAppStore.getState();
           const ticket = (msg as unknown as { ticket: number }).ticket;
-          setPositions([
-            ...positions.filter((p) => p.ticket !== ticket),
-            msg as never,
-          ]);
+          setPositions([...positions.filter((p) => p.ticket !== ticket), msg as never]);
           break;
         }
         case 'SystemState':

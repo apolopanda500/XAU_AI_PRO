@@ -13,12 +13,20 @@ export type TabType =
   | 'strategy-tester'
   | 'risk'
   | 'alert'
-    | 'analytics'
+  | 'analytics'
   | 'calendar'
   | 'ai'
   | 'vips';
 
-export type ThemeName = 'dark' | 'xau_dark' | 'btc_dark' | 'light' | 'ocean_dark' | 'emerald_dark' | 'rose_dark' | 'violet_dark';
+export type ThemeName =
+  | 'dark'
+  | 'xau_dark'
+  | 'btc_dark'
+  | 'light'
+  | 'ocean_dark'
+  | 'emerald_dark'
+  | 'rose_dark'
+  | 'violet_dark';
 
 // Sub-aba ativa dentro da aba Operar. Persiste para que sair e voltar nao
 // empurre o operador de volta para o topo da pilha.
@@ -179,11 +187,18 @@ export interface Settings {
 // para nao quebrar consumidores antigos.
 export const DEFAULT_MARKET_WATCHLIST: readonly string[] = [];
 
-const quoteKey = (quote: Quote): string => [
-  String(quote.broker ?? '').trim().toLowerCase(),
-  String(quote.market ?? '').trim().toLowerCase(),
-  String(quote.symbol ?? '').trim().toUpperCase(),
-].join(':');
+const quoteKey = (quote: Quote): string =>
+  [
+    String(quote.broker ?? '')
+      .trim()
+      .toLowerCase(),
+    String(quote.market ?? '')
+      .trim()
+      .toLowerCase(),
+    String(quote.symbol ?? '')
+      .trim()
+      .toUpperCase(),
+  ].join(':');
 
 export const DEFAULT_SETTINGS: Settings = {
   pinEnabled: false,
@@ -327,7 +342,12 @@ export const useAppStore = create<AppState>()(
           subscribeSymbols: normalizeSymbols(p.subscribeSymbols ?? current.subscribeSymbols),
           // Compatibilidade segura: versoes antigas podiam persistir auto-connect=true.
           // A inicializacao do MT5 exige acao explicita do usuario.
-          settings: { ...DEFAULT_SETTINGS, ...(p.settings ?? {}), marketAutoRefresh: true, mt5AutoConnect: false },
+          settings: {
+            ...DEFAULT_SETTINGS,
+            ...(p.settings ?? {}),
+            marketAutoRefresh: true,
+            mt5AutoConnect: false,
+          },
           // Valor persistido de uma versao antiga ou corrompido cai na primeira
           // sub-aba; os nomes da versao de cinco viram os quatro novos.
           robotSub: (() => {

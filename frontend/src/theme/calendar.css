@@ -257,9 +257,21 @@
   border: 1px solid transparent;
 }
 
-.cal-impact.alto { background: color-mix(in srgb, #ef4444 22%, transparent); color: #fca5a5; border-color: #ef4444; }
-.cal-impact.medio { background: color-mix(in srgb, #eab308 20%, transparent); color: #fde047; border-color: #eab308; }
-.cal-impact.baixo { background: color-mix(in srgb, var(--muted) 16%, transparent); color: var(--muted); border-color: var(--border); }
+.cal-impact.alto {
+  background: color-mix(in srgb, #ef4444 22%, transparent);
+  color: #fca5a5;
+  border-color: #ef4444;
+}
+.cal-impact.medio {
+  background: color-mix(in srgb, #eab308 20%, transparent);
+  color: #fde047;
+  border-color: #eab308;
+}
+.cal-impact.baixo {
+  background: color-mix(in srgb, var(--muted) 16%, transparent);
+  color: var(--muted);
+  border-color: var(--border);
+}
 
 .cal-gold {
   color: #fbbf24;
@@ -316,6 +328,11 @@
 }
 
 @keyframes cal-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.85; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.85;
+  }
 }

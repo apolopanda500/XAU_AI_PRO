@@ -72,17 +72,17 @@ A XM Global é o ambiente DEMO atualmente usado para validação, mas não defin
 
 ### Componentes principais
 
-| Camada | Local principal | Responsabilidade |
-|---|---|---|
-| Desktop PC | `frontend/` + `frontend/src-tauri/` | Interface React, Tauri, notificações, build Windows |
-| Core | `core/` | Sessão MT5, heartbeat, WebSocket, despacho e regras locais |
-| Gateway | `backend/fastapi_gateway.py` e `backend/mt5_gateway.py` | API local, leitura MT5, contratos e proteções |
-| Execução | `backend/*_execution.py` | Adaptadores MT5, Binance e MEXC |
-| Risco | `backend/risk_gate.py` | Limites de volume, perda, exposição e posições |
-| Auditoria | `backend/audit_log.py`, `backend/intent_log.py` | Registro sem segredos e reconciliação |
-| Telemetria | `backend/watchdog.py`, `backend/guardian_engine.py` | Heartbeat, saúde, eventos e regras de proteção |
-| Empacotamento | `*.spec`, `scripts/`, `installer/` | PyInstaller, Tauri, MSI, NSIS e instalador |
-| EA | `Experts/` | Intocável neste ciclo |
+| Camada        | Local principal                                         | Responsabilidade                                           |
+| ------------- | ------------------------------------------------------- | ---------------------------------------------------------- |
+| Desktop PC    | `frontend/` + `frontend/src-tauri/`                     | Interface React, Tauri, notificações, build Windows        |
+| Core          | `core/`                                                 | Sessão MT5, heartbeat, WebSocket, despacho e regras locais |
+| Gateway       | `backend/fastapi_gateway.py` e `backend/mt5_gateway.py` | API local, leitura MT5, contratos e proteções              |
+| Execução      | `backend/*_execution.py`                                | Adaptadores MT5, Binance e MEXC                            |
+| Risco         | `backend/risk_gate.py`                                  | Limites de volume, perda, exposição e posições             |
+| Auditoria     | `backend/audit_log.py`, `backend/intent_log.py`         | Registro sem segredos e reconciliação                      |
+| Telemetria    | `backend/watchdog.py`, `backend/guardian_engine.py`     | Heartbeat, saúde, eventos e regras de proteção             |
+| Empacotamento | `*.spec`, `scripts/`, `installer/`                      | PyInstaller, Tauri, MSI, NSIS e instalador                 |
+| EA            | `Experts/`                                              | Intocável neste ciclo                                      |
 
 ---
 
@@ -92,13 +92,13 @@ A XM Global é o ambiente DEMO atualmente usado para validação, mas não defin
 
 O produto deve trabalhar somente com conectores homologados, e não prometer compatibilidade universal sem teste.
 
-| Tipo | Estado arquitetural |
-|---|---|
-| Corretoras MT5 | Compatibilidade pela instalação MT5 e pelos símbolos liberados pela conta/corretora |
-| XM Global | Ambiente DEMO atual de validação |
-| MEXC | Adaptador existente, execução bloqueada por padrão |
-| Binance | Adaptador existente, execução bloqueada por padrão |
-| Outros brokers/exchanges | Futuros adaptadores após homologação técnica, segurança e testes |
+| Tipo                     | Estado arquitetural                                                                 |
+| ------------------------ | ----------------------------------------------------------------------------------- |
+| Corretoras MT5           | Compatibilidade pela instalação MT5 e pelos símbolos liberados pela conta/corretora |
+| XM Global                | Ambiente DEMO atual de validação                                                    |
+| MEXC                     | Adaptador existente, execução bloqueada por padrão                                  |
+| Binance                  | Adaptador existente, execução bloqueada por padrão                                  |
+| Outros brokers/exchanges | Futuros adaptadores após homologação técnica, segurança e testes                    |
 
 ### Ativos
 
@@ -179,28 +179,28 @@ O kill switch universal bloqueia novas ordens quando ativo. Saques e transferên
 
 Foram corrigidos dois testes que funcionavam apenas quando executados diretamente pelo Python, mas falhavam no `pytest` porque não inicializavam o contexto necessário.
 
-| Arquivo | Correção |
-|---|---|
-| `tests/test_boot_backfill_integration.py` | Criada fixture isolada; asserts reutilizáveis para pytest e smoke direto; expectativa ajustada para terminal desconectado no MT5 fake |
+| Arquivo                                   | Correção                                                                                                                                                                        |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tests/test_boot_backfill_integration.py` | Criada fixture isolada; asserts reutilizáveis para pytest e smoke direto; expectativa ajustada para terminal desconectado no MT5 fake                                           |
 | `tests/test_queue_gateway_integration.py` | Criada fixture isolada para gateway/fila/MT5 fake; suporte preservado para smoke direto; `handler.command` adicionado; rate limit isolado para evitar contaminação entre testes |
 
 Nenhuma alteração foi feita em `Experts`.
 
 ### 6.2 Validações aprovadas
 
-| Grupo | Resultado |
-|---|---:|
-| Boot/backfill via pytest | 4 aprovados |
-| Smoke direto boot/backfill | aprovado |
-| Risco, execução, reconciliação, conexões, auditoria e conta universal | 41 aprovados |
-| Endpoints do gateway | 9 aprovados |
-| Core Python, mercado, MCP, indicadores e sincronização MT5 | 23 aprovados |
-| UI, alertas, telemetria, watchdog, guardian e fila | 54 aprovados |
-| Vitest frontend | 24 aprovados |
-| TypeScript | aprovado (`tsc --noEmit`) |
-| Build Vite | aprovado |
-| Smoke direto fila/gateway | aprovado |
-| **Total de testes Python validados em lotes** | **131 aprovados** |
+| Grupo                                                                 |                 Resultado |
+| --------------------------------------------------------------------- | ------------------------: |
+| Boot/backfill via pytest                                              |               4 aprovados |
+| Smoke direto boot/backfill                                            |                  aprovado |
+| Risco, execução, reconciliação, conexões, auditoria e conta universal |              41 aprovados |
+| Endpoints do gateway                                                  |               9 aprovados |
+| Core Python, mercado, MCP, indicadores e sincronização MT5            |              23 aprovados |
+| UI, alertas, telemetria, watchdog, guardian e fila                    |              54 aprovados |
+| Vitest frontend                                                       |              24 aprovados |
+| TypeScript                                                            | aprovado (`tsc --noEmit`) |
+| Build Vite                                                            |                  aprovado |
+| Smoke direto fila/gateway                                             |                  aprovado |
+| **Total de testes Python validados em lotes**                         |         **131 aprovados** |
 
 ### 6.3 Artefato frontend validado
 
@@ -412,20 +412,20 @@ powershell -ExecutionPolicy Bypass -File scripts\validate_release.ps1
 
 ## 12. Estado atual resumido
 
-| Área | Estado em 21/09/2026 |
-|---|---|
-| Arquitetura PC | mapeada |
-| Multiativos/multicorretora | direção de produto definida |
-| EA em `Experts` | intocado |
-| Testes Python por lotes | 131 aprovados |
-| Frontend Vitest | 24 aprovados |
-| TypeScript | aprovado |
-| Build Vite | aprovado |
-| Core Rust | pendente de validação neste ciclo |
-| PyInstaller gateway | pendente |
-| Tauri MSI/NSIS | pendente |
-| Instalador/instalação limpa | pendente |
-| DEMO XM Global em tempo real | pendente |
-| Piloto REAL próprio | pendente |
-| Lançamento comercial PC | não aprovado ainda |
-| Android | posterior à aprovação da versão PC |
+| Área                         | Estado em 21/09/2026               |
+| ---------------------------- | ---------------------------------- |
+| Arquitetura PC               | mapeada                            |
+| Multiativos/multicorretora   | direção de produto definida        |
+| EA em `Experts`              | intocado                           |
+| Testes Python por lotes      | 131 aprovados                      |
+| Frontend Vitest              | 24 aprovados                       |
+| TypeScript                   | aprovado                           |
+| Build Vite                   | aprovado                           |
+| Core Rust                    | pendente de validação neste ciclo  |
+| PyInstaller gateway          | pendente                           |
+| Tauri MSI/NSIS               | pendente                           |
+| Instalador/instalação limpa  | pendente                           |
+| DEMO XM Global em tempo real | pendente                           |
+| Piloto REAL próprio          | pendente                           |
+| Lançamento comercial PC      | não aprovado ainda                 |
+| Android                      | posterior à aprovação da versão PC |

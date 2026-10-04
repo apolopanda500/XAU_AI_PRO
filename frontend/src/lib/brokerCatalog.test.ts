@@ -76,9 +76,28 @@ describe('parseAssetCatalog', () => {
   const payload = {
     source: 'okx_api',
     assets: [
-      { symbol: 'BTC-USDT', display_name: 'Bitcoin', availability: 'available', restrictions: [], digits: 2, point: 0.1, volume_step: 0.0001, trade_mode: 0 },
-      { symbol: 'OLD-USDT', availability: 'unavailable', restrictions: ['symbol_disabled'], trade_mode: 0 },
-      { symbol: 'XAU-USD-SWAP', availability: 'restricted', restrictions: ['long_only'], trade_mode: 1 },
+      {
+        symbol: 'BTC-USDT',
+        display_name: 'Bitcoin',
+        availability: 'available',
+        restrictions: [],
+        digits: 2,
+        point: 0.1,
+        volume_step: 0.0001,
+        trade_mode: 0,
+      },
+      {
+        symbol: 'OLD-USDT',
+        availability: 'unavailable',
+        restrictions: ['symbol_disabled'],
+        trade_mode: 0,
+      },
+      {
+        symbol: 'XAU-USD-SWAP',
+        availability: 'restricted',
+        restrictions: ['long_only'],
+        trade_mode: 1,
+      },
     ],
   };
 
@@ -114,7 +133,17 @@ describe('parseAssetCatalog', () => {
 });
 
 describe('isTradable', () => {
-  const base = { symbol: 'X', displayName: null, restrictions: [], digits: null, point: null, volumeStep: null, volumeMin: null, volumeMax: null, tradeMode: null };
+  const base = {
+    symbol: 'X',
+    displayName: null,
+    restrictions: [],
+    digits: null,
+    point: null,
+    volumeStep: null,
+    volumeMin: null,
+    volumeMax: null,
+    tradeMode: null,
+  };
 
   it('ativo disponivel e operavel', () => {
     expect(isTradable({ ...base, availability: 'available' })).toBe(true);
@@ -123,12 +152,16 @@ describe('isTradable', () => {
 
   it('ativo desativado na corretora nao e operavel', () => {
     expect(isTradable({ ...base, availability: 'unavailable' })).toBe(false);
-    expect(isTradable({ ...base, availability: 'available', restrictions: ['symbol_disabled'] })).toBe(false);
+    expect(
+      isTradable({ ...base, availability: 'available', restrictions: ['symbol_disabled'] }),
+    ).toBe(false);
   });
 
   it('ativo com restricao de direcao continua selecionavel', () => {
     // long_only nao impede operar: impede apenas vender.
-    expect(isTradable({ ...base, availability: 'restricted', restrictions: ['long_only'] })).toBe(true);
+    expect(isTradable({ ...base, availability: 'restricted', restrictions: ['long_only'] })).toBe(
+      true,
+    );
   });
 });
 

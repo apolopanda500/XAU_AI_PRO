@@ -3,6 +3,7 @@
 ## [1.0.0] - 2025-01-14
 
 ### Adicionado
+
 - ✅ **EconomicCalendarTab.tsx** - Componente completo do calendário econômico
   - Lista de eventos com hora, país, impacto, título, anterior, consenso, real
   - Filtros por país (EUA, UK, EU, JP, BR, CN)

@@ -11,8 +11,8 @@
 9. ✅ **CONCLUÍDO** — Conectores de corretoras com sandbox, rate limit e reconciliação. (módulo `connectors`: trait `BrokerConnector`, `RateLimiter` token bucket, `BrokerConfig`, mock `MockConnector` com sandbox enforcement + reconciliação simulada, guildrail de segurança mantido; CI verde)
 10. ✅ **CONCLUÍDO** — Atualizações stable/beta/canary/emergency com rollback. (módulo `updates`: versionamento semântico, canais de rollout com política, `RollbackManager` com histórico e rollback automático/manual, rollback compatível com integridade de dados; CI verde)
 11. ⬜ **PRÓXIMO** — Instalador assinado, documentação PT-BR/EN, suporte e observabilidade.
-10. ⬜ Atualizações stable/beta/canary/emergency com rollback.
-11. ⬜ Instalador assinado, documentação PT-BR/EN, suporte e observabilidade.
+12. ⬜ Atualizações stable/beta/canary/emergency com rollback.
+13. ⬜ Instalador assinado, documentação PT-BR/EN, suporte e observabilidade.
 
 ## Definition of Done
 

@@ -6,11 +6,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { apiBase } from '../lib/api';
-import {
-  EconomicEvent,
-  FiltroCalendario,
-  EstadoCarregamento,
-} from '../types';
+import { EconomicEvent, FiltroCalendario, EstadoCarregamento } from '../types';
 import type { ImpactLevel } from '../types';
 
 const API = `${apiBase()}`;
@@ -20,8 +16,13 @@ const CACHE_KEY = 'xau_ai_pro_calendario_cache';
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 type ApiEvent = {
-  title?: string; currency?: string; impact?: string;
-  note?: string; when_utc?: string; when?: string; gold_relevant?: boolean;
+  title?: string;
+  currency?: string;
+  impact?: string;
+  note?: string;
+  when_utc?: string;
+  when?: string;
+  gold_relevant?: boolean;
 };
 
 const CURRENCY_TO_COUNTRY: Record<string, { code: string; name: string; flag: string }> = {
@@ -51,8 +52,11 @@ function processarEventosApi(itens: ApiEvent[]): EconomicEvent[] {
   return itens.map((item, i) => {
     const utc = item.when_utc ? new Date(`${item.when_utc}Z`) : new Date();
     const horario = Number.isNaN(utc.getTime()) ? new Date() : utc;
-    const pais = CURRENCY_TO_COUNTRY[(item.currency ?? '').toUpperCase()] ??
-      { code: item.currency ?? '--', name: item.currency ?? 'Desconhecido', flag: '🏳️' };
+    const pais = CURRENCY_TO_COUNTRY[(item.currency ?? '').toUpperCase()] ?? {
+      code: item.currency ?? '--',
+      name: item.currency ?? 'Desconhecido',
+      flag: '🏳️',
+    };
     return {
       id: `${item.when_utc ?? agora.toISOString()}-${i}`,
       horario,
@@ -74,7 +78,10 @@ function carregarDoCache(): EconomicEvent[] | null {
   try {
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
-    const { ts, eventos } = JSON.parse(raw) as { ts: number; eventos: Array<Omit<EconomicEvent, 'horario'> & { horario: string }> };
+    const { ts, eventos } = JSON.parse(raw) as {
+      ts: number;
+      eventos: Array<Omit<EconomicEvent, 'horario'> & { horario: string }>;
+    };
     if (Date.now() - ts > CACHE_TTL_MS) return null;
     return eventos.map((e) => ({ ...e, horario: new Date(e.horario) }));
   } catch {
@@ -92,7 +99,7 @@ function salvarNoCache(eventos: EconomicEvent[]): void {
 
 export function useEconomicData(
   filtro: FiltroCalendario,
-  intervaloRefreshMs: number = CACHE_TTL_MS
+  intervaloRefreshMs: number = CACHE_TTL_MS,
 ) {
   const [estado, setEstado] = useState<EstadoCarregamento<EconomicEvent[]>>({
     dados: null,
@@ -116,10 +123,10 @@ export function useEconomicData(
     }
 
     try {
-      const resposta = await fetch(
-        `${API}/api/economic/calendar?limit=50&days=14&tz=BRT`,
-        { method: 'GET', signal: AbortSignal.timeout(8000) }
-      );
+      const resposta = await fetch(`${API}/api/economic/calendar?limit=50&days=14&tz=BRT`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(8000),
+      });
       const dadosApi = (await resposta.json()) as { events?: ApiEvent[]; error?: string };
 
       if (resposta.ok && dadosApi.events?.length) {

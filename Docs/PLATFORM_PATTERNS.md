@@ -2,14 +2,14 @@
 
 ## Ideias aproveitáveis
 
-| Referência | Padrão | Aplicação no XAU AI PRO |
-|---|---|---|
-| MT5 | Market Watch + gráfico + painel inferior | Mercado mantém watchlist; Robô concentra execução; Testador usa Diário, Resultados e Agentes |
-| MT5 | Tester multiagente e otimização | Fase posterior: endpoint seguro para iniciar, parar e acompanhar agentes |
-| cTrader | Active Symbol Panel | Robô mostra ativo, sessão, detalhes, spread, volume, margem e comandos no mesmo contexto |
-| cTrader | Trade Watch | Inventário mostra posições, ordens pendentes, proteção, margem e P/L em uma grade única |
+| Referência  | Padrão                                        | Aplicação no XAU AI PRO                                                                                |
+| ----------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| MT5         | Market Watch + gráfico + painel inferior      | Mercado mantém watchlist; Robô concentra execução; Testador usa Diário, Resultados e Agentes           |
+| MT5         | Tester multiagente e otimização               | Fase posterior: endpoint seguro para iniciar, parar e acompanhar agentes                               |
+| cTrader     | Active Symbol Panel                           | Robô mostra ativo, sessão, detalhes, spread, volume, margem e comandos no mesmo contexto               |
+| cTrader     | Trade Watch                                   | Inventário mostra posições, ordens pendentes, proteção, margem e P/L em uma grade única                |
 | TradingView | Watchlist com colunas configuráveis e alertas | Mercado usa ícone, preço, variação, spread, volume, fonte e atualização; alertas só após endpoint real |
-| EMS desktop | Grades densas e múltiplos painéis | Painel usa inventário, diagnóstico e estado sem duplicar tabelas em outras abas |
+| EMS desktop | Grades densas e múltiplos painéis             | Painel usa inventário, diagnóstico e estado sem duplicar tabelas em outras abas                        |
 
 ## Regras de implementação
 

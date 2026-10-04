@@ -1,6 +1,10 @@
 // Testes para riskCalculations.ts
 import { describe, it, expect } from 'vitest';
-import { calculateDailyDrawdown, calculatePositionSize, calculateRiskRewardRatio } from '../lib/riskCalculations';
+import {
+  calculateDailyDrawdown,
+  calculatePositionSize,
+  calculateRiskRewardRatio,
+} from '../lib/riskCalculations';
 
 describe('riskCalculations', () => {
   describe('calculateDailyDrawdown', () => {

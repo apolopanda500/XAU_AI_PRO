@@ -13,9 +13,9 @@
 O documento da manhã registrou 3 workflows vermelhos e corrigiu 1 deles. Ao
 medir o estado real, `gh run list` mostrou outra coisa:
 
-| Situação | O que a medição mostrou |
-|---|---|
-| `CI` nos 3 últimos pushes | **verde** |
+| Situação                                      | O que a medição mostrou |
+| --------------------------------------------- | ----------------------- |
+| `CI` nos 3 últimos pushes                     | **verde**               |
 | `Manutencao Automatica Segura` (hoje, 14:45Z) | **vermelho — e é novo** |
 
 Ou seja: o defeito que a manhã fechou já estava verde, e apareceu um que
@@ -44,10 +44,10 @@ robocopy "%ROOT%\Python\models" "%ROOT%\frontend\src-tauri\Python\models" /MIR .
 
 `/MIR` **espelha**: apaga no destino tudo que não está na origem. E:
 
-| Pasta | Conteúdo medido em 03/10/2026 |
-|---|---|
-| `Python\models` (origem, raiz) | 72 arquivos, **zero `MULTI_*`** |
-| `frontend\src-tauri\Python\models` (destino) | 36 `.pkl` e **zero `MULTI_*`** |
+| Pasta                                        | Conteúdo medido em 03/10/2026   |
+| -------------------------------------------- | ------------------------------- |
+| `Python\models` (origem, raiz)               | 72 arquivos, **zero `MULTI_*`** |
+| `frontend\src-tauri\Python\models` (destino) | 36 `.pkl` e **zero `MULTI_*`**  |
 
 Os três modelos são publicados por `train_multi.MODELOS_DIR` (linha 80) em
 `frontend\src-tauri\Python\models` — **o próprio destino do comando**. A origem
@@ -75,15 +75,16 @@ código 0.
    com mensagem que diz o que treinar e onde restaurar.
 3. **3 testes novos** em `tests/test_spec_gateway.py` que leem o `build_app.bat`
    como texto e valem em qualquer checkout.
+
 ### A prova
 
-| Cenário | Resultado |
-|---|---|
-| Trava sem os 3 modelos | `EXIT=1`, mensagem de erro |
-| Trava com os 3 modelos | `EXIT=0`, "Modelos MULTI presentes no destino: OK." |
-| Trava com `.pkl` e sem `.meta.json` | `EXIT=1` — o caso parcial também é pego |
-| `test_governanca_multi.py` antes da restauração | 25 `skip` por artefato ausente |
-| `test_governanca_multi.py` **depois** | **30 passed** |
+| Cenário                                         | Resultado                                           |
+| ----------------------------------------------- | --------------------------------------------------- |
+| Trava sem os 3 modelos                          | `EXIT=1`, mensagem de erro                          |
+| Trava com os 3 modelos                          | `EXIT=0`, "Modelos MULTI presentes no destino: OK." |
+| Trava com `.pkl` e sem `.meta.json`             | `EXIT=1` — o caso parcial também é pego             |
+| `test_governanca_multi.py` antes da restauração | 25 `skip` por artefato ausente                      |
+| `test_governanca_multi.py` **depois**           | **30 passed**                                       |
 
 Os 3 modelos foram restaurados de `frontend\src-tauri\bridge\_internal\Python\models`
 para a pasta de origem.
@@ -122,13 +123,13 @@ fastapi / uvicorn     # requirements-ci.txt na develop
 E mesmo assim falha. Porque **o workflow agendado do GitHub usa a versão do
 YAML que está na branch default**, e a branch default do repositório é `main`:
 
-| Verificação | Resultado |
-|---|---|
-| `gh repo view --json defaultBranchRef` | **`main`** |
-| `maintenance.yml` em `origin/main` tem `ref: develop`? | **0 ocorrências** |
-| `maintenance.yml` em `origin/develop` tem `ref: develop`? | 1 ocorrência |
-| `requirements-ci.txt` em `origin/main` tem `fastapi`? | **não** |
-| `develop` à frente de `main` | **53 commits** |
+| Verificação                                               | Resultado         |
+| --------------------------------------------------------- | ----------------- |
+| `gh repo view --json defaultBranchRef`                    | **`main`**        |
+| `maintenance.yml` em `origin/main` tem `ref: develop`?    | **0 ocorrências** |
+| `maintenance.yml` em `origin/develop` tem `ref: develop`? | 1 ocorrência      |
+| `requirements-ci.txt` em `origin/main` tem `fastapi`?     | **não**           |
+| `develop` à frente de `main`                              | **53 commits**    |
 
 O `ref: develop` foi escrito na `develop` — e a `develop` é justamente a branch
 que o agendamento **não lê**. Enquanto `main` estiver 53 commits atrás, a
@@ -157,8 +158,8 @@ próprio dono consegue lê-la — `Get-Acl` responde `UnauthorizedAccessExceptio
 Não é defeito do produto: é o cache temporário padrão do pytest nesta máquina.
 
 `scripts\limpeza_segura.ps1` **já registra isso**, na seção "LIMITACAO HONESTA"
-da função `Resolve-Icacls`: *"NÃO resolve o `.pytest_cache` desta máquina: lá nem
-o próprio dono consegue ler a pasta, e só o shell elevado reverte."*
+da função `Resolve-Icacls`: _"NÃO resolve o `.pytest_cache` desta máquina: lá nem
+o próprio dono consegue ler a pasta, e só o shell elevado reverte."_
 
 ### A correção
 
@@ -167,34 +168,35 @@ o próprio dono consegue ler a pasta, e só o shell elevado reverte."*
 ```ini
 addopts = -ra --basetemp=Temp/pytest-basetemp
 ```
+
 ---
 
 ## 5. O que mudou nesta sessão
 
-| Arquivo | Mudança |
-|---|---|
-| `scripts/build_app.bat` | `/MIR` → `/E` na linha dos modelos; trava de artefato dos 3 MULTI |
-| `tests/test_spec_gateway.py` | 3 testes novos que travam o defeito 1 |
-| `pytest.ini` | `--basetemp` dentro do repositório |
-| `Docs/SESSAO_20261003_CI_VERMELHO_E_LEITURA_DOCS.md` | documento da manhã (não commitado) |
-| `Docs/SESSAO_20261002_MODELOS_MULTI_E_SEGURANCA.md` | §7.2/7.3 da sessão anterior (não commitadas) |
+| Arquivo                                              | Mudança                                                           |
+| ---------------------------------------------------- | ----------------------------------------------------------------- |
+| `scripts/build_app.bat`                              | `/MIR` → `/E` na linha dos modelos; trava de artefato dos 3 MULTI |
+| `tests/test_spec_gateway.py`                         | 3 testes novos que travam o defeito 1                             |
+| `pytest.ini`                                         | `--basetemp` dentro do repositório                                |
+| `Docs/SESSAO_20261003_CI_VERMELHO_E_LEITURA_DOCS.md` | documento da manhã (não commitado)                                |
+| `Docs/SESSAO_20261002_MODELOS_MULTI_E_SEGURANCA.md`  | §7.2/7.3 da sessão anterior (não commitadas)                      |
 
 ## 6. Estado medido ao fim
 
-| Camada | Resultado |
-|---|---|
-| pytest | **833 passed, 0 errors** |
-| MODELOS MULTI na origem | **3 restaurados** (174 MB) |
-| MQL5 | intocado |
-| Build | **não executado** — `PLANO_MESTRE_20261002.md`: nenhum build enquanto houver correção pendente |
+| Camada                  | Resultado                                                                                      |
+| ----------------------- | ---------------------------------------------------------------------------------------------- |
+| pytest                  | **833 passed, 0 errors**                                                                       |
+| MODELOS MULTI na origem | **3 restaurados** (174 MB)                                                                     |
+| MQL5                    | intocado                                                                                       |
+| Build                   | **não executado** — `PLANO_MESTRE_20261002.md`: nenhum build enquanto houver correção pendente |
 
 ## 7. O que ficou em aberto
 
-| Pendência | Por quê |
-|---|---|
-| **Merge de `develop` em `main`** | Dispara deploy de produção na Vercel. Decisão do dono. Enquanto isso, o cron das 10:17 UTC continua falhando. |
-| `Dependency Audit` (6 `high` sem patch) | Já registrado na sessão da manhã. Sem correção upstream. |
-| Super-Linter `quality` | Já registrado. Escolha de linters é decisão do dono. |
+| Pendência                               | Por quê                                                                                                       |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| **Merge de `develop` em `main`**        | Dispara deploy de produção na Vercel. Decisão do dono. Enquanto isso, o cron das 10:17 UTC continua falhando. |
+| `Dependency Audit` (6 `high` sem patch) | Já registrado na sessão da manhã. Sem correção upstream.                                                      |
+| Super-Linter `quality`                  | Já registrado. Escolha de linters é decisão do dono.                                                          |
 
 ## 8. A regra que este ciclo confirma — e o lugar onde ela falhou
 
@@ -217,20 +219,19 @@ eram o mesmo defeito automático, visto três vezes.
 
 ### A prova
 
-| Comando | Resultado |
-|---|---|
-| `pytest -q tests` (antes) | 606 passed, 25 skipped, **199 errors** (192 s) |
-| `pytest -q tests` (depois) | **833 passed, 0 errors** (111 s) |
+| Comando                    | Resultado                                      |
+| -------------------------- | ---------------------------------------------- |
+| `pytest -q tests` (antes)  | 606 passed, 25 skipped, **199 errors** (192 s) |
+| `pytest -q tests` (depois) | **833 passed, 0 errors** (111 s)               |
 
 Não há argumento extra: **é o comando exato do `AGENTS.md`**.
 
 ### Duas leituras erradas no caminho
 
-| O que fiz | Por que errou |
-|---|---|
+| O que fiz                                                        | Por que errou                                                                                                                                                                                                               |
+| ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `basetemp = Temp/pytest-basetemp` como chave solta do `[pytest]` | O pytest **9.1.1 aceita sem erro e ignora**. Continua dizendo `configfile: pytest.ini`, continua usando o `%TEMP%`, e emite `PytestConfigWarning: Unknown config option: basetemp`. Só a flag de linha de comando funciona. |
-| Contar `(` e `)` no `.bat` para validar sintaxe | Deu `abre=27 fecha=27` e **não prova nada**: o `echo "modelos nao carregam"` tem parênteses que não são bloco. O que validou foi **executar os 3 cenários**. |
-
+| Contar `(` e `)` no `.bat` para validar sintaxe                  | Deu `abre=27 fecha=27` e **não prova nada**: o `echo "modelos nao carregam"` tem parênteses que não são bloco. O que validou foi **executar os 3 cenários**.                                                                |
 
 Resolver exige **merge de `develop` em `main`**. Isso é decisão do dono:
 `main` é a branch de release, `deploy.yml` linha 75 faz **deploy de produção
@@ -247,11 +248,7 @@ imagem. Um merge não é uma correção de código — é uma mudança de branch
 > ⚠️ A alternativa "ligar o workflow em `main`" produziria um cron **verde por
 > engano**: pareceria resolvido e não estaria.
 
-
-
-
-
 ---
 
-*Documento de sessão. O estado do sistema são as políticas técnicas; a
-precedência de leitura permanece em `SESSAO_20261003_CI_VERMELHO_E_LEITURA_DOCS.md`.*
+_Documento de sessão. O estado do sistema são as políticas técnicas; a
+precedência de leitura permanece em `SESSAO_20261003_CI_VERMELHO_E_LEITURA_DOCS.md`._

@@ -37,16 +37,30 @@ const MERCADOS: Record<Broker, readonly string[]> = {
  * backend ignora) ou nunca apareceria (quebrando OKX).
  */
 const EXIGE_PASSPHRASE: Record<Broker, boolean> = {
-  mt5: false, binance: false, mexc: false, bybit: false, okx: true,
+  mt5: false,
+  binance: false,
+  mexc: false,
+  bybit: false,
+  okx: true,
 };
 
 export const EXCHANGES: readonly Exchange[] = ['binance', 'mexc', 'bybit', 'okx'];
 
 export const ROTULO_BROKER: Record<Broker, string> = {
-  mt5: 'MT5', binance: 'Binance', mexc: 'MEXC', bybit: 'Bybit', okx: 'OKX',
+  mt5: 'MT5',
+  binance: 'Binance',
+  mexc: 'MEXC',
+  bybit: 'Bybit',
+  okx: 'OKX',
 };
 
-export type Connection = { id: string; broker: string; market: string; configured?: boolean; active?: boolean };
+export type Connection = {
+  id: string;
+  broker: string;
+  market: string;
+  configured?: boolean;
+  active?: boolean;
+};
 export type TerminalAccount = { login: number; server: string; name?: string };
 
 export const marketsFor = (broker: Broker): readonly string[] => MERCADOS[broker] ?? [];
@@ -57,21 +71,26 @@ export function isExchange(broker: Broker): broker is Exchange {
   return broker !== 'mt5';
 }
 
-
 export async function requestConnection(path: string, method = 'GET', payload?: object) {
   const response = await fetch(`${API}${path}`, {
-    method, signal: AbortSignal.timeout(20000),
-    ...(payload ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) } : {}),
+    method,
+    signal: AbortSignal.timeout(20000),
+    ...(payload
+      ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }
+      : {}),
   });
   const data = await response.json();
-  if (!response.ok || data.ok !== true) throw new Error(data.error || 'Não foi possível validar a conexão.');
+  if (!response.ok || data.ok !== true)
+    throw new Error(data.error || 'Não foi possível validar a conexão.');
   return data;
 }
 
 export async function detectTerminal(): Promise<TerminalAccount> {
   const data = await requestConnection('/api/status');
   if (data.terminal_connected !== true || !data.account?.login || !data.account?.server) {
-    throw new Error('Abra o MetaTrader 5 e entre na conta pelo terminal. Depois clique em Sincronizar MT5.');
+    throw new Error(
+      'Abra o MetaTrader 5 e entre na conta pelo terminal. Depois clique em Sincronizar MT5.',
+    );
   }
   return { login: data.account.login, server: data.account.server, name: data.account.name };
 }
@@ -106,10 +125,11 @@ export async function saveExchange(
   secret: string,
   passphrase = '',
 ): Promise<string> {
-  if (!marketsFor(broker).includes(market)) throw new Error('Mercado incompatível com a corretora.');
+  if (!marketsFor(broker).includes(market))
+    throw new Error('Mercado incompatível com a corretora.');
   if (!name.trim()) throw new Error('Dê um nome à conexão.');
   const precisaCredencial = isExchange(broker);
-  if (precisaCredencial && ![key, secret].every(value => value.trim())) {
+  if (precisaCredencial && ![key, secret].every((value) => value.trim())) {
     throw new Error(`${ROTULO_BROKER[broker]}: informe API key e secret.`);
   }
   if (exigePassphrase(broker) && !passphrase.trim()) {
@@ -117,7 +137,9 @@ export async function saveExchange(
   }
   const id = `${broker}:${market}:${name.trim()}`;
   await requestConnection('/api/connections', 'POST', {
-    id, broker, market,
+    id,
+    broker,
+    market,
     // Corretora de sessao nao recebe segredo nenhum: gravar vazio no DPAPI
     // seria guardar um segredo que nao existe.
     ...(precisaCredencial ? { api_key: key.trim(), api_secret: secret.trim() } : {}),

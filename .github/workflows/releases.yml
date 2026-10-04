@@ -17,7 +17,7 @@ name: Releases (draft mensal)
   workflow_dispatch:
 
 permissions:
-  contents: write   # criar releases (mensal)
+  contents: write # criar releases (mensal)
 
 jobs:
   monthly-release-draft:
@@ -29,12 +29,12 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ github.token }}
-      
+
       - name: Configurar Git
         run: |
           git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions"
-      
+
       - name: Montar release draft a partir do CHANGELOG
         env:
           GH_TOKEN: ${{ github.token }}

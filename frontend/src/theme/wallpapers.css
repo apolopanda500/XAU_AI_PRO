@@ -8,7 +8,7 @@
 }
 
 .wallpaper-xau::before {
-  content: "";
+  content: '';
   position: fixed;
   inset: 0;
   background-image:
@@ -18,15 +18,25 @@
     radial-gradient(2px 2px at 80% 60%, rgba(255, 215, 0, 0.3), transparent),
     radial-gradient(1px 1px at 10% 80%, rgba(255, 180, 0, 0.4), transparent),
     radial-gradient(1px 1px at 90% 40%, rgba(255, 200, 0, 0.5), transparent);
-  background-size: 200px 200px, 150px 150px, 180px 180px, 220px 220px, 160px 160px, 190px 190px;
+  background-size:
+    200px 200px,
+    150px 150px,
+    180px 180px,
+    220px 220px,
+    160px 160px,
+    190px 190px;
   animation: xau-particles 20s linear infinite;
   pointer-events: none;
   z-index: 0;
 }
 
 @keyframes xau-particles {
-  0% { transform: translateY(0); }
-  100% { transform: translateY(-200px); }
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(-200px);
+  }
 }
 
 /* Wallpaper BTC — Laranja/Preto */
@@ -38,7 +48,7 @@
 }
 
 .wallpaper-btc::before {
-  content: "";
+  content: '';
   position: fixed;
   inset: 0;
   background-image:
@@ -46,15 +56,23 @@
     radial-gradient(1px 1px at 50% 65%, rgba(255, 69, 0, 0.4), transparent),
     radial-gradient(2px 2px at 75% 25%, rgba(255, 140, 0, 0.5), transparent),
     radial-gradient(1px 1px at 15% 75%, rgba(255, 99, 0, 0.4), transparent);
-  background-size: 180px 180px, 200px 200px, 160px 160px, 220px 220px;
+  background-size:
+    180px 180px,
+    200px 200px,
+    160px 160px,
+    220px 220px;
   animation: btc-particles 25s linear infinite;
   pointer-events: none;
   z-index: 0;
 }
 
 @keyframes btc-particles {
-  0% { transform: translateX(0); }
-  100% { transform: translateX(-180px); }
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-180px);
+  }
 }
 
 /* Wallpaper Quantum — Roxo/Azul */
@@ -66,7 +84,7 @@
 }
 
 .wallpaper-quantum::before {
-  content: "";
+  content: '';
   position: fixed;
   inset: 0;
   background-image:
@@ -75,14 +93,25 @@
     radial-gradient(2px 2px at 80% 30%, rgba(138, 43, 226, 0.4), transparent),
     radial-gradient(1px 1px at 40% 85%, rgba(0, 200, 255, 0.4), transparent),
     radial-gradient(1px 1px at 15% 55%, rgba(160, 80, 255, 0.5), transparent);
-  background-size: 250px 250px, 200px 200px, 180px 180px, 220px 220px, 190px 190px;
+  background-size:
+    250px 250px,
+    200px 200px,
+    180px 180px,
+    220px 220px,
+    190px 190px;
   animation: quantum-particles 30s linear infinite;
   pointer-events: none;
   z-index: 0;
 }
 
 @keyframes quantum-particles {
-  0% { transform: translateY(0) translateX(0); }
-  50% { transform: translateY(-100px) translateX(50px); }
-  100% { transform: translateY(-200px) translateX(0); }
+  0% {
+    transform: translateY(0) translateX(0);
+  }
+  50% {
+    transform: translateY(-100px) translateX(50px);
+  }
+  100% {
+    transform: translateY(-200px) translateX(0);
+  }
 }

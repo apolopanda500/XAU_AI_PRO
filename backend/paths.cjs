@@ -11,7 +11,7 @@ function dataCandidates() {
 
 function resolveDataDir() {
   const candidates = dataCandidates();
-  return candidates.find(candidate => fs.existsSync(candidate)) || candidates[0];
+  return candidates.find((candidate) => fs.existsSync(candidate)) || candidates[0];
 }
 
 module.exports = { resolveDataDir };

@@ -15,7 +15,9 @@ export const MAX_SUBSCRIBE_SYMBOLS = 24;
 export function normalizeSymbols(symbols: readonly unknown[]): string[] {
   const seen = new Set<string>();
   for (const value of symbols) {
-    const symbol = String(value ?? '').trim().toUpperCase();
+    const symbol = String(value ?? '')
+      .trim()
+      .toUpperCase();
     if (!symbol || symbol.length > 40 || /\s/.test(symbol)) continue;
     seen.add(symbol);
     if (seen.size >= MAX_SUBSCRIBE_SYMBOLS) break;

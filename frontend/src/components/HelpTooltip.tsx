@@ -10,11 +10,11 @@ interface HelpTooltipProps {
   className?: string;
 }
 
-export function HelpTooltip({ 
-  text, 
-  children, 
+export function HelpTooltip({
+  text,
+  children,
   position = 'top',
-  className = '' 
+  className = '',
 }: HelpTooltipProps) {
   const positionStyle = {
     top: 'bottom: 100%; left: 50%; transform: translateX(-50%);',
@@ -26,12 +26,9 @@ export function HelpTooltip({
   return (
     <span className={`help-tooltip ${className}`}>
       {children}
-      <span 
-        className="help-tooltip-icon" 
-        style={{ position: 'relative' }}
-      >
+      <span className="help-tooltip-icon" style={{ position: 'relative' }}>
         ?
-        <span 
+        <span
           className="help-tooltip-text"
           style={{
             position: 'absolute',

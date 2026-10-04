@@ -15,13 +15,14 @@
 }
 
 .mini-info-widget::before {
-  content: "";
+  content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, 
-    var(--quantum-glow-soft) 0%, 
-    transparent 30%, 
-    transparent 70%, 
+  background: linear-gradient(
+    90deg,
+    var(--quantum-glow-soft) 0%,
+    transparent 30%,
+    transparent 70%,
     var(--quantum-glow-soft) 100%
   );
   pointer-events: none;
@@ -148,9 +149,15 @@
   border-radius: 3px;
 }
 
-.mini-temp.ok { color: #22c55e; }
-.mini-temp.warn { color: #f59e0b; }
-.mini-temp.danger { color: #ef4444; }
+.mini-temp.ok {
+  color: #22c55e;
+}
+.mini-temp.warn {
+  color: #f59e0b;
+}
+.mini-temp.danger {
+  color: #ef4444;
+}
 
 .mini-leds {
   display: flex;
@@ -171,6 +178,11 @@
 }
 
 @keyframes mini-led-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
 }

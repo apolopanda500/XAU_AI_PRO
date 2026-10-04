@@ -106,18 +106,18 @@ export interface EstadoCarregamento<T> {
  * Mapeamento de cores por impacto
  */
 export const CORES_IMPACTO: Record<ImpactLevel, string> = {
-  baixo: '#6b7280',   // Cinza
-  medio: '#eab308',   // Amarelo
-  alto: '#ef4444',    // Vermelho
+  baixo: '#6b7280', // Cinza
+  medio: '#eab308', // Amarelo
+  alto: '#ef4444', // Vermelho
 };
 
 /**
  * Mapeamento de cores por impacto de mercado (notícias)
  */
 export const CORES_IMPACTO_MERCADO: Record<MarketImpact, string> = {
-  bullish: '#22c55e',   // Verde (alta)
-  bearish: '#ef4444',   // Vermelho (baixa)
-  neutral: '#6b7280',   // Cinza
+  bullish: '#22c55e', // Verde (alta)
+  bearish: '#ef4444', // Vermelho (baixa)
+  neutral: '#6b7280', // Cinza
 };
 
 /**

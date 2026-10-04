@@ -36,13 +36,13 @@ PC/VPS do trader; o app Android consome o gateway por HTTPS/WSS com token.
 
 ## Pré-requisitos Android (máquina de build)
 
-| Requisito | Status |
-|---|---|
-| Android SDK (`ANDROID_HOME`) | ✅ `C:\Users\Micro\AppData\Local\Android\Sdk` |
-| JDK 17+ | ✅ JBR do Android Studio (OpenJDK 25) |
-| Targets Rust android (4 ABIs) | ✅ |
-| NDK (`ndk;26.x`) via `sdkmanager` | ⚠️ instalar se ausente |
-| `JAVA_HOME` apontando para o JBR | ⚠️ setar por sessão (ver abaixo) |
+| Requisito                         | Status                                        |
+| --------------------------------- | --------------------------------------------- |
+| Android SDK (`ANDROID_HOME`)      | ✅ `C:\Users\Micro\AppData\Local\Android\Sdk` |
+| JDK 17+                           | ✅ JBR do Android Studio (OpenJDK 25)         |
+| Targets Rust android (4 ABIs)     | ✅                                            |
+| NDK (`ndk;26.x`) via `sdkmanager` | ⚠️ instalar se ausente                        |
+| `JAVA_HOME` apontando para o JBR  | ⚠️ setar por sessão (ver abaixo)              |
 
 ## Passo a passo do build Android (quando o backend remoto estiver no ar)
 
@@ -68,6 +68,7 @@ npx tauri android build         # gera .aab + .apk assinados
 ```
 
 Assinatura (uma vez):
+
 ```powershell
 keytool -genkey -v -keystore xau-ai-pro.keystore -alias xauaipro -keyalg RSA -keysize 2048 -validity 10000
 ```

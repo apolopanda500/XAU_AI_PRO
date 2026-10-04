@@ -15,7 +15,10 @@ export const STALE_AFTER_MS = 15_000;
 
 export function formatNumber(value: number | null | undefined, digits = 2): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return '—';
-  return value.toLocaleString('pt-BR', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  return value.toLocaleString('pt-BR', {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
 }
 
 export function formatSigned(value: number | null | undefined, digits = 2): string {

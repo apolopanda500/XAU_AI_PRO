@@ -8,16 +8,16 @@
 
 ## 1. O que foi pedido (na ordem em que chegou)
 
-| # | Pedido | Onde ficou |
-|---|---|---|
-| 1 | VIP com metas: operou volume **ou** comprou US$ 100 | `backend/metas_vip.py` + `backend/acesso.py` |
-| 2 | Free **nunca** usa multi; PRO usa | `_PLAN_CATALOG["free"]` + `acesso.pode_usar_multi_modelo()` |
-| 3 | Nenhum ativo/corretora fixo em código | `backend/exchange_symbols.py`, `asset_classes.py` |
-| 4 | Um modelo MULTI por classe, **todos os timeframes** | `Python/ai/train_multi.py` |
-| 5 | Nomes de modelo limpos, sem `_H1` na tela | `ai_inference.rotulo_modelo()` |
-| 6 | Corretoras com pares normalizados (USDT/USDC/USD) | `backend/exchange_symbols.py` |
-| 7 | Credenciais limpas, projeto seguro | `.gitignore` + 3 workflows com gitleaks |
-| 8 | Testes + validação final + commit/push | `829 passed`, `8c5f197` |
+| #   | Pedido                                              | Onde ficou                                                  |
+| --- | --------------------------------------------------- | ----------------------------------------------------------- |
+| 1   | VIP com metas: operou volume **ou** comprou US$ 100 | `backend/metas_vip.py` + `backend/acesso.py`                |
+| 2   | Free **nunca** usa multi; PRO usa                   | `_PLAN_CATALOG["free"]` + `acesso.pode_usar_multi_modelo()` |
+| 3   | Nenhum ativo/corretora fixo em código               | `backend/exchange_symbols.py`, `asset_classes.py`           |
+| 4   | Um modelo MULTI por classe, **todos os timeframes** | `Python/ai/train_multi.py`                                  |
+| 5   | Nomes de modelo limpos, sem `_H1` na tela           | `ai_inference.rotulo_modelo()`                              |
+| 6   | Corretoras com pares normalizados (USDT/USDC/USD)   | `backend/exchange_symbols.py`                               |
+| 7   | Credenciais limpas, projeto seguro                  | `.gitignore` + 3 workflows com gitleaks                     |
+| 8   | Testes + validação final + commit/push              | `829 passed`, `8c5f197`                                     |
 
 ---
 
@@ -37,10 +37,10 @@ nenhum** — o build passava limpo.
 
 A correcao tem dois caminhos e **o segundo e o que quebrava**:
 
-| Caminho | Existe? | Contem MULTI? |
-|---|---|---|
-| `Python/models` (raiz) | sim, 72 arquivos | **nao** |
-| `frontend/src-tauri/Python/models` | sim | **sim, os 3** |
+| Caminho                            | Existe?          | Contem MULTI? |
+| ---------------------------------- | ---------------- | ------------- |
+| `Python/models` (raiz)             | sim, 72 arquivos | **nao**       |
+| `frontend/src-tauri/Python/models` | sim              | **sim, os 3** |
 
 `train_multi.MODELOS_DIR` (linha 79) publica na **segunda**. Apontar o `.spec`
 para a primeira compilaria sem erro e entregaria um instalador vazio de
@@ -73,11 +73,11 @@ numero exato da mensagem de erro.
 
 Tres hipoteses erradas antes da causa:
 
-| Hipotese | Por que estava errada |
-|---|---|
-| "Falta de memoria" | Era, mas nao por acumulo. `gc.collect()` nao mudou nada — mesmo 542 MiB, mesmo 71028348. |
-| "O `replace([inf,-inf], nan)` copia a base" | Custo real, mas nao a causa do estouro. |
-| "O encoding do dataset esta errado" | O `detectar_encoding` errava mesmo (ver 2.2c), mas corrigido o encoding os anos continuavam em 1 — **o defeito era o dado, nao a leitura.** |
+| Hipotese                                    | Por que estava errada                                                                                                                       |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| "Falta de memoria"                          | Era, mas nao por acumulo. `gc.collect()` nao mudou nada — mesmo 542 MiB, mesmo 71028348.                                                    |
+| "O `replace([inf,-inf], nan)` copia a base" | Custo real, mas nao a causa do estouro.                                                                                                     |
+| "O encoding do dataset esta errado"         | O `detectar_encoding` errava mesmo (ver 2.2c), mas corrigido o encoding os anos continuavam em 1 — **o defeito era o dado, nao a leitura.** |
 
 Encadeamento:
 
@@ -101,6 +101,7 @@ limpos ela declarava UTF-16 sem ser.
 
 Agora: BOM manda; sem BOM, a **tentativa de decodificar** e a prova (o primeiro
 campo de um CSV de mercado comeca com data).
+
 ### 2.3 Features nao estacionarias tornam MULTI impossivel
 
 `FEATURES` comeca com preco absoluto. XAUUSD ≈ 2000, EURUSD ≈ 1,08. Um modelo
@@ -133,11 +134,11 @@ defeito era o teste. Agora injeta o Free explicitamente via `monkeypatch`.
 
 ## 3. Os 3 modelos publicados
 
-| Modelo | Simbolos | Edge | Folds | Estavel |
-|---|---|---|---|---|
-| `MULTI_CRYPTO` | BTC, DOGE, ETH, SOL, XRP | **+0,0594** | 5/5 positivos | sim |
-| `MULTI_FIAT` | 10 pares | **+0,0566** | 5/5 | sim |
-| `MULTI_METALS` | XAU, XAG | **+0,0626** | 5/5 | sim |
+| Modelo         | Simbolos                 | Edge        | Folds         | Estavel |
+| -------------- | ------------------------ | ----------- | ------------- | ------- |
+| `MULTI_CRYPTO` | BTC, DOGE, ETH, SOL, XRP | **+0,0594** | 5/5 positivos | sim     |
+| `MULTI_FIAT`   | 10 pares                 | **+0,0566** | 5/5           | sim     |
+| `MULTI_METALS` | XAU, XAG                 | **+0,0626** | 5/5           | sim     |
 
 Todos com `publicable=true`, `live_execution=false`, `withdrawals_enabled=false`.
 Folds em **expanding window** (`train` cresce de fold em fold) — sem isso o
@@ -149,11 +150,11 @@ walk-forward testaria no passado e o edge seria mentira.
 
 **Nenhuma credencial estava exposta.** Isso foi verificado, nao assumido:
 
-| Verificacao | Resultado |
-|---|---|
-| `.env`, `.env.local`, `.env.mexc.local`, `.env.binance.local` | todos ignorados |
-| Historico completo (`git log --all`) | so `.env.example` foi commitado |
-| Segredos em codigo rastreado | nenhum (so SHA-256 e hash de commit) |
+| Verificacao                                                   | Resultado                            |
+| ------------------------------------------------------------- | ------------------------------------ |
+| `.env`, `.env.local`, `.env.mexc.local`, `.env.binance.local` | todos ignorados                      |
+| Historico completo (`git log --all`)                          | so `.env.example` foi commitado      |
+| Segredos em codigo rastreado                                  | nenhum (so SHA-256 e hash de commit) |
 
 **Correcoes aplicadas:**
 
@@ -198,14 +199,14 @@ so para pintar o CI de verde seria esconder defeito.
 
 ## 6. Estado ao fim do ciclo
 
-| Camada | Resultado |
-|---|---|
-| pytest | **829 passed** |
-| vitest | **189 passed** |
-| tsc --noEmit | exit 0 |
-| eslint | exit 0 |
-| preflight | EXIT=0 |
-| MQL5 | intacto |
+| Camada       | Resultado      |
+| ------------ | -------------- |
+| pytest       | **829 passed** |
+| vitest       | **189 passed** |
+| tsc --noEmit | exit 0         |
+| eslint       | exit 0         |
+| preflight    | EXIT=0         |
+| MQL5         | intacto        |
 
 Commits: `003060f` (ci/seguranca) · `8c5f197` (bundle + governanca MULTI).
 GitHub e GitLab sincronizados em `8c5f197`.
@@ -243,15 +244,16 @@ que era cache regeneravel. O `tauri.conf.json` aponta `frontendDist` para
 
 Duas leituras erradas minhas no mesmo minuto, que valem registrar:
 
-| O que eu fiz | Por que errou |
-|---|---|
-| Apaguei `frontend/dist` para liberar disco | `frontendDist` do Tauri le essa pasta. **Nao e cache: e entrada do build.** |
+| O que eu fiz                                                | Por que errou                                                                                                                           |
+| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Apaguei `frontend/dist` para liberar disco                  | `frontendDist` do Tauri le essa pasta. **Nao e cache: e entrada do build.**                                                             |
 | Quase apaguei `dist/mt5-gateway` achando que era redundante | o `robocopy` do passo [6/7] põe o exe em `bridge/mt5-gateway.exe` (raiz), nao em `bridge/mt5-gateway/`. **Verifiquei antes de apagar.** |
 
 O que salvou o segundo foi ter conferido `Test-Path
 'frontend\src-tauri\bridge\mt5-gateway.exe'` antes do `Remove-Item`. Um `-Force`
 sem verificacao teria custado os 3 modelos e o gateway inteiro, e o build
 ainda teria passado adiante.
+
 ### 7.2 O mesmo defeito aconteceu TRES vezes — e o registro e o que quebra o ciclo
 
 O `robocopy /MIR` do passo [6/7] espelha `dist/mt5-gateway` em
@@ -261,15 +263,15 @@ O `robocopy /MIR` do passo [6/7] espelha `dist/mt5-gateway` em
 
 Foi o que aconteceu **tres vezes neste ciclo**:
 
-| Build | Como os modelos sumiram |
-|---|---|
-| 1 | `.spec` sem `datas` — nunca chegaram ao `dist` |
-| 2 | removi `dist/` manualmente para liberar disco, antes do [6/7] |
-| 3 | mesma remocao, durante o build em andamento |
+| Build | Como os modelos sumiram                                       |
+| ----- | ------------------------------------------------------------- |
+| 1     | `.spec` sem `datas` — nunca chegaram ao `dist`                |
+| 2     | removi `dist/` manualmente para liberar disco, antes do [6/7] |
+| 3     | mesma remocao, durante o build em andamento                   |
 
 Nas tres o sintoma era identico e enganoso: **o build passava limpo**. O
 `bridge/` ficava com 36 `.pkl` (os unitarios) e zero `MULTI_*`, e o app
-instalado diria *"modelos nao carregam"* sem nenhuma excecao.
+instalado diria _"modelos nao carregam"_ sem nenhuma excecao.
 
 **O que quebra o ciclo e ter o nome do sintoma escrito no doc.** Sem o
 registro, a terceira ocorrencia teria sido tratada como um problema novo e
@@ -301,10 +303,11 @@ cache.
 ⚠️ **Limite declarado:** o gate exige 5.000 linhas por simbolo. `XAGUSD` (945)
 e `USDBRL` (194) ficam fora por volume insuficiente. `INDICES` nao tem dado
 nenhum — ficou registrado como pendencia, nao inventado.
-| | Antes (leitura errada) | Depois |
-|---|---|---|
-| Linhas | 0 | **676.732** |
-| Simbolos | 0 | **17** |
+
+|          | Antes (leitura errada) | Depois      |
+| -------- | ---------------------- | ----------- |
+| Linhas   | 0                      | **676.732** |
+| Simbolos | 0                      | **17**      |
 
 O CSV tambem tem **11 campos, nao 15**. O filtro de largura descartava tudo —
 da a leitura "sem dados" com 85 MB na mesa.

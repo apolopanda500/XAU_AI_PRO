@@ -12,7 +12,9 @@ function stubWindowWithStorage(storage: FakeStorage | undefined, userAgent = '')
   vi.stubGlobal('navigator', { userAgent });
 }
 
-afterEach(() => { vi.unstubAllGlobals(); });
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe('isMobileRuntime', () => {
   it('detecta Android pelo user agent', () => {
@@ -33,17 +35,25 @@ describe('apiBase', () => {
   });
 
   it('override em runtime via localStorage (ajuste no app Android)', () => {
-    stubWindowWithStorage({ getItem: (k) => (k === 'xau-api-base' ? 'https://gateway.exemplo.com' : null) });
+    stubWindowWithStorage({
+      getItem: (k) => (k === 'xau-api-base' ? 'https://gateway.exemplo.com' : null),
+    });
     expect(apiBase()).toBe('https://gateway.exemplo.com');
   });
 
   it('não quebra se o storage lançar (modo privado/SSR)', () => {
-    stubWindowWithStorage({ getItem: () => { throw new Error('bloqueado'); } });
+    stubWindowWithStorage({
+      getItem: () => {
+        throw new Error('bloqueado');
+      },
+    });
     expect(apiBase()).toBe('http://127.0.0.1:9001');
   });
 
   it('prioridade: localStorage vence o fallback embutido', () => {
-    stubWindowWithStorage({ getItem: (k) => (k === 'xau-api-base' ? 'http://10.0.0.5:9001' : null) });
+    stubWindowWithStorage({
+      getItem: (k) => (k === 'xau-api-base' ? 'http://10.0.0.5:9001' : null),
+    });
     expect(apiBase()).toBe('http://10.0.0.5:9001');
   });
 
@@ -71,7 +81,9 @@ describe('wsUrl', () => {
   });
 
   it('override em runtime para wss remoto (Android)', () => {
-    stubWindowWithStorage({ getItem: (k) => (k === 'xau-ws-url' ? 'wss://mercado.exemplo.com/ws' : null) });
+    stubWindowWithStorage({
+      getItem: (k) => (k === 'xau-ws-url' ? 'wss://mercado.exemplo.com/ws' : null),
+    });
     expect(wsUrl()).toBe('wss://mercado.exemplo.com/ws');
   });
 });

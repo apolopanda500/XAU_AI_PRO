@@ -25,7 +25,7 @@ export function useCoreBootstrap() {
     if (!isTauri()) {
       setCoreStatus('fallback');
       console.warn(
-        '[Core] Ambiente sem Tauri detectado - inicie o core manualmente (core\\target\\release\\xau-ai-pro-core.exe)'
+        '[Core] Ambiente sem Tauri detectado - inicie o core manualmente (core\\target\\release\\xau-ai-pro-core.exe)',
       );
       return;
     }

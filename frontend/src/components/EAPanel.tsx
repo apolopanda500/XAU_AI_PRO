@@ -27,11 +27,7 @@
 import { useState, type ReactNode } from 'react';
 import { apiBase } from '../lib/api';
 import { notify } from '../lib/notify';
-import {
-  useEaRuntime,
-  useEaStatusDetail,
-  type EaDetailed,
-} from '../hooks/queries';
+import { useEaRuntime, useEaStatusDetail, type EaDetailed } from '../hooks/queries';
 
 type CmdResult = {
   ok?: boolean;
@@ -43,7 +39,10 @@ type CmdResult = {
 };
 
 const TIMEFRAMES = ['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1', 'W1'];
-const MODOS: Array<[string, string]> = [['auto', 'Automático'], ['manual', 'Manual']];
+const MODOS: Array<[string, string]> = [
+  ['auto', 'Automático'],
+  ['manual', 'Manual'],
+];
 
 const ESTADO_TOM: Record<string, 'ok' | 'warn' | 'neutral' | 'danger'> = {
   vivo: 'ok',
@@ -153,9 +152,8 @@ export default function EAPanel() {
       {!vivo && (
         <div className="xau-guard" role="status">
           <span>
-            Comandos de EA desativados: {motivo}. O gateway só encaminha comando com
-            heartbeat vivo — abra o gráfico no MetaTrader 5 com o EA anexado e
-            <code> ExpertEnable</code> ligado.
+            Comandos de EA desativados: {motivo}. O gateway só encaminha comando com heartbeat vivo
+            — abra o gráfico no MetaTrader 5 com o EA anexado e<code> ExpertEnable</code> ligado.
           </span>
         </div>
       )}
@@ -190,45 +188,67 @@ export default function EAPanel() {
         </div>
         <div className="field">
           <label htmlFor="ea-timeframe">Timeframe</label>
-          <select id="ea-timeframe" value={timeframe} onChange={(e) => setTimeframe(e.target.value)}>
-            {TIMEFRAMES.map((tf) => <option key={tf} value={tf}>{tf}</option>)}
+          <select
+            id="ea-timeframe"
+            value={timeframe}
+            onChange={(e) => setTimeframe(e.target.value)}
+          >
+            {TIMEFRAMES.map((tf) => (
+              <option key={tf} value={tf}>
+                {tf}
+              </option>
+            ))}
           </select>
         </div>
         <div className="field">
           <label htmlFor="ea-modo">Modo</label>
           <select id="ea-modo" value={modo} onChange={(e) => setModo(e.target.value)}>
-            {MODOS.map(([valor, rotulo]) => <option key={valor} value={valor}>{rotulo}</option>)}
+            {MODOS.map(([valor, rotulo]) => (
+              <option key={valor} value={valor}>
+                {rotulo}
+              </option>
+            ))}
           </select>
         </div>
       </div>
 
       <div className="btn-row" style={{ marginTop: 10, flexWrap: 'wrap' }}>
         <button
-          type="button" className="btn primary" disabled={bloqueado || !simbolo}
+          type="button"
+          className="btn primary"
+          disabled={bloqueado || !simbolo}
           onClick={() => void enviar('set-symbol', { symbol: simbolo, value: simbolo })}
         >
           Aplicar símbolo
         </button>
         <button
-          type="button" className="btn" disabled={bloqueado}
+          type="button"
+          className="btn"
+          disabled={bloqueado}
           onClick={() => void enviar('set-timeframe', { value: timeframe })}
         >
           Aplicar timeframe
         </button>
         <button
-          type="button" className="btn" disabled={bloqueado}
+          type="button"
+          className="btn"
+          disabled={bloqueado}
           onClick={() => void enviar('set-mode', { value: modo })}
         >
           Aplicar modo
         </button>
         <button
-          type="button" className="btn" disabled={bloqueado}
+          type="button"
+          className="btn"
+          disabled={bloqueado}
           onClick={() => void enviar('set-autotrading', { value: ea?.autotrading ? '0' : '1' })}
         >
           {ea?.autotrading ? 'Desligar auto-trading' : 'Ligar auto-trading'}
         </button>
         <button
-          type="button" className="btn ghost danger" disabled={bloqueado}
+          type="button"
+          className="btn ghost danger"
+          disabled={bloqueado}
           onClick={() => void enviar('close', { symbol: simbolo })}
           title="Fecha a posição do símbolo informado"
         >
@@ -249,14 +269,18 @@ export default function EAPanel() {
       {/* --------------------------------------------------------- inventário */}
       <div className="xau-section">Instalados no terminal</div>
 
-      {detalhe.isFetching && !linha && <div className="hint">Lendo a pasta de experts do terminal…</div>}
-      {linha?.error && <div className="hint warn" role="alert">{String(linha.error)}</div>}
+      {detalhe.isFetching && !linha && (
+        <div className="hint">Lendo a pasta de experts do terminal…</div>
+      )}
+      {linha?.error && (
+        <div className="hint warn" role="alert">
+          {String(linha.error)}
+        </div>
+      )}
 
       {!linha?.error && lista.length === 0 && !detalhe.isFetching && (
         <div className="placeholder" role="status">
-          <p className="hint">
-            Nenhum EA encontrado em {linha?.experts_dir ?? 'MQL5/Experts'}.
-          </p>
+          <p className="hint">Nenhum EA encontrado em {linha?.experts_dir ?? 'MQL5/Experts'}.</p>
         </div>
       )}
 
@@ -284,11 +308,11 @@ export default function EAPanel() {
                     <tr key={item.arquivo ?? item.nome}>
                       <td>{item.nome ?? '—'}</td>
                       <td className="muted">{item.arquivo ?? '—'}</td>
-                      <td><Chip tom={tom}>{rotulo}</Chip></td>
+                      <td>
+                        <Chip tom={tom}>{rotulo}</Chip>
+                      </td>
                       <td className="num">
-                        {item.no_journal
-                          ? `${item.ocorrencias_journal ?? 0}×`
-                          : '—'}
+                        {item.no_journal ? `${item.ocorrencias_journal ?? 0}×` : '—'}
                       </td>
                       <td>{item.tem_codigo_fonte ? '.mq5' : '—'}</td>
                       <td className="num muted">{item.hash_sha256_16 ?? '—'}</td>
@@ -303,16 +327,15 @@ export default function EAPanel() {
           </div>
           <div className="hint" style={{ marginTop: 6 }}>
             {linha?.count ?? lista.length} arquivo(s) · {linha?.executaveis ?? 0} executável(is) ·{' '}
-            {linha?.apenas_fonte ?? 0} só código-fonte.
-            {' '}{linha?.nota ?? ''}
+            {linha?.apenas_fonte ?? 0} só código-fonte. {linha?.nota ?? ''}
           </div>
         </>
       )}
 
       <div className="hint" style={{ marginTop: 10 }}>
-        O <code>.mq5</code> é editável no repositório. Mudou o código: recompile no
-        MetaEditor64 (<code>C:\Program Files\MetaTrader 5\MetaEditor64.exe</code>) e reanexe ao
-        gráfico — o build deste app não compila MQL5.
+        O <code>.mq5</code> é editável no repositório. Mudou o código: recompile no MetaEditor64 (
+        <code>C:\Program Files\MetaTrader 5\MetaEditor64.exe</code>) e reanexe ao gráfico — o build
+        deste app não compila MQL5.
       </div>
     </div>
   );

@@ -215,4 +215,3 @@ jobs:
           image: "node:22-bookworm-slim"
           only-severities: high,critical
           exit-code: false
-

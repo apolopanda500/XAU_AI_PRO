@@ -49,7 +49,10 @@ const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     return { ok: true, json: async () => ({ models: MODELOS }) };
   }
   if (u.includes('/api/auto/')) {
-    chamadas.push({ url: u, body: init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : {} });
+    chamadas.push({
+      url: u,
+      body: init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : {},
+    });
     return { ok: true, json: async () => ({ ok: true }) };
   }
   return { ok: true, json: async () => ({}) };
@@ -77,7 +80,7 @@ describe('AutoEnginePanel — par, comandos e config', () => {
 
   it('lista so os ativos que tem modelo, em ordem alfabetica', async () => {
     render(<AutoEnginePanel />);
-    const sel = await screen.findByLabelText('Ativo do motor automatico') as HTMLSelectElement;
+    const sel = (await screen.findByLabelText('Ativo do motor automatico')) as HTMLSelectElement;
     await waitFor(() => expect(sel.options.length).toBe(3));
     expect(sel.value).toBe('ATIVOA');
     // GBPUSD tem `.pkl_present: false`: fica de fora, senão o motor liga e
@@ -87,7 +90,7 @@ describe('AutoEnginePanel — par, comandos e config', () => {
 
   it('o período acompanha o ativo escolhido', async () => {
     render(<AutoEnginePanel />);
-    const sel = await screen.findByLabelText('Ativo do motor automatico') as HTMLSelectElement;
+    const sel = (await screen.findByLabelText('Ativo do motor automatico')) as HTMLSelectElement;
     await waitFor(() => expect(sel.options.length).toBe(3));
 
     const periodo = screen.getByLabelText('Periodo do motor automatico') as HTMLSelectElement;
@@ -102,13 +105,15 @@ describe('AutoEnginePanel — par, comandos e config', () => {
 
   it('Aplicar manda ativo, período e limites no mesmo POST', async () => {
     render(<AutoEnginePanel />);
-    const sel = await screen.findByLabelText('Ativo do motor automatico') as HTMLSelectElement;
+    const sel = (await screen.findByLabelText('Ativo do motor automatico')) as HTMLSelectElement;
     await waitFor(() => expect(sel.options.length).toBe(3));
 
     fireEvent.change(sel, { target: { value: 'ATIVOB' } });
     fireEvent.click(screen.getByRole('button', { name: 'Aplicar so' }));
 
-    await waitFor(() => expect(chamadas.some((c) => c.url.includes('/api/auto/config'))).toBe(true));
+    await waitFor(() =>
+      expect(chamadas.some((c) => c.url.includes('/api/auto/config'))).toBe(true),
+    );
     const config = chamadas.find((c) => c.url.includes('/api/auto/config'));
     expect(config?.body.simbolo).toBe('ATIVOB');
     expect(config?.body.timeframe).toBe('H1');
@@ -150,10 +155,9 @@ describe('AutoEnginePanel — par, comandos e config', () => {
   it('botoes dizem o que FAZ: aplicar e ligar e um caminho so', async () => {
     render(<AutoEnginePanel />);
     await screen.findByLabelText('Ativo do motor automatico');
-    fireEvent.change(
-      await screen.findByLabelText('Corretora do motor automatico'),
-      { target: { value: 'mt5' } },
-    );
+    fireEvent.change(await screen.findByLabelText('Corretora do motor automatico'), {
+      target: { value: 'mt5' },
+    });
 
     const nomes = screen.getAllByRole('button').map((b) => b.textContent ?? '');
     // "Aplicar e ligar" existe porque "Aplicar" e "Ligar" eram indistinguiveis:
@@ -177,7 +181,11 @@ describe('AutoEnginePanel — par, comandos e config', () => {
     // indistinguiveis e o operador clicava em "Ligar" sem "Aplicar".
     // Com o motor ligado o botao muda de rotulo para "Operando" — e o que
     // impede o operador de achar que ainda ha algo a ligar.
-    expect((screen.getByRole('button', { name: 'Operando' }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole('button', { name: 'Parar motor' }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole('button', { name: 'Operando' }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    expect(
+      (screen.getByRole('button', { name: 'Parar motor' }) as HTMLButtonElement).disabled,
+    ).toBe(false);
   });
 });

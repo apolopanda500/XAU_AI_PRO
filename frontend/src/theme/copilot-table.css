@@ -80,7 +80,15 @@
 }
 
 /* Faixa de gravidade na borda esquerda, sem numero de coluna extra. */
-.copilot-achados-table tr.g-critico td:first-child { box-shadow: inset 2px 0 0 var(--danger); }
-.copilot-achados-table tr.g-alto td:first-child { box-shadow: inset 2px 0 0 #eab308; }
-.copilot-achados-table tr.g-medio td:first-child { box-shadow: inset 2px 0 0 var(--muted); }
-.copilot-achados-table tr.g-baixo td:first-child { box-shadow: inset 2px 0 0 color-mix(in srgb, var(--muted) 40%, transparent); }
+.copilot-achados-table tr.g-critico td:first-child {
+  box-shadow: inset 2px 0 0 var(--danger);
+}
+.copilot-achados-table tr.g-alto td:first-child {
+  box-shadow: inset 2px 0 0 #eab308;
+}
+.copilot-achados-table tr.g-medio td:first-child {
+  box-shadow: inset 2px 0 0 var(--muted);
+}
+.copilot-achados-table tr.g-baixo td:first-child {
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--muted) 40%, transparent);
+}

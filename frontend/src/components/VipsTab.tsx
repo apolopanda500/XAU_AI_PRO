@@ -82,7 +82,9 @@ export default function VipsTab() {
   const carregar = useCallback(async (signal?: AbortSignal) => {
     try {
       const base = apiBase();
-      const resposta = await fetch(`${base}/api/vip/progress`, { signal: signal ?? AbortSignal.timeout(6000) });
+      const resposta = await fetch(`${base}/api/vip/progress`, {
+        signal: signal ?? AbortSignal.timeout(6000),
+      });
       if (!resposta.ok) {
         // O status sozinho nao diz onde procurar. Um 404 aqui tem DUAS causas
         // possiveis e elas pedem acoes opostas: (1) a rota existe e faltou o
@@ -98,15 +100,17 @@ export default function VipsTab() {
               : `${base} respondeu ${resposta.status}.`,
         );
       }
-      setDados(await resposta.json() as Nivel);
+      setDados((await resposta.json()) as Nivel);
       setErro('');
       // A escada e o que o VOLUME alcancou; o acesso e o que o PLANO destrava.
       // Sao duas chamadas porque sao duas fontes: `vip_progress` le o
       // audit.jsonl, `acesso` le a assinatura local. A tela precisa das duas
       // para nao mostrar degrau que nao abre nada.
       try {
-        const r2 = await fetch(`${base}/api/acesso`, { signal: signal ?? AbortSignal.timeout(6000) });
-        if (r2.ok) setAcesso(await r2.json() as Acesso);
+        const r2 = await fetch(`${base}/api/acesso`, {
+          signal: signal ?? AbortSignal.timeout(6000),
+        });
+        if (r2.ok) setAcesso((await r2.json()) as Acesso);
       } catch {
         // A escada continua util sem o acesso. Falhar aqui nao pode apagar a
         // tela inteira — o operador ainda precisa ver onde esta.
@@ -128,7 +132,9 @@ export default function VipsTab() {
       <div className="section-head">
         <div>
           <h2 id="vips-title">Progressão VIP</h2>
-          <span className="muted">Nível por volume executado na janela de {dados?.janela_dias ?? 30} dias</span>
+          <span className="muted">
+            Nível por volume executado na janela de {dados?.janela_dias ?? 30} dias
+          </span>
         </div>
         {dados && <span className="chip">{dados.nivel_nome}</span>}
       </div>
@@ -150,14 +156,20 @@ export default function VipsTab() {
         </div>
       )}
 
-      {erro && <p className="hint" role="status">{erro}</p>}
+      {erro && (
+        <p className="hint" role="status">
+          {erro}
+        </p>
+      )}
 
       {dados && (
         <>
           <div className="vips-nivel">
             <strong>{dados.nivel_nome}</strong>
             <ul className="vips-beneficios">
-              {dados.beneficios.map((b) => <li key={b}>{b}</li>)}
+              {dados.beneficios.map((b) => (
+                <li key={b}>{b}</li>
+              ))}
             </ul>
           </div>
 
@@ -195,7 +207,9 @@ export default function VipsTab() {
 
           {dados.proximo ? (
             <table className="tbl compact-table vips-tabela">
-              <caption className="sr-only">Volume por grupo e quanto falta para {dados.proximo.nome}</caption>
+              <caption className="sr-only">
+                Volume por grupo e quanto falta para {dados.proximo.nome}
+              </caption>
               <thead>
                 <tr>
                   <th>Grupo</th>
@@ -218,13 +232,13 @@ export default function VipsTab() {
           )}
 
           <p className="hint">
-            Nível alcançado trava por {dados.trava_dias} dias. A promoção não é
-            imediata: o nível novo vale a partir do dia seguinte ({dados.dias_ate_promocao} dia),
-            como na Interactive Brokers.
+            Nível alcançado trava por {dados.trava_dias} dias. A promoção não é imediata: o nível
+            novo vale a partir do dia seguinte ({dados.dias_ate_promocao} dia), como na Interactive
+            Brokers.
           </p>
           <p className="hint">
-            Os limiares são de estrutura: o desconto de cada nível depende de acordo
-            com a corretora e não é exibido aqui.
+            Os limiares são de estrutura: o desconto de cada nível depende de acordo com a corretora
+            e não é exibido aqui.
           </p>
           <p className="hint">
             Saque e transferência: <b>{dados.withdrawals_enabled ? 'ATIVADO' : 'desativados'}</b> ·

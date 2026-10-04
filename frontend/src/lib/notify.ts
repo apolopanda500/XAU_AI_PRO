@@ -1,5 +1,9 @@
 // Notificações nativas do SO via plugin Tauri, com fallback silencioso no modo web.
-import { isPermissionGranted, requestPermission, sendNotification } from '@tauri-apps/plugin-notification';
+import {
+  isPermissionGranted,
+  requestPermission,
+  sendNotification,
+} from '@tauri-apps/plugin-notification';
 
 export async function notify(title: string, body: string): Promise<void> {
   try {

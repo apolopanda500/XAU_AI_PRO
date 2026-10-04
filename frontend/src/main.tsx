@@ -30,7 +30,6 @@ import './theme/guardian.css';
 // vence as folhas que inventaram valores proprios. Ver theme/scale.css.
 import './theme/scale.css';
 
-
 // Ajusta para Tauri (mobile viewport)
 const metaViewport = document.querySelector('meta[name="viewport"]');
 if (metaViewport) {
@@ -50,14 +49,18 @@ async function waitForGateway() {
         retry = false;
         throw new Error('gateway local nao autenticado');
       }
-      const payload = await response.json() as {
+      const payload = (await response.json()) as {
         ok?: boolean;
         source?: string;
         gateway_build?: string;
       };
-      if (response.ok && payload.ok === true
-        && payload.source === 'mt5_gateway'
-        && payload.gateway_build === 'xau-ai-pro-1.2.4-universal-20260928') return;
+      if (
+        response.ok &&
+        payload.ok === true &&
+        payload.source === 'mt5_gateway' &&
+        payload.gateway_build === 'xau-ai-pro-1.2.4-universal-20260928'
+      )
+        return;
       retry = false;
       throw new Error('identidade do gateway local invalida');
     } catch (error) {
@@ -97,6 +100,3 @@ async function bootstrap() {
 void bootstrap().catch(() => {
   if (root) root.textContent = 'Falha ao inicializar o ambiente local seguro.';
 });
-
-
-

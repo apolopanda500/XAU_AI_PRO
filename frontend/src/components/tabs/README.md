@@ -54,10 +54,12 @@ hooks/
 Gerencia fetching, cache e filtros de eventos econômicos.
 
 **Parâmetros:**
+
 - `filtro: FiltroCalendario` - Configuração de filtros
 - `intervaloRefreshMs: number` - Intervalo de refresh (padrão: 5 min)
 
 **Retorno:**
+
 ```typescript
 {
   eventos: EconomicEvent[];       // Eventos filtrados
@@ -75,10 +77,12 @@ Gerencia fetching, cache e filtros de eventos econômicos.
 Gerencia feed de notícias com polling e deduplicação.
 
 **Parâmetros:**
+
 - `filtro: FiltroNoticias` - Configuração de filtros
 - `intervaloPollingMs: number` - Intervalo de polling (padrão: 60s)
 
 **Retorno:**
+
 ```typescript
 {
   noticias: NewsItem[];           // Notícias filtradas
@@ -99,10 +103,10 @@ Gerencia feed de notícias com polling e deduplicação.
 interface EconomicEvent {
   id: string;
   horario: Date;
-  codigoPais: string;        // Ex: "US", "BR"
-  nomePais: string;          // Ex: "Estados Unidos"
-  bandeira: string;          // Ex: "🇺🇸"
-  impacto: ImpactLevel;      // "baixo" | "medio" | "alto"
+  codigoPais: string; // Ex: "US", "BR"
+  nomePais: string; // Ex: "Estados Unidos"
+  bandeira: string; // Ex: "🇺🇸"
+  impacto: ImpactLevel; // "baixo" | "medio" | "alto"
   titulo: string;
   anterior: string | null;
   consenso: string | null;
@@ -117,9 +121,9 @@ interface EconomicEvent {
 interface NewsItem {
   id: string;
   titulo: string;
-  fonte: string;             // Ex: "Reuters", "Bloomberg"
+  fonte: string; // Ex: "Reuters", "Bloomberg"
   timestamp: Date;
-  categoria: NewsCategory;   // 8 categorias disponíveis
+  categoria: NewsCategory; // 8 categorias disponíveis
   impactoMercado: MarketImpact; // "bullish" | "bearish" | "neutral"
   resumo?: string;
   url?: string;
@@ -139,10 +143,12 @@ import { EconomicCalendarTab, NewsTab } from "./components/tabs";
 ## APIs Utilizadas
 
 ### Calendário Econômico
+
 - **Primária**: `https://api.forexfactory.com/calendar` (requer API key)
 - **Fallback**: Mock realista com eventos FOMC, BCE, BOJ, Copom, etc.
 
 ### Notícias Globais
+
 - **Primária**: `https://newsapi.org/v2/top-headlines` (requer API key)
 - **Fallback**: Mock realista com notícias de guerras, FED, BCE, OPEC, etc.
 

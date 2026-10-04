@@ -5,24 +5,24 @@ Estado: decididas pelo usuário. Este documento é a fonte da verdade para as es
 
 ## Decisões
 
-| ID | Tema | Decisão |
-| --- | --- | --- |
-| A1 | Modelo de negócio | **Assinatura** (produto proprietário) |
-| A2 | Escopo de ativos | **Totalmente multiativo, global** |
-| A3 | Corretoras | **As top corretoras**: forex, índices, commodities, cripto e afins |
-| A4 | Posicionamento | **Governança de execução com IA** (escolhido por recomendação, ver justificativa) |
-| B1 | Token no Android | **Login por usuários** |
-| B2 | Assinatura Android | **Grátis** |
-| B3 | Assinatura Windows | **Grátis** |
-| B4 | Código morto | **Limpeza segura**, mantendo o espaço limpo |
-| B5 | CSS | **Consolidar** as folhas de override |
-| C1 | Procedência dos 23.820 ticks | **São dados de teste** (confirmado pelo usuário) |
-| C2 | Dependências vulneráveis | **Corrigir**, mantendo o projeto seguro |
-| C3 | Repo Git órfão do Cline | **Apagar** |
-| C4 | Vazamento de processos no pytest | **Corrigir** |
-| C5 | Guarda de segredos | **Forma segura** (DPAPI) |
-| D1 | Submódulos de `experiments/` | **Remover** |
-| D2 | GitLab | **Melhor opção** a definir |
+| ID  | Tema                             | Decisão                                                                           |
+| --- | -------------------------------- | --------------------------------------------------------------------------------- |
+| A1  | Modelo de negócio                | **Assinatura** (produto proprietário)                                             |
+| A2  | Escopo de ativos                 | **Totalmente multiativo, global**                                                 |
+| A3  | Corretoras                       | **As top corretoras**: forex, índices, commodities, cripto e afins                |
+| A4  | Posicionamento                   | **Governança de execução com IA** (escolhido por recomendação, ver justificativa) |
+| B1  | Token no Android                 | **Login por usuários**                                                            |
+| B2  | Assinatura Android               | **Grátis**                                                                        |
+| B3  | Assinatura Windows               | **Grátis**                                                                        |
+| B4  | Código morto                     | **Limpeza segura**, mantendo o espaço limpo                                       |
+| B5  | CSS                              | **Consolidar** as folhas de override                                              |
+| C1  | Procedência dos 23.820 ticks     | **São dados de teste** (confirmado pelo usuário)                                  |
+| C2  | Dependências vulneráveis         | **Corrigir**, mantendo o projeto seguro                                           |
+| C3  | Repo Git órfão do Cline          | **Apagar**                                                                        |
+| C4  | Vazamento de processos no pytest | **Corrigir**                                                                      |
+| C5  | Guarda de segredos               | **Forma segura** (DPAPI)                                                          |
+| D1  | Submódulos de `experiments/`     | **Remover**                                                                       |
+| D2  | GitLab                           | **Melhor opção** a definir                                                        |
 
 ## Justificativa da recomendação de A4
 
@@ -42,11 +42,11 @@ A alegação de "Mercado 10/10" não se sustenta e não deve ser usada em materi
 
 Opções reais:
 
-| Opção | Custo | Consequência |
-| --- | --- | --- |
-| A. Abrir o código sob licença OSS para acessar a SignPath | US$ 0 | Concede o código-fonte; conflita com A1 |
-| B. Certificado de CA comercial | US$ 70–400/ano | Mantém proprietary, custo recorrente |
-| C. Publicar sem assinar | US$ 0 | SmartScreen alerta o usuário; má reputação de download |
+| Opção                                                     | Custo          | Consequência                                           |
+| --------------------------------------------------------- | -------------- | ------------------------------------------------------ |
+| A. Abrir o código sob licença OSS para acessar a SignPath | US$ 0          | Concede o código-fonte; conflita com A1                |
+| B. Certificado de CA comercial                            | US$ 70–400/ano | Mantém proprietary, custo recorrente                   |
+| C. Publicar sem assinar                                   | US$ 0          | SmartScreen alerta o usuário; má reputação de download |
 
 ### Conflito 2: B2 (Android grátis) tem custo escondido
 
@@ -60,14 +60,14 @@ O que falta não é adapter novo, é a **matriz de capabilities por corretora e 
 
 ## Execução já realizada
 
-| ID | Status | Resultado |
-| --- | --- | --- |
-| C3 | **Concluído** | 6,04 GB liberados; `C:\Users\Micro\.git` removido. Sem remote, sem worktree, árvore HEAD vazia. Disco foi de 0,75 GB para 8,97 GB. |
-| D1 | **Concluído** | 3 submódulos removidos de `experiments/isolated` (mcp-servers, opentelemetry-js, tanstack-query). Eram gitlinks sem `.gitmodules`, impossíveis de inicializar. Diretórios preservados em disco e blindados no `.gitignore`. |
-| C4 | **Concluído** | Vazamento reproduzido (4 processos, porta 9001 travada) e corrigido em três pontos: teardown do fixture `app`, handle do `Popen` em `app/mt5_gateway.py`, e fixture `autouse` de sessão em `tests/conftest.py`. Verificado: 267 passed, 0 órfãos, porta livre. |
-| C2 | **Parcial** | `npm audit` de 6 (1 alta + 5 moderadas) para **0** no `develop`. Removido `react-router-dom` (dependência de produção sem nenhum import). Upgrade de vite 5→8, vitest 3→5, plugin-react 4→6. `manualChunks` migrado para a forma de função (Rolldown rejeita a forma de objeto). tsc limpo, 35 testes, build OK. **O alerta do Dependabot NÃO foi encerrado** — ver seção "Por que o alerta do Dependabot continua aberto". |
-| C1 | **Parcial** | Procedência registrada como dado de teste no docstring de `app/market_store.py` e no handoff. **Lacuna aberta:** `market_ticks` não tem coluna de procedência e o fallback do gráfico não rotula a origem. |
-| C5 | **Concluído** | `scripts/segredos_windows.ps1` criado. Senhas cifradas com DPAPI, ACL restrita a usuário/SYSTEM/Administradores, nada mais em `Temp`. Round-trip verificado: a senha recuperada reassinou o APK com digest de certificado idêntico. |
+| ID  | Status        | Resultado                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| --- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| C3  | **Concluído** | 6,04 GB liberados; `C:\Users\Micro\.git` removido. Sem remote, sem worktree, árvore HEAD vazia. Disco foi de 0,75 GB para 8,97 GB.                                                                                                                                                                                                                                                                                          |
+| D1  | **Concluído** | 3 submódulos removidos de `experiments/isolated` (mcp-servers, opentelemetry-js, tanstack-query). Eram gitlinks sem `.gitmodules`, impossíveis de inicializar. Diretórios preservados em disco e blindados no `.gitignore`.                                                                                                                                                                                                 |
+| C4  | **Concluído** | Vazamento reproduzido (4 processos, porta 9001 travada) e corrigido em três pontos: teardown do fixture `app`, handle do `Popen` em `app/mt5_gateway.py`, e fixture `autouse` de sessão em `tests/conftest.py`. Verificado: 267 passed, 0 órfãos, porta livre.                                                                                                                                                              |
+| C2  | **Parcial**   | `npm audit` de 6 (1 alta + 5 moderadas) para **0** no `develop`. Removido `react-router-dom` (dependência de produção sem nenhum import). Upgrade de vite 5→8, vitest 3→5, plugin-react 4→6. `manualChunks` migrado para a forma de função (Rolldown rejeita a forma de objeto). tsc limpo, 35 testes, build OK. **O alerta do Dependabot NÃO foi encerrado** — ver seção "Por que o alerta do Dependabot continua aberto". |
+| C1  | **Parcial**   | Procedência registrada como dado de teste no docstring de `app/market_store.py` e no handoff. **Lacuna aberta:** `market_ticks` não tem coluna de procedência e o fallback do gráfico não rotula a origem.                                                                                                                                                                                                                  |
+| C5  | **Concluído** | `scripts/segredos_windows.ps1` criado. Senhas cifradas com DPAPI, ACL restrita a usuário/SYSTEM/Administradores, nada mais em `Temp`. Round-trip verificado: a senha recuperada reassinou o APK com digest de certificado idêntico.                                                                                                                                                                                         |
 
 ## O que A2 e A3 implicam em trabalho
 

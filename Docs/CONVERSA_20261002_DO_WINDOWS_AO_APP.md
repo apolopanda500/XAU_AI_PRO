@@ -11,20 +11,20 @@
 
 ## Linha do tempo
 
-| # | Pedido | O que aconteceu |
-|---|---|---|
-| 1 | "limpar windows, lista apps e atualização instalada" | Disco em 1,69 GB. Descobri o log de 28,59 GB |
-| 2 | "muitas atualizações do windows e copias que podem não estar servindo" | Limpeza: **+38 GB** |
-| 3 | "EA experts intocável" | Trava declarada; `Experts` fora de qualquer remoção |
-| 4 | "sim remover" (SQL Server, LLVM, IIS…) | **+6,5 GB**, 8 apps, build validado depois |
-| 5 | "github gitlab, desinstalar app, criar instalador, executar pelo atalho" | GitHub+GitLab sincronizados; app antigo era registro órfão |
-| 6 | "sub aba vips tem que estar melhor, validar tudo antes de build" | Escada VIP + **16 camadas** 10/10 |
-| 7 | "docs é a pasta do xau com as conversas gravadas" | Registro criado |
-| 8 | "nao deixe pendencias 0 pendencias, app 10/10" | Achados que impediam dizer "10/10" |
-| 9 | "github validar e empacotar erro" | **10 falhas de CI → 1**; segredo real encontrado |
-| 10 | "secury and quality. CI/CD erro" | Super-Linter, `npm audit`, 5 testes Windows-only |
-| 11 | "repositorios 10/10, 0 erros, 0 segredos, 0 virus" | Auditoria de segurança |
-| 12 | "ok" (build) | Instalador gerado, instalado, rodando |
+| #   | Pedido                                                                   | O que aconteceu                                            |
+| --- | ------------------------------------------------------------------------ | ---------------------------------------------------------- |
+| 1   | "limpar windows, lista apps e atualização instalada"                     | Disco em 1,69 GB. Descobri o log de 28,59 GB               |
+| 2   | "muitas atualizações do windows e copias que podem não estar servindo"   | Limpeza: **+38 GB**                                        |
+| 3   | "EA experts intocável"                                                   | Trava declarada; `Experts` fora de qualquer remoção        |
+| 4   | "sim remover" (SQL Server, LLVM, IIS…)                                   | **+6,5 GB**, 8 apps, build validado depois                 |
+| 5   | "github gitlab, desinstalar app, criar instalador, executar pelo atalho" | GitHub+GitLab sincronizados; app antigo era registro órfão |
+| 6   | "sub aba vips tem que estar melhor, validar tudo antes de build"         | Escada VIP + **16 camadas** 10/10                          |
+| 7   | "docs é a pasta do xau com as conversas gravadas"                        | Registro criado                                            |
+| 8   | "nao deixe pendencias 0 pendencias, app 10/10"                           | Achados que impediam dizer "10/10"                         |
+| 9   | "github validar e empacotar erro"                                        | **10 falhas de CI → 1**; segredo real encontrado           |
+| 10  | "secury and quality. CI/CD erro"                                         | Super-Linter, `npm audit`, 5 testes Windows-only           |
+| 11  | "repositorios 10/10, 0 erros, 0 segredos, 0 virus"                       | Auditoria de segurança                                     |
+| 12  | "ok" (build)                                                             | Instalador gerado, instalado, rodando                      |
 
 ---
 
@@ -78,11 +78,11 @@ prova de que a causa era essa. Backup do registro em `%TEMP%\backup_flighting.re
 Antes de remover, verifiquei dependência (o projeto já tinha registrado 3
 vezes o defeito de mexer no que "parecia não usado"):
 
-| Removido | Prova de que era seguro |
-|---|---|
-| SQL Server LocalDB · SSMS · SSIS · ODBC · OLE DB | `grep pyodbc/pymssql` → **0**; bancos reais são SQLite |
-| **LLVM** (2,83 GB) | projeto usa `x86_64-pc-windows-msvc`; `grep clang/llvm` → **0** |
-| Go · IIS Express · 17 features IIS | gateway é FastAPI/HTTP puro |
+| Removido                                         | Prova de que era seguro                                         |
+| ------------------------------------------------ | --------------------------------------------------------------- |
+| SQL Server LocalDB · SSMS · SSIS · ODBC · OLE DB | `grep pyodbc/pymssql` → **0**; bancos reais são SQLite          |
+| **LLVM** (2,83 GB)                               | projeto usa `x86_64-pc-windows-msvc`; `grep clang/llvm` → **0** |
+| Go · IIS Express · 17 features IIS               | gateway é FastAPI/HTTP puro                                     |
 
 **E compilei antes e depois**, porque era a única prova que valia:
 
@@ -91,6 +91,7 @@ ANTES:  cl.exe → p.exe (142.336 bytes) ✅
 DEPOIS: cl.exe → p.exe (142.336 bytes) ✅
 RUST:   cargo check --locked → Finished in 2m02s ✅
 ```
+
 ## 5. "sub aba vips tem que estar melhor" — e um defeito de integridade
 
 Antes de mexer na VIP, rodei as 16 camadas. A camada 11 reprovou e
@@ -119,7 +120,7 @@ FAILED ...::test_documento_gerado_diz_a_verdade
 A VIP em si: a tela mostrava **um degrau solto**. Agora mostra a escada
 inteira com percentual. Duas decisões vieram do defeito, não da estética:
 
-- **percentual usa o grupo mais atrasado** — o nível só conta quando *todos* passam
+- **percentual usa o grupo mais atrasado** — o nível só conta quando _todos_ passam
 - **só um degrau é `atual`** — a 1ª versão marcava todos, dizendo que ele persegue 5 metas ao mesmo tempo
 
 ## 6. "nao deixe pendencias 0 pendencias, app 10/10"
@@ -128,12 +129,12 @@ Não consegui dizer "0 pendências" — e o motivo é o que vale registrar.
 
 **Quatro falsos positivos** quase viraram "correção":
 
-| Alarme | Realidade |
-|---|---|
-| `XAUUSD` em 3 arquivos | **docstrings** explicando o defeito já corrigido |
-| `audit de segredos` = "0 arquivos" | **correto** — audita só o que entra no commit |
-| `/api/health` devolve 401 | **é a trava fail-closed** |
-| `cargo test` = 1 warning | `dead_code` pré-existente |
+| Alarme                             | Realidade                                        |
+| ---------------------------------- | ------------------------------------------------ |
+| `XAUUSD` em 3 arquivos             | **docstrings** explicando o defeito já corrigido |
+| `audit de segredos` = "0 arquivos" | **correto** — audita só o que entra no commit    |
+| `/api/health` devolve 401          | **é a trava fail-closed**                        |
+| `cargo test` = 1 warning           | `dead_code` pré-existente                        |
 
 **E dois defeitos meus** que os testes não pegaram:
 
@@ -185,11 +186,11 @@ conclui que o instalador falhou.
 
 **Estes três continuam abertos** e nenhum é de código:
 
-| Pendência | Por quê não fiz |
-|---|---|
+| Pendência                                | Por quê não fiz                                                                                                                       |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | **`XAU_ENABLE_REAL_ORDERS=1` hardcoded** | É a flag de **dinheiro real**, em código compilado do Tauri. Mexer sem o dono decidir é exatamente o que a trava existe para impedir. |
-| **Super-Linter com 32 linters** | Nunca passou. Desligar o Prettier revelou o resto. Configurar 32 ferramentas é projeto próprio. |
-| **Secrets no histórico do git** | Código limpo, mas o histórico é público. Precisa de **rotação na Vercel** — decisão do dono. |
+| **Super-Linter com 32 linters**          | Nunca passou. Desligar o Prettier revelou o resto. Configurar 32 ferramentas é projeto próprio.                                       |
+| **Secrets no histórico do git**          | Código limpo, mas o histórico é público. Precisa de **rotação na Vercel** — decisão do dono.                                          |
 
 ---
 

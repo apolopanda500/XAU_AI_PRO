@@ -20,12 +20,24 @@ const { default: HistoryTab } = await import('./HistoryTab');
 
 const DEALS = [
   {
-    id: 'd1', broker: 'mt5', symbol: 'XAUUSD', side: 'buy',
-    quantity: 0.1, price: 2400, realizedPnl: 100, executedAt: '2026-09-28T10:00:00Z',
+    id: 'd1',
+    broker: 'mt5',
+    symbol: 'XAUUSD',
+    side: 'buy',
+    quantity: 0.1,
+    price: 2400,
+    realizedPnl: 100,
+    executedAt: '2026-09-28T10:00:00Z',
   },
   {
-    id: 'd2', broker: 'mt5', symbol: 'XAUUSD', side: 'sell',
-    quantity: 0.1, price: 2410, realizedPnl: -50, executedAt: '2026-09-28T11:00:00Z',
+    id: 'd2',
+    broker: 'mt5',
+    symbol: 'XAUUSD',
+    side: 'sell',
+    quantity: 0.1,
+    price: 2410,
+    realizedPnl: -50,
+    executedAt: '2026-09-28T11:00:00Z',
   },
 ];
 
@@ -89,7 +101,8 @@ describe('HistoryTab — histórico e analytics compartilham a mesma fonte', () 
   it('Analytics explica o vazio usando o filtro do Historico', () => {
     devolver({ deals: [], loading: false });
     const { container } = render(<HistoryTab />);
-    expect(container.querySelector('.analytics-page')?.textContent)
-      .toContain('Nenhuma operacao fechada no periodo do filtro do Historico acima.');
+    expect(container.querySelector('.analytics-page')?.textContent).toContain(
+      'Nenhuma operacao fechada no periodo do filtro do Historico acima.',
+    );
   });
 });

@@ -4,7 +4,7 @@
 > `backend/broker_registry.py`. **Nao editar a mao**: a fonte da verdade e o
 > registro, e `--check` reprova se o arquivo estiver desatualizado.
 >
-> Dados publicos: 2026-10-01
+> Dados publicos: 2026-10-03
 
 ## A coluna "Leitura" estava invertida (corrigido 01/10/2026)
 

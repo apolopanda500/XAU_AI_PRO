@@ -12,19 +12,19 @@
 
 ## 1. Resumo do dia
 
-| Chamado | Achado | Commit |
-|---|---|---|
-| Liberar espaço | `NONE` (88 MB) removido e posto na allowlist | `336d199` |
-| Corrigir dois comandos | `install_app.bat` falhava 100%; `build_app.bat` anunciava caminho morto | `336d199` |
-| Limpar ambiente | Preflight de **2 falhas para 0** | `336d199` |
-| Build e reinstalação | MSI 312,6 MB · app no ar · 3 processos | `bcf5f9c`, `3363212` |
-| Atalho do instalador | Defeito meu: chave `shortcut` não existe no Tauri v2 | `e18932d` → `65e746e` |
-| `account_id` obrigatório | Motor mandava `""` sempre | `940ba56` |
-| Planos para VIP | Free / VIP / VIPS **com migração do id gravado** | `22f16a5` |
-| Progressão VIP | Escada por volume real, modelo PrimeXBT | `f1ddb99`, `a29ccbb` |
-| Regra da IBKR | Promoção no dia seguinte, não imediata | `dc2efc9` |
-| Forward test | `retcode` do broker no evento | `dbdce10` |
-| Cobertura | 15 testes para a escada + falso positivo corrigido | `bb6cece` |
+| Chamado                  | Achado                                                                  | Commit                |
+| ------------------------ | ----------------------------------------------------------------------- | --------------------- |
+| Liberar espaço           | `NONE` (88 MB) removido e posto na allowlist                            | `336d199`             |
+| Corrigir dois comandos   | `install_app.bat` falhava 100%; `build_app.bat` anunciava caminho morto | `336d199`             |
+| Limpar ambiente          | Preflight de **2 falhas para 0**                                        | `336d199`             |
+| Build e reinstalação     | MSI 312,6 MB · app no ar · 3 processos                                  | `bcf5f9c`, `3363212`  |
+| Atalho do instalador     | Defeito meu: chave `shortcut` não existe no Tauri v2                    | `e18932d` → `65e746e` |
+| `account_id` obrigatório | Motor mandava `""` sempre                                               | `940ba56`             |
+| Planos para VIP          | Free / VIP / VIPS **com migração do id gravado**                        | `22f16a5`             |
+| Progressão VIP           | Escada por volume real, modelo PrimeXBT                                 | `f1ddb99`, `a29ccbb`  |
+| Regra da IBKR            | Promoção no dia seguinte, não imediata                                  | `dc2efc9`             |
+| Forward test             | `retcode` do broker no evento                                           | `dbdce10`             |
+| Cobertura                | 15 testes para a escada + falso positivo corrigido                      | `bb6cece`             |
 
 ---
 
@@ -51,7 +51,7 @@ INSTALL_EXIT=0
 
 `auto_engine.py` montava o pedido com `payload.get("account_id", "")`, e o
 `Decisao` **não tem esse campo**: o valor era sempre vazio. Toda ordem morria
-no contrato universal *depois* de gastar um ciclo de inferência, e o painel
+no contrato universal _depois_ de gastar um ciclo de inferência, e o painel
 não tinha de onde pegar o valor.
 
 A conta agora vem da conexão ativa da corretora escolhida no ciclo
@@ -99,21 +99,19 @@ recusar por política de risco com a API correta.
 
 ## 6. Estado final medido
 
-| Camada | Resultado |
-|---|---|
-| pytest | **677 passed, 0 failed** |
-| vitest | **184 passed** |
-| tsc · build frontend | **exit 0** |
-| backend lint + build | **exit 0** |
-| core Rust | **38 passed** |
-| Tauri | **11 passed** |
-| Privacidade | **6/6 declarações** |
-| Segredos | **0 bloqueios** |
-| Saque | **0 violações** |
-| Preflight | **0 bloqueantes** |
-| Git | **0 pendentes** |
-
-
+| Camada               | Resultado                |
+| -------------------- | ------------------------ |
+| pytest               | **677 passed, 0 failed** |
+| vitest               | **184 passed**           |
+| tsc · build frontend | **exit 0**               |
+| backend lint + build | **exit 0**               |
+| core Rust            | **38 passed**            |
+| Tauri                | **11 passed**            |
+| Privacidade          | **6/6 declarações**      |
+| Segredos             | **0 bloqueios**          |
+| Saque                | **0 violações**          |
+| Preflight            | **0 bloqueantes**        |
+| Git                  | **0 pendentes**          |
 
 ---
 
@@ -125,13 +123,13 @@ a operação com **2 falhas** e derrubava
 
 O que foi tentado, nesta ordem:
 
-| Passo | Resultado |
-|---|---|
-| `takeown /F cmd.exe` | **ÊXITO** — propriedade passou para `HENRIQUE\Micro` |
-| `icacls cmd.exe /grant Micro:(F)` | **ÊXITO** — 1 arquivo, 0 falhas |
-| `Remove-Item` | **erro 5** — Access Denied |
-| `Rename-Item` → `cmd_remover_elevado.txt` | **ÊXITO** |
-| `Remove-Item` (novo nome) | **erro 5** — Access Denied |
+| Passo                                     | Resultado                                            |
+| ----------------------------------------- | ---------------------------------------------------- |
+| `takeown /F cmd.exe`                      | **ÊXITO** — propriedade passou para `HENRIQUE\Micro` |
+| `icacls cmd.exe /grant Micro:(F)`         | **ÊXITO** — 1 arquivo, 0 falhas                      |
+| `Remove-Item`                             | **erro 5** — Access Denied                           |
+| `Rename-Item` → `cmd_remover_elevado.txt` | **ÊXITO**                                            |
+| `Remove-Item` (novo nome)                 | **erro 5** — Access Denied                           |
 
 A renomeação é o que resolve: o nome `cmd.exe` saiu da raiz, e é o nome que o
 `preflight` e o teste checam. Ficam **344 KB presos pelo Controlador de
@@ -150,14 +148,14 @@ no Git. Sem isso, `git status` mostraria `??` para um binário do Windows.
 
 O `build_app.bat` foi executado com as correções deste ciclo. **EXIT=0**.
 
-| Etapa | Resultado |
-|---|---|
-| 1-2 · versão | 8 alvos OK |
-| 3 · frontend | **exit 0** — 170 módulos, 520 ms |
+| Etapa         | Resultado                                          |
+| ------------- | -------------------------------------------------- |
+| 1-2 · versão  | 8 alvos OK                                         |
+| 3 · frontend  | **exit 0** — 170 módulos, 520 ms                   |
 | 4 · core Rust | **exit 0** — achou o binário no `CARGO_TARGET_DIR` |
-| 5 · gateway | **exit 0** — PyInstaller, 506,7 MB |
-| 6 · recursos | core 8,7 MB · bridge 32,8 MB · **72 modelos** |
-| 7 · bundle | MSI **312,6 MB** + NSIS **203,1 MB** |
+| 5 · gateway   | **exit 0** — PyInstaller, 506,7 MB                 |
+| 6 · recursos  | core 8,7 MB · bridge 32,8 MB · **72 modelos**      |
+| 7 · bundle    | MSI **312,6 MB** + NSIS **203,1 MB**               |
 
 **O `install_app.bat` também foi executado — EXIT=0.** Ele nunca tinha passado
 da linha de verificação, porque procurava o MSI num caminho inexistente:
@@ -188,12 +186,12 @@ correção manda procurar**. Antes, essa linha do script apontava para
 
 ### Disco durante o build
 
-| Momento | Livre |
-|---|---|
-| Início | 29,99 GB |
-| meio (PyInstaller) | 23,16 GB |
-| NSIS comprimindo | 18,89 GB |
-| Fim | **15,60 GB** |
+| Momento            | Livre        |
+| ------------------ | ------------ |
+| Início             | 29,99 GB     |
+| meio (PyInstaller) | 23,16 GB     |
+| NSIS comprimindo   | 18,89 GB     |
+| Fim                | **15,60 GB** |
 
 O consumo é o `Temp\cargo-target` (cache do Rust + bundle). Tudo removível
 por `limpeza_segura.ps1 -BuildArtifacts -Apply`, com o destino de volta aos
@@ -205,18 +203,18 @@ por `limpeza_segura.ps1 -BuildArtifacts -Apply`, com o destino de volta aos
 
 Tudo medido neste ciclo, nada herdado de relatório anterior:
 
-| Camada | Comando | Resultado |
-|---|---|---|
-| Python | `pytest -q tests` | **659 passed, 0 failed** (111,86s) |
-| Frontend | `npx tsc --noEmit` | **exit 0** |
-| Frontend | `npm test -- --run` | **179 passed** (46,46s) |
-| Build | `scripts\build_app.bat` | **EXIT=0** — MSI 312,6 MB · NSIS 203,1 MB |
-| Instalador | `scripts\install_app.bat` | **EXIT=0** — encontrou o MSI |
-| Preflight | `scripts\preflight.py` | **Tudo pronto para a operacao** |
-| Segredos | `scripts\auditar_segredos.py` | **0 bloqueios** |
-| Git | `git status` | **0 arquivos pendentes** |
-| Git | `git diff --check` | **sem erro de whitespace** |
-| MQL5 | `git status --porcelain MQL5` | **vazio — intocado** |
+| Camada     | Comando                       | Resultado                                 |
+| ---------- | ----------------------------- | ----------------------------------------- |
+| Python     | `pytest -q tests`             | **659 passed, 0 failed** (111,86s)        |
+| Frontend   | `npx tsc --noEmit`            | **exit 0**                                |
+| Frontend   | `npm test -- --run`           | **179 passed** (46,46s)                   |
+| Build      | `scripts\build_app.bat`       | **EXIT=0** — MSI 312,6 MB · NSIS 203,1 MB |
+| Instalador | `scripts\install_app.bat`     | **EXIT=0** — encontrou o MSI              |
+| Preflight  | `scripts\preflight.py`        | **Tudo pronto para a operacao**           |
+| Segredos   | `scripts\auditar_segredos.py` | **0 bloqueios**                           |
+| Git        | `git status`                  | **0 arquivos pendentes**                  |
+| Git        | `git diff --check`            | **sem erro de whitespace**                |
+| MQL5       | `git status --porcelain MQL5` | **vazio — intocado**                      |
 
 O único aviso do `preflight` era `arquivos pendentes no git` (as 4 correções
 deste ciclo), e ele sumiu com o commit.
@@ -255,8 +253,6 @@ gitlab  https://gitlab.com/apolopanda500/XAU_AI_PRO.git
 
 É pendência de **credencial**, não de código — entra na lista do §7.
 
-
-
 ---
 
 ## 5. Reinstalação completa e app no ar (01/10, 16:28-16:33)
@@ -264,21 +260,26 @@ gitlab  https://gitlab.com/apolopanda500/XAU_AI_PRO.git
 Ciclo pedido: desinstalar o app antigo, instalar o novo, executar pelo atalho,
 testar.
 
-| Passo | Resultado |
-|---|---|
-| Desinstalar 1.2.4 antigo | `uninstall.exe /S` — pasta **removida**, registro limpo |
-| Instalar o MSI novo | `MainEngineThread is returning 0` — **sucesso** |
-| Instalado | **870,9 MB** · bridge 506,7 · Python 342,6 · core 8,7 · **72 modelos** |
-| Atalho | **não existia** — ver §5.1 |
-| App pelo atalho | 3 processos no ar |
-| Portas | **9001 · 9002 · 9003** ouvindo |
-| Prova de vida | `telemetry_history.jsonl` |
+| Passo                    | Resultado                                                              |
+| ------------------------ | ---------------------------------------------------------------------- |
+| Desinstalar 1.2.4 antigo | `uninstall.exe /S` — pasta **removida**, registro limpo                |
+| Instalar o MSI novo      | `MainEngineThread is returning 0` — **sucesso**                        |
+| Instalado                | **870,9 MB** · bridge 506,7 · Python 342,6 · core 8,7 · **72 modelos** |
+| Atalho                   | **não existia** — ver §5.1                                             |
+| App pelo atalho          | 3 processos no ar                                                      |
+| Portas                   | **9001 · 9002 · 9003** ouvindo                                         |
+| Prova de vida            | `telemetry_history.jsonl`                                              |
 
 ### Prova de vida
 
 ```json
-{"ts_iso": "2026-10-01T16:32:55", "source": "loop",
- "terminal_connected": true, "equity": 150.87, "ea_state": "stale"}
+{
+  "ts_iso": "2026-10-01T16:32:55",
+  "source": "loop",
+  "terminal_connected": true,
+  "equity": 150.87,
+  "ea_state": "stale"
+}
 ```
 
 `terminal_connected: true` e `equity: 150,87` são do **MetaTrader 5 real** — o
@@ -294,8 +295,8 @@ algum ciclo antigo; o instalador nunca o gerava.
 **Causa:** `tauri.conf.json` não declarava a chave `shortcut`. Sem ela, o Tauri
 não gera atalho em nenhum dos dois lugares.
 
-**Efeito real:** o caminho de teste "abrir pelo atalho" falhava com *"o sistema
-não pode encontrar o arquivo especificado"* — e o usuário que instalasse o
+**Efeito real:** o caminho de teste "abrir pelo atalho" falhava com _"o sistema
+não pode encontrar o arquivo especificado"_ — e o usuário que instalasse o
 1.2.4 ficaria sem atalho para sempre.
 
 **Correção:** `"shortcut": true` no bloco `bundle` (commit `e18932d`). O `.lnk`
@@ -320,13 +321,13 @@ operar quer as portas livres. Registrado aqui para que a próxima pessoa não le
 
 ## 6. Como o app instalado funciona
 
-| Camada | Caminho | Tamanho |
-|---|---|---|
-| Executável | `%LOCALAPPDATA%\XAU AI PRO\XAU AI PRO.exe` | 12,9 MB |
-| Gateway (bridge) | `...\bridge\` | 506,7 MB |
-| Modelos de IA | `...\Python\models\` | 342,6 MB (72 arquivos) |
-| Core Rust | `...\core\xau-ai-pro-core.exe` | 8,7 MB |
-| **Total instalado** | | **871 MB** |
+| Camada              | Caminho                                    | Tamanho                |
+| ------------------- | ------------------------------------------ | ---------------------- |
+| Executável          | `%LOCALAPPDATA%\XAU AI PRO\XAU AI PRO.exe` | 12,9 MB                |
+| Gateway (bridge)    | `...\bridge\`                              | 506,7 MB               |
+| Modelos de IA       | `...\Python\models\`                       | 342,6 MB (72 arquivos) |
+| Core Rust           | `...\core\xau-ai-pro-core.exe`             | 8,7 MB                 |
+| **Total instalado** |                                            | **871 MB**             |
 
 - **Atalho** na Área de Trabalho → `C:\Users\Micro\AppData\Local\XAU AI PRO\XAU AI PRO.exe`
   — alvo **confirmado existente**.
@@ -341,17 +342,17 @@ operar quer as portas livres. Registrado aqui para que a próxima pessoa não le
 
 ### Fechado nesta sessão (01/10/2026)
 
-| Item | Prova |
-|---|---|
-| `install_app.bat` falhando sempre | **EXIT=0** — `Instalador criado em: ...\Temp\cargo-target\release\bundle\msi` |
-| `build_app.bat` anunciando caminho morto | MSI **312,6 MB** + NSIS **203,1 MB** gerados |
-| Preflight bloqueando operação | **2 falhas → 0** (antes de instalar) |
-| `cmd.exe` na raiz | renomeado, fora do Git, preflight verde |
-| `NONE` de 88 MB | removido e posto na allowlist |
-| Atalho não recriado pelo instalador | `"shortcut": true` + `.lnk` recriado |
-| Build completo | **EXIT=0** de ponta a ponta |
-| Reinstalação e app no ar | 3 processos · portas 9001/9002/9003 · `terminal_connected: true` |
-| `git push` | `74a1903..e18932d` GitHub, EXIT=0 |
+| Item                                     | Prova                                                                         |
+| ---------------------------------------- | ----------------------------------------------------------------------------- |
+| `install_app.bat` falhando sempre        | **EXIT=0** — `Instalador criado em: ...\Temp\cargo-target\release\bundle\msi` |
+| `build_app.bat` anunciando caminho morto | MSI **312,6 MB** + NSIS **203,1 MB** gerados                                  |
+| Preflight bloqueando operação            | **2 falhas → 0** (antes de instalar)                                          |
+| `cmd.exe` na raiz                        | renomeado, fora do Git, preflight verde                                       |
+| `NONE` de 88 MB                          | removido e posto na allowlist                                                 |
+| Atalho não recriado pelo instalador      | `"shortcut": true` + `.lnk` recriado                                          |
+| Build completo                           | **EXIT=0** de ponta a ponta                                                   |
+| Reinstalação e app no ar                 | 3 processos · portas 9001/9002/9003 · `terminal_connected: true`              |
+| `git push`                               | `74a1903..e18932d` GitHub, EXIT=0                                             |
 
 ---
 

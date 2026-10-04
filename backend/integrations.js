@@ -16,17 +16,33 @@ function env(k) {
 function requestJson(url, options = {}, body = null) {
   return new Promise((resolve, reject) => {
     const lib = url.startsWith('https:') ? https : http;
-    const req = lib.request(url, { method: options.method || 'GET', headers: options.headers || {}, timeout: options.timeout || 8000 }, (res) => {
-      let data = '';
-      res.on('data', (c) => { data += c; });
-      res.on('end', () => {
-        let parsed = null;
-        try { parsed = data ? JSON.parse(data) : null; } catch { parsed = null; }
-        resolve({ status: res.statusCode, headers: res.headers, body: parsed, raw: data });
-      });
-    });
+    const req = lib.request(
+      url,
+      {
+        method: options.method || 'GET',
+        headers: options.headers || {},
+        timeout: options.timeout || 8000,
+      },
+      (res) => {
+        let data = '';
+        res.on('data', (c) => {
+          data += c;
+        });
+        res.on('end', () => {
+          let parsed = null;
+          try {
+            parsed = data ? JSON.parse(data) : null;
+          } catch {
+            parsed = null;
+          }
+          resolve({ status: res.statusCode, headers: res.headers, body: parsed, raw: data });
+        });
+      },
+    );
     req.on('error', reject);
-    req.on('timeout', () => { req.destroy(new Error('timeout')); });
+    req.on('timeout', () => {
+      req.destroy(new Error('timeout'));
+    });
     if (body) req.write(body);
     req.end();
   });
@@ -47,8 +63,16 @@ async function sendSlack(text, extra = {}) {
   if (!url) return { ok: false, error: 'SLACK_WEBHOOK_URL nao configurado' };
   const payload = JSON.stringify({ text, ...extra });
   try {
-    const res = await requestJson(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, timeout: 8000 }, payload);
-    return { ok: res.status >= 200 && res.status < 300, status: res.status, error: res.status >= 300 ? res.raw.slice(0, 200) : undefined };
+    const res = await requestJson(
+      url,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, timeout: 8000 },
+      payload,
+    );
+    return {
+      ok: res.status >= 200 && res.status < 300,
+      status: res.status,
+      error: res.status >= 300 ? res.raw.slice(0, 200) : undefined,
+    };
   } catch (e) {
     return { ok: false, error: e.message };
   }
@@ -58,14 +82,39 @@ async function sendSlack(text, extra = {}) {
 async function sendSlackTest() {
   if (!slackConfigured()) return { ok: false, error: 'SLACK_WEBHOOK_URL nao configurado' };
   const blocks = [
-    { type: 'header', text: { type: 'plain_text', text: ':white_check_mark: XAU AI PRO - Teste de integracao Slack' } },
-    { type: 'section', text: { type: 'mrkdwn', text: 'Integracao Slack funcionando corretamente.' } },
-    { type: 'context', elements: [{ type: 'mrkdwn', text: `Host: ${require('os').hostname()} | TS: ${new Date().toISOString()}` }] },
+    {
+      type: 'header',
+      text: {
+        type: 'plain_text',
+        text: ':white_check_mark: XAU AI PRO - Teste de integracao Slack',
+      },
+    },
+    {
+      type: 'section',
+      text: { type: 'mrkdwn', text: 'Integracao Slack funcionando corretamente.' },
+    },
+    {
+      type: 'context',
+      elements: [
+        {
+          type: 'mrkdwn',
+          text: `Host: ${require('os').hostname()} | TS: ${new Date().toISOString()}`,
+        },
+      ],
+    },
   ];
   const payload = JSON.stringify({ text: 'XAU AI PRO - Teste Slack', blocks });
   try {
-    const res = await requestJson(slackWebhook(), { method: 'POST', headers: { 'Content-Type': 'application/json' }, timeout: 8000 }, payload);
-    return { ok: res.status >= 200 && res.status < 300, status: res.status, error: res.status >= 300 ? res.raw.slice(0, 200) : undefined };
+    const res = await requestJson(
+      slackWebhook(),
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, timeout: 8000 },
+      payload,
+    );
+    return {
+      ok: res.status >= 200 && res.status < 300,
+      status: res.status,
+      error: res.status >= 300 ? res.raw.slice(0, 200) : undefined,
+    };
   } catch (e) {
     return { ok: false, error: e.message };
   }
@@ -85,10 +134,22 @@ function kiloConfigured() {
 async function sendKiloTest() {
   const url = kiloWebhook();
   if (!url) return { ok: false, error: 'KILO_WEBHOOK_URL nao configurado' };
-  const payload = JSON.stringify({ source: 'xau_ai_pro', type: 'connection_test', ts: new Date().toISOString() });
+  const payload = JSON.stringify({
+    source: 'xau_ai_pro',
+    type: 'connection_test',
+    ts: new Date().toISOString(),
+  });
   try {
-    const res = await requestJson(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, timeout: 8000 }, payload);
-    return { ok: res.status >= 200 && res.status < 300, status: res.status, detail: res.raw.slice(0, 200) };
+    const res = await requestJson(
+      url,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, timeout: 8000 },
+      payload,
+    );
+    return {
+      ok: res.status >= 200 && res.status < 300,
+      status: res.status,
+      detail: res.raw.slice(0, 200),
+    };
   } catch (e) {
     return { ok: false, error: e.message };
   }
@@ -105,13 +166,31 @@ async function checkGithub() {
   if (!token) return { service: 'github', ok: false, status: false, detail: 'sem GITHUB_TOKEN' };
   try {
     const res = await requestJson('https://api.github.com/user', {
-      headers: { Authorization: `Bearer ${token}`, 'User-Agent': 'XAU_AI_PRO', Accept: 'application/vnd.github+json' },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'User-Agent': 'XAU_AI_PRO',
+        Accept: 'application/vnd.github+json',
+      },
       timeout: 8000,
     });
     if (res.status === 200 && res.body && res.body.login) {
-      return { service: 'github', ok: true, status: true, detail: `token valido (${res.body.login})`, escopos: (res.headers['x-oauth-scopes'] || '').split(',').map(s => s.trim()).filter(Boolean) };
+      return {
+        service: 'github',
+        ok: true,
+        status: true,
+        detail: `token valido (${res.body.login})`,
+        escopos: (res.headers['x-oauth-scopes'] || '')
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
+      };
     }
-    return { service: 'github', ok: false, status: false, detail: `token invalido (HTTP ${res.status})` };
+    return {
+      service: 'github',
+      ok: false,
+      status: false,
+      detail: `token invalido (HTTP ${res.status})`,
+    };
   } catch (e) {
     return { service: 'github', ok: false, status: false, detail: `erro: ${e.message}` };
   }
@@ -154,8 +233,20 @@ function sentryStatus() {
   const dsn = sentryDsn();
   if (!dsn) return { service: 'sentry', ok: false, status: false, detail: 'sem SENTRY_DSN' };
   let sdk = false;
-  try { require.resolve('@sentry/node'); sdk = true; } catch { sdk = false; }
-  return { service: 'sentry', ok: sdk, status: sdk, detail: sdk ? `DSN configurado (env=${env('ENVIRONMENT') || 'production'})` : 'DSN configurado, mas @sentry/node nao instalado (npm i @sentry/node)' };
+  try {
+    require.resolve('@sentry/node');
+    sdk = true;
+  } catch {
+    sdk = false;
+  }
+  return {
+    service: 'sentry',
+    ok: sdk,
+    status: sdk,
+    detail: sdk
+      ? `DSN configurado (env=${env('ENVIRONMENT') || 'production'})`
+      : 'DSN configurado, mas @sentry/node nao instalado (npm i @sentry/node)',
+  };
 }
 
 // ---------- Vercel ----------
@@ -166,7 +257,11 @@ function vercelStatus() {
     service: 'vercel',
     ok: true,
     status: true,
-    detail: linked ? (token ? 'projeto vinculado (OIDC ativo)' : 'projeto vinculado') : 'sem .vercel/project.json',
+    detail: linked
+      ? token
+        ? 'projeto vinculado (OIDC ativo)'
+        : 'projeto vinculado'
+      : 'sem .vercel/project.json',
   };
 }
 
@@ -178,7 +273,11 @@ async function getIntegrationsStatus() {
   const github = await checkGithub();
   const sentry = sentryStatus();
   const vercel = vercelStatus();
-  return { ok: true, ts: new Date().toISOString(), integrations: { slack, github, sentry, vercel } };
+  return {
+    ok: true,
+    ts: new Date().toISOString(),
+    integrations: { slack, github, sentry, vercel },
+  };
 }
 
 module.exports = {

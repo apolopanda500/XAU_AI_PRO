@@ -13,7 +13,7 @@
 }
 
 .mining-rig::before {
-  content: "";
+  content: '';
   position: absolute;
   inset: 0;
   background:
@@ -114,8 +114,12 @@
 }
 
 @keyframes fan-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .mining-gpu-leds {
@@ -188,9 +192,15 @@
   color: var(--muted);
 }
 
-.mining-stat-value.ok { color: #22c55e; }
-.mining-stat-value.warn { color: #f59e0b; }
-.mining-stat-value.danger { color: #ef4444; }
+.mining-stat-value.ok {
+  color: #22c55e;
+}
+.mining-stat-value.warn {
+  color: #f59e0b;
+}
+.mining-stat-value.danger {
+  color: #ef4444;
+}
 
 .hash-value {
   color: var(--quantum-primary) !important;
@@ -314,6 +324,11 @@
 
 /* Animação de pulse para status */
 @keyframes mining-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
 }

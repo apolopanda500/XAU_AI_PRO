@@ -5,13 +5,13 @@
 > partido e a ordem de correção proposta.
 >
 > **Motivo:** o dono definiu duas regras que o código não cumpre —
-> *"não deixar XAUUSD em códigos como comando ou exclusivo"* e
-> *"também não colocar MT5 como comando ou exclusão; o app tem que funcionar
-> para todos de forma padrão livre"* — e pediu para juntar pendências e
+> _"não deixar XAUUSD em códigos como comando ou exclusivo"_ e
+> _"também não colocar MT5 como comando ou exclusão; o app tem que funcionar
+> para todos de forma padrão livre"_ — e pediu para juntar pendências e
 > correções em etapas antes de executar.
 >
-> Precedente: [`SESSAO_20260930.md`](./SESSAO_20260930.md) seção 13 — *"quase
-> todo bug apareceu da mesma forma: o teste passava, a tela mentia"*.
+> Precedente: [`SESSAO_20260930.md`](./SESSAO_20260930.md) seção 13 — _"quase
+> todo bug apareceu da mesma forma: o teste passava, a tela mentia"_.
 
 ---
 
@@ -23,8 +23,8 @@ A regra **já está escrita** em `app/market_symbols.py:32`:
 return ""  # sem ativo fixo — UI pede seleção / usa símbolo do chart MT5
 ```
 
-O mesmo arquivo, docstring: *"Resolver genérico de símbolos/timeframes — sem
-hardcode de ativo"*. O `backend/` descumpre essa regra em pontos que **tomam
+O mesmo arquivo, docstring: _"Resolver genérico de símbolos/timeframes — sem
+hardcode de ativo"_. O `backend/` descumpre essa regra em pontos que **tomam
 decisão de trading**.
 
 ---
@@ -34,20 +34,20 @@ decisão de trading**.
 > **Status: CORRIGIDO na Etapa 1 (30/09/2026).** A tabela abaixo registra o que
 > foi encontrado; o que mudou esta em §7.
 
-| # | Arquivo:linha | Código | Gravidade | Estado |
-|---|---|---|---|---|
-| A1 | `backend/ai_inference.py:184` | `str(symbol or "XAUUSD").strip().upper() or "XAUUSD"` | **Alta** | **corrigido** (Etapa 1) |
-| A2 | `backend/backtest.py:168` | `symbol: str = "XAUUSD"` | Média | **corrigido** (Etapa 1) |
-| A3 | `backend/copilot_data.py:159` | `simbolos: str = "XAUUSD"` | Baixa | **corrigido** (Etapa 1) |
+| #   | Arquivo:linha                 | Código                                                | Gravidade | Estado                  |
+| --- | ----------------------------- | ----------------------------------------------------- | --------- | ----------------------- |
+| A1  | `backend/ai_inference.py:184` | `str(symbol or "XAUUSD").strip().upper() or "XAUUSD"` | **Alta**  | **corrigido** (Etapa 1) |
+| A2  | `backend/backtest.py:168`     | `symbol: str = "XAUUSD"`                              | Média     | **corrigido** (Etapa 1) |
+| A3  | `backend/copilot_data.py:159` | `simbolos: str = "XAUUSD"`                            | Baixa     | **corrigido** (Etapa 1) |
 
 ### A1 é o achado mais grave da sessão
 
 A docstring **imediatamente acima** (linhas 176-178) descreve este defeito como
 já corrigido:
 
-> *"O artefato é `<SIMBOLO>_<TF>` (XAUUSD_H1, BTCUSD_M15, ...). Antes o caminho
+> _"O artefato é `<SIMBOLO>_<TF>` (XAUUSD_H1, BTCUSD_M15, ...). Antes o caminho
 > era fixo em XAUUSD, então pedir BTCUSD devolvia o modelo de ouro — sinal de
-> outro ativo apresentado como se fosse do ativo pedido."*
+> outro ativo apresentado como se fosse do ativo pedido."_
 
 O caminho dos arquivos **foi** corrigido (linhas 186-187 usam `{simbolo}`).
 Mas o `or "XAUUSD"` da linha 184 **ficou**. Efeito real hoje:
@@ -62,7 +62,7 @@ com confiança real, e nada no retorno denuncia isso.
 **Por que voltou:** o mesmo padrão da seção 13 — corrigiu-se o caso visível
 (o caminho) e ficou o caso silencioso (o default). É a segunda vez que este
 par exato reaparece: `docs/ESTADO_E_PENDENCIAS.md` linha 36 registra
-*"Inferência usava coluna `time`, features esperavam `Time`"* no mesmo módulo.
+_"Inferência usava coluna `time`, features esperavam `Time`"_ no mesmo módulo.
 
 ---
 
@@ -79,26 +79,27 @@ par exato reaparece: `docs/ESTADO_E_PENDENCIAS.md` linha 36 registra
   combinação inválida com mensagem boa.
 - `auto_engine.py:164,233` — `snapshot()` e `configurar()` devolvem
   `"broker": self.broker or "mt5"`.
+
 ### 3.2 MT5 é o único que não pode ser cadastrado como conexão
 
 `backend/connection_service.py`:
 
-| Linha | Código | Efeito |
-|---|---|---|
-| 17 | `if broker not in {"binance","mexc","bybit","okx"}: raise ValueError("MT5 usa a sessão do terminal…")` | MT5 é exceção, não padrão |
-| 16, 33, 39-51 | o mesmo conjunto repetido 3×; `if/elif/elif/else` escolhe o cliente | 4 corretoras em código, não em catálogo |
-| 34 | `if item["broker"] not in {...}: raise ValueError("Sincronize MT5 pela sessão do terminal.")` | MT5 fora do fluxo de conexão |
+| Linha         | Código                                                                                                 | Efeito                                  |
+| ------------- | ------------------------------------------------------------------------------------------------------ | --------------------------------------- |
+| 17            | `if broker not in {"binance","mexc","bybit","okx"}: raise ValueError("MT5 usa a sessão do terminal…")` | MT5 é exceção, não padrão               |
+| 16, 33, 39-51 | o mesmo conjunto repetido 3×; `if/elif/elif/else` escolhe o cliente                                    | 4 corretoras em código, não em catálogo |
+| 34            | `if item["broker"] not in {...}: raise ValueError("Sincronize MT5 pela sessão do terminal.")`          | MT5 fora do fluxo de conexão            |
 
 O `broker_registry` já tem 9 corretoras com capacidades declaradas. A camada
 de conexão ignora o registro e mantém a lista hardcoded.
 
 ### 3.3 Defaults de corretora em leitura
 
-| Arquivo:linha | Padrão |
-|---|---|
+| Arquivo:linha                                 | Padrão                            |
+| --------------------------------------------- | --------------------------------- |
 | `copilot_data.py:158,166,171,181,190,197,201` | `broker: str = "mt5"` (7 funções) |
-| `fastapi_gateway.py:590,601,608,1169,1189` | `Query(default="mt5")` |
-| `trading_mcp.py:110,114,118,128` | `args.get("broker", "mt5")` |
+| `fastapi_gateway.py:590,601,608,1169,1189`    | `Query(default="mt5")`            |
+| `trading_mcp.py:110,114,118,128`              | `args.get("broker", "mt5")`       |
 
 `universal_contracts.py:19` (`Broker = Literal[...]`) **não** é violação: é a
 lista de corretoras do sistema.
@@ -107,31 +108,31 @@ lista de corretoras do sistema.
 
 ## 4. O que **não** é violação (não tocar)
 
-| Arquivo | Por quê |
-|---|---|
-| `broker_registry.py` | MT5 é **uma entrada entre 9**; é o catálogo |
-| `universal_contracts.py:19` | `Literal` = a lista de corretoras suportadas |
-| `asset_registry.py` | lê o catálogo de símbolos **do terminal conectado** |
-| `market_data.py:69-98` | `YF_MAP`/`STOOQ_MAP`/`CATEGORY_MAP` são **tabelas de mapeamento**; XAUUSD é uma linha entre 20+ |
-| `auto_engine.py:429-449` (`_trava_instrumento`) | **bloqueia** modelo de outro ativo — é a defesa, não o defeito |
+| Arquivo                                         | Por quê                                                                                         |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `broker_registry.py`                            | MT5 é **uma entrada entre 9**; é o catálogo                                                     |
+| `universal_contracts.py:19`                     | `Literal` = a lista de corretoras suportadas                                                    |
+| `asset_registry.py`                             | lê o catálogo de símbolos **do terminal conectado**                                             |
+| `market_data.py:69-98`                          | `YF_MAP`/`STOOQ_MAP`/`CATEGORY_MAP` são **tabelas de mapeamento**; XAUUSD é uma linha entre 20+ |
+| `auto_engine.py:429-449` (`_trava_instrumento`) | **bloqueia** modelo de outro ativo — é a defesa, não o defeito                                  |
 
 ---
 
 ## 5. Ambiente: o disco era o bloqueio real
 
-| Momento | Livre |
-|---|---|
-| Início da sessão | 0,87 GB |
+| Momento                              | Livre      |
+| ------------------------------------ | ---------- |
+| Início da sessão                     | 0,87 GB    |
 | Após remover `target\debug` (3,9 GB) | **6,2 GB** |
 
 `cargo check` falhou **duas vezes** com `Espaço insuficiente no disco (os error
-112)`, antes de qualquer teste. A pendência *"Liberar espaço em disco"* de
+112)`, antes de qualquer teste. A pendência _"Liberar espaço em disco"_ de
 `SESSAO_20260930.md` §11 era **bloqueante**, não cosmética.
 
 **ACL corrompida (recorrente).** `scripts\limpeza_segura.ps1` falhou com
-*"O acesso ao caminho … foi negado"*; `docs/SESSAO_20260930.md` §8 documenta o
-mesmo sintoma (*"`.git`: ACL corrompida no `.pytest_cache` travava
-`git status`"*).
+_"O acesso ao caminho … foi negado"_; `docs/SESSAO_20260930.md` §8 documenta o
+mesmo sintoma (_"`.git`: ACL corrompida no `.pytest_cache` travava
+`git status`"_).
 
 **Correção aplicada (Etapa 0.1):** `Resolve-Icacls()` + `try/catch` em volta
 de cada remoção. Antes, o `Remove-Item` sob `$ErrorActionPreference = 'Stop'` era
@@ -140,10 +141,9 @@ os outros de serem limpos. Agora o script sempre sai com `exit=0`, avisa o que
 não conseguiu e segue.
 
 **Limite honesto:** o `.pytest_cache` desta máquina **não** é recuperável sem
-shell elevado — nem o dono consegue lê-lo, e `takeown` responde *"Acesso
-negado"*. O `icacls` resolve ACL herdada quebrada (foi o que destravou o
+shell elevado — nem o dono consegue lê-lo, e `takeown` responde _"Acesso
+negado"_. O `icacls` resolve ACL herdada quebrada (foi o que destravou o
 `target\debug`, 3,9 GB), não esse caso. O script avisa em vez de fingir.
-
 
 Mas o `_loop` (linhas 451-505) **ignora os dois**:
 
@@ -192,13 +192,15 @@ destravar os defeitos: cada um que corrigir o código vira verde sozinho. Um
 teste que passa antes da correção não provava nada.
 
 ```
+
 FAILED test_ai_inference.py::TestNenhumAtivoPresumido::test_simbolo_vazio_nao_carrega_o_modelo_de_ouro
-       E  assert RandomForestClassifier(...) is None
+E assert RandomForestClassifier(...) is None
 FAILED test_ai_inference.py::TestNenhumAtivoPresumido::test_simbolo_ausente_e_recusado_com_motivo
 FAILED test_auto_engine.py::TestRoteamentoPorCorretora::test_loop_nao_importa_mt5_gateway_direto
 FAILED test_auto_engine.py::TestRoteamentoPorCorretora::test_loop_nao_chama_trade_order_do_mt5
 FAILED test_auto_engine.py::TestRoteamentoPorCorretora::test_loop_usa_o_router_universal
 5 failed, 52 passed
+
 ```
 
 A primeira falha é a prova empírica do A1: `inferir("", candles, "H1")` devolve
@@ -231,8 +233,10 @@ O que mudou alem do `or "XAUUSD"`:
 **Verificacao de que nao sobrou nenhum:**
 
 ```
+
 Select-String -Path backend\*.py,app\*.py -Pattern 'symbol[s]?\s*[:=]\s*["'']XAUUSD|or\s+["'']XAUUSD'
-ai_inference.py:198   <- comentario que documenta o bug corrigido
+ai_inference.py:198 <- comentario que documenta o bug corrigido
+
 ```
 
 Uma unica ocorrencia, e e a frase *"2. O DEFAULT ficou. `str(symbol or "XAUUSD")`
@@ -290,7 +294,9 @@ passaram de `Query(default="mt5")` para `Query(min_length=1)`.
 ### Verificacao de que nao sobrou nenhum
 
 ```
+
 Select-String -Pattern 'or "mt5"|= "mt5"|default="mt5"|\? "mt5"'
+
 ```
 
 Sobram **comparações** (`if broker == "mt5"`), que são legítimas — são o
@@ -310,16 +316,18 @@ retorna `False`. Nenhuma das etapas acima habilita saque, e nenhuma toca em
 ## 9. Estado final
 
 ```
-pytest    659 passed, 0 failed
-vitest    169 passed (19 arquivos)
-tsc       exit 0
-build     exit 0
-saque     0 violacoes de withdrawals_enabled/transfers
-segredos  0 bloqueios
-MQL5      intocado
-disco     ~0,5 GB livres (ver lição de disco abaixo)
-git       20 modificados + 5 novos, nenhum commit
-```
+
+pytest 659 passed, 0 failed
+vitest 169 passed (19 arquivos)
+tsc exit 0
+build exit 0
+saque 0 violacoes de withdrawals_enabled/transfers
+segredos 0 bloqueios
+MQL5 intocado
+disco ~0,5 GB livres (ver lição de disco abaixo)
+git 20 modificados + 5 novos, nenhum commit
+
+````
 
 **As cinco etapas (0 a 4) estao concluidas. Zero pendencia de teste.**
 
@@ -343,16 +351,17 @@ Sequencia pratica quando o disco aperta:
 ```powershell
 .\scripts\limpeza_segura.ps1 -Apply -DebugCache   # cache de depuracao
 Remove-Item frontend\src-tauri\target\release -Recurse -Force   # so antes de rebuild
-```
+````
 
 O `limpeza_segura.ps1` trata `target\debug` e `Temp\cargo-target`; o
 `target\release` **nao** entra na limpeza automatica porque e o diretorio de
 trabalho do `tauri build` e o usuario pode querer o binario assinado que saiu
 dele. A copia assinada vive em `release\<versao>\`.
 
-def risk_state():  from backend.mt5_gateway import _risk_state, _mt5
-def enviar(...):   from backend.mt5_gateway import _trade_order
+def risk_state(): from backend.mt5_gateway import _risk_state, _mt5
+def enviar(...): from backend.mt5_gateway import _trade_order
 resposta = _mt5_candles(self.simbolo, self.timeframe, 600)
+
 ```
 
 **Consequência:** o operador escolhe `binance`, a tela confirma `binance`, o
@@ -372,3 +381,4 @@ existe e sabe escolher entre os 5 adaptadores — o motor simplesmente não o us
 **Cobertura:** `tests/test_auto_engine.py` tem **25 testes** e **nenhum**
 menciona `broker` no roteamento. O único teste de `configurar` (linha 326) é
 `test_configurar_rejeita_valor_invalido`, sobre `banca: -1`.
+```

@@ -17,17 +17,29 @@ vi.mock('../lib/api', () => ({ apiBase: () => 'http://127.0.0.1:9000' }));
 const { default: SystemHealthOnly, limparCacheSistema } = await import('./SystemHealthOnly');
 
 const HW = {
-  os: 'Windows 11', architecture: '64-bit', cpu_name: 'Ryzen 7', cpu_cores: 8,
-  cpu_usage_percent: 12, memory_total_gb: 16, memory_available_gb: 8,
-  disk_total_gb: 500, disk_free_gb: 250, cpu_temperature_c: 45,
-  gpu_name: 'RTX 4070', gpu_available: true, source: 'WMI',
+  os: 'Windows 11',
+  architecture: '64-bit',
+  cpu_name: 'Ryzen 7',
+  cpu_cores: 8,
+  cpu_usage_percent: 12,
+  memory_total_gb: 16,
+  memory_available_gb: 8,
+  disk_total_gb: 500,
+  disk_free_gb: 250,
+  cpu_temperature_c: 45,
+  gpu_name: 'RTX 4070',
+  gpu_available: true,
+  source: 'WMI',
 };
 
 describe('SystemHealthOnly — cache e carregamento', () => {
   beforeEach(() => {
     limparCacheSistema();
     invokeMock.mockReset();
-    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true })));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: true })),
+    );
   });
 
   afterEach(() => {

@@ -49,20 +49,29 @@ export default function SubscriptionPanel() {
         fetch(`${api}/api/social/strategies`, { signal: AbortSignal.timeout(6000) }),
       ]);
       if (!plansResponse.ok || !subscriptionResponse.ok) throw new Error('gateway indisponível');
-      const planData = await plansResponse.json() as { plans?: Plan[] };
-      const subscriptionData = await subscriptionResponse.json() as { subscription?: Subscription };
-      const strategyData = strategiesResponse.ok ? await strategiesResponse.json() as { strategies?: Strategy[] } : { strategies: [] };
+      const planData = (await plansResponse.json()) as { plans?: Plan[] };
+      const subscriptionData = (await subscriptionResponse.json()) as {
+        subscription?: Subscription;
+      };
+      const strategyData = strategiesResponse.ok
+        ? ((await strategiesResponse.json()) as { strategies?: Strategy[] })
+        : { strategies: [] };
       if (generation !== loadGeneration.current) return;
       setPlans(Array.isArray(planData.plans) ? planData.plans : []);
       setSubscription(subscriptionData.subscription ?? null);
       setStrategies(Array.isArray(strategyData.strategies) ? strategyData.strategies : []);
       setStatus('Planos locais; nenhuma cobrança ou execução real foi ativada.');
     } catch {
-      if (generation === loadGeneration.current) setStatus('Gateway indisponível. A assinatura local será exibida quando o gateway iniciar.');
+      if (generation === loadGeneration.current)
+        setStatus(
+          'Gateway indisponível. A assinatura local será exibida quando o gateway iniciar.',
+        );
     }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   const activate = async (planId: string) => {
     loadGeneration.current += 1;
@@ -74,7 +83,7 @@ export default function SubscriptionPanel() {
         body: JSON.stringify({ plan_id: planId }),
         signal: AbortSignal.timeout(6000),
       });
-      const data = await response.json() as { subscription?: Subscription; error?: string };
+      const data = (await response.json()) as { subscription?: Subscription; error?: string };
       if (!response.ok || !data.subscription) throw new Error(data.error || 'plano indisponível');
       setSubscription(data.subscription);
       setStatus(`Plano ${data.subscription.plan.name} ativado localmente.`);
@@ -94,7 +103,7 @@ export default function SubscriptionPanel() {
         body: JSON.stringify({ strategy_id: strategyId }),
         signal: AbortSignal.timeout(6000),
       });
-      const data = await response.json() as { error?: string };
+      const data = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(data.error || 'estratégia indisponível');
       await load();
       setStatus('Estratégia adicionada ao modo social paper.');
@@ -106,7 +115,8 @@ export default function SubscriptionPanel() {
   return (
     <div className="subscription-panel">
       <p className="hint settings-hint">
-        Preferência local de recursos. Não é licença comercial nem cobrança. Copy trading real permanece bloqueado.
+        Preferência local de recursos. Não é licença comercial nem cobrança. Copy trading real
+        permanece bloqueado.
       </p>
 
       <div className="table-scroll">
@@ -126,19 +136,40 @@ export default function SubscriptionPanel() {
               const ativo = subscription?.plan_id === plan.id;
               return (
                 <tr key={plan.id} className={ativo ? 'selected' : ''}>
-                  <td><strong>{plan.name}</strong><br /><span className="muted">{plan.description}</span></td>
-                  <td className="num">{plan.reference_price_monthly === 0 ? 'Grátis' : `${plan.currency} ${plan.reference_price_monthly}`}</td>
-                  <td className="plans-features">{plan.features.join(' · ')}</td>
-                  <td><span className={`chip ${ativo ? 'ok' : 'warn'}`}>{ativo ? 'ativo' : 'local'}</span></td>
                   <td>
-                    <button type="button" className="btn xs primary" onClick={() => void activate(plan.id)} disabled={ativo}>
+                    <strong>{plan.name}</strong>
+                    <br />
+                    <span className="muted">{plan.description}</span>
+                  </td>
+                  <td className="num">
+                    {plan.reference_price_monthly === 0
+                      ? 'Grátis'
+                      : `${plan.currency} ${plan.reference_price_monthly}`}
+                  </td>
+                  <td className="plans-features">{plan.features.join(' · ')}</td>
+                  <td>
+                    <span className={`chip ${ativo ? 'ok' : 'warn'}`}>
+                      {ativo ? 'ativo' : 'local'}
+                    </span>
+                  </td>
+                  <td>
+                    <button
+                      type="button"
+                      className="btn xs primary"
+                      onClick={() => void activate(plan.id)}
+                      disabled={ativo}
+                    >
                       {ativo ? 'Ativo' : 'Ativar'}
                     </button>
                   </td>
                 </tr>
               );
             })}
-            {!plans.length && <tr><td colSpan={5}>Nenhum plano lido do gateway.</td></tr>}
+            {!plans.length && (
+              <tr>
+                <td colSpan={5}>Nenhum plano lido do gateway.</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -158,23 +189,42 @@ export default function SubscriptionPanel() {
           <tbody>
             {strategies.map((strategy) => (
               <tr key={strategy.id}>
-                <td><strong>{strategy.name}</strong><br /><span className="muted">{strategy.description}</span></td>
-                <td><span className="chip">{strategy.risk_profile}</span></td>
+                <td>
+                  <strong>{strategy.name}</strong>
+                  <br />
+                  <span className="muted">{strategy.description}</span>
+                </td>
+                <td>
+                  <span className="chip">{strategy.risk_profile}</span>
+                </td>
                 <td>{strategy.symbols.join(' · ')}</td>
                 <td>{strategy.timeframes.join(' / ')}</td>
                 <td>
-                  <button type="button" className="btn xs ghost" disabled={!strategy.available || strategy.following} onClick={() => void follow(strategy.id)}>
+                  <button
+                    type="button"
+                    className="btn xs ghost"
+                    disabled={!strategy.available || strategy.following}
+                    onClick={() => void follow(strategy.id)}
+                  >
                     {strategy.following ? 'Seguindo' : strategy.available ? 'Seguir' : 'Requer VIP'}
                   </button>
                 </td>
               </tr>
             ))}
-            {!strategies.length && <tr><td colSpan={5}>Nenhuma estratégia publicada.</td></tr>}
+            {!strategies.length && (
+              <tr>
+                <td colSpan={5}>Nenhuma estratégia publicada.</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
 
-      {status && <div className="hint" role="status">{status}</div>}
+      {status && (
+        <div className="hint" role="status">
+          {status}
+        </div>
+      )}
     </div>
   );
 }

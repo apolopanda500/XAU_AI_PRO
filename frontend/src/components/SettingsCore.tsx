@@ -21,7 +21,12 @@ const tabs: [Section, string][] = [
   // developeu. Cada afirmação da tela tem um teste ou auditoria por trás.
   ['confianca', 'Confiança & Responsável'],
 ];
-const fmt = (v: unknown) => { const n = Number(v); return Number.isFinite(n) ? n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '--'; };
+const fmt = (v: unknown) => {
+  const n = Number(v);
+  return Number.isFinite(n)
+    ? n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : '--';
+};
 export default function SettingsCore() {
   const settings = useAppStore((state) => state.settings);
   const setSettings = useAppStore((state) => state.setSettings);
@@ -38,38 +43,113 @@ export default function SettingsCore() {
   const [account, setAccount] = useState<Record<string, unknown> | null>(null);
   const [connectivity, setConnectivity] = useState<Record<string, string>>({});
   const refreshAccount = () => {
-    fetch(`${apiBase()}/api/status`, { signal: AbortSignal.timeout(5000) }).then((r) => r.json()).then((d: any) => setConnected(Boolean(d?.terminal_connected))).catch(() => setConnected(false));
-    fetch(`${apiBase()}/api/account`, { signal: AbortSignal.timeout(5000) }).then((r) => r.json()).then((data: any) => { const a = data && typeof data === 'object' ? (data.account ?? data) : null; setAccount(a && typeof a === 'object' ? a : null); }).catch(() => setAccount(null));
+    fetch(`${apiBase()}/api/status`, { signal: AbortSignal.timeout(5000) })
+      .then((r) => r.json())
+      .then((d: any) => setConnected(Boolean(d?.terminal_connected)))
+      .catch(() => setConnected(false));
+    fetch(`${apiBase()}/api/account`, { signal: AbortSignal.timeout(5000) })
+      .then((r) => r.json())
+      .then((data: any) => {
+        const a = data && typeof data === 'object' ? (data.account ?? data) : null;
+        setAccount(a && typeof a === 'object' ? a : null);
+      })
+      .catch(() => setAccount(null));
   };
-  useEffect(() => { refreshAccount(); const timer = window.setInterval(refreshAccount, 15000); return () => window.clearInterval(timer); }, []);
-  useEffect(() => { if (section !== 'connections') return; let active = true; const check = async () => { const items: Record<string, string> = {}; for (const [name, path] of [['Gateway local', '/api/health'], ['MT5', '/api/status'], ['MEXC API', '/api/universal/account?broker=mexc&market=crypto-spot'], ['Binance API', '/api/universal/account?broker=binance&market=crypto-spot']] as const) { const started = performance.now(); try { const response = await fetch(`${apiBase()}${path}`, { signal: AbortSignal.timeout(5000) }); items[name] = response.ok ? `Online · ${Math.round(performance.now() - started)} ms` : 'Indisponível'; } catch { items[name] = 'Indisponível'; } } if (active) setConnectivity(items); }; void check(); const timer = window.setInterval(check, 15000); return () => { active = false; window.clearInterval(timer); }; }, [section]);
+  useEffect(() => {
+    refreshAccount();
+    const timer = window.setInterval(refreshAccount, 15000);
+    return () => window.clearInterval(timer);
+  }, []);
+  useEffect(() => {
+    if (section !== 'connections') return;
+    let active = true;
+    const check = async () => {
+      const items: Record<string, string> = {};
+      for (const [name, path] of [
+        ['Gateway local', '/api/health'],
+        ['MT5', '/api/status'],
+        ['MEXC API', '/api/universal/account?broker=mexc&market=crypto-spot'],
+        ['Binance API', '/api/universal/account?broker=binance&market=crypto-spot'],
+      ] as const) {
+        const started = performance.now();
+        try {
+          const response = await fetch(`${apiBase()}${path}`, {
+            signal: AbortSignal.timeout(5000),
+          });
+          items[name] = response.ok
+            ? `Online · ${Math.round(performance.now() - started)} ms`
+            : 'Indisponível';
+        } catch {
+          items[name] = 'Indisponível';
+        }
+      }
+      if (active) setConnectivity(items);
+    };
+    void check();
+    const timer = window.setInterval(check, 15000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [section]);
   const createPin = async () => {
-    if (!pin1 || pin1 !== pin2) { setStatus('Os PINs digitados não conferem.'); return; }
+    if (!pin1 || pin1 !== pin2) {
+      setStatus('Os PINs digitados não conferem.');
+      return;
+    }
     const error = validarPin(pin1);
-    if (error) { setStatus(error); return; }
+    if (error) {
+      setStatus(error);
+      return;
+    }
     if (hasPin) {
       // Troca de PIN exige prova de posse do PIN atual.
       const erroAtual = validarPin(pinAtual);
-      if (erroAtual) { setStatus(erroAtual); return; }
+      if (erroAtual) {
+        setStatus(erroAtual);
+        return;
+      }
       const confere = await verificarPin(pinAtual).catch(() => false);
-      if (!confere) { setStatus('PIN atual incorreto. O PIN não foi alterado.'); setPinAtual(''); return; }
+      if (!confere) {
+        setStatus('PIN atual incorreto. O PIN não foi alterado.');
+        setPinAtual('');
+        return;
+      }
     }
-    const gravado = await definirPin(pin1).then(() => true).catch(() => false);
-    if (!gravado) { setStatus('Falha ao gravar o PIN. Verifique as permissões da pasta de dados.'); return; }
+    const gravado = await definirPin(pin1)
+      .then(() => true)
+      .catch(() => false);
+    if (!gravado) {
+      setStatus('Falha ao gravar o PIN. Verifique as permissões da pasta de dados.');
+      return;
+    }
     setHasPin(true);
     setSettings({ pinEnabled: true, pinCode: '' });
-    setPin1(''); setPin2(''); setPinAtual('');
+    setPin1('');
+    setPin2('');
+    setPinAtual('');
     setStatus(hasPin ? 'PIN alterado com sucesso.' : 'PIN ativado e salvo neste dispositivo.');
   };
   const togglePin = async () => {
     if (hasPin) {
       const pin = window.prompt('Digite o PIN atual para desativar:') || '';
       const error = validarPin(pin);
-      if (error) { setStatus(error); return; }
+      if (error) {
+        setStatus(error);
+        return;
+      }
       const confere = await verificarPin(pin).catch(() => false);
-      if (!confere) { setStatus('PIN atual incorreto. O PIN continua ativo.'); return; }
-      const removido = await removerPin().then(() => true).catch(() => false);
-      if (!removido) { setStatus('Falha ao remover o PIN. O PIN continua ativo.'); return; }
+      if (!confere) {
+        setStatus('PIN atual incorreto. O PIN continua ativo.');
+        return;
+      }
+      const removido = await removerPin()
+        .then(() => true)
+        .catch(() => false);
+      if (!removido) {
+        setStatus('Falha ao remover o PIN. O PIN continua ativo.');
+        return;
+      }
       setHasPin(false);
       setSettings({ pinEnabled: false, pinCode: '' });
       setStatus('PIN desativado.');
@@ -81,13 +161,25 @@ export default function SettingsCore() {
   return (
     <div className="card settings-card">
       <div className="section-head">
-        <div><h2>Configurações</h2><span className="muted">Interface, alertas, conexões e segurança</span></div>
-        <span className={`chip ${connected ? 'ok' : 'warn'}`}>{connected ? 'MT5 conectado' : 'MT5 desconectado'}</span>
+        <div>
+          <h2>Configurações</h2>
+          <span className="muted">Interface, alertas, conexões e segurança</span>
+        </div>
+        <span className={`chip ${connected ? 'ok' : 'warn'}`}>
+          {connected ? 'MT5 conectado' : 'MT5 desconectado'}
+        </span>
       </div>
       <div className="settings-layout">
         <nav className="settings-nav" aria-label="Seções de configuração">
           {tabs.map(([id, label]) => (
-            <button key={id} type="button" className={`settings-nav-item ${section === id ? 'active' : ''}`} onClick={() => setSection(id)}>{label}</button>
+            <button
+              key={id}
+              type="button"
+              className={`settings-nav-item ${section === id ? 'active' : ''}`}
+              onClick={() => setSection(id)}
+            >
+              {label}
+            </button>
           ))}
         </nav>
         {section === 'general' && (
@@ -95,8 +187,17 @@ export default function SettingsCore() {
             <h3>🎨 Tema da interface</h3>
             <div className="theme-grid">
               {THEMES.map((theme) => (
-                <button key={theme.id} type="button" className={`theme-swatch theme-swatch-${theme.id} ${settings.theme === theme.id ? 'selected' : ''}`} onClick={() => setSettings({ theme: theme.id })}>
-                  <span className="theme-preview" aria-hidden="true"><i /><i /><i /></span>
+                <button
+                  key={theme.id}
+                  type="button"
+                  className={`theme-swatch theme-swatch-${theme.id} ${settings.theme === theme.id ? 'selected' : ''}`}
+                  onClick={() => setSettings({ theme: theme.id })}
+                >
+                  <span className="theme-preview" aria-hidden="true">
+                    <i />
+                    <i />
+                    <i />
+                  </span>
                   <span className="theme-name">{theme.label}</span>
                   {settings.theme === theme.id && <span className="chip ok">ativo</span>}
                 </button>
@@ -119,7 +220,13 @@ export default function SettingsCore() {
             <div className="settings-rows">
               <label className="switch-row">
                 <span>Casas decimais: {settings.precision}</span>
-                <input type="range" min={0} max={5} value={settings.precision} onChange={(e) => setSettings({ precision: Number(e.target.value) })} />
+                <input
+                  type="range"
+                  min={0}
+                  max={5}
+                  value={settings.precision}
+                  onChange={(e) => setSettings({ precision: Number(e.target.value) })}
+                />
               </label>
             </div>
           </div>
@@ -160,14 +267,19 @@ export default function SettingsCore() {
             <div className="settings-rows">
               <label className="switch-row">
                 <span>Caminho do terminal</span>
-                <input className="input" value={settings.mt5Path} onChange={(e) => setSettings({ mt5Path: e.target.value })} placeholder="terminal64.exe" />
+                <input
+                  className="input"
+                  value={settings.mt5Path}
+                  onChange={(e) => setSettings({ mt5Path: e.target.value })}
+                  placeholder="terminal64.exe"
+                />
               </label>
             </div>
             <ConnectionSettings />
             <ConnectedDevicesPanel />
             <p className="hint">
-              Por segurança o app nunca inicia o MT5 sozinho — a conexão é uma
-              ação sua, na aba do Robô.
+              Por segurança o app nunca inicia o MT5 sozinho — a conexão é uma ação sua, na aba do
+              Robô.
             </p>
           </div>
         )}
@@ -192,9 +304,8 @@ export default function SettingsCore() {
             */}
             <h3>PIN de acesso</h3>
             <p className="hint">
-              O PIN protege a abertura do app e é pedido na tela de bloqueio.
-              Validado com PBKDF2-SHA256 (150k iterações) e salvo apenas neste
-              dispositivo.
+              O PIN protege a abertura do app e é pedido na tela de bloqueio. Validado com
+              PBKDF2-SHA256 (150k iterações) e salvo apenas neste dispositivo.
             </p>
             <div className="settings-rows">
               <label className="switch-row">
@@ -214,16 +325,39 @@ export default function SettingsCore() {
                   onChange={(e) => setPinAtual(e.target.value.replace(/\D/g, ''))}
                 />
               )}
-              <input className="input" type="password" inputMode="numeric" maxLength={8} placeholder="Novo PIN (4-8 dígitos)" value={pin1} onChange={(e) => setPin1(e.target.value.replace(/\D/g, ''))} />
-              <input className="input" type="password" inputMode="numeric" maxLength={8} placeholder="Confirmar PIN" value={pin2} onChange={(e) => setPin2(e.target.value.replace(/\D/g, ''))} />
-              <button type="button" className="btn primary sm" onClick={() => void createPin()}>{hasPin ? 'Alterar PIN' : 'Salvar PIN'}</button>
+              <input
+                className="input"
+                type="password"
+                inputMode="numeric"
+                maxLength={8}
+                placeholder="Novo PIN (4-8 dígitos)"
+                value={pin1}
+                onChange={(e) => setPin1(e.target.value.replace(/\D/g, ''))}
+              />
+              <input
+                className="input"
+                type="password"
+                inputMode="numeric"
+                maxLength={8}
+                placeholder="Confirmar PIN"
+                value={pin2}
+                onChange={(e) => setPin2(e.target.value.replace(/\D/g, ''))}
+              />
+              <button type="button" className="btn primary sm" onClick={() => void createPin()}>
+                {hasPin ? 'Alterar PIN' : 'Salvar PIN'}
+              </button>
             </div>
             {hasPin && (
               <p className="hint">
-                Para desativar o PIN é necessário informar o PIN atual. O app nunca remove a credencial sozinho.
+                Para desativar o PIN é necessário informar o PIN atual. O app nunca remove a
+                credencial sozinho.
               </p>
             )}
-            {status && <div className="hint" role="status">{status}</div>}
+            {status && (
+              <div className="hint" role="status">
+                {status}
+              </div>
+            )}
           </div>
         )}
 

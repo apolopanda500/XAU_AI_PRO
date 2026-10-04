@@ -25,12 +25,12 @@ O defeito nunca foi "não trava de margem".
 
 ## 2. O defeito real: insistir depois de recusado
 
-| Medido no CSV (UTF-16, 24/08 a 02/10) | Valor |
-|---|---|
-| `EXEC_NO_MARGIN` | 4.165 de 4.246 `BROKER_ERROR` |
-| Intervalo mediano entre recusas do **mesmo** símbolo | **2 a 3 s** |
-| Menor intervalo observado | **0 s** |
-| Maior rajada (mesmo segundo, mesmo símbolo) | **4** |
+| Medido no CSV (UTF-16, 24/08 a 02/10)                | Valor                         |
+| ---------------------------------------------------- | ----------------------------- |
+| `EXEC_NO_MARGIN`                                     | 4.165 de 4.246 `BROKER_ERROR` |
+| Intervalo mediano entre recusas do **mesmo** símbolo | **2 a 3 s**                   |
+| Menor intervalo observado                            | **0 s**                       |
+| Maior rajada (mesmo segundo, mesmo símbolo)          | **4**                         |
 
 Margem esgotada não se resolve em dois segundos. Ela volta com swap, depósito
 ou fechamento de posição. Tentar de novo a cada 2 s é trabalho garantidamente
@@ -50,10 +50,10 @@ perdido — e o log de 1.452 eventos num dia esconde o sinal que importa.
 A primeira versão zerava `m_consecutive_blocks` quando a janela expirava. Por
 simulação com a mesma lógica e os mesmos parâmetros:
 
-| Variante | Recusas/dia (8 símbolos) |
-|---|---|
-| **zerando o contador** | **691.200** |
-| mantendo o contador | **217** |
+| Variante               | Recusas/dia (8 símbolos) |
+| ---------------------- | ------------------------ |
+| **zerando o contador** | **691.200**              |
+| mantendo o contador    | **217**                  |
 
 Zerar fazia a trava voltar ao estado inicial a cada 60 s, e o par
 (60 s de espera + 1 recusa) se repetia ~1.080 vezes por dia. **A correção
@@ -72,19 +72,19 @@ não por um timer.
 Simulação da lógica final (mesmos parâmetros do `.mqh`), 1,7 dia, 8 símbolos,
 margem esgotada do início ao fim:
 
-| | Recusas/dia |
-|---|---|
-| sem cooldown (comportamento medido) | 691.200 |
-| **com cooldown** | **217** |
-| | **redução de 3.191×** |
+|                                     | Recusas/dia           |
+| ----------------------------------- | --------------------- |
+| sem cooldown (comportamento medido) | 691.200               |
+| **com cooldown**                    | **217**               |
+|                                     | **redução de 3.191×** |
 
 Outros cenários, todos verdes:
 
-| Cenário | Resultado |
-|---|---|
+| Cenário                                | Resultado                                                            |
+| -------------------------------------- | -------------------------------------------------------------------- |
 | Margem esgota → volta → esgota de novo | opera normalmente após recuperar (18.220 concessões na janela livre) |
-| Bloqueio de `EURUSD` afeta `NZDUSD`? | **não** — bloqueio é por símbolo |
-| 80 símbolos com limite de 64 | rastreia 64, sem escrita fora do array |
+| Bloqueio de `EURUSD` afeta `NZDUSD`?   | **não** — bloqueio é por símbolo                                     |
+| 80 símbolos com limite de 64           | rastreia 64, sem escrita fora do array                               |
 
 ## 6. Um segundo defeito, pré-existente, encontrado na compilação
 
@@ -124,12 +124,12 @@ em MQL5 e evita `ArraySize` sobre array dimensionado.
 
 ## 8. O que NÃO foi feito, e por quê
 
-| Pendência | Por quê |
-|---|---|
-| **Reanexar o EA ao gráfico** | Derruba o treino do dono na DEMO, que está em andamento. Compilar **não** reanexa — o `.ex5` novo só entra em vigor quando alguém trocar o EA no gráfico. |
-| **Rodar o forward test novo** | Precisa do EA reanexado primeiro. |
-| **Endurance 24h/72h** | Mesma razão, e são 24 h a 7 dias de relógio. |
-| **Conta REAL** | Por decisão do dono, **por último**. |
+| Pendência                     | Por quê                                                                                                                                                   |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Reanexar o EA ao gráfico**  | Derruba o treino do dono na DEMO, que está em andamento. Compilar **não** reanexa — o `.ex5` novo só entra em vigor quando alguém trocar o EA no gráfico. |
+| **Rodar o forward test novo** | Precisa do EA reanexado primeiro.                                                                                                                         |
+| **Endurance 24h/72h**         | Mesma razão, e são 24 h a 7 dias de relógio.                                                                                                              |
+| **Conta REAL**                | Por decisão do dono, **por último**.                                                                                                                      |
 
 > ⚠️ **O `.ex5` novo está no disco, mas o EA que está rodando é o velho.**
 > Reverter o EA no gráfico (ou trocar por um `.ex5` antigo) traz os 2-3 s de
@@ -153,4 +153,4 @@ repositório "não compila MQL5" (AGENTS.md), então o CI nunca vai pegar isso.
 
 ---
 
-*Documento de sessão. Precedência de leitura: `SESSAO_20261003_NOITE_MERGE_E_BROKER_ERROR.md`.*
+_Documento de sessão. Precedência de leitura: `SESSAO_20261003_NOITE_MERGE_E_BROKER_ERROR.md`._

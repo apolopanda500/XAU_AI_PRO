@@ -2,13 +2,13 @@
 
 ## O que existe de terceiros (mapeamento)
 
-| Servidor MCP | Foco | Limitação para nós |
-|---|---|---|
-| `aitrados/finance-trading-ai-agents-mcp` | agentes de finança multi-fonte | não fala com MT5 local |
-| `triplom/financial-mcp-server` | dados de mercado (APIs públicas) | leitura apenas, sem execução |
-| `razor-ai/tradingview-mcp` | TradingView (watchlist/gráficos) | amarrado ao TV, sem mesa própria |
-| `Techie03/trade-mcp` | corretoras via API cloud | sem MT5 desktop, sem risk-gate local |
-| `@modelcontextprotocol/server-github` | repos/code (já no nosso `.mcp.json`) | n/a |
+| Servidor MCP                             | Foco                                 | Limitação para nós                   |
+| ---------------------------------------- | ------------------------------------ | ------------------------------------ |
+| `aitrados/finance-trading-ai-agents-mcp` | agentes de finança multi-fonte       | não fala com MT5 local               |
+| `triplom/financial-mcp-server`           | dados de mercado (APIs públicas)     | leitura apenas, sem execução         |
+| `razor-ai/tradingview-mcp`               | TradingView (watchlist/gráficos)     | amarrado ao TV, sem mesa própria     |
+| `Techie03/trade-mcp`                     | corretoras via API cloud             | sem MT5 desktop, sem risk-gate local |
+| `@modelcontextprotocol/server-github`    | repos/code (já no nosso `.mcp.json`) | n/a                                  |
 
 **Conclusão:** nenhum MCP público opera um terminal **MT5 local** herdando
 risk-gate + auditoria + emergency-stop. Por isso o projeto tem servidor próprio.
@@ -28,6 +28,7 @@ risk-gate + auditoria + emergency-stop. Por isso o projeto tem servidor próprio
 ## Como ativar
 
 Registro em `.mcp.json`:
+
 ```json
 "xau-trading": {
   "command": ".venv/Scripts/python.exe",
@@ -37,6 +38,7 @@ Registro em `.mcp.json`:
 ```
 
 Uso com Claude/Codex (qualquer client MCP):
+
 ```
 > tools/list            → 9 ferramentas disponíveis
 > tools/call account_summary {}            → saldo/patrimônio da mesa
@@ -46,6 +48,7 @@ Uso com Claude/Codex (qualquer client MCP):
 ```
 
 Para HABILITAR execução real pela IA (decisão consciente do trader):
+
 ```powershell
 $env:XAU_MCP_TRADING = "1"   # somente na sessão que roda o MCP
 ```

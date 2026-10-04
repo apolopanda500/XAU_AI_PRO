@@ -83,16 +83,30 @@ app.post('/api/chat', async (req, res) => {
     const response = await fetch('https://ai-gateway.vercel.sh/v1/chat/completions', {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, stream: false, messages: [
-        { role: 'system', content: 'Voce e o assistente XAU AI PRO. Nao execute ordens; responda com analise e riscos.' },
-        { role: 'user', content: message },
-      ] }),
+      body: JSON.stringify({
+        model,
+        stream: false,
+        messages: [
+          {
+            role: 'system',
+            content:
+              'Voce e o assistente XAU AI PRO. Nao execute ordens; responda com analise e riscos.',
+          },
+          { role: 'user', content: message },
+        ],
+      }),
     });
     const payload = await response.json();
     if (!response.ok) {
-      return res.status(response.status).json({ error: payload?.error?.message || 'Falha no AI Gateway' });
+      return res
+        .status(response.status)
+        .json({ error: payload?.error?.message || 'Falha no AI Gateway' });
     }
-    return res.json({ model, reply: payload?.choices?.[0]?.message?.content || '', usage: payload?.usage || null });
+    return res.json({
+      model,
+      reply: payload?.choices?.[0]?.message?.content || '',
+      usage: payload?.usage || null,
+    });
   } catch (error) {
     return res.status(502).json({ error: `AI Gateway indisponivel: ${error.message}` });
   }
@@ -117,10 +131,10 @@ app.get('/', async (req, res) => {
   }
 
   // Cliente de API: resposta JSON preservada (comportamento original)
-  
+
   // Check if client prefers HTML (browser access)
   const acceptsHtml = req.headers.accept?.includes('text/html');
-  
+
   if (acceptsHtml) {
     // Serve HTML status page with Speed Insights
     res.setHeader('Content-Type', 'text/html');
@@ -184,10 +198,9 @@ app.get('/api/health', async (req, res) => {
   } catch (e) {
     console.error('Analytics tracking error:', e.message);
   }
-  
+
   res.json({ ok: true, ts: new Date().toISOString(), source: 'vercel' });
 });
-
 
 // ---------- DIAGNÃ“STICO TEMPORÃRIO DO WORKFLOW SDK ----------
 // Retorna o erro real do start() em JSON para debug no deploy serverless.
@@ -224,17 +237,19 @@ app.get('/api/_diag', async (req, res) => {
 app.post('/api/workflows/market-data', async (req, res) => {
   try {
     // Track workflow initiation
-    await track('workflow_market_data_started', {}, { request: req }).catch(e => 
-      console.error('Analytics tracking error:', e.message)
+    await track('workflow_market_data_started', {}, { request: req }).catch((e) =>
+      console.error('Analytics tracking error:', e.message),
     );
-    
+
     const run = await start(marketDataWorkflow, [], {
       name: 'market-data-sync',
     });
     res.json({ runId: run.runId, status: 'started' });
   } catch (e) {
     // Track workflow errors
-    await track('workflow_market_data_error', { error: e.message }, { request: req }).catch(() => {});
+    await track('workflow_market_data_error', { error: e.message }, { request: req }).catch(
+      () => {},
+    );
     res.status(500).json({ error: e.message });
   }
 });
@@ -245,12 +260,14 @@ app.post('/api/workflows/market-data', async (req, res) => {
 app.post('/api/workflows/reconcile', async (req, res) => {
   try {
     const { symbol } = req.body || {};
-    
+
     // Track workflow initiation with symbol info
-    await track('workflow_reconcile_started', { symbol: symbol || 'XAUUSD' }, { request: req }).catch(e => 
-      console.error('Analytics tracking error:', e.message)
-    );
-    
+    await track(
+      'workflow_reconcile_started',
+      { symbol: symbol || 'XAUUSD' },
+      { request: req },
+    ).catch((e) => console.error('Analytics tracking error:', e.message));
+
     const run = await start(reconcileWorkflow, [symbol || 'XAUUSD'], {
       name: 'reconcile-trade',
     });

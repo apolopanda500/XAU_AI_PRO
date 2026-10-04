@@ -1,4 +1,5 @@
 # POLITICA UNICA DE RISCO - XAU_AI_PRO v1.2.0-RC1
+
 ## ETAPA 15.5 - RISK CONTROL CENTER
 
 **Data:** 24/08/2026 | **Status:** ATIVA | **Compilacao: 0 erros / 0 warnings**
@@ -20,13 +21,13 @@
 
 ## 2. ORDEM DETERMINISTICA DE AVALIACAO (RiskEvaluate)
 
-| Ordem | Regra | Executor | Motivo |
-|-------|-------|----------|--------|
-| 1 | Perda diaria (vs STARTBAL) | SafetyManager.CheckDailyLoss | DAILY_LOSS |
-| 2 | Drawdown diario (vs peak) | SafetyManager.CheckDailyDrawdown | DAILY_DRAWDOWN |
-| 3 | Numero de operacoes/dia | SafetyManager.CheckDailyTrades | MAX_TRADES_PER_DAY |
-| 4 | Margem livre minima | SafetyManager.CheckFreeMargin | FREE_MARGIN |
-| 5 | Exposicao total | SafetyManager.CheckTotalExposure | TOTAL_EXPOSURE |
+| Ordem | Regra                      | Executor                         | Motivo             |
+| ----- | -------------------------- | -------------------------------- | ------------------ |
+| 1     | Perda diaria (vs STARTBAL) | SafetyManager.CheckDailyLoss     | DAILY_LOSS         |
+| 2     | Drawdown diario (vs peak)  | SafetyManager.CheckDailyDrawdown | DAILY_DRAWDOWN     |
+| 3     | Numero de operacoes/dia    | SafetyManager.CheckDailyTrades   | MAX_TRADES_PER_DAY |
+| 4     | Margem livre minima        | SafetyManager.CheckFreeMargin    | FREE_MARGIN        |
+| 5     | Exposicao total            | SafetyManager.CheckTotalExposure | TOTAL_EXPOSURE     |
 
 Camadas anteriores ao RiskCenter (mantidas):
 `DecisionEngine` -> `ValidationEngine` -> **RiskCenter** -> `ExecutionEngine`
@@ -36,14 +37,14 @@ Camadas anteriores ao RiskCenter (mantidas):
 
 ## 3. MATRIZ DE CONFLITOS DO INVENTARIO (ETAPA 15.5)
 
-| # | Conflito | Status |
-|---|----------|--------|
-| C1 | 3 definicoes de drawdown (RiskHub vs RiskEngine vs EquityProtection) | RESOLVIDO - RiskEngine consome GetDrawdownPercent() |
-| C2 | EmergencyCloseAll pode conflitar com CircuitBreaker | DOCUMENTADO - integracao na Fase 15.7 (Failover) |
-| C3 | Exposure do PortfolioManager = P/L flutuante, nao nocional | DOCUMENTADO - metrica real pendente |
-| C4 | MaxOpenPositions checado 2x (PositionManager + PortfolioManager) | DOCUMENTADO - sem efeito pratico |
-| C5 | CheckRiskPerSymbol/Session sao stubs | PENDENTE - implementacao futura |
-| C6 | Default hardcoded 15.0 em EquityProtection() | DOCUMENTADO |
+| #   | Conflito                                                             | Status                                              |
+| --- | -------------------------------------------------------------------- | --------------------------------------------------- |
+| C1  | 3 definicoes de drawdown (RiskHub vs RiskEngine vs EquityProtection) | RESOLVIDO - RiskEngine consome GetDrawdownPercent() |
+| C2  | EmergencyCloseAll pode conflitar com CircuitBreaker                  | DOCUMENTADO - integracao na Fase 15.7 (Failover)    |
+| C3  | Exposure do PortfolioManager = P/L flutuante, nao nocional           | DOCUMENTADO - metrica real pendente                 |
+| C4  | MaxOpenPositions checado 2x (PositionManager + PortfolioManager)     | DOCUMENTADO - sem efeito pratico                    |
+| C5  | CheckRiskPerSymbol/Session sao stubs                                 | PENDENTE - implementacao futura                     |
+| C6  | Default hardcoded 15.0 em EquityProtection()                         | DOCUMENTADO                                         |
 
 ---
 
@@ -65,4 +66,5 @@ Print(RiskCenterSummary());
 ```
 
 ---
-*Documento oficial - ETAPA 15.5*
+
+_Documento oficial - ETAPA 15.5_

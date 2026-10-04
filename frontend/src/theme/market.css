@@ -15,7 +15,7 @@
   color: var(--primary);
   font-size: 12px;
   font-weight: 700;
-  letter-spacing: .08em;
+  letter-spacing: 0.08em;
 }
 
 .market-page h1 {
@@ -94,7 +94,7 @@
 
 .market-source-controls {
   display: grid;
-  grid-template-columns: minmax(160px, 1fr) minmax(140px, .8fr) minmax(180px, 1.2fr);
+  grid-template-columns: minmax(160px, 1fr) minmax(140px, 0.8fr) minmax(180px, 1.2fr);
   gap: 12px;
 }
 
@@ -356,7 +356,7 @@
   color: var(--muted);
   font-size: 12px;
   text-transform: uppercase;
-  letter-spacing: .05em;
+  letter-spacing: 0.05em;
 }
 
 .market-account-grid {
@@ -492,9 +492,9 @@
   .market-page *,
   .market-page *::before,
   .market-page *::after {
-    animation-duration: .01ms !important;
+    animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
-    transition-duration: .01ms !important;
+    transition-duration: 0.01ms !important;
   }
 }

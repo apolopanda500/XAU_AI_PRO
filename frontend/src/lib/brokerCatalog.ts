@@ -14,7 +14,17 @@ export const BROKERS: BrokerOption[] = [
 ];
 
 export const MARKETS_BY_BROKER: Record<string, string[]> = {
-  mt5: ['forex', 'metals', 'indices', 'stocks', 'commodities', 'bonds', 'crypto-spot', 'crypto-futures', 'other'],
+  mt5: [
+    'forex',
+    'metals',
+    'indices',
+    'stocks',
+    'commodities',
+    'bonds',
+    'crypto-spot',
+    'crypto-futures',
+    'other',
+  ],
   binance: ['crypto-spot', 'crypto-futures'],
   mexc: ['crypto-spot', 'crypto-futures'],
   bybit: ['crypto-spot', 'crypto-futures'],
@@ -50,14 +60,16 @@ export function compatibleMarket(broker: string, current: string): string {
  * cotação não casaria com a linha da tabela.
  */
 export function normalizeSymbol(symbol: string): string {
-  return String(symbol || '')
-    .trim()
-    .toUpperCase()
-    // O sufixo precisa sair antes de apagar os separadores, senao "BTC-USDT-SWAP"
-    // vira "BTCUSDTSWAP" e nao casa com o par canonico.
-    .replace(/[-_]SWAP$/, '')
-    .replace(/\.(P|PERP|S)$/, '')
-    .replace(/[-/_]/g, '');
+  return (
+    String(symbol || '')
+      .trim()
+      .toUpperCase()
+      // O sufixo precisa sair antes de apagar os separadores, senao "BTC-USDT-SWAP"
+      // vira "BTCUSDTSWAP" e nao casa com o par canonico.
+      .replace(/[-_]SWAP$/, '')
+      .replace(/\.(P|PERP|S)$/, '')
+      .replace(/[-/_]/g, '')
+  );
 }
 
 export interface AssetRow {
