@@ -118,6 +118,31 @@ export default function UniversalLiveTerminal() {
         kind,
       });
     }
+    // DECISOES DO MOTOR NO FEED (04/10/2026)
+    //
+    // O feed tinha journal do MT5 e contas cripto, e nao tinha o motor. O
+    // operador via "Auto: Ligado" na faixa e nenhuma linha dizendo o que o
+    // motor respondeu — e ligar o automatico sem ver resposta e indistinguivel
+    // de um motor que ligou e nao faz nada.
+    //
+    // Entra aqui pelo mesmo caminho do resto: a mesma fonte (`autoQ`), sem
+    // polling novo — seria o mesmo endpoint lido duas vezes.
+    for (const d of (auto?.decisoes ?? []).slice(0, 6)) {
+      const quando = d.ts ? new Date(String(d.ts)) : now;
+      const valido = !Number.isNaN(quando.getTime());
+      const rotulo = [d.simbolo, d.timeframe].filter(Boolean).join(' ') || '--';
+      const resposta = d.side ? `${d.side} ${fmtNum(d.confianca, 1)}%` : 'sem sinal';
+      rows.push({
+        id: `auto-${d.ts ?? rotulo}`,
+        source: 'MOTOR',
+        info: `${rotulo} · ${resposta} · ${d.motivo || 'sem motivo'}`,
+        at: valido ? quando : now,
+        // Uma decisao com `side` e uma acao do modelo; sem `side` e recusa ou
+        // erro, que o operador precisa distinguir de uma ordem.
+        kind: d.side ? 'TRADES' : /erro|recus|fail/i.test(String(d.motivo ?? '')) ? 'ERROR' : 'WARN',
+      });
+    }
+
     // Contas de cripto (Spot/Futuros de MEXC e Binance) — conteúdo de conta real, não "informação básica"
     for (const c of cryptoQ.data ?? []) {
       if (!c.ok) {
@@ -141,7 +166,7 @@ export default function UniversalLiveTerminal() {
       });
     }
     return rows.sort((a, b) => b.at.getTime() - a.at.getTime()).slice(0, 14);
-  }, [journalQ.data, cryptoQ.data]);
+  }, [journalQ.data, cryptoQ.data, auto]);
 
   // Fechamento de posição via gateway.
   //
@@ -225,23 +250,36 @@ export default function UniversalLiveTerminal() {
   return (
     <div className="card compact-card robot-live-latest">
       <div className="section-head mini-terminal-head">
-        <h2>Mini Terminal</h2>
+        {/* NOME COMPLETO, UMA VEZ. O painel chamava este bloco de "Mini
+            Terminal" e o `RobotTabs` envolvia em "Posições ao vivo": sao dois
+            nomes para a mesma coisa, e o operador nao sabia se eram telas
+            diferentes. Agora o cabecalho diz o que e: o terminal. */}
+        <h2>Terminal ao vivo</h2>
         <div className="btn-row">
-          <span className={`chip ${modoTone}`} title="Modo da conta no MT5">
+          <span className={`chip ${modoTone}`} title="Modo da conta: DEMO (teste) ou REAL (dinheiro de verdade)">
             {modoLabel}
           </span>
-          <span className={`chip ${connected ? 'ok' : 'warn'}`}>
-            {connected ? 'Conectado' : 'Desconectado'}
+          <span className={`chip ${connected ? 'ok' : 'warn'}`} title="Conexão do terminal MetaTrader 5">
+            {connected ? 'MT5 conectado' : 'MT5 desconectado'}
           </span>
-          <span className={`chip ${eaHeartbeat.live ? 'ok' : 'warn'}`}>
-            EA {eaHeartbeat.live ? `${eaHeartbeat.age_sec ?? 0}s` : 'off'}
+          <span
+            className={`chip ${eaHeartbeat.live ? 'ok' : 'warn'}`}
+            title="Expert Advisor: seconds since the last heartbeat"
+          >
+            EA {eaHeartbeat.live ? `viva · ${eaHeartbeat.age_sec ?? 0}s` : 'off'}
+          </span>
+          <span
+            className={`chip ${autoAtivo ? 'ok' : 'warn'}`}
+            title="Motor de operação automática"
+          >
+            Motor {autoAtivo ? 'ligado' : 'desligado'}
           </span>
           <button
             type="button"
             className="btn xs ghost"
             onClick={refreshAll}
             disabled={busy}
-            aria-label="Atualizar Mini Terminal"
+            aria-label="Atualizar todos os dados do terminal"
           >
             {busy ? 'Atualizando…' : 'Atualizar'}
           </button>
