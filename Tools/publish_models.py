@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
-"""Publica os modelos de IA do XAU_AI_PRO como CDN (GitHub Releases + manifest).
+"""Publica os modelos de IA do XAU_AI_PRO num GitHub Release + manifest.
 
-Estrategia (thin-installer):
-  - Os .pkl (2,3 GB no total) sao publicados num GitHub Release (ate 2 GB/arquivo);
-  - O manifest.json (pequeno, com nome/sha256/tamanho/URL de cada modelo) e
-    commitado em Models/manifest.json e servido via raw.githubusercontent.com;
-  - O app (model_manager.ensure_models) le o manifest e baixa so o que falta.
+Os `.pkl` (2,3 GB no total) sao publicados num GitHub Release (ate 2 GB/arquivo)
+e o `manifest.json` — nome, sha256, tamanho e URL de cada modelo — e commitado
+em `Models/manifest.json`.
+
+O app **nao** baixa modelo pela internet: os tres MULTI vao embutidos no
+instalador (ver `mt5-gateway.spec`, que empacota `frontend/src-tauri/Python/
+models`). Este script existe para publicar e versionar os artefatos, nao para
+consumi-los em runtime.
 
 Uso:
   python publish_models.py --dry-run                 # so mostra o plano

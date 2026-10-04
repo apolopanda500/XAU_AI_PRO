@@ -2,7 +2,7 @@
 """Aba Integracoes do app XAU_AI_PRO.
 
 Centraliza configuracao e testes de conexao de:
-GitHub, Sentry, Slack, CDN de modelos (Vercel) e MCP/Plugins/Extensoes.
+GitHub, GitLab, Figma, CDN de modelos e MCP/Plugins/Extensoes.
 """
 from __future__ import annotations
 
@@ -23,16 +23,11 @@ from app.integrations_client import (
     list_plugins,
     mcp_ping,
     load_mcp_servers, mcp_server_ping,
-    models_url_test,
-    kilo_test,
-    sentry_test,
-    slack_test,
     instalados,
     catalogo,
     mcp_pesquisar,
 )
 from app import updater
-from app.deploy_vercel import get_deploy_hook, trigger_deploy
 from app.market_data import MarketData
 from app.mt5_robot import MT5Robot
 from app.theme.mexc import Theme
@@ -118,19 +113,10 @@ class IntegrationsTab:
             c.get("integrations", "figma", "token", default=""),
             c.get("integrations", "figma", "file_key", default=""),
         )
-        self.sentry_dsn = self._card_sentry(body, c.get("integrations", "sentry", "dsn", default=""))
-        self.slack_hook = self._card_slack(body, c.get("integrations", "slack", "webhook", default=""))
-        self.kilo_hook = self._card_kilo(body, c.get("integrations", "kilo", "webhook", default=""))
-        self.models_url = self._card_models(body, c.get("integrations", "models", "base_url", default=""))
-
         self._widgets = {
             "github": self.github_url["result"],
             "gitlab": self.gitlab_cfg["result"],
             "figma": self.figma_cfg["result"],
-            "sentry": self.sentry_dsn["result"],
-            "slack": self.slack_hook["result"],
-            "kilo": self.kilo_hook["result"],
-            "models": self.models_url["result"],
         }
 
         self._card_mcp_servers(body)
@@ -306,60 +292,6 @@ class IntegrationsTab:
     def _mcp_market_remove(self, mid: str) -> None:
         self.on_status("Remoção é gerenciada pelo catálogo operacional")
 
-    # ------------------------------------------------------------------
-    # Deploy Vercel
-    # ------------------------------------------------------------------
-    def _card_vercel_deploy(self, body) -> None:
-        """Card para disparar deploy automatico do backend via Vercel Deploy Hook."""
-        card = Card(body, title="Deploy Vercel (backend)")
-        card.pack(fill="x", padx=24, pady=10)
-        form = tk.Frame(card.body, bg=Theme.CARD)
-        form.pack(fill="x", padx=8, pady=8)
-
-        tk.Label(form, text="Deploy Hook URL:", bg=Theme.CARD, fg=Theme.TEXT,
-                 font=(Theme.FONT_FAMILY, 10)).grid(row=0, column=0, sticky="w", pady=4)
-        self.e_vercel_hook = _entry(form, width=72)
-        self.e_vercel_hook.grid(row=0, column=1, sticky="ew", padx=8, pady=4)
-        self.e_vercel_hook.insert(0, get_deploy_hook())
-        form.grid_columnconfigure(1, weight=1)
-
-        info = tk.Label(form, text="Cole a URL do Deploy Hook do projeto Vercel. "
-                                    "O deploy e iniciado automaticamente via POST, sem necessidade de login.",
-                        bg=Theme.CARD, fg=Theme.TEXT_SECONDARY, font=(Theme.FONT_FAMILY, 9), justify="left")
-        info.grid(row=1, column=0, columnspan=2, sticky="w", pady=(4, 8))
-
-        row2 = tk.Frame(form, bg=Theme.CARD)
-        row2.grid(row=2, column=0, columnspan=2, sticky="w")
-        PrimaryButton(row2, text="Deploy Agora", command=self._do_vercel_deploy, width=16).pack(side="left", padx=(0, 8))
-        SecondaryButton(row2, text="Ver Status", command=self._check_vercel_deploy, width=14).pack(side="left", padx=(0, 8))
-
-        self.res_vercel_deploy = _result_label(form)
-        self.res_vercel_deploy.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(8, 0))
-
-    def _do_vercel_deploy(self) -> None:
-        url = self.e_vercel_hook.get().strip()
-        self.res_vercel_deploy.config(text="Iniciando deploy...", fg=Theme.TEXT)
-        self.on_status("Deploy Vercel em andamento...")
-
-        def worker() -> None:
-            r = trigger_deploy(hook_url=url)
-            self.frame.after(0, lambda: self._show_vercel_result(r))
-        threading.Thread(target=worker, daemon=True).start()
-
-    def _check_vercel_deploy(self) -> None:
-        self.res_vercel_deploy.config(text="Consultando status...", fg=Theme.TEXT)
-
-        def worker() -> None:
-            from app.deploy_vercel import check_status
-            r = check_status(job_id="")
-            self.frame.after(0, lambda: self._show_vercel_result(r))
-        threading.Thread(target=worker, daemon=True).start()
-
-    def _show_vercel_result(self, r: dict[str, Any]) -> None:
-        color = Theme.SUCCESS if r.get("ok") else Theme.DANGER
-        self.res_vercel_deploy.config(text=r.get("message", ""), fg=color)
-        self.on_status(r.get("message", ""))
-
     def _card_updates(self, body) -> None:
         """Card de auto-atualizacao do aplicativo (GitHub Releases)."""
         card = Card(body, title="Atualizacoes do Aplicativo (ciclo mensal v1.3.x)")
@@ -461,70 +393,6 @@ class IntegrationsTab:
         webbrowser.open(f"https://www.figma.com/design/{file_key}")
         self.figma_cfg["result"].configure(text="✔ Projeto Figma aberto", fg=Theme.SUCCESS)
 
-    def _card_sentry(self, body, dsn: str) -> dict[str, tk.Entry]:
-        card = Card(body, title="Sentry - Monitoramento de erros")
-        card.pack(fill="x", padx=24, pady=10)
-        form = tk.Frame(card.body, bg=Theme.CARD)
-        form.pack(fill="x", padx=8, pady=8)
-        tk.Label(form, text="DSN", bg=Theme.CARD, fg=Theme.TEXT_SECONDARY).grid(row=0, column=0, sticky="w", padx=4)
-        e_dsn = _entry(form, width=62)
-        e_dsn.insert(0, dsn)
-        e_dsn.grid(row=0, column=1, padx=4, pady=3)
-        res = _result_label(form)
-        res.grid(row=1, column=0, columnspan=2, sticky="w", padx=4, pady=(4, 0))
-        row = tk.Frame(card.body, bg=Theme.CARD)
-        row.pack(fill="x", padx=8, pady=(0, 8))
-        SecondaryButton(row, text="Enviar evento teste", command=self.test_sentry, width=18).pack(side="left", padx=4)
-        return {"dsn": e_dsn, "result": res}
-
-    def _card_slack(self, body, webhook: str) -> dict[str, tk.Entry]:
-        card = Card(body, title="Slack - Notificacoes (webhook)")
-        card.pack(fill="x", padx=24, pady=10)
-        form = tk.Frame(card.body, bg=Theme.CARD)
-        form.pack(fill="x", padx=8, pady=8)
-        tk.Label(form, text="Webhook URL", bg=Theme.CARD, fg=Theme.TEXT_SECONDARY).grid(row=0, column=0, sticky="w", padx=4)
-        e_hook = _entry(form, width=62)
-        e_hook.insert(0, webhook)
-        e_hook.grid(row=0, column=1, padx=4, pady=3)
-        res = _result_label(form)
-        res.grid(row=1, column=0, columnspan=2, sticky="w", padx=4, pady=(4, 0))
-        row = tk.Frame(card.body, bg=Theme.CARD)
-        row.pack(fill="x", padx=8, pady=(0, 8))
-        SecondaryButton(row, text="Enviar mensagem teste", command=self.test_slack, width=20).pack(side="left", padx=4)
-        return {"webhook": e_hook, "result": res}
-
-    def _card_kilo(self, body, webhook: str) -> dict[str, tk.Entry]:
-        card = Card(body, title="Kilo - Sessoes (inbound webhook)")
-        card.pack(fill="x", padx=24, pady=10)
-        form = tk.Frame(card.body, bg=Theme.CARD)
-        form.pack(fill="x", padx=8, pady=8)
-        tk.Label(form, text="Webhook URL", bg=Theme.CARD, fg=Theme.TEXT_SECONDARY).grid(row=0, column=0, sticky="w", padx=4)
-        e_hook = _entry(form, width=62)
-        e_hook.insert(0, webhook)
-        e_hook.grid(row=0, column=1, padx=4, pady=3)
-        res = _result_label(form)
-        res.grid(row=1, column=0, columnspan=2, sticky="w", padx=4, pady=(4, 0))
-        row = tk.Frame(card.body, bg=Theme.CARD)
-        row.pack(fill="x", padx=8, pady=(0, 8))
-        SecondaryButton(row, text="Enviar ping teste", command=self.test_kilo, width=20).pack(side="left", padx=4)
-        return {"webhook": e_hook, "result": res}
-
-    def _card_models(self, body, base_url: str) -> dict[str, tk.Entry]:
-        card = Card(body, title="Modelos IA - CDN (Vercel) / download sob demanda")
-        card.pack(fill="x", padx=24, pady=10)
-        form = tk.Frame(card.body, bg=Theme.CARD)
-        form.pack(fill="x", padx=8, pady=8)
-        tk.Label(form, text="URL base", bg=Theme.CARD, fg=Theme.TEXT_SECONDARY).grid(row=0, column=0, sticky="w", padx=4)
-        e_url = _entry(form, width=62)
-        e_url.insert(0, base_url)
-        e_url.grid(row=0, column=1, padx=4, pady=3)
-        res = _result_label(form)
-        res.grid(row=1, column=0, columnspan=2, sticky="w", padx=4, pady=(4, 0))
-        row = tk.Frame(card.body, bg=Theme.CARD)
-        row.pack(fill="x", padx=8, pady=(0, 8))
-        SecondaryButton(row, text="Testar manifest", command=self.test_models, width=18).pack(side="left", padx=4)
-        return {"base_url": e_url, "result": res}
-
     def _card_mcp(self, body, endpoint: str, plugins_dir: str) -> None:
         card = Card(body, title="MCP / Plugins / Extensoes")
         card.pack(fill="x", padx=24, pady=10)
@@ -605,26 +473,6 @@ class IntegrationsTab:
         file_key = self._get(self.figma_cfg, "file_key")
         self.on_status("Testando conexao com o Figma...")
         self._run_async(lambda: figma_test(tok, file_key), "figma")
-
-    def test_sentry(self) -> None:
-        dsn = self._get(self.sentry_dsn, "dsn")
-        self.on_status("Enviando evento de teste ao Sentry...")
-        self._run_async(lambda: sentry_test(dsn), "sentry")
-
-    def test_slack(self) -> None:
-        hook = self._get(self.slack_hook, "webhook")
-        self.on_status("Enviando mensagem de teste ao Slack...")
-        self._run_async(lambda: slack_test(hook), "slack")
-
-    def test_kilo(self) -> None:
-        hook = self._get(self.kilo_hook, "webhook")
-        self.on_status("Enviando ping de teste ao Kilo...")
-        self._run_async(lambda: kilo_test(hook), "kilo")
-
-    def test_models(self) -> None:
-        url = self._get(self.models_url, "base_url")
-        self.on_status("Consultando manifest de modelos...")
-        self._run_async(lambda: models_url_test(url), "models")
 
     def test_mcp(self) -> None:
         endpoint = self.e_mcp.get().strip()
@@ -715,25 +563,6 @@ class IntegrationsTab:
     # ------------------------------------------------------------------
     # Persistencia
     # ------------------------------------------------------------------
-    def _save_deploy_hook_env(self, url: str) -> None:
-        """Atualiza VERCEL_DEPLOY_HOOK_URL no .env.local, se possivel."""
-        try:
-            env_path = ROOT / ".env.local"
-            lines = []
-            found = False
-            if env_path.exists():
-                for line in env_path.read_text(encoding="utf-8").splitlines():
-                    if line.strip().startswith("VERCEL_DEPLOY_HOOK_URL="):
-                        lines.append(f"VERCEL_DEPLOY_HOOK_URL={url}")
-                        found = True
-                    else:
-                        lines.append(line)
-            if not found:
-                lines.append(f"VERCEL_DEPLOY_HOOK_URL={url}")
-            env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        except Exception:
-            pass
-
     def save(self) -> None:
         c = get_config()
         c.set("integrations", "github", "repo_url", value=self._get(self.github_url, "url"))
@@ -743,10 +572,6 @@ class IntegrationsTab:
         c.set("integrations", "gitlab", "token", value=self._get(self.gitlab_cfg, "token"))
         c.set("integrations", "figma", "token", value=self._get(self.figma_cfg, "token"))
         c.set("integrations", "figma", "file_key", value=self._get(self.figma_cfg, "file_key"))
-        c.set("integrations", "sentry", "dsn", value=self._get(self.sentry_dsn, "dsn"))
-        c.set("integrations", "slack", "webhook", value=self._get(self.slack_hook, "webhook"))
-        c.set("integrations", "kilo", "webhook", value=self._get(self.kilo_hook, "webhook"))
-        c.set("integrations", "models", "base_url", value=self._get(self.models_url, "base_url"))
         servers = {}
         for sid, widgets in self.mcp_server_entries.items():
             servers[sid] = {
@@ -755,5 +580,4 @@ class IntegrationsTab:
                 "enabled": widgets["enabled"].get(),
             }
         c.set("integrations", "mcp", "servers", value=servers)
-        self.on_status("Integracoes salvas")
         self.on_status("Integracoes salvas")

@@ -102,10 +102,6 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "github": {"repo_url": "https://github.com/apolopanda500/XAU_AI_PRO.git", "token": ""},
         "gitlab": {"base_url": "https://gitlab.com", "project_path": "apolopanda500/XAU_AI_PRO", "token": ""},
         "figma": {"token": "", "file_key": "DCWY2p6frSZwjAcwZYYDKj", "team_id": ""},
-        "sentry": {"dsn": ""},
-        "slack": {"webhook": ""},
-        "kilo": {"webhook": ""},
-        "models": {"base_url": "", "api_key": ""},
         "mcp": {
             "endpoint": "",
             "servers": {

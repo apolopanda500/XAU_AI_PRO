@@ -172,9 +172,9 @@ def auditar_rede() -> None:
                   "kilosessions.ai", "outro-site.com", "api.vercel.com")
     # IP privado/loopback em string de configuracao nao e destino de saida.
     privado = re.compile(r"^(\d{1,3}\.){3}\d{1,3}$")
-    # Ferramentas de desenvolvimento. `deploy_vercel.py` publica o site; o
-    # `integrations_client.py` so valida a URL que o proprio operador digitou.
-    ferramentas = {"deploy_vercel.py", "integrations_client.py"}
+    # Ferramentas de desenvolvimento. O `integrations_client.py` so valida a URL
+    # que o proprio operador digitou.
+    ferramentas = {"integrations_client.py"}
     hosts: set[str] = set()
     for arquivo in _arquivos_codigo():
         if arquivo.suffix not in (".py", ".ts", ".tsx", ".rs"):

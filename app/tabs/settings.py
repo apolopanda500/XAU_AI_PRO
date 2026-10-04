@@ -196,27 +196,6 @@ class SettingsTab:
         SecondaryButton(storage_card.body, text="Atualizar armazenamento", command=self.refresh_storage,
                         width=22).pack(anchor="w", padx=12, pady=(0, 10))
 
-        # Modelos IA - CDN Vercel (download sob demanda)
-        models_card = Card(self.frame, title="Modelos IA - CDN Vercel")
-        models_card.pack(fill="x", padx=24, pady=10)
-        mf = tk.Frame(models_card.body, bg=Theme.CARD)
-        mf.pack(fill="x", padx=8, pady=8)
-        tk.Label(mf, text="URL base (manifest.json)", bg=Theme.CARD, fg=Theme.TEXT_SECONDARY).grid(row=0, column=0, sticky="w", padx=4, pady=3)
-        self.models_url_entry = tk.Entry(mf, width=60, bg=Theme.PANEL, fg=Theme.TEXT, relief="flat",
-                                         highlightbackground=Theme.BORDER, highlightthickness=1)
-        self.models_url_entry.insert(0, get_config().get("integrations", "models", "base_url", default=""))
-        self.models_url_entry.grid(row=0, column=1, columnspan=3, padx=4, pady=3)
-        tk.Label(mf, text="API key (opcional)", bg=Theme.CARD, fg=Theme.TEXT_SECONDARY).grid(row=1, column=0, sticky="w", padx=4, pady=3)
-        self.models_key_entry = tk.Entry(mf, width=60, bg=Theme.PANEL, fg=Theme.TEXT, show="*",
-                                         relief="flat", highlightbackground=Theme.BORDER, highlightthickness=1)
-        self.models_key_entry.insert(0, get_config().get("integrations", "models", "api_key", default=""))
-        self.models_key_entry.grid(row=1, column=1, columnspan=3, padx=4, pady=3)
-        self.models_res = tk.Label(mf, text="", bg=Theme.CARD, fg=Theme.TEXT_SECONDARY,
-                                   font=(Theme.FONT_FAMILY, 9), anchor="w")
-        self.models_res.grid(row=2, column=0, columnspan=4, sticky="w", padx=4, pady=(4, 0))
-        SecondaryButton(mf, text="Testar manifest", command=self.test_models, width=16).grid(row=3, column=0, padx=4, pady=4, sticky="w")
-        AccentButton(mf, text="Salvar modelos", command=self.save_models, width=16).grid(row=3, column=1, padx=4, pady=4, sticky="w")
-
         # Botoes
         btn_row = tk.Frame(self.frame, bg=Theme.BG)
         btn_row.pack(fill="x", padx=24, pady=20)
@@ -334,9 +313,9 @@ class SettingsTab:
 
     def apply_cpu(self) -> None:
         """Aplica prioridade, afinidade e limites de recursos imediatamente."""
-        from app.cpu import (apply_model_limits, memory_info, model_max_ram_mb,
-                             model_n_jobs, parse_affinity, set_affinity,
-                             set_priority, temperature_c)  # noqa: PLC0415
+        from app.cpu import (apply_model_limits, memory_info, parse_affinity,
+                             set_affinity, set_priority,
+                             temperature_c)  # noqa: PLC0415
         c = get_config()
         c.set("cpu", "priority", value=self.cpu_priority_var.get())
         c.set("cpu", "affinity", value=self._affinity_value())
@@ -356,40 +335,6 @@ class SettingsTab:
         msg += f" | RAM {mem.get('usage_pct', 0):.0f}% | Temp {'%.1f' % temp + 'C' if temp >= 0 else 'N/A'}"
         self.cpu_status_label.configure(text=msg, fg=Theme.SUCCESS if (ok_p or ok_a or n_jobs) else Theme.DANGER)
         self.on_status(msg)
-
-    def test_models(self) -> None:
-        """Testa o manifest.json da CDN Vercel (em thread, nao trava a GUI)."""
-        url = self.models_url_entry.get().strip()
-        if not url:
-            self.models_res.configure(text="✘ URL vazia", fg=Theme.DANGER)
-            return
-        self.on_status("Testando manifest de modelos (Vercel)...")
-
-        def worker() -> None:
-            try:
-                from app.integrations_client import models_url_test
-                result = models_url_test(url)
-            except Exception as e:  # noqa: BLE001
-                result = {"ok": False, "message": str(e)}
-            msg = str(result.get("message", ""))
-            ok = bool(result.get("ok"))
-            try:
-                self.models_res.after(0, lambda: self.models_res.configure(
-                    text=("✔ " if ok else "✘ ") + msg,
-                    fg=Theme.SUCCESS if ok else Theme.DANGER))
-                self.on_status(msg)
-            except Exception:
-                pass
-
-        threading.Thread(target=worker, daemon=True).start()
-
-    def save_models(self) -> None:
-        """Salva URL base e API key dos modelos Vercel na config."""
-        c = get_config()
-        c.set("integrations", "models", "base_url", value=self.models_url_entry.get().strip())
-        c.set("integrations", "models", "api_key", value=self.models_key_entry.get().strip())
-        self.models_res.configure(text="✔ Modelos Vercel salvos", fg=Theme.SUCCESS)
-        self.on_status("Modelos Vercel salvos")
 
     def test_mt5(self) -> None:
         if self.robot.connect():
