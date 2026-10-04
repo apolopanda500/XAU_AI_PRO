@@ -59,14 +59,11 @@ def predict() -> None:
         
     except Exception as e:
         print(f"Erro critico na predicao: {e}")
-        try:
-            capture_prediction_error(
-                symbol="ALL",
-                prediction_type="pipeline",
-                error_msg=str(e)
-            )
-        except:
-            pass
+        # O `except` nao engolia mais nada: chamava `capture_prediction_error`,
+        # que foi removida com o Sentry em 04/10/2026. O `NameError` que vinha
+        # do tratamento DELETAVA a excecao original que operator estava vendo.
+        # Agora o log recebe a causa e a excecao continua subindo.
+        log.exception("predicao falhou")
         raise
 
 

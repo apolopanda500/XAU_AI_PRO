@@ -46,9 +46,15 @@ def main() -> int:
                 m = result.get("metrics", {})
                 print(f"  {key}: success | acc={m.get('accuracy', 0) * 100:.2f}% | f1={m.get('f1_score', 0):.2f}")
             else:
-                print(f"  {key}: error | {result.get('error', 'desconhecido')}")
-                if result.get("error"):
-                    capture_training_error(result["error"])
+                # O motivo ja vai para o stdout E para o log. A captura no Sentry
+                # foi removida em 04/10/2026 junto com o resto da integracao, e a
+                # chamada ficou orfa: `capture_training_error` nao existia mais e
+                # o `NameError` mascarava o erro real do retreino.
+                #
+                # `compileall` passa (nome indefinido e sintaxe valida) e o pytest
+                # nao exercita este caminho — o CI pegou, em 4 segundos.
+                logger.error("retreino falhou em %s: %s", key, result.get("error", "desconhecido"))
+                print(f"  {key}: erro | {result.get('error', 'desconhecido')}")
 
     print(f"\nAuto-retrain concluido em {time.time() - started:.1f}s.")
     return 0
