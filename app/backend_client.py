@@ -3,7 +3,7 @@
 
 Consome a API do backend Node.js. Por padrao usa o backend local
 (porta 3001, que le o forward_test_events.csv real do EA). Se a config
-do app definir 'api.backend_url', usa o backend remoto (Vercel) com
+do app definir 'api.backend_url', usa esse endereco remoto com
 autenticacao via 'api.backend_api_key' (header Authorization Bearer).
 Se o backend estiver OFF, retorna None (dashboard mostra indisponivel).
 """
@@ -37,7 +37,7 @@ ENDPOINTS = {
 
 
 # ---------------------------------------------------------------------------
-# Configuracao remota (Vercel): URL + API key vindas da config do app.
+# Configuracao remota: URL + API key vindas da config do app.
 # Fallback para o backend local (127.0.0.1:3001) quando nao configurado.
 # ---------------------------------------------------------------------------
 

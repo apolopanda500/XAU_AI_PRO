@@ -240,7 +240,10 @@ class TradingViewMarket(tk.Frame):
         chart_head.pack(fill="x", pady=(10, 2))
         tk.Label(chart_head, text="Grafico", bg=Theme.CARD, fg=Theme.TEXT_SECONDARY,
                  font=(Theme.FONT_FAMILY, 8)).pack(side="left")
-        from app.market_symbols import DEFAULT_TIMEFRAME, TIMEFRAMES as _TFS
+        from app.market_symbols import TIMEFRAMES as _TFS
+        # Sem valor inicial: o operador ESCOLHE. O import de DEFAULT_TIMEFRAME
+        # foi embora porque a constante nao tem mais valor de uso — ela e ""
+        # e quem precisa de um timeframe usa `resolve_timeframe()`.
         self.chart_tf_var = tk.StringVar(value="")
         for _tf in [t for t in _TFS if t != "MN1"]:
             tk.Radiobutton(chart_head, text=_tf, variable=self.chart_tf_var, value=_tf,
@@ -425,9 +428,16 @@ class TradingViewMarket(tk.Frame):
             self._busy = False
 
     def _collect_candles(self, symbol: str, timeframe: str = "", limit: int = 80) -> list[dict]:
-        """Candles do simbolo via MT5 local (best-effort, worker thread)."""
-        from app.market_symbols import DEFAULT_TIMEFRAME, base_symbol
-        timeframe = timeframe or DEFAULT_TIMEFRAME
+        """Candles do simbolo via MT5 local (best-effort, worker thread).
+
+        Timeframe vazio devolve lista vazia: o operador ainda nao escolheu, e
+        inventar M5 faria ele ver um grafico que nao pediu. Antes era
+        `timeframe or DEFAULT_TIMEFRAME`, que entregava M5 sem pedir.
+        """
+        from app.market_symbols import resolve_timeframe, base_symbol
+        timeframe = resolve_timeframe(timeframe)
+        if not timeframe:
+            return []
         base = base_symbol(symbol)
         try:
             from app.mt5_lock import mt5_lock

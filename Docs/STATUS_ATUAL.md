@@ -40,12 +40,14 @@
 ## 🏗️ Arquitetura do Sistema (3 componentes)
 
 ### 1. EA MQL5 (MetaTrader 5)
+
 - Local: `MQL5/Experts/XAU_AI_PRO/`
 - Compila sem erros (`0 errors, 0 warnings`)
 - EA compilado (`XAU_AI_PRO.ex5`) presente no diretório do MT5
 - Coleta dados de mercado, salva `dataset.csv`, lê `prediction_{symbol}.json`, executa trades
 
 ### 2. Pipeline Python (IA)
+
 - Local: `Python/`
 - `main.py` — CLI entry point (train, predict)
 - `train.py` — Treina RandomForest (300 estimators, max_depth=10)
@@ -57,6 +59,7 @@
 - `ai/validation.py` — Validação via LLM (LiteLLM Proxy)
 
 ### 3. Ultimate App (Desktop)
+
 - Local: `Ultimate/`
 - `XAU_AI_PRO.exe` — Executável PyInstaller (9.5MB)
 - `launcher.py` — Inicia Backend + Frontend + Proxy
@@ -70,6 +73,7 @@
 ## 📋 Próximas Ações
 
 ### Imediato (Usuário)
+
 1. Abrir MetaTrader 5
 2. Recompilar o EA (F7 no MetaEditor) — os arquivos corrigidos já estão no diretório do MT5
 3. Arrastar o EA para o gráfico XAUUSD (ou símbolo da corretora)
@@ -77,6 +81,7 @@
 5. O EA agora deve iniciar (bugs de INIT_FAILED corrigidos)
 
 ### Depois (Validação)
+
 1. Testar em conta DEMO por 1 semana
 2. Verificar se operações são abertas (sinais agora são mais realistas)
 3. Monitore logs: Score, Risk, AI, Execution
@@ -86,13 +91,13 @@
 
 ## 📊 Estado dos Componentes
 
-| Componente | Status | Observação |
-|---|---|---|
-| EA MQL5 | 🟢 Corrigido | Bugs de init resolvidos, sinais relaxados, parâmetros otimizados |
-| Pipeline Python | 🟢 Funcional | train e predict testados com sucesso |
-| Ultimate App | 🟡 Estruturado | Banco SQLite vazio (sem trades ainda), app não testado |
-| Banco de Dados | 🟡 Vazio | Tabelas criadas, 0 registros |
-| Git | 🟡 Pendente | Arquivos não versionados, main 2 commits atrás |
+| Componente      | Status         | Observação                                                       |
+| --------------- | -------------- | ---------------------------------------------------------------- |
+| EA MQL5         | 🟢 Corrigido   | Bugs de init resolvidos, sinais relaxados, parâmetros otimizados |
+| Pipeline Python | 🟢 Funcional   | train e predict testados com sucesso                             |
+| Ultimate App    | 🟡 Estruturado | Banco SQLite vazio (sem trades ainda), app não testado           |
+| Banco de Dados  | 🟡 Vazio       | Tabelas criadas, 0 registros                                     |
+| Git             | 🟡 Pendente    | Arquivos não versionados, main 2 commits atrás                   |
 
 ---
 

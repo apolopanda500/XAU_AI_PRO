@@ -134,15 +134,94 @@ def test_portas_ocupadas_bloqueiam_operacao_longa(monkeypatch):
 
 
 def test_mql5_intacto_nao_falha():
-    assert pf.checar_mql5().estado == pf.ESTADOS["ok"]
+    """MQL5 sem diff e `ok`.
 
-
-def test_mql5_modificado_bloqueia():
+    O `_git` e substituido em vez de ler o repositorio de verdade: este teste
+    mede a GUARDA, e a guarda mede o que o `git status` devolve. Ler o
+    working tree faz o teste depender de haver (ou nao) um `.mqh` modificado
+    em mao — ele reprovou porque o cooldown de margem estava
+    sendo escrito, e a falha parecia ser do preflight quando era do contexto.
+    """
     original = pf._git
 
     def falso(*args):
         if args[:2] == ("status", "--porcelain"):
-            return 0, " M MQL5/Experts/XAU_AI_PRO/XAU_AI_PRO.mq5"
+            return 0, ""
+        return original(*args)
+
+    pf._git = falso
+    try:
+        resultado = pf.checar_mql5()
+    finally:
+        pf._git = original
+    assert resultado.estado == pf.ESTADOS["ok"]
+
+
+def test_mql5_modificado_sem_autorizacao_bloqueia():
+    """Alteracao NAO declarada continua bloqueando — a guarda nao foi afrouxada.
+
+    Este e o teste que impede que a `AUTORIZACOES_MQL5` vire um atalho para
+    desligar a protecao: basta declarar uma vez e a guarda deixa de valer.
+    """
+    original = pf._git
+
+    def falso(*args):
+        if args[:2] == ("status", "--porcelain"):
+            return 0, " M MQL5/Experts/XAU_AI_PRO/Core/AlgoQueNaoFoiAutorizado.mqh"
+        return original(*args)
+
+    pf._git = falso
+    try:
+        resultado = pf.checar_mql5()
+    finally:
+        pf._git = original
+    assert resultado.estado == pf.ESTADOS["falha"], (
+        "alteracao MQL5 sem autorizacao precisa reprovar; se este teste falha, "
+        "a guarda foi afrouxada em vez de exigir declaracao"
+    )
+    assert "AUTORIZACOES_MQL5" in resultado.dica
+
+
+def test_mql5_autorizado_e_aviso_nao_falha():
+    """Alteracao DECLARADA passa como `aviso`, nunca como `ok`.
+
+    `aviso` e o estado certo: o arquivo mudou e foi autorizado, mas o
+    `preflight` nao pode afirmar que a alteracao esta valida — compilou e
+    reanexou sao passos de fora do repositorio, e a propria guarda avisa isso.
+    """
+    original = pf._git
+    autorizado = next(iter(pf.AUTORIZACOES_MQL5))
+
+    def falso(*args):
+        if args[:2] == ("status", "--porcelain"):
+            return 0, f" M MQL5/Experts/XAU_AI_PRO/{autorizado}"
+        return original(*args)
+
+    pf._git = falso
+    try:
+        resultado = pf.checar_mql5()
+    finally:
+        pf._git = original
+    assert resultado.estado == pf.ESTADOS["aviso"], (
+        f"alteracao autorizada devia dar aviso, deu {resultado.estado}"
+    )
+    assert "REANEXOU" in resultado.dica or "REANEX" in resultado.dica
+
+
+def test_mql5_modificado_bloqueia():
+    """Alteracao nao declarada reprova.
+
+    O caminho e um modulo que NAO esta em `AUTORIZACOES_MQL5`, e nao o
+    `XAU_AI_PRO.mq5`: este passou a ser autorizado (integracao do SignalCoreV2
+    e da versao), entao usa-lo aqui transformaria este teste no oposto do que
+    ele verifica — passaria por `aviso` e nao mediria mais nada.
+    """
+    original = pf._git
+    nao_autorizado = "MQL5/Experts/XAU_AI_PRO/Core/AlgoQueNaoFoiAutorizado.mqh"
+
+    def falso(*args):
+        if args[:2] == ("status", "--porcelain"):
+            return 0, f" M {nao_autorizado}"
         return original(*args)
 
     pf._git = falso
@@ -152,6 +231,7 @@ def test_mql5_modificado_bloqueia():
         pf._git = original
     assert resultado.estado == pf.ESTADOS["falha"]
     assert "git checkout" in resultado.dica
+    assert "AUTORIZACOES_MQL5" in resultado.dica
 
 
 # ------------------------------------------------------------------ limpeza

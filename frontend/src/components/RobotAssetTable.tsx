@@ -55,7 +55,12 @@ export default function RobotAssetTable() {
 
   const [broker, setBroker] = useState('mt5');
   const [market, setMarket] = useState('forex');
-  const [catalog, setCatalog] = useState<CatalogState>({ rows: [], source: null, error: null, loading: true });
+  const [catalog, setCatalog] = useState<CatalogState>({
+    rows: [],
+    source: null,
+    error: null,
+    loading: true,
+  });
   const [quoteError, setQuoteError] = useState<string | null>(null);
   const [quoteBusy, setQuoteBusy] = useState(false);
   const [onlyTradable, setOnlyTradable] = useState(false);
@@ -73,14 +78,29 @@ export default function RobotAssetTable() {
         if (!alive) return;
         const data = body as { assets?: unknown; source?: string; error?: string };
         if (!ok) {
-          setCatalog({ rows: [], source: null, error: data?.error || `HTTP ${status}`, loading: false });
+          setCatalog({
+            rows: [],
+            source: null,
+            error: data?.error || `HTTP ${status}`,
+            loading: false,
+          });
           return;
         }
-        setCatalog({ rows: parseAssetCatalog(body), source: data?.source ?? null, error: null, loading: false });
+        setCatalog({
+          rows: parseAssetCatalog(body),
+          source: data?.source ?? null,
+          error: null,
+          loading: false,
+        });
       })
       .catch((err: unknown) => {
         if (!alive) return;
-        setCatalog({ rows: [], source: null, error: `Catálogo indisponível: ${String(err)}`, loading: false });
+        setCatalog({
+          rows: [],
+          source: null,
+          error: `Catálogo indisponível: ${String(err)}`,
+          loading: false,
+        });
       });
     return () => {
       alive = false;
@@ -89,7 +109,9 @@ export default function RobotAssetTable() {
 
   const symbols = useMemo(() => {
     const base = catalog.rows.map((row) => row.symbol);
-    return onlyTradable ? base.filter((s) => isTradable(catalog.rows.find((r) => r.symbol === s)!)) : base;
+    return onlyTradable
+      ? base.filter((s) => isTradable(catalog.rows.find((r) => r.symbol === s)!))
+      : base;
   }, [catalog.rows, onlyTradable]);
 
   // Quantos do catalogo vieram com preco de verdade. A MEXC devolve 1898 e a
@@ -98,7 +120,9 @@ export default function RobotAssetTable() {
   // cada preco.
   const cotados = symbols.filter((s) => {
     const q = porSimbolo.get(s);
-    return Boolean(q && ((Number.isFinite(q.bid) && q.bid > 0) || (Number.isFinite(q.ask) && q.ask > 0)));
+    return Boolean(
+      q && ((Number.isFinite(q.bid) && q.bid > 0) || (Number.isFinite(q.ask) && q.ask > 0)),
+    );
   }).length;
 
   const lerQuotes = useCallback(async () => {
@@ -107,9 +131,10 @@ export default function RobotAssetTable() {
     setQuoteBusy(true);
     try {
       const alvo = symbols.slice(0, MAX_BATCH);
-      const path = broker === 'mt5'
-        ? `/api/mt5/quotes?symbols=${encodeURIComponent(alvo.join(','))}`
-        : `/api/universal/quotes?broker=${encodeURIComponent(broker)}&market=${encodeURIComponent(market)}&symbols=${encodeURIComponent(alvo.join(','))}`;
+      const path =
+        broker === 'mt5'
+          ? `/api/mt5/quotes?symbols=${encodeURIComponent(alvo.join(','))}`
+          : `/api/universal/quotes?broker=${encodeURIComponent(broker)}&market=${encodeURIComponent(market)}&symbols=${encodeURIComponent(alvo.join(','))}`;
       const r = await fetch(`${apiBase()}${path}`, { signal: AbortSignal.timeout(12000) });
       const body = await r.json().catch(() => ({}));
       if (!r.ok) {
@@ -117,7 +142,8 @@ export default function RobotAssetTable() {
         // nao respondeu (ou nao resolve nesta rede). Dizer "HTTP 503" nao
         // ajuda o operador a decidir; dizer qual corretora e por que ajuda.
         const motivo = (body as { error?: string })?.error || `HTTP ${r.status}`;
-        const semInternet = /getaddrinfo|name or service not known|timed out|11002|unreachable/i.test(motivo);
+        const semInternet =
+          /getaddrinfo|name or service not known|timed out|11002|unreachable/i.test(motivo);
         setQuoteError(
           semInternet
             ? `${brokerLabel(broker)}: API publica nao alcancavel nesta rede. O nome do ativo e as regras de ordem continuam vindo da corretora.`
@@ -126,7 +152,9 @@ export default function RobotAssetTable() {
         return;
       }
       const data = body as { quotes?: unknown[]; errors?: unknown[] };
-      setQuoteError(Array.isArray(data.errors) && data.errors.length ? 'Alguns ativos não responderam.' : null);
+      setQuoteError(
+        Array.isArray(data.errors) && data.errors.length ? 'Alguns ativos não responderam.' : null,
+      );
       let recebidas = 0;
       for (const item of data.quotes ?? []) {
         if (!item || typeof item !== 'object') continue;
@@ -200,24 +228,44 @@ export default function RobotAssetTable() {
           <div>
             <h2>Ativos da corretora</h2>
             <span className="muted">
-              {brokerLabel(broker)} · {MARKET_LABELS[market] ?? market} · {symbols.length} no catalogo
+              {brokerLabel(broker)} · {MARKET_LABELS[market] ?? market} · {symbols.length} no
+              catalogo
               {cotados ? ` · ${cotados} com cotacao ao vivo` : ' · aguardando cotacao'}
               {catalog.source ? ` · fonte ${catalog.source}` : ''}
             </span>
           </div>
           <div className="btn-row">
-            <select value={broker} onChange={(e) => trocarBroker(e.target.value)} aria-label="Origem">
+            <select
+              value={broker}
+              onChange={(e) => trocarBroker(e.target.value)}
+              aria-label="Origem"
+            >
               {BROKERS.map((item) => (
-                <option key={item.id} value={item.id}>{item.label}</option>
+                <option key={item.id} value={item.id}>
+                  {item.label}
+                </option>
               ))}
             </select>
-            <select value={market} onChange={(e) => { setMarket(e.target.value); setSelected(''); }} aria-label="Mercado">
+            <select
+              value={market}
+              onChange={(e) => {
+                setMarket(e.target.value);
+                setSelected('');
+              }}
+              aria-label="Mercado"
+            >
               {(MARKETS_BY_BROKER[broker] ?? []).map((value) => (
-                <option key={value} value={value}>{MARKET_LABELS[value] ?? value}</option>
+                <option key={value} value={value}>
+                  {MARKET_LABELS[value] ?? value}
+                </option>
               ))}
             </select>
             <label className="chip" style={{ cursor: 'pointer' }}>
-              <input type="checkbox" checked={onlyTradable} onChange={(e) => setOnlyTradable(e.target.checked)} />
+              <input
+                type="checkbox"
+                checked={onlyTradable}
+                onChange={(e) => setOnlyTradable(e.target.checked)}
+              />
               apenas operáveis
             </label>
             <button
@@ -225,23 +273,42 @@ export default function RobotAssetTable() {
               className="btn sm primary"
               onClick={() => setTick((t) => t + 1)}
               disabled={quoteBusy || !symbols.length}
-              title={symbols.length ? undefined : 'Sem ativos no catalogo desta corretora/mercado para consultar.'}
+              title={
+                symbols.length
+                  ? undefined
+                  : 'Sem ativos no catalogo desta corretora/mercado para consultar.'
+              }
             >
               {quoteBusy ? 'Atualizando…' : 'Atualizar agora'}
             </button>
           </div>
         </div>
 
-        {catalog.error && <div className="hint warn" role="alert">{catalog.error}</div>}
-        {quoteError && <div className="hint warn" role="status">{quoteError}</div>}
+        {catalog.error && (
+          <div className="hint warn" role="alert">
+            {catalog.error}
+          </div>
+        )}
+        {quoteError && (
+          <div className="hint warn" role="status">
+            {quoteError}
+          </div>
+        )}
         {catalog.loading && <div className="hint">Carregando catálogo…</div>}
 
         <div className="table-scroll">
           <table className="tbl compact-table dense-grid">
             <thead>
               <tr>
-                <th>Usar</th><th>Ativo</th><th>Mercado</th><th className="num">Preço</th>
-                <th>Bid</th><th>Ask</th><th>Spread</th><th>Fonte</th><th>Estado</th>
+                <th>Usar</th>
+                <th>Ativo</th>
+                <th>Mercado</th>
+                <th className="num">Preço</th>
+                <th>Bid</th>
+                <th>Ask</th>
+                <th>Spread</th>
+                <th>Fonte</th>
+                <th>Estado</th>
               </tr>
             </thead>
             <tbody>
@@ -267,17 +334,32 @@ export default function RobotAssetTable() {
                       <strong>{symbol}</strong>
                     </td>
                     <td>{MARKET_LABELS[market] ?? market}</td>
-                    <td className="num">{typeof preco === 'number' && Number.isFinite(preco) ? preco : '--'}</td>
-                    <td className="num">{quote && Number.isFinite(quote.bid) ? quote.bid : '--'}</td>
-                    <td className="num">{quote && Number.isFinite(quote.ask) ? quote.ask : '--'}</td>
-                    <td className="num">{quote && Number.isFinite(quote.spread) ? quote.spread : '--'}</td>
+                    <td className="num">
+                      {typeof preco === 'number' && Number.isFinite(preco) ? preco : '--'}
+                    </td>
+                    <td className="num">
+                      {quote && Number.isFinite(quote.bid) ? quote.bid : '--'}
+                    </td>
+                    <td className="num">
+                      {quote && Number.isFinite(quote.ask) ? quote.ask : '--'}
+                    </td>
+                    <td className="num">
+                      {quote && Number.isFinite(quote.spread) ? quote.spread : '--'}
+                    </td>
                     <td className="muted">{quote?.source ?? 'sem cotação'}</td>
                     <td>
-                      {tradable
-                        ? <span className="chip ok">operável</span>
-                        : <span className="chip warn" title={(info?.restrictions ?? []).map(restrictionLabel).join(', ')}>
-                            {(info?.restrictions ?? []).map(restrictionLabel).join(', ') || info?.availability || 'indisponível'}
-                          </span>}
+                      {tradable ? (
+                        <span className="chip ok">operável</span>
+                      ) : (
+                        <span
+                          className="chip warn"
+                          title={(info?.restrictions ?? []).map(restrictionLabel).join(', ')}
+                        >
+                          {(info?.restrictions ?? []).map(restrictionLabel).join(', ') ||
+                            info?.availability ||
+                            'indisponível'}
+                        </span>
+                      )}
                     </td>
                   </tr>
                 );
@@ -288,11 +370,14 @@ export default function RobotAssetTable() {
 
         {!catalog.loading && !symbols.length && (
           <div className="placeholder" role="status">
-            A corretora não expôs ativos para {brokerLabel(broker)} em {MARKET_LABELS[market] ?? market}.
+            A corretora não expôs ativos para {brokerLabel(broker)} em{' '}
+            {MARKET_LABELS[market] ?? market}.
           </div>
         )}
         {symbols.length > MAX_BATCH && (
-          <p className="hint">Exibindo e consultando os {MAX_BATCH} primeiros ativos do catálogo.</p>
+          <p className="hint">
+            Exibindo e consultando os {MAX_BATCH} primeiros ativos do catálogo.
+          </p>
         )}
       </div>
       {/* O "Ticket operacional" que fechava este bloco tinha um botão

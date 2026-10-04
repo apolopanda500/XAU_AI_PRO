@@ -74,6 +74,12 @@ a = Analysis(
         'backend.audit_log',
         'backend.plano_gate',
         'backend.risk_gate',
+        # `latencia` entra pelo mesmo motivo dos acima: a rota `/api/latencia`
+        # importa DENTRO do handler (`from backend import latencia as _`),
+        # que o analisador nao enxerga. Sem esta linha o gateway congelado
+        # responde 404 na rota — e o teste `test_nenhum_modulo_do_backend_fica_
+        # de_fora_do_bundle` reprova, que e exatamente para onde isto aponta.
+        'backend.latencia',
         # METAS E TRAVAS DO VIP (2026-10-02)
         #
         # Estes dois NAO entram sozinhos pelo mesmo motivo acima: o

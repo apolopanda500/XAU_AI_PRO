@@ -80,7 +80,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "backend_port": 8000,
         "dashboard_port": 8501,
         "litellm_port": 4000,
-        "backend_url": "https://xau-ai-pro-ci56i6oj4-apolopanda500.vercel.app",
+        "backend_url": "http://127.0.0.1:9001",
         "backend_api_key": "",
         "ai_enabled": False,
         "ai_base_url": "",
@@ -102,10 +102,6 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "github": {"repo_url": "https://github.com/apolopanda500/XAU_AI_PRO.git", "token": ""},
         "gitlab": {"base_url": "https://gitlab.com", "project_path": "apolopanda500/XAU_AI_PRO", "token": ""},
         "figma": {"token": "", "file_key": "DCWY2p6frSZwjAcwZYYDKj", "team_id": ""},
-        "sentry": {"dsn": ""},
-        "slack": {"webhook": ""},
-        "kilo": {"webhook": ""},
-        "models": {"base_url": "", "api_key": ""},
         "mcp": {
             "endpoint": "",
             "servers": {

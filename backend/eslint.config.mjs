@@ -81,12 +81,6 @@ export default [
     },
   },
   {
-    ignores: [
-      'node_modules/**',
-      '.output/**',
-      '.vercel/**',
-      '.nitro/**',
-      'dist/**',
-    ],
+    ignores: ['node_modules/**', '.output/**', 'dist/**'],
   },
 ];

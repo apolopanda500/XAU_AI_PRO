@@ -446,7 +446,14 @@ def treinar_classe(classe: str) -> dict[str, Any]:
     if estavel:
         import joblib
 
-        joblib.dump(modelo, MODELOS_DIR / f"{nome}.pkl")
+        caminho_pkl = MODELOS_DIR / f"{nome}.pkl"
+        joblib.dump(modelo, caminho_pkl)
+        # Grava o SHA-256 do artefato no `.meta.json`. A inferencia confere
+        # ANTES do `joblib.load`, que desserializa com pickle e executa codigo.
+        # Ver `Python/integridade_modelo.py`.
+        from Python.integridade_modelo import registrar as _registrar_hash
+
+        _registrar_hash(caminho_pkl, resultado)
         resultado.update(publicable=True, publish_reason="")
     else:
         resultado.update(publicable=False, publish_reason=motivo)

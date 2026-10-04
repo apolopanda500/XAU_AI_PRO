@@ -42,7 +42,9 @@ export const QuantumClock: React.FC<Props> = ({
     return (
       <div className="quantum-clock-compact">
         <span className="clock-icon">🕐</span>
-        <span className="clock-time">{hours}:{minutes}</span>
+        <span className="clock-time">
+          {hours}:{minutes}
+        </span>
         {showSeconds && <span className="clock-secs">{seconds}</span>}
       </div>
     );

@@ -1,0 +1,61 @@
+# Globais do Prettier deste repositorio.
+#
+# `.pytest_cache` e o item que MOTIVA a lista: a pasta tem ACL CORROMPIDA nesta
+# maquina (nem o dono le — ver `scripts/limpeza_segura.ps1`, secao "LIMITACAO
+# HONESTA"). O Prettier faz `scandir` do diretorio ao expandir um glob e aborta
+# com `EPERM`, o que produz um falso verde:
+#
+#   [error] EPERM: operation not permitted, scandir '...\.pytest_cache'
+#   All matched files use Prettier code style!
+#
+# O "All matched" e mentira: o Prettier nao checou NADA. Medido em 04/10/2026.
+#
+# `.output` e o build de saida da Vercel (nitro). Ja ignorado por
+# `backend/.gitignore:4`, e NAO pode ser formatado: sao bundles gerados, com
+# linhas minificadas que o Prettier reescreveria a cada build. Era 5 dos arquivos
+# que ele reportaria, e nenhum era codigo do projeto.
+
+.pytest_cache/
+.pytest-tmp-*/
+node_modules/
+dist/
+build/
+Temp/
+Logs/
+target/
+vendor/
+__pycache__/
+.venv/
+venv/
+.mypy_cache/
+.ruff_cache/
+.output/
+.next/
+.vite/
+
+# Arquivo GERADO por codigo. Nao pode ser formatado.
+#
+# `Docs/MATRIZ_CAPABILIDADES.md` e escrito por
+# `scripts/gerar_matriz_capacidades.py` a partir de `backend/broker_registry.py`,
+# e o proprio cabecalho diz "Nao editar a mao". O
+# `tests/test_broker_coverage.py::test_documento_gerado_diz_a_verdade` compara
+# o arquivo com a saida do gerador e REPROVA se divergirem.
+#
+# Medido em 04/10/2026: o Prettier reformatou o arquivo, o teste reprovou com
+# "Docs/MATRIZ_CAPABILIDADES.md desatualizado", e regenerar nao resolvia — a
+# proxima execucao de `prettier --write` quebraria de novo.
+#
+# A saida do gerador e a fonte da verdade; o estilo do arquivo e do gerador.
+Docs/MATRIZ_CAPABILIDADES.md
+
+# Artefatos binarios ou gerados: nao ha estilo a corrigir.
+*.pkl
+*.ex5
+*.log
+*.db
+*.sqlite3
+*.lock
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+Cargo.lock

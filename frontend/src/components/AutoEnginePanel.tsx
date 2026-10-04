@@ -56,7 +56,15 @@ type Estado = {
   limites: Partial<Limites>;
   // `modelo` e o nome do artefato que rodou, lido do `.meta.json` pelo
   // backend. O terminal ao vivo mostra este campo em vez de montar um nome.
-  decisoes: Array<{ ts?: string; simbolo?: string; side?: string; acao?: string; motivo?: string; confianca?: number; modelo?: string }>;
+  decisoes: Array<{
+    ts?: string;
+    simbolo?: string;
+    side?: string;
+    acao?: string;
+    motivo?: string;
+    confianca?: number;
+    modelo?: string;
+  }>;
   updated_at?: string;
 };
 
@@ -65,11 +73,21 @@ type Modelo = { id: string; symbol: string; timeframe: string; pkl_present: bool
 const CAMPOS: Array<{ chave: keyof Limites; rotulo: string; dica: string; passo: number }> = [
   { chave: 'banca', rotulo: 'Banca', dica: 'Base de calculo, nao o saldo da conta', passo: 10 },
   { chave: 'risco_por_trade_pct', rotulo: 'Risco por trade %', dica: '0 a 10', passo: 0.1 },
-  { chave: 'confianca_minima', rotulo: 'Confianca minima %', dica: 'Probabilidade real do modelo', passo: 1 },
+  {
+    chave: 'confianca_minima',
+    rotulo: 'Confianca minima %',
+    dica: 'Probabilidade real do modelo',
+    passo: 1,
+  },
   { chave: 'edge_minimo', rotulo: 'Edge minimo', dica: '0.05 = 5%', passo: 0.01 },
   { chave: 'max_posicoes', rotulo: 'Max posicoes', dica: 'Simultaneas', passo: 1 },
   { chave: 'max_operacoes_dia', rotulo: 'Operacoes/dia', dica: 'Teto diario', passo: 1 },
-  { chave: 'perda_diaria_max_pct', rotulo: 'Perda diaria %', dica: 'Ao atingir, o motor para', passo: 0.5 },
+  {
+    chave: 'perda_diaria_max_pct',
+    rotulo: 'Perda diaria %',
+    dica: 'Ao atingir, o motor para',
+    passo: 0.5,
+  },
   { chave: 'sl_atr', rotulo: 'Stop (x ATR)', dica: 'Multiplicador de ATR', passo: 0.1 },
   { chave: 'tp_atr', rotulo: 'Alvo (x ATR)', dica: 'Multiplicador de ATR', passo: 0.1 },
   { chave: 'intervalo_minutos', rotulo: 'Intervalo (min)', dica: 'Entre avaliacoes', passo: 1 },
@@ -80,10 +98,28 @@ function num(v: string): number {
 }
 
 export default function AutoEnginePanel() {
-  const [limites, setLimites] = useState<Limites>({
-    banca: 20, risco_por_trade_pct: 1, confianca_minima: 55, edge_minimo: 0.05,
-    max_posicoes: 2, max_operacoes_dia: 20, perda_diaria_max_pct: 2,
-    sl_atr: 1.5, tp_atr: 3, intervalo_minutos: 15,
+  // NENHUM DEFAULT. Todos os limites nascem em zero.
+//
+// Antes vinham preenchidos: banca 20, confianca 55, intervalo 15 min,
+// sl_atr 1.5, tp_atr 3. O operador via esses numeros na tela e ligava o motor
+// sem saber que estava operando com o risco de outra pessoa.
+//
+// Zero aqui tambem evita o outro bug: o intervalo fixo em 15 minutos e
+// absurdo em H4 e curto demais em M5. Cada par e cada modelo tem a sua
+// paciencia, e a escolha e do operador. O backend foi zerado no mesmo dia
+// (ver `backend/auto_engine.py::LimitesAuto`), senao a tela dizia "nao
+// escolhido" e o motor operava com o valor antigo assim mesmo.
+const [limites, setLimites] = useState<Limites>({
+    banca: 0,
+    risco_por_trade_pct: 0,
+    confianca_minima: 0,
+    edge_minimo: 0,
+    max_posicoes: 0,
+    max_operacoes_dia: 0,
+    perda_diaria_max_pct: 0,
+    sl_atr: 0,
+    tp_atr: 0,
+    intervalo_minutos: 0,
   });
   const [status, setStatus] = useState('');
   const [ocupado, setOcupado] = useState(false);
@@ -132,12 +168,18 @@ export default function AutoEnginePanel() {
         if (controller.signal.aborted) return;
         setModelos((d.models ?? []).filter((m) => m.pkl_present));
       })
-      .catch(() => { /* sem lista, os selects ficam com o padrao */ });
+      .catch(() => {
+        /* sem lista, os selects ficam com o padrao */
+      });
     return () => controller.abort();
   }, []);
 
   const pares = useMemo(
-    () => modelos.map((m) => ({ simbolo: String(m.symbol).toUpperCase(), timeframe: String(m.timeframe).toUpperCase() })),
+    () =>
+      modelos.map((m) => ({
+        simbolo: String(m.symbol).toUpperCase(),
+        timeframe: String(m.timeframe).toUpperCase(),
+      })),
     [modelos],
   );
 
@@ -221,7 +263,11 @@ export default function AutoEnginePanel() {
         body: JSON.stringify(corpo ?? {}),
         signal: AbortSignal.timeout(10_000),
       });
-      const d = (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string; motivo?: string };
+      const d = (await r.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        motivo?: string;
+      };
       if (r.ok && d.ok !== false) {
         // Três rotinas, três frases: aplicar config nao liga o motor, ligar
         // nao configura, desligar nao mexe nos limites.
@@ -266,7 +312,11 @@ export default function AutoEnginePanel() {
         body: JSON.stringify({ ...limites, simbolo, timeframe, broker, market }),
         signal: AbortSignal.timeout(10_000),
       });
-      const dCfg = (await cfg.json().catch(() => ({}))) as { ok?: boolean; error?: string; motivo?: string };
+      const dCfg = (await cfg.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        motivo?: string;
+      };
       if (!cfg.ok || dCfg.ok === false) {
         const motivo = dCfg.error || dCfg.motivo || `HTTP ${cfg.status}`;
         setStatus(motivo);
@@ -279,7 +329,11 @@ export default function AutoEnginePanel() {
         body: '{}',
         signal: AbortSignal.timeout(10_000),
       });
-      const dIni = (await ini.json().catch(() => ({}))) as { ok?: boolean; error?: string; motivo?: string };
+      const dIni = (await ini.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        motivo?: string;
+      };
       if (ini.ok && dIni.ok !== false) {
         setStatus('Motor ligado.');
         void notify('Operacao automatica ligada', `Motor operando ${simbolo} ${timeframe}.`);
@@ -303,28 +357,29 @@ export default function AutoEnginePanel() {
   const faltaCorretora = !broker || !market;
 
   // Par escolhido na tela ainda nao aplicado ao motor.
-  const parDiferente = Boolean(
-    estado
-    && String(estado.simbolo ?? '').toUpperCase() !== simbolo,
-  ) || Boolean(
-    estado
-    && String(estado.timeframe ?? '').toUpperCase() !== timeframe,
-  ) || Boolean(
-    estado && String(estado.broker ?? '').toLowerCase() !== broker,
-  ) || Boolean(
-    estado && String(estado.market ?? '').toLowerCase() !== market,
-  );
+  const parDiferente =
+    Boolean(estado && String(estado.simbolo ?? '').toUpperCase() !== simbolo) ||
+    Boolean(estado && String(estado.timeframe ?? '').toUpperCase() !== timeframe) ||
+    Boolean(estado && String(estado.broker ?? '').toLowerCase() !== broker) ||
+    Boolean(estado && String(estado.market ?? '').toLowerCase() !== market);
 
   return (
     <section className="card compact-card auto-engine" aria-labelledby="auto-engine-title">
       <div className="section-head">
         <div>
           <h2 id="auto-engine-title">Operacao automatica</h2>
-          <span className="muted">O motor avalia o modelo treinado do par escolhido e envia ordens sozinho, dentro dos limites abaixo</span>
+          <span className="muted">
+            O motor avalia o modelo treinado do par escolhido e envia ordens sozinho, dentro dos
+            limites abaixo
+          </span>
         </div>
         <div className="btn-row">
-          <span className={`chip ${ativo ? 'ok' : 'warn'}`}>{ativo ? 'Automatico operando' : 'Automatico parado'}</span>
-          <span className="chip">{estado?.simbolo ?? '--'} {estado?.timeframe ?? ''}</span>
+          <span className={`chip ${ativo ? 'ok' : 'warn'}`}>
+            {ativo ? 'Automatico operando' : 'Automatico parado'}
+          </span>
+          <span className="chip">
+            {estado?.simbolo ?? '--'} {estado?.timeframe ?? ''}
+          </span>
           <span className="chip">ciclo {estado?.ciclo ?? 0}</span>
         </div>
       </div>
@@ -340,7 +395,6 @@ export default function AutoEnginePanel() {
           selecionado acima. Quem aperta "Operar manualmente" desliga o motor
           primeiro: os dois nao devem decidir a mesma conta ao mesmo tempo. */}
 
-
       {/* O MOTOR OPERA UM PAR POR VEZ: escolher ativo + periodo e escolher
           qual modelo roda. So aparecem pares com `.pkl` no disco. */}
       <div className="auto-engine-grid auto-engine-par">
@@ -349,28 +403,48 @@ export default function AutoEnginePanel() {
             "escolha a corretora antes de ligar": o backend exige a escolha e a
             tela nao offers. Fica na MESMA grade do par, para nao virar uma
             linha extra de UI. */}
-        <label className="field" title="Corretora que vai executar a ordem. Nenhuma corretora e o padrao: o operador escolhe.">
+        <label
+          className="field"
+          title="Corretora que vai executar a ordem. Nenhuma corretora e o padrao: o operador escolhe."
+        >
           <span>Corretora</span>
           <select
             aria-label="Corretora do motor automatico"
             value={broker}
             disabled={!BROKERS.length}
-            onChange={(e) => { setSujo(true); setBroker(e.target.value); }}
+            onChange={(e) => {
+              setSujo(true);
+              setBroker(e.target.value);
+            }}
           >
             <option value="">Escolha a corretora</option>
-            {BROKERS.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
+            {BROKERS.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.label}
+              </option>
+            ))}
           </select>
         </label>
-        <label className="field" title="Classe de ativo. A lista segue a corretora escolhida: Binance nao opera forex.">
+        <label
+          className="field"
+          title="Classe de ativo. A lista segue a corretora escolhida: Binance nao opera forex."
+        >
           <span>Mercado</span>
           <select
             aria-label="Mercado do motor automatico"
             value={market}
             disabled={!broker || !mercados.length}
-            onChange={(e) => { setSujo(true); setMarket(e.target.value); }}
+            onChange={(e) => {
+              setSujo(true);
+              setMarket(e.target.value);
+            }}
           >
             {!broker && <option value="">Escolha a corretora antes</option>}
-            {mercados.map((m) => <option key={m} value={m}>{MARKET_LABELS[m] ?? m}</option>)}
+            {mercados.map((m) => (
+              <option key={m} value={m}>
+                {MARKET_LABELS[m] ?? m}
+              </option>
+            ))}
           </select>
         </label>
         <label className="field" title="Ativo que o motor vai avaliar a cada ciclo">
@@ -379,10 +453,17 @@ export default function AutoEnginePanel() {
             aria-label="Ativo do motor automatico"
             value={simbolo}
             disabled={!simbolos.length}
-            onChange={(e) => { setSujo(true); setSimbolo(e.target.value.toUpperCase()); }}
+            onChange={(e) => {
+              setSujo(true);
+              setSimbolo(e.target.value.toUpperCase());
+            }}
           >
             {!simbolos.length && <option value={simbolo}>{simbolo}</option>}
-            {simbolos.map((s) => <option key={s} value={s}>{s}</option>)}
+            {simbolos.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
           </select>
         </label>
         <label className="field" title="Período do modelo treinado deste ativo">
@@ -391,14 +472,23 @@ export default function AutoEnginePanel() {
             aria-label="Periodo do motor automatico"
             value={timeframe}
             disabled={!periodos.length}
-            onChange={(e) => { setSujo(true); setTimeframe(e.target.value.toUpperCase()); }}
+            onChange={(e) => {
+              setSujo(true);
+              setTimeframe(e.target.value.toUpperCase());
+            }}
           >
             {!periodos.length && <option value={timeframe}>{timeframe}</option>}
-            {periodos.map((t) => <option key={t} value={t}>{t}</option>)}
+            {periodos.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
           </select>
         </label>
         <div className="auto-engine-par-chips">
-          <span className="chip">modelo {simbolo}_{timeframe}</span>
+          <span className="chip">
+            modelo {simbolo}_{timeframe}
+          </span>
           {!modelos.length && <span className="chip warn">lista de modelos indisponível</span>}
         </div>
       </div>
@@ -453,7 +543,9 @@ export default function AutoEnginePanel() {
         <button
           className="btn"
           type="button"
-          onClick={() => void enviar('/api/auto/config', { ...limites, simbolo, timeframe, broker, market })}
+          onClick={() =>
+            void enviar('/api/auto/config', { ...limites, simbolo, timeframe, broker, market })
+          }
           disabled={ocupado}
           title="Grava os limites e o par sem ligar o motor"
         >
@@ -469,18 +561,38 @@ export default function AutoEnginePanel() {
         </button>
       </div>
 
-      <div className="hint" role="status" aria-live="polite" style={{ marginTop: 6 }}>{status || `Threads: ${estado?.threads ?? '--'}`}</div>
+      <div className="hint" role="status" aria-live="polite" style={{ marginTop: 6 }}>
+        {status || `Threads: ${estado?.threads ?? '--'}`}
+      </div>
 
       {(estado?.decisoes?.length ?? 0) > 0 && (
         <div className="table-scroll auto-engine-decisoes">
           <table className="tbl compact-table dense-grid">
-            <thead><tr><th>Quando</th><th>Ativo</th><th>Decisao</th><th className="num">Confianca</th><th>Motivo</th></tr></thead>
+            <thead>
+              <tr>
+                <th>Quando</th>
+                <th>Ativo</th>
+                <th>Decisao</th>
+                <th className="num">Confianca</th>
+                <th>Motivo</th>
+              </tr>
+            </thead>
             <tbody>
               {(estado?.decisoes ?? []).slice(0, 8).map((d, i) => (
                 <tr key={`${d.ts ?? i}`}>
-                  <td className="mono">{d.ts ? new Date(d.ts).toLocaleTimeString('pt-BR') : '--'}</td>
-                  <td><strong>{d.simbolo ?? '--'}</strong></td>
-                  <td><span className={`chip ${/buy|compra/i.test(String(d.side)) ? 'ok' : /sell|venda/i.test(String(d.side)) ? 'warn' : ''}`}>{d.side ?? d.acao ?? '--'}</span></td>
+                  <td className="mono">
+                    {d.ts ? new Date(d.ts).toLocaleTimeString('pt-BR') : '--'}
+                  </td>
+                  <td>
+                    <strong>{d.simbolo ?? '--'}</strong>
+                  </td>
+                  <td>
+                    <span
+                      className={`chip ${/buy|compra/i.test(String(d.side)) ? 'ok' : /sell|venda/i.test(String(d.side)) ? 'warn' : ''}`}
+                    >
+                      {d.side ?? d.acao ?? '--'}
+                    </span>
+                  </td>
                   <td className="num">{d.confianca ?? '--'}</td>
                   <td>{d.motivo ?? '--'}</td>
                 </tr>

@@ -74,7 +74,9 @@ class StrategyTester(tk.Frame):
         # Timeframe
         tf_card = Card(panel, title="Timeframe", padx=12, pady=12)
         tf_card.pack(fill="x", padx=8, pady=4)
-        from app.market_symbols import DEFAULT_TIMEFRAME, TIMEFRAMES
+        from app.market_symbols import TIMEFRAMES
+        # Sem valor inicial: o operador ESCOLHE. Antes `value=DEFAULT_TIMEFRAME`
+        # marcava M5 como escolhido antes de ele escolher qualquer coisa.
         self.tf_var = tk.StringVar(value="")
         for tf in TIMEFRAMES:
             tk.Radiobutton(tf_card.body, text=tf, variable=self.tf_var, value=tf,

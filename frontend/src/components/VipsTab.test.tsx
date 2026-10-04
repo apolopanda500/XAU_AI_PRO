@@ -13,11 +13,14 @@ const RESPOSTA = vi.hoisted(() => ({ body: null as unknown }));
 
 vi.mock('../../lib/api', () => ({ apiBase: () => 'http://127.0.0.1:9001' }));
 
-vi.stubGlobal('fetch', vi.fn(async () => ({
-  ok: true,
-  status: 200,
-  json: async () => RESPOSTA.body,
-})));
+vi.stubGlobal(
+  'fetch',
+  vi.fn(async () => ({
+    ok: true,
+    status: 200,
+    json: async () => RESPOSTA.body,
+  })),
+);
 
 const { default: VipsTab } = await import('./VipsTab');
 
@@ -96,10 +99,34 @@ describe('VipsTab', () => {
 // quanto ja fez do proximo. Estes testes fixam que a escada aparece inteira,
 // que so um degrau e o proximo alvo, e que ela nunca promete desconto.
 const ESCADA = {
-  regular: { id: 'regular', nome: 'Regular', estado: 'alcancado', percentual: 100, minimo_por_grupo: { cripto: 0, forex_cfd: 0 } },
-  vip1: { id: 'vip1', nome: 'VIP 1', estado: 'atual', percentual: 50, minimo_por_grupo: { cripto: 10_000, forex_cfd: 100_000 } },
-  vip2: { id: 'vip2', nome: 'VIP 2', estado: 'futuro', percentual: 5, minimo_por_grupo: { cripto: 100_000, forex_cfd: 1_000_000 } },
-  vip5: { id: 'vip5', nome: 'VIP 5', estado: 'futuro', percentual: 0, minimo_por_grupo: { cripto: 25_000_000, forex_cfd: 90_000_000 } },
+  regular: {
+    id: 'regular',
+    nome: 'Regular',
+    estado: 'alcancado',
+    percentual: 100,
+    minimo_por_grupo: { cripto: 0, forex_cfd: 0 },
+  },
+  vip1: {
+    id: 'vip1',
+    nome: 'VIP 1',
+    estado: 'atual',
+    percentual: 50,
+    minimo_por_grupo: { cripto: 10_000, forex_cfd: 100_000 },
+  },
+  vip2: {
+    id: 'vip2',
+    nome: 'VIP 2',
+    estado: 'futuro',
+    percentual: 5,
+    minimo_por_grupo: { cripto: 100_000, forex_cfd: 1_000_000 },
+  },
+  vip5: {
+    id: 'vip5',
+    nome: 'VIP 5',
+    estado: 'futuro',
+    percentual: 0,
+    minimo_por_grupo: { cripto: 25_000_000, forex_cfd: 90_000_000 },
+  },
 };
 
 function comEscada() {

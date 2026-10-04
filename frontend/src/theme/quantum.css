@@ -64,9 +64,10 @@
 
 /* Transição suave entre temas (0.5s ease) */
 * {
-  transition: background-color 0.5s ease,
-              border-color 0.5s ease,
-              box-shadow 0.5s ease;
+  transition:
+    background-color 0.5s ease,
+    border-color 0.5s ease,
+    box-shadow 0.5s ease;
 }
 
 /* ============================================================
@@ -76,7 +77,8 @@
 
 /* Partícula flutuando suavemente */
 @keyframes quantum-float {
-  0%, 100% {
+  0%,
+  100% {
     transform: translateY(0) translateX(0);
     opacity: 0.4;
   }
@@ -96,7 +98,8 @@
 
 /* Partícula flutuando inversa */
 @keyframes quantum-float-reverse {
-  0%, 100% {
+  0%,
+  100% {
     transform: translateY(0) translateX(0);
     opacity: 0.6;
   }
@@ -112,7 +115,8 @@
 
 /* Pulso de energia */
 @keyframes quantum-pulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 0.3;
     transform: scale(1);
   }
@@ -124,14 +128,17 @@
 
 /* Glow pulsante */
 @keyframes quantum-glow-pulse {
-  0%, 100% {
-    box-shadow: 0 0 5px var(--quantum-glow),
-                0 0 10px var(--quantum-glow-soft);
+  0%,
+  100% {
+    box-shadow:
+      0 0 5px var(--quantum-glow),
+      0 0 10px var(--quantum-glow-soft);
   }
   50% {
-    box-shadow: 0 0 15px var(--quantum-glow),
-                0 0 30px var(--quantum-glow-soft),
-                0 0 45px var(--quantum-glow-soft);
+    box-shadow:
+      0 0 15px var(--quantum-glow),
+      0 0 30px var(--quantum-glow-soft),
+      0 0 45px var(--quantum-glow-soft);
   }
 }
 
@@ -166,14 +173,17 @@
 
 /* Números quânticos piscando */
 @keyframes quantum-blink {
-  0%, 90%, 100% {
+  0%,
+  90%,
+  100% {
     opacity: 0.3;
     text-shadow: 0 0 5px var(--quantum-glow-soft);
   }
   95% {
     opacity: 1;
-    text-shadow: 0 0 15px var(--quantum-glow),
-                 0 0 25px var(--quantum-glow-soft);
+    text-shadow:
+      0 0 15px var(--quantum-glow),
+      0 0 25px var(--quantum-glow-soft);
   }
 }
 
@@ -199,7 +209,8 @@
 
 /* Scale breathe */
 @keyframes quantum-breathe {
-  0%, 100% {
+  0%,
+  100% {
     transform: scale(1);
     opacity: 0.5;
   }
@@ -220,8 +231,9 @@
   height: 4px;
   border-radius: 50%;
   background: var(--quantum-particle);
-  box-shadow: 0 0 6px var(--quantum-glow),
-              0 0 12px var(--quantum-glow-soft);
+  box-shadow:
+    0 0 6px var(--quantum-glow),
+    0 0 12px var(--quantum-glow-soft);
   animation: quantum-float 4s ease-in-out infinite;
   pointer-events: none;
 }
@@ -280,8 +292,9 @@
 
 .quantum-energy-line.thick {
   height: 3px;
-  box-shadow: 0 0 12px var(--quantum-glow),
-              0 0 20px var(--quantum-glow-soft);
+  box-shadow:
+    0 0 12px var(--quantum-glow),
+    0 0 20px var(--quantum-glow-soft);
 }
 
 /* ============================================================
@@ -297,9 +310,10 @@
 }
 
 .quantum-number.glow-strong {
-  text-shadow: 0 0 10px var(--quantum-glow),
-               0 0 20px var(--quantum-glow-soft),
-               0 0 30px var(--quantum-glow-soft);
+  text-shadow:
+    0 0 10px var(--quantum-glow),
+    0 0 20px var(--quantum-glow-soft),
+    0 0 30px var(--quantum-glow-soft);
   animation-duration: 4s;
 }
 
@@ -355,28 +369,30 @@
   animation-duration: 10s;
 }
 
-
 /* ============================================================
    7. SOMBRAS QUÂNTICAS
    Box-shadow com múltiplas camadas de cores neon.
    ============================================================ */
 
 .quantum-shadow {
-  box-shadow: 0 0 10px var(--quantum-glow-soft),
-              0 0 20px var(--quantum-glow-soft),
-              0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow:
+    0 0 10px var(--quantum-glow-soft),
+    0 0 20px var(--quantum-glow-soft),
+    0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .quantum-shadow.strong {
-  box-shadow: 0 0 15px var(--quantum-glow),
-              0 0 30px var(--quantum-glow-soft),
-              0 0 50px var(--quantum-glow-soft),
-              0 4px 20px rgba(0, 0, 0, 0.4);
+  box-shadow:
+    0 0 15px var(--quantum-glow),
+    0 0 30px var(--quantum-glow-soft),
+    0 0 50px var(--quantum-glow-soft),
+    0 4px 20px rgba(0, 0, 0, 0.4);
 }
 
 .quantum-shadow.glow {
-  box-shadow: 0 0 8px var(--quantum-glow),
-              0 0 16px var(--quantum-glow-soft);
+  box-shadow:
+    0 0 8px var(--quantum-glow),
+    0 0 16px var(--quantum-glow-soft);
 }
 
 /* ============================================================
@@ -434,11 +450,7 @@
 }
 
 .quantum-gradient-glow {
-  background: radial-gradient(
-    circle at 50% 50%,
-    var(--quantum-glow) 0%,
-    transparent 70%
-  );
+  background: radial-gradient(circle at 50% 50%, var(--quantum-glow) 0%, transparent 70%);
 }
 
 .quantum-gradient-text {
@@ -492,7 +504,6 @@
   animation-duration: 12s;
 }
 
-
 /* ============================================================
    11. PAINEL QUÂNTICO
    Container com todos os efeitos combinados.
@@ -504,8 +515,9 @@
   border: 1px solid var(--quantum-border);
   border-radius: var(--radius);
   padding: 16px;
-  box-shadow: 0 0 10px var(--quantum-glow-soft),
-              0 4px 12px rgba(0, 0, 0, 0.2);
+  box-shadow:
+    0 0 10px var(--quantum-glow-soft),
+    0 4px 12px rgba(0, 0, 0, 0.2);
   overflow: hidden;
 }
 
@@ -516,19 +528,15 @@
   left: 0;
   right: 0;
   height: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    var(--quantum-primary),
-    transparent
-  );
+  background: linear-gradient(90deg, transparent, var(--quantum-primary), transparent);
   opacity: 0.6;
 }
 
 .quantum-panel:hover {
-  box-shadow: 0 0 15px var(--quantum-glow),
-              0 0 25px var(--quantum-glow-soft),
-              0 4px 16px rgba(0, 0, 0, 0.3);
+  box-shadow:
+    0 0 15px var(--quantum-glow),
+    0 0 25px var(--quantum-glow-soft),
+    0 4px 16px rgba(0, 0, 0, 0.3);
   border-color: var(--quantum-primary);
 }
 
@@ -554,12 +562,7 @@
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    var(--quantum-glow-soft),
-    transparent
-  );
+  background: linear-gradient(90deg, transparent, var(--quantum-glow-soft), transparent);
   transform: translateX(-100%);
   transition: transform 0.5s ease;
 }
@@ -602,11 +605,7 @@
   height: 200%;
   top: -50%;
   left: -50%;
-  background: radial-gradient(
-    ellipse at center,
-    var(--quantum-bg-wave) 0%,
-    transparent 50%
-  );
+  background: radial-gradient(ellipse at center, var(--quantum-bg-wave) 0%, transparent 50%);
   animation: quantum-wave 20s linear infinite;
 }
 
@@ -649,7 +648,6 @@
   background: var(--danger);
   box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
 }
-
 
 /* ============================================================
    15. SCROLLBAR QUÂNTICA
@@ -811,36 +809,54 @@
   opacity: 1;
 }
 
-
-
 /* Tema Ocean Dark — Ciano profundo */
 [data-theme='ocean_dark'] {
-  --quantum-primary: #22d3ee; --quantum-secondary: #38bdf8; --quantum-accent: #0ea5e9;
-  --quantum-glow: rgba(34, 211, 238, 0.6); --quantum-glow-soft: rgba(34, 211, 238, 0.25);
-  --quantum-energy: #38bdf8; --quantum-particle: rgba(34, 211, 238, 0.8);
-  --quantum-border: rgba(34, 211, 238, 0.4); --quantum-bg-wave: rgba(34, 211, 238, 0.03);
+  --quantum-primary: #22d3ee;
+  --quantum-secondary: #38bdf8;
+  --quantum-accent: #0ea5e9;
+  --quantum-glow: rgba(34, 211, 238, 0.6);
+  --quantum-glow-soft: rgba(34, 211, 238, 0.25);
+  --quantum-energy: #38bdf8;
+  --quantum-particle: rgba(34, 211, 238, 0.8);
+  --quantum-border: rgba(34, 211, 238, 0.4);
+  --quantum-bg-wave: rgba(34, 211, 238, 0.03);
 }
 
 /* Tema Emerald Dark — Verde esmeralda */
 [data-theme='emerald_dark'] {
-  --quantum-primary: #34d399; --quantum-secondary: #6ee7b7; --quantum-accent: #10b981;
-  --quantum-glow: rgba(52, 211, 153, 0.6); --quantum-glow-soft: rgba(52, 211, 153, 0.25);
-  --quantum-energy: #6ee7b7; --quantum-particle: rgba(52, 211, 153, 0.8);
-  --quantum-border: rgba(52, 211, 153, 0.4); --quantum-bg-wave: rgba(52, 211, 153, 0.03);
+  --quantum-primary: #34d399;
+  --quantum-secondary: #6ee7b7;
+  --quantum-accent: #10b981;
+  --quantum-glow: rgba(52, 211, 153, 0.6);
+  --quantum-glow-soft: rgba(52, 211, 153, 0.25);
+  --quantum-energy: #6ee7b7;
+  --quantum-particle: rgba(52, 211, 153, 0.8);
+  --quantum-border: rgba(52, 211, 153, 0.4);
+  --quantum-bg-wave: rgba(52, 211, 153, 0.03);
 }
 
 /* Tema Rose Dark — Rosa */
 [data-theme='rose_dark'] {
-  --quantum-primary: #fb7185; --quantum-secondary: #fda4af; --quantum-accent: #e11d48;
-  --quantum-glow: rgba(251, 113, 133, 0.6); --quantum-glow-soft: rgba(251, 113, 133, 0.25);
-  --quantum-energy: #fda4af; --quantum-particle: rgba(251, 113, 133, 0.8);
-  --quantum-border: rgba(251, 113, 133, 0.4); --quantum-bg-wave: rgba(251, 113, 133, 0.03);
+  --quantum-primary: #fb7185;
+  --quantum-secondary: #fda4af;
+  --quantum-accent: #e11d48;
+  --quantum-glow: rgba(251, 113, 133, 0.6);
+  --quantum-glow-soft: rgba(251, 113, 133, 0.25);
+  --quantum-energy: #fda4af;
+  --quantum-particle: rgba(251, 113, 133, 0.8);
+  --quantum-border: rgba(251, 113, 133, 0.4);
+  --quantum-bg-wave: rgba(251, 113, 133, 0.03);
 }
 
 /* Tema Violet Dark — Violeta */
 [data-theme='violet_dark'] {
-  --quantum-primary: #a78bfa; --quantum-secondary: #c4b5fd; --quantum-accent: #8b5cf6;
-  --quantum-glow: rgba(167, 139, 250, 0.6); --quantum-glow-soft: rgba(167, 139, 250, 0.25);
-  --quantum-energy: #c4b5fd; --quantum-particle: rgba(167, 139, 250, 0.8);
-  --quantum-border: rgba(167, 139, 250, 0.4); --quantum-bg-wave: rgba(167, 139, 250, 0.03);
+  --quantum-primary: #a78bfa;
+  --quantum-secondary: #c4b5fd;
+  --quantum-accent: #8b5cf6;
+  --quantum-glow: rgba(167, 139, 250, 0.6);
+  --quantum-glow-soft: rgba(167, 139, 250, 0.25);
+  --quantum-energy: #c4b5fd;
+  --quantum-particle: rgba(167, 139, 250, 0.8);
+  --quantum-border: rgba(167, 139, 250, 0.4);
+  --quantum-bg-wave: rgba(167, 139, 250, 0.03);
 }

@@ -82,7 +82,12 @@ describe('agruparPorDia — ordem crescente', () => {
 
   it('selo Hoje / Amanhã / Ontem, sem selo nos dias seguintes', () => {
     const dias = agruparPorDia(
-      [ev('a', H.em(-1, 9, 0)), ev('b', H.em(0, 9, 0)), ev('c', H.em(1, 9, 0)), ev('d', H.em(5, 9, 0))],
+      [
+        ev('a', H.em(-1, 9, 0)),
+        ev('b', H.em(0, 9, 0)),
+        ev('c', H.em(1, 9, 0)),
+        ev('d', H.em(5, 9, 0)),
+      ],
       H.agora,
     );
 
@@ -110,7 +115,12 @@ describe('EconomicCalendarTab — tabela', () => {
   afterEach(() => cleanup());
 
   it('renderiza os dias em ordem crescente, com selo e contagem', () => {
-    H.eventos = [ev('hoje-tarde', H.em(0, 23, 0)), ev('amanha', H.em(1, 10, 0)), ev('depois', H.em(2, 8, 0)), ev('hoje-madrugada', H.em(0, 0, 0))];
+    H.eventos = [
+      ev('hoje-tarde', H.em(0, 23, 0)),
+      ev('amanha', H.em(1, 10, 0)),
+      ev('depois', H.em(2, 8, 0)),
+      ev('hoje-madrugada', H.em(0, 0, 0)),
+    ];
 
     render(<EconomicCalendarTab />);
 

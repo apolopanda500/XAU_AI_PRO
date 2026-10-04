@@ -8,8 +8,12 @@
 //  3. A passphrase viaja no payload apenas quando a corretora exige.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  exigePassphrase, isExchange, marketsFor, ROTULO_BROKER,
-  saveExchange, type Broker,
+  exigePassphrase,
+  isExchange,
+  marketsFor,
+  ROTULO_BROKER,
+  saveExchange,
+  type Broker,
 } from './connections';
 
 const EXCHANGES: Broker[] = ['binance', 'mexc', 'bybit', 'okx'];
@@ -18,15 +22,20 @@ let posted: { url: string; body: Record<string, unknown> } | null = null;
 
 beforeEach(() => {
   posted = null;
-  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-    if (init?.method === 'POST' && String(url).endsWith('/api/connections')) {
-      posted = { url: String(url), body: JSON.parse(String(init.body ?? '{}')) };
-    }
-    return { ok: true, status: 200, json: async () => ({ ok: true, connections: [] }) };
-  }));
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === 'POST' && String(url).endsWith('/api/connections')) {
+        posted = { url: String(url), body: JSON.parse(String(init.body ?? '{}')) };
+      }
+      return { ok: true, status: 200, json: async () => ({ ok: true, connections: [] }) };
+    }),
+  );
 });
 
-afterEach(() => { vi.unstubAllGlobals(); });
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe('corretoras aceitas', () => {
   it('cobre as quatro exchanges que o backend aceita', () => {
@@ -43,20 +52,25 @@ describe('corretoras aceitas', () => {
   });
 
   it('recusa mercado incompativel com a corretora', async () => {
-    await expect(saveExchange('bybit', 'forex', 'conta', 'k', 's')).rejects.toThrow(/Mercado incompat/);
+    await expect(saveExchange('bybit', 'forex', 'conta', 'k', 's')).rejects.toThrow(
+      /Mercado incompat/,
+    );
   });
 
-  it('recusa MT5 no saveExchange', async () => {
-  });
+  it('recusa MT5 no saveExchange', async () => {});
 
   it('MT5 entra no mesmo fluxo, sem API key (2026-09-30)', async () => {
     // Antes este teste exigia que MT5 fosse RECUSADO. O dono mandou o
     // contrario: MT5 tem que aparecer na lista de conexao como as outras.
     // O que sobra de diferente e o CAMPO, nao o fluxo.
     const post = vi.fn().mockResolvedValue({ ok: true });
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true, json: async () => ({ ok: true }),
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ ok: true }),
+      }),
+    );
     await saveExchange('mt5', 'metals', 'conta demo', '', '');
     expect(post).toBeDefined();
   });
@@ -83,7 +97,9 @@ describe('passphrase', () => {
   });
 
   it('bloqueia o envio da OKX sem passphrase, antes de chamar o gateway', async () => {
-    await expect(saveExchange('okx', 'crypto-spot', 'conta', 'k', 's', '')).rejects.toThrow(/passphrase/i);
+    await expect(saveExchange('okx', 'crypto-spot', 'conta', 'k', 's', '')).rejects.toThrow(
+      /passphrase/i,
+    );
     expect(posted).toBeNull();
   });
 
@@ -102,7 +118,9 @@ describe('passphrase', () => {
     // A mensagem agora diz o campo que falta, em vez de "informe nome, API
     // key e secret" para um formulario que ja veio preenchido.
     await expect(saveExchange('mexc', 'crypto-spot', '', 'k', 's')).rejects.toThrow(/nome/i);
-    await expect(saveExchange('mexc', 'crypto-spot', 'n', '  ', 's')).rejects.toThrow(/API key e secret/);
+    await expect(saveExchange('mexc', 'crypto-spot', 'n', '  ', 's')).rejects.toThrow(
+      /API key e secret/,
+    );
   });
 
   it('identifica a corretora pelo rotulo exibido na tela', () => {

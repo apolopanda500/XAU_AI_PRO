@@ -127,17 +127,26 @@ class RobotVision(tk.Frame):
         """Analisa o mercado como o robo veria."""
         try:
             from app.mt5_lock import mt5_lock
-            from app.market_symbols import DEFAULT_TIMEFRAME
+            from app.market_symbols import resolve_timeframe
             import MetaTrader5 as mt5
             symbol = (getattr(self.robot, "symbol", "") or "").strip().upper()
             if not symbol:
                 return
+            # O timeframe vem do ROBO que o operador configurou. Antes era
+            # `tf_map.get(DEFAULT_TIMEFRAME, mt5.TIMEFRAME_H1)`: com
+            # DEFAULT_TIMEFRAME vazio o `.get` caia em H1, e a visao do robo
+            # usava um timeframe que ninguem escolheu. Agora usa o do robo, e
+            # sem ele nao ha visao — melhor do que visao inventada.
+            tf_pedido = resolve_timeframe(getattr(self.robot, "timeframe", ""))
             tf_map = {"M1": mt5.TIMEFRAME_M1, "M5": mt5.TIMEFRAME_M5, "M15": mt5.TIMEFRAME_M15,
                       "M30": mt5.TIMEFRAME_M30, "H1": mt5.TIMEFRAME_H1, "H4": mt5.TIMEFRAME_H4,
                       "D1": mt5.TIMEFRAME_D1}
+            tf = tf_map.get(tf_pedido)
+            if tf is None:
+                return
             with mt5_lock:
                 mt5.symbol_select(symbol, True)
-                rates = mt5.copy_rates_from_pos(symbol, tf_map.get(DEFAULT_TIMEFRAME, mt5.TIMEFRAME_H1), 0, 100)
+                rates = mt5.copy_rates_from_pos(symbol, tf, 0, 100)
             if rates is not None and len(rates) >= 30:
                 candles = []
                 for r in rates:

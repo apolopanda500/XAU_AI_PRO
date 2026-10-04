@@ -10,10 +10,10 @@
 
 ## 1. O que foi pedido
 
-| Pedido | Resultado |
-|---|---|
-| Ler a pasta `docs` inteira | **58 arquivos** lidos (índice, arquitetura, 6 ciclos de sessão, políticas, contratos, benchmarks) |
-| "últimas alterações, continuar trabalho do app" | Os 3 workflows vermelhos foram diagnosticados por log do CI e reproduzidos localmente |
+| Pedido                                          | Resultado                                                                                         |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Ler a pasta `docs` inteira                      | **58 arquivos** lidos (índice, arquitetura, 6 ciclos de sessão, políticas, contratos, benchmarks) |
+| "últimas alterações, continuar trabalho do app" | Os 3 workflows vermelhos foram diagnosticados por log do CI e reproduzidos localmente             |
 
 ---
 
@@ -21,12 +21,12 @@
 
 `gh run list` no `57d8e89`:
 
-| Workflow | Conclusão |
-|---|---|
-| `CI` | **verde** |
+| Workflow                           | Conclusão                                               |
+| ---------------------------------- | ------------------------------------------------------- |
+| `CI`                               | **verde**                                               |
 | `XAU AI PRO - validação universal` | `security` verde · **`quality` e `validate` vermelhos** |
-| `CI/CD - XAU AI PRO` | **vermelho** (`Validar e Empacotar`) |
-| `Security Checks` | 5 jobs verdes · só **`Dependency Audit` vermelho** |
+| `CI/CD - XAU AI PRO`               | **vermelho** (`Validar e Empacotar`)                    |
+| `Security Checks`                  | 5 jobs verdes · só **`Dependency Audit` vermelho**      |
 
 Nenhum é falha de código do produto. São três causas diferentes, e só uma
 tinha correção de verdade.
@@ -60,8 +60,8 @@ zero. O CI roda o checkout limpo.
 
 ### Isto é o defeito do §2.4 do ciclo de 02/10 — invertido
 
-O ciclo anterior registrou *"teste que dependia do disco local — verde numa
-máquina, vermelho na outra"* e corrigiu com `skip`. Aqui é o **mesmo padrão ao
+O ciclo anterior registrou _"teste que dependia do disco local — verde numa
+máquina, vermelho na outra"_ e corrigiu com `skip`. Aqui é o **mesmo padrão ao
 contrário**: o teste é sobre conteúdo que o repositório **por decisão não
 versiona**. Não é teste instável; é teste que mede a coisa errada num ambiente
 que não a tem.
@@ -86,10 +86,10 @@ diferente do caminho que o runtime resolve — e roda em qualquer checkout. O
 
 ### Prova dos dois cenários
 
-| Cenário | Comando | Resultado |
-|---|---|---|
-| Com modelos (máquina do dono) | `pytest tests/test_spec_gateway.py -q` | **9 passed** |
-| Sem modelos (cenário do CI) | `XAU_MODELOS_DIR=<pasta vazia> pytest -q -rs` | **8 passed, 1 skipped** |
+| Cenário                       | Comando                                       | Resultado               |
+| ----------------------------- | --------------------------------------------- | ----------------------- |
+| Com modelos (máquina do dono) | `pytest tests/test_spec_gateway.py -q`        | **9 passed**            |
+| Sem modelos (cenário do CI)   | `XAU_MODELOS_DIR=<pasta vazia> pytest -q -rs` | **8 passed, 1 skipped** |
 
 O segundo cenário é a prova de que a correção funciona onde o defeito
 aparecia — não só onde já passava.
@@ -122,10 +122,10 @@ workflow@4.8.9
 
 ### Não existe correção — e isso foi verificado, não assumido
 
-| Verificação | Resultado |
-|---|---|
-| `npm audit fix` (executado de verdade) | **não alterou nada** — as 6 continuam |
-| `npm view http-cache-semantics versions` | última versão publicada é **4.2.0** — a que está instalada |
+| Verificação                                       | Resultado                                                                   |
+| ------------------------------------------------- | --------------------------------------------------------------------------- |
+| `npm audit fix` (executado de verdade)            | **não alterou nada** — as 6 continuam                                       |
+| `npm view http-cache-semantics versions`          | última versão publicada é **4.2.0** — a que está instalada                  |
 | Advisory **CVE-2026-93748 / GHSA-ch52-4w7c-c8xp** | **Patched versions: None** · Affected `<= 4.2.0` · Dependabot alerts: **0** |
 
 A frase do advisory é literal: **não há versão corrigida**. `npm audit` segue
@@ -163,7 +163,7 @@ o patch. Duas saídas reais, nenhuma aplicada nesta sessão:
 ### Causa
 
 O repositório **não tem `biome.json` nem `.prettierrc`** (verificado). O Biome
-aplica os *defaults* dele sobre um projeto escrito com outra convenção.
+aplica os _defaults_ dele sobre um projeto escrito com outra convenção.
 
 É exatamente o motivo pelo qual o ciclo anterior desligou o Prettier, com
 justificativa escrita no próprio workflow
@@ -173,8 +173,8 @@ justificativa escrita no próprio workflow
 
 O dono já escreveu na sessão de 02/10:
 
-> *"Não foi desligado: escolher quais linters o projeto usa é decisão do
-> dono, e desligar só para pintar o CI de verde seria esconder defeito."*
+> _"Não foi desligado: escolher quais linters o projeto usa é decisão do
+> dono, e desligar só para pintar o CI de verde seria esconder defeito."_
 
 Desligar o Biome repetiria essa decisão sem autorização. **Registrado, não
 aplicado.**
@@ -183,11 +183,11 @@ aplicado.**
 
 ## 6. O que mudou nesta sessão
 
-| Arquivo | Mudança |
-|---|---|
-| `tests/test_spec_gateway.py` | `skip` nos 2 testes que medem artefato não versionado; asserção do runtime preservada antes do `skip` |
-| `Docs/SESSAO_20261002_MODELOS_MULTI_E_SEGURANCA.md` | seções 7.2 e 7.3, escritas no ciclo anterior e nunca commitadas |
-| `Docs/SESSAO_20261003_CI_VERMELHO_E_LEITURA_DOCS.md` | este documento |
+| Arquivo                                              | Mudança                                                                                               |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `tests/test_spec_gateway.py`                         | `skip` nos 2 testes que medem artefato não versionado; asserção do runtime preservada antes do `skip` |
+| `Docs/SESSAO_20261002_MODELOS_MULTI_E_SEGURANCA.md`  | seções 7.2 e 7.3, escritas no ciclo anterior e nunca commitadas                                       |
+| `Docs/SESSAO_20261003_CI_VERMELHO_E_LEITURA_DOCS.md` | este documento                                                                                        |
 
 As seções 7.2 e 7.3 do documento de 02/10 estavam no working tree desde então,
 escritas e não commitadas:
@@ -201,11 +201,11 @@ escritas e não commitadas:
 
 ## 7. O que NÃO foi feito, e por quê
 
-| Pendência | Por que não fiz |
-|---|---|
-| Defeito 2 aplicado | Não existe versão corrigida. Escolher entre aceitar ou ajustar o job é decisão do dono. |
-| Defeito 3 aplicado | Desligar o Biome é repetir a decisão que o dono reservou para si. |
-| Build do app | `PLANO_MESTRE_20261002.md`: **nenhum build enquanto houver correção pendente**. Os defeitos 2 e 3 continuam abertos. |
+| Pendência          | Por que não fiz                                                                                                      |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| Defeito 2 aplicado | Não existe versão corrigida. Escolher entre aceitar ou ajustar o job é decisão do dono.                              |
+| Defeito 3 aplicado | Desligar o Biome é repetir a decisão que o dono reservou para si.                                                    |
+| Build do app       | `PLANO_MESTRE_20261002.md`: **nenhum build enquanto houver correção pendente**. Os defeitos 2 e 3 continuam abertos. |
 
 ---
 
@@ -216,11 +216,11 @@ escritas e não commitadas:
 Os três workflows estavam vermelhos e **nenhum** era defeito de código do
 produto:
 
-| Workflow vermelho | Realidade |
-|---|---|
-| `validate` | teste media artefato que o `.gitignore` remove — **corrigível** |
-| `Dependency Audit` | advisory **sem patch disponível** — não corrigível |
-| `quality` | linter com defaults, sem config no repo — decisão de dono |
+| Workflow vermelho  | Realidade                                                       |
+| ------------------ | --------------------------------------------------------------- |
+| `validate`         | teste media artefato que o `.gitignore` remove — **corrigível** |
+| `Dependency Audit` | advisory **sem patch disponível** — não corrigível              |
+| `quality`          | linter com defaults, sem config no repo — decisão de dono       |
 
 O mesmo padrão que 30/09 §13 e 02/10 §9 registram, agora pela terceira vez: **o
 alarme é real, mas a causa raramente é o que o nome do job sugere.** E a
@@ -228,5 +228,5 @@ tentação de "consertar" para pintar o CI verde é ela mesma o defeito.
 
 ---
 
-*Documento de sessão. O estado do sistema são as políticas técnicas; a
-precedência de leitura permanece em `SESSAO_20261002_MODELOS_MULTI_E_SEGURANCA.md`.*
+_Documento de sessão. O estado do sistema são as políticas técnicas; a
+precedência de leitura permanece em `SESSAO_20261002_MODELOS_MULTI_E_SEGURANCA.md`._

@@ -104,8 +104,7 @@ export interface ResultadoInferencia {
   motivo: string;
 }
 
-const MOTIVO_TIMEOUT =
-  'Sem resposta do gateway. O serviço de inferência não respondeu a tempo.';
+const MOTIVO_TIMEOUT = 'Sem resposta do gateway. O serviço de inferência não respondeu a tempo.';
 
 async function pedirPrevisao(
   symbol: string,
@@ -128,7 +127,11 @@ async function pedirPrevisao(
   try {
     d = (await r.json()) as RespostaPredict;
   } catch {
-    return { sinal: null, disponivel: false, motivo: `Resposta inválida do gateway (HTTP ${r.status})` };
+    return {
+      sinal: null,
+      disponivel: false,
+      motivo: `Resposta inválida do gateway (HTTP ${r.status})`,
+    };
   }
 
   if (!r.ok || d.ok === false) {

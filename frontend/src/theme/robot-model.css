@@ -20,7 +20,9 @@
 
 .model-cover.is-botao {
   cursor: pointer;
-  transition: border-color 150ms ease, transform 150ms ease;
+  transition:
+    border-color 150ms ease,
+    transform 150ms ease;
 }
 
 .model-cover.is-botao:hover {
@@ -101,10 +103,18 @@
   border-top: 1px solid var(--border);
 }
 
-.model-cover .mc-selo[data-classe='metal'] { color: #ffd24a; }
-.model-cover .mc-selo[data-classe='cripto'] { color: #3ee6f0; }
-.model-cover .mc-selo[data-classe='forex'] { color: #7fc0ff; }
-.model-cover .mc-selo[data-classe='indice'] { color: #c4a6ff; }
+.model-cover .mc-selo[data-classe='metal'] {
+  color: #ffd24a;
+}
+.model-cover .mc-selo[data-classe='cripto'] {
+  color: #3ee6f0;
+}
+.model-cover .mc-selo[data-classe='forex'] {
+  color: #7fc0ff;
+}
+.model-cover .mc-selo[data-classe='indice'] {
+  color: #c4a6ff;
+}
 
 /* Grade das capas: `auto-fill` deixa caberem quantas couberem na largura e
    nao deixa o ultimo cartao esticar sozinho quando sobra uma linha. */
@@ -114,7 +124,6 @@
   gap: 6px;
   margin-top: 8px;
 }
-
 
 .robot-model .rm-row {
   display: flex;

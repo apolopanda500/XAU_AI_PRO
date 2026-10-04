@@ -62,8 +62,9 @@ describe('dealPnl', () => {
 
 describe('dealDate', () => {
   it('prefere executedAt', () => {
-    expect(dealDate(deal({ executedAt: '2026-01-01T00:00:00Z', close_time: '2025-01-01T00:00:00Z' })))
-      .toBe('2026-01-01T00:00:00Z');
+    expect(
+      dealDate(deal({ executedAt: '2026-01-01T00:00:00Z', close_time: '2025-01-01T00:00:00Z' })),
+    ).toBe('2026-01-01T00:00:00Z');
   });
 
   it('cai para close_time', () => {
@@ -111,10 +112,7 @@ describe('resumir', () => {
   });
 
   it('profit factor e bruto ganho sobre bruto perdido', () => {
-    const r = resumir([
-      deal({ realizedPnl: 200 }),
-      deal({ realizedPnl: -100 }),
-    ]);
+    const r = resumir([deal({ realizedPnl: 200 }), deal({ realizedPnl: -100 })]);
     expect(r.profitFactor).toBeCloseTo(2, 6);
   });
 
@@ -139,27 +137,50 @@ describe('coerencia entre abas', () => {
   });
 });
 
-
 describe('deduplicar deals', () => {
   it('remove o mesmo ticket em contas diferentes', () => {
     // O `id` do gateway e o ticket, que e contador POR CONTA. Junta de varias
     // corretoras, o mesmo ticket aparece duas vezes.
     const entrada = [
       { id: '77', broker: 'mt5', symbol: 'XAUUSD', executedAt: '2026-09-01T10:00', side: 'buy' },
-      { id: '77', broker: 'binance', symbol: 'XAUUSD', executedAt: '2026-09-01T10:00', side: 'buy' },
+      {
+        id: '77',
+        broker: 'binance',
+        symbol: 'XAUUSD',
+        executedAt: '2026-09-01T10:00',
+        side: 'buy',
+      },
     ];
     expect(deduplicar(entrada)).toHaveLength(2);
   });
 
   it('remove repeticao exata dentro da mesma conta', () => {
-    const d = { id: '1', broker: 'mt5', symbol: 'XAUUSD', executedAt: '2026-09-01T10:00', side: 'sell' };
+    const d = {
+      id: '1',
+      broker: 'mt5',
+      symbol: 'XAUUSD',
+      executedAt: '2026-09-01T10:00',
+      side: 'sell',
+    };
     expect(deduplicar([d, { ...d }])).toHaveLength(1);
   });
 
   it('preserva abertura e fechamento da mesma posicao', () => {
     // Mesmo ticket e mesma conta: o que separa e o horario e o lado.
-    const ab = { id: '5', broker: 'mt5', symbol: 'XAUUSD', executedAt: '2026-09-01T10:00', side: 'buy' };
-    const fe = { id: '5', broker: 'mt5', symbol: 'XAUUSD', executedAt: '2026-09-01T12:00', side: 'sell' };
+    const ab = {
+      id: '5',
+      broker: 'mt5',
+      symbol: 'XAUUSD',
+      executedAt: '2026-09-01T10:00',
+      side: 'buy',
+    };
+    const fe = {
+      id: '5',
+      broker: 'mt5',
+      symbol: 'XAUUSD',
+      executedAt: '2026-09-01T12:00',
+      side: 'sell',
+    };
     expect(deduplicar([ab, fe])).toHaveLength(2);
   });
 

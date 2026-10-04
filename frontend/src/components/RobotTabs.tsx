@@ -80,8 +80,12 @@ export default function RobotTabs() {
   const paineis: Record<RobotSub, ReactNode> = {
     operar: (
       <>
-        <Secao nome="Operação automática"><AutoEnginePanel /></Secao>
-        <Secao nome="Posições ao vivo"><UniversalLiveTerminal /></Secao>
+        <Secao nome="Operação automática">
+          <AutoEnginePanel />
+        </Secao>
+        <Secao nome="Posições ao vivo">
+          <UniversalLiveTerminal />
+        </Secao>
       </>
     ),
   };

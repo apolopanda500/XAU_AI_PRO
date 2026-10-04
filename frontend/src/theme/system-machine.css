@@ -51,7 +51,7 @@
   height: 100%;
   border-radius: 3px;
   background: var(--success, #22c55e);
-  transition: width .25s ease;
+  transition: width 0.25s ease;
 }
 
 .sys-bar-fill.warn {

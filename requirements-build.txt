@@ -8,7 +8,6 @@ pandas
 scikit-learn
 scipy
 joblib
-sentry-sdk[openai]>=2.44.0
 Pillow
 MetaTrader5
 pyinstaller

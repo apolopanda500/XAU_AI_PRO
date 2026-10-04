@@ -92,7 +92,7 @@ function QuantumBackground({
         color,
       };
     },
-    [speed]
+    [speed],
   );
 
   // Inicializa as partículas com base na densidade configurada
@@ -105,7 +105,7 @@ function QuantumBackground({
       }
       particlesRef.current = particles;
     },
-    [density, createParticle, getThemeColors]
+    [density, createParticle, getThemeColors],
   );
 
   // Atualiza a posição de todas as partículas
@@ -176,7 +176,7 @@ function QuantumBackground({
         animationRef.current = requestAnimationFrame(() => animate(ctx, width, height));
       }
     },
-    [updateParticles, drawParticles, drawConnections]
+    [updateParticles, drawParticles, drawConnections],
   );
 
   // Redimensiona o canvas
@@ -208,7 +208,8 @@ function QuantumBackground({
     if (prefersReducedMotion) return;
     const visibility = new IntersectionObserver(([entry]) => {
       activeRef.current = entry.isIntersecting;
-      if (activeRef.current && !animationRef.current) animate(ctx, canvas.clientWidth, canvas.clientHeight);
+      if (activeRef.current && !animationRef.current)
+        animate(ctx, canvas.clientWidth, canvas.clientHeight);
     });
     visibility.observe(canvas);
     resizeCanvas();

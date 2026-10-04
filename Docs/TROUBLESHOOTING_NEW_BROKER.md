@@ -9,12 +9,14 @@
 ### 1. Verifique o nome do símbolo na nova corretora
 
 **No MetaTrader 5:**
+
 1. Abra o **Market Watch** (Ctrl+M)
 2. Procure por XAUUSD ou GOLD
 3. Clique com botão direito → **Specification**
 4. Anote o **nome exato** do símbolo
 
 **Nomes comuns:**
+
 - `XAUUSD` (padrão)
 - `XAUUSDc` (com sufixo 'c')
 - `XAUUSD.pro`
@@ -42,6 +44,7 @@ input string Symbols=
 ```
 
 **Exemplo se sua corretora usar `XAUUSD`:**
+
 ```cpp
 input string Symbols="XAUUSD";
 ```
@@ -49,6 +52,7 @@ input string Symbols="XAUUSD";
 ### 3. Verifique o Magic Number
 
 **Linha 8 do Config.mqh:**
+
 ```cpp
 input long MagicNumber = 2026001;
 ```
@@ -59,6 +63,7 @@ input long MagicNumber = 2026001;
 ### 4. Verifique configurações de lote
 
 **Linha 15 do Config.mqh:**
+
 ```cpp
 input double LotSize = 0.01;
 ```
@@ -69,6 +74,7 @@ input double LotSize = 0.01;
 ### 5. Verifique permissões de automação
 
 Algumas corretoras bloqueiam EAs. Verifique:
+
 - ✅ AutoTrading está habilitado (botão no MT5)
 - ✅ A corretora permite EAs
 - ✅ Você tem permissão para operar o ativo
@@ -82,6 +88,7 @@ Vou adicionar logs detalhados para você ver exatamente o que está acontecendo.
 ### Passo 1: Habilite debug mode
 
 No Config.mqh, linha 103:
+
 ```cpp
 input bool DebugTradeDecision = true;  // ← Já está true
 ```
@@ -91,6 +98,7 @@ input bool DebugTradeDecision = true;  // ← Já está true
 **Arquivo:** `XAU_AI_PRO.log` (na pasta do EA)
 
 **Procure por:**
+
 ```
 Broker Symbol: XAUUSDc -> [NOME_ENCONTRADO]
 ATIVO REGISTRADO: [NOME_ENCONTRADO]
@@ -121,6 +129,7 @@ Se não aparecer nada, o símbolo não está sendo encontrado.
 4. **Procure por mensagens de erro** em vermelho
 
 **Mensagens esperadas (sucesso):**
+
 ```
 XAU_AI_PRO iniciado
 ATIVO REGISTRADO: XAUUSD
@@ -128,6 +137,7 @@ Broker Symbol: XAUUSDc -> XAUUSD
 ```
 
 **Mensagens de erro (problema):**
+
 ```
 Símbolo não encontrado: XAUUSDc
 ERRO INIT SYSTEM

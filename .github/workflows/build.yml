@@ -3,7 +3,10 @@
 # Jobs:
 #   - test:       lint critico (flake8 E9,F63,F7,F82) + pytest (Ubuntu, xvfb)
 #   - docker:     push ao Docker Hub (condicional: vars.DOCKER_ENABLED/DOCKER_USER + secret DOCKER_PAT)
-#   - vercel-vcr: push ao Vercel Container Registry (condicional: vars.VCR_ENABLED + secret VERCEL_TOKEN)
+#
+# REMOVIDO em 04/10/2026: o job `vercel-vcr`. O projeto e 100% local, com GitHub
+# e GitLab como unicos canais; o Container Registry da Vercel nao existe mais
+# para este job publicar.
 #
 # Consolidacao: os steps de teste eram do extinto python-app.yml (deduplicacao).
 
@@ -99,49 +102,3 @@ jobs:
           tags: "${{ vars.DOCKER_USER }}/xau-ai-pro-backend:latest"
 
   # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  # Build/push de imagen en Vercel Container Registry (VCR).
-  # Requiere: vars.VCR_ENABLED='true' + secret VERCEL_TOKEN.
-  # Cada comando `vercel vcr` opera sobre um projeto Vercel: no CI nÃ£o hÃ¡
-  # `vercel link`, por isso Ã© obrigatÃ³rio passar --scope (team) e --project.
-  # Usa os mesmos secrets/fallbacks do deploy.yml.
-  # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  vercel-vcr:
-    runs-on: ubuntu-latest
-    if: vars.VCR_ENABLED == 'true'
-    env:
-      VERCEL_SCOPE: ${{ secrets.VERCEL_ORG_ID }}
-      VERCEL_PROJECT: ${{ secrets.VERCEL_PROJECT_ID }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-
-      - name: Instalar Vercel CLI
-        run: npm install -g vercel@59.6.2
-
-      - name: Verificar VERCEL_TOKEN
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: |
-          if [ -z "$VERCEL_TOKEN" ]; then
-            echo "::warning::VERCEL_TOKEN nÃ£o configurado. Pule el flujo VCR."
-            echo "SKIP_VCR=true" >> "$GITHUB_ENV"
-          fi
-
-      - name: Autenticar container tool no VCR
-        if: env.SKIP_VCR != 'true'
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: |
-          vercel vcr login docker --scope "$VERCEL_SCOPE" --project "$VERCEL_PROJECT" --token "$VERCEL_TOKEN"
-
-      - name: Build e push imagem no VCR
-        if: env.SKIP_VCR != 'true'
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: |
-          vercel vcr build docker ./backend --push --scope "$VERCEL_SCOPE" --project "$VERCEL_PROJECT" --token "$VERCEL_TOKEN"

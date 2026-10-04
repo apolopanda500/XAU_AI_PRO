@@ -45,7 +45,11 @@ export function useRealRisk() {
   const [estado, setEstado] = useState<RiskStateReal | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
-  const [kill, setKill] = useState<KillSwitchState>({ status: 'desconhecido', busy: false, erro: null });
+  const [kill, setKill] = useState<KillSwitchState>({
+    status: 'desconhecido',
+    busy: false,
+    erro: null,
+  });
   const vivo = useRef(true);
 
   const lerEstado = useCallback(async () => {
@@ -95,14 +99,22 @@ export function useRealRisk() {
         body: JSON.stringify({ confirm: true }),
         signal: AbortSignal.timeout(8000),
       });
-      const body = await r.json().catch(() => ({})) as { error?: string; emergency_stop?: boolean };
+      const body = (await r.json().catch(() => ({}))) as {
+        error?: string;
+        emergency_stop?: boolean;
+      };
       if (!r.ok) {
         const mensagem = body?.error || `HTTP ${r.status}`;
         setKill((k) => ({ ...k, busy: false, erro: mensagem }));
         void notify('Parada de emergencia recusada', mensagem);
         return;
       }
-      setKill((k) => ({ ...k, busy: false, erro: null, status: acao === 'stop' ? 'ativo' : 'livre' }));
+      setKill((k) => ({
+        ...k,
+        busy: false,
+        erro: null,
+        status: acao === 'stop' ? 'ativo' : 'livre',
+      }));
       void notify(
         acao === 'stop' ? 'Execução parada' : 'Execução retomada',
         acao === 'stop'

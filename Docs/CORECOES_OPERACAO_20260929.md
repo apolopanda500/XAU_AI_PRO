@@ -52,12 +52,14 @@ minimo, e sem isso os 7 testes de candles quebraram com `AttributeError`.
 ### Prova
 
 Antes:
+
 ```
 resposta ok = False | status = unavailable | code = terminal_disconnected
 candles = 0
 ```
 
 Depois:
+
 ```
 600 candles reais
 inferir -> disponivel = True | sinal = SELL | conf = 37.5
@@ -73,13 +75,13 @@ modelo = random_forest_XAUUSD_H1
 `SubscriptionPanel.tsx` chama 5 rotas, e o frontend fala com o gateway local
 (9001, ver `apiBase()`). Todas as 5 viviam **so** no `fastapi_gateway` (9003):
 
-| Rota | 9001 | 9003 |
-|---|---|---|
-| `/api/subscriptions/plans` | ausente | sim |
-| `/api/subscriptions/me` | ausente | sim |
-| `/api/social/strategies` | ausente | sim |
-| `/api/subscriptions/activate` | ausente | sim |
-| `/api/social/follow` | ausente | sim |
+| Rota                          | 9001    | 9003 |
+| ----------------------------- | ------- | ---- |
+| `/api/subscriptions/plans`    | ausente | sim  |
+| `/api/subscriptions/me`       | ausente | sim  |
+| `/api/social/strategies`      | ausente | sim  |
+| `/api/subscriptions/activate` | ausente | sim  |
+| `/api/social/follow`          | ausente | sim  |
 
 A tela recebia 404 nas cinco chamadas e renderizava vazio. O conteudo existia e
 esta bom:
@@ -119,6 +121,7 @@ nao pode mostrar horario inventado como se fosse publicado**.
 O que falta para ser profissional: data exata de cada evento, previsao,
 realizado e revisao. Isso vem de uma API externa (fonte de calendario
 economico) ou do broker. **Requer sua decisao**, porque significa:
+
 - escolher fornecedor e o que fazer quando a API cair;
 - o app passa a depender de rede para essa aba;
 - a regra do projeto exige rotular a procedencia dos dados.
@@ -127,13 +130,13 @@ economico) ou do broker. **Requer sua decisao**, porque significa:
 
 ## 4. Verificacao
 
-| Item | Resultado |
-|---|---|
-| `pytest -q tests` | **619 passed** |
-| `npx tsc --noEmit` | **exit 0** |
-| `candles_mt5_para_dataframe` | novo helper unico de traducao MT5 -> treino |
-| Gateway reconstruido (PyInstaller) | 29/09 18:12 |
-| MQL5 | intocado |
+| Item                               | Resultado                                   |
+| ---------------------------------- | ------------------------------------------- |
+| `pytest -q tests`                  | **619 passed**                              |
+| `npx tsc --noEmit`                 | **exit 0**                                  |
+| `candles_mt5_para_dataframe`       | novo helper unico de traducao MT5 -> treino |
+| Gateway reconstruido (PyInstaller) | 29/09 18:12                                 |
+| MQL5                               | intocado                                    |
 
 ### Endurecimento
 

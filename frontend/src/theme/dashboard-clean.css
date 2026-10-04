@@ -1,1 +1,4 @@
-.home-clean .home-facts,.home-clean .home-note{display:none}
+.home-clean .home-facts,
+.home-clean .home-note {
+  display: none;
+}

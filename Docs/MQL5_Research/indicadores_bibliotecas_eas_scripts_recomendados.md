@@ -20,6 +20,7 @@
 ## Indicadores Recomendados
 
 ### 🥇 KCI Volatility Distance — ID 74838
+
 - **Autor:** RitzFalih (Syamsurizal Dimjati)
 - **Publicado:** 10/08/2026
 - **Avaliação:** ⭐ 4.6 (25)
@@ -31,6 +32,7 @@
 - **Sugestão de uso:** Criar wrapper `.mqh` que exponha `GetKCIVolatilityDistance(symbol, tf)` e adicionar ao `DataLogger.mqh`.
 
 ### 🥈 KCI Directional Matrix — ID 74839
+
 - **Autor:** RitzFalih
 - **Publicado:** 09/08/2026
 - **Avaliação:** ⭐ 4.6
@@ -42,6 +44,7 @@
 - **Sugestão de uso:** Adicionar como features no `dataset.csv`: `kci_principal,kdi_plus,kdi_minus`.
 
 ### 🥉 CKS Position Risk Dashboard — ID 74913
+
 - **Autor:** ksbaba055ks (Cheng Kah Seng)
 - **Publicado:** 12/08/2026
 - **Avaliação:** ⭐ (1)
@@ -52,8 +55,8 @@
 - **Compatibilidade com XAU_AI_PRO:** ⭐⭐⭐⭐
 - **Sugestão de uso:** Usar como indicador auxiliar no gráfico. Não integrar no EA.
 
-
 ### Trend Flasher -AKM — ID 74932
+
 - **Autor:** amarfx
 - **Publicado:** 13/08/2026
 - **Avaliação:** ⭐ (2)
@@ -65,6 +68,7 @@
 - **Sugestão de uso:** Indicador visual no gráfico. Replicar lógica SuperTrend em `.mqh` própria se quiser usá-la no sinal.
 
 ### Alpha Beta Trend + Dashboard -AKM — ID 74958
+
 - **Autor:** amarfx
 - **Publicado:** 13/08/2026
 - **Avaliação:** ⭐ (1)
@@ -76,6 +80,7 @@
 - **Sugestão de uso:** Substituir ou complementar a EMA 200 do `TrendFilter.mqh`.
 
 ### MA Gauge Pro -AKM — ID 75000
+
 - **Autor:** amarfx
 - **Publicado:** 14/08/2026
 - **Avaliação:** ⭐ (1)
@@ -87,6 +92,7 @@
 - **Sugestão de uso:** Integrar como módulo adaptativo de tendência.
 
 ### Elder Force Index — ID 75863
+
 - **Autor:** JotaYglesias
 - **Publicado:** 08/08/2026 (atualizado 10/08)
 - **Avaliação:** ⭐ 5 (1)
@@ -98,6 +104,7 @@
 - **Sugestão de uso:** Adicionar como feature no `dataset.csv`.
 
 ### Double Envelopes (Historical Gauged) — ID 74860
+
 - **Autor:** amarfx
 - **Publicado:** 10/08/2026
 - **Avaliação:** ⭐ (1)
@@ -113,6 +120,7 @@
 ## Bibliotecas Recomendadas
 
 ### 🥇 Result — Type-safe error handling — ID 74427
+
 - **Autor:** MasksymLibovych (Maksym Libovych)
 - **Publicado:** 29/07/2026
 - **Avaliação:** ⭐ (1)
@@ -124,6 +132,7 @@
 - **Sugestão de uso:** Refatorar funções críticas do `RiskEngine.mqh`, `ExecutionEngine.mqh` e `OrderManager.mqh` para usar `ResultValue<double>`.
 
 ### 🥈 Channel Proximity Engine — ID 73055
+
 - **Autor:** phade (Conor Mcnamara)
 - **Publicado:** 07/08/2026
 - **Avaliação:** ⭐ 5 (4)
@@ -135,6 +144,7 @@
 - **Sugestão de uso:** Integrar ao `EntryFilter` para confirmar reversão em suporte/resistência.
 
 ### 🥉 MQTTFive — MQTT 5.0 Client — ID 73373
+
 - **Autor:** chekh74 (Sergey Chekh)
 - **Publicado:** 01/07/2026
 - **Avaliação:** ⭐ (1)
@@ -146,6 +156,7 @@
 - **Sugestão de uso:** Substituir/Complementar a comunicação JSON por MQTT para envio de sinais em tempo real.
 
 ### ASQ PropFirm Shield — ID 71480
+
 - **Autor:** Robin2.0 / Algosphere Quant
 - **Publicado:** 05/05/2026 (atualizado 05/06)
 - **Avaliação:** ⭐ 4.2 (28)
@@ -157,6 +168,7 @@
 - **Sugestão de uso:** Integrar ao `SafetyManager.mqh` para proteção de conta/prop firm.
 
 ### Institutional Kelly-VAPS Risk Engine — ID 71390
+
 - **Autor:** KayruYuta (Amanda Vitoria)
 - **Publicado:** 03/05/2026 (atualizado 02/06)
 - **Avaliação:** ⭐ 4.6 (13)
@@ -174,6 +186,7 @@
 > **Nota:** Esses EAs não devem substituir o XAU_AI_PRO, mas sim servir como referência de estratégia, gestão de risco e execução.
 
 ### 🥇 Aegis Quantum Lite — ID 75002
+
 - **Autor:** ksbaba055ks
 - **Publicado:** 14/08/2026
 - **Avaliação:** ⭐ (1)
@@ -185,6 +198,7 @@
 - **Sugestão de uso:** Estudar padrão de execução e painel. Não integrar diretamente.
 
 ### 🥈 SuperTrend_Amarnath_Kondiyan_Mohan — ID 74894
+
 - **Autor:** amarfx
 - **Publicado:** 12/08/2026
 - **Avaliação:** ⭐ (1)
@@ -196,6 +210,7 @@
 - **Sugestão de uso:** Estudar lógica de saída e gestão de cesta.
 
 ### 🥉 MA + Envelope Breakouts — ID 74815
+
 - **Autor:** amarfx
 - **Publicado:** 11/08/2026
 - **Avaliação:** ⭐ (1)
@@ -207,6 +222,7 @@
 - **Sugestão de uso:** Estudar. Cuidado com possíveis bugs (divisão por 1000 vs 100 no ciclo 1).
 
 ### Market Miner — ID 74818
+
 - **Autor:** amarfx
 - **Publicado:** 11/08/2026
 - **Avaliação:** ⭐ (2)
@@ -218,6 +234,7 @@
 - **Sugestão de uso:** Estudar organização por ciclos/magic numbers.
 
 ### EA KCI N-Matrix engine — ID 74840
+
 - **Autor:** RitzFalih
 - **Publicado:** 09/08/2026
 - **Avaliação:** ⭐ (2)
@@ -228,12 +245,12 @@
 - **Compatibilidade com XAU_AI_PRO:** ⭐⭐⭐
 - **Sugestão de uso:** Estudar com cautela. Não usar em conta real sem extensos testes.
 
-
 ---
 
 ## Scripts Recomendados
 
 ### 🥇 Execution Cost Sensitivity Analyzer — ID 74663
+
 - **Autor:** Thiabot (Cristian Castillo)
 - **Publicado:** 04/08/2026
 - **Avaliação:** ⭐ (2)
@@ -245,6 +262,7 @@
 - **Sugestão de uso:** Usar após backtests para validar resiliência a custos.
 
 ### 🥈 Trade Journal Exporter — ID 74572
+
 - **Autor:** dmck (Dror Munk)
 - **Publicado:** 02/08/2026
 - **Avaliação:** ⭐ (1)
@@ -256,6 +274,7 @@
 - **Sugestão de uso:** Substituir/Complementar o `TradeLogger.mqh` para exportar trades.
 
 ### 🥉 Position Size Calculator — ID 74571
+
 - **Autor:** dmck
 - **Publicado:** 03/08/2026
 - **Avaliação:** ⭐ (1)
@@ -267,6 +286,7 @@
 - **Sugestão de uso:** Usar como script auxiliar para confirmar cálculos.
 
 ### Drawdown DNA Analyzer — ID 74240
+
 - **Autor:** Thiabot
 - **Publicado:** 23/07/2026
 - **Avaliação:** ⭐ (2)
@@ -278,6 +298,7 @@
 - **Sugestão de uso:** Usar no `PerformanceAnalyzer.mqh` ou para relatórios de backtest.
 
 ### Profit Concentration Analyzer — ID 74245
+
 - **Autor:** Thiabot
 - **Publicado:** 22/07/2026
 - **Avaliação:** ⭐ (2)
@@ -288,32 +309,31 @@
 - **Compatibilidade com XAU_AI_PRO:** ⭐⭐⭐⭐⭐
 - **Sugestão de uso:** Usar para validar se a vantagem é robusta ou depende de outliers.
 
-
 ---
 
 ## Ranking Geral por Prioridade
 
-| Prioridade | Item | Categoria | Uso Principal | Esforço |
-|---|---|---|---|---|
-| 1 | KCI Volatility Distance (74838) | Indicador | Feature ML + confirmação de sinal | Médio |
-| 2 | KCI Directional Matrix (74839) | Indicador | Feature ML + substituição do RSI | Médio |
-| 3 | Result — Error Handling (74427) | Biblioteca | Robustez do código | Médio |
-| 4 | ASQ PropFirm Shield (71480) | Biblioteca | Proteção de conta/prop firm | Médio |
-| 5 | Institutional Kelly-VAPS (71390) | Biblioteca | Cálculo dinâmico de lote | Médio |
-| 6 | Trade Journal Exporter (74572) | Script | Exportação de trades | Baixo |
-| 7 | Execution Cost Sensitivity (74663) | Script | Validação de custos | Baixo |
-| 8 | Drawdown DNA Analyzer (74240) | Script | Análise de risco | Baixo |
-| 9 | Profit Concentration Analyzer (74245) | Script | Robustez estatística | Baixo |
-| 10 | CKS Position Risk Dashboard (74913) | Indicador | Validação visual de risco | Baixo |
-| 11 | Trend Flasher -AKM (74932) | Indicador | Dashboard visual SuperTrend | Baixo |
-| 12 | MQTTFive (73373) | Biblioteca | Integração externa via MQTT | Alto |
-| 13 | Channel Proximity Engine (73055) | Biblioteca | Sinais de canal | Médio |
-| 14 | MA Gauge Pro -AKM (75000) | Indicador | MA adaptativa | Alto |
-| 15 | Alpha Beta Trend + Dashboard (74958) | Indicador | Filtro de tendência | Médio |
-| 16 | Elder Force Index (75863) | Indicador | Feature de volume | Médio |
-| 17 | SuperTrend EA (74894) | EA | Referência de saída | Estudo |
-| 18 | Market Miner (74818) | EA | Referência multiestratégia | Estudo |
-| 19 | Aegis Quantum Lite (75002) | EA | Referência simples | Estudo |
+| Prioridade | Item                                  | Categoria  | Uso Principal                     | Esforço |
+| ---------- | ------------------------------------- | ---------- | --------------------------------- | ------- |
+| 1          | KCI Volatility Distance (74838)       | Indicador  | Feature ML + confirmação de sinal | Médio   |
+| 2          | KCI Directional Matrix (74839)        | Indicador  | Feature ML + substituição do RSI  | Médio   |
+| 3          | Result — Error Handling (74427)       | Biblioteca | Robustez do código                | Médio   |
+| 4          | ASQ PropFirm Shield (71480)           | Biblioteca | Proteção de conta/prop firm       | Médio   |
+| 5          | Institutional Kelly-VAPS (71390)      | Biblioteca | Cálculo dinâmico de lote          | Médio   |
+| 6          | Trade Journal Exporter (74572)        | Script     | Exportação de trades              | Baixo   |
+| 7          | Execution Cost Sensitivity (74663)    | Script     | Validação de custos               | Baixo   |
+| 8          | Drawdown DNA Analyzer (74240)         | Script     | Análise de risco                  | Baixo   |
+| 9          | Profit Concentration Analyzer (74245) | Script     | Robustez estatística              | Baixo   |
+| 10         | CKS Position Risk Dashboard (74913)   | Indicador  | Validação visual de risco         | Baixo   |
+| 11         | Trend Flasher -AKM (74932)            | Indicador  | Dashboard visual SuperTrend       | Baixo   |
+| 12         | MQTTFive (73373)                      | Biblioteca | Integração externa via MQTT       | Alto    |
+| 13         | Channel Proximity Engine (73055)      | Biblioteca | Sinais de canal                   | Médio   |
+| 14         | MA Gauge Pro -AKM (75000)             | Indicador  | MA adaptativa                     | Alto    |
+| 15         | Alpha Beta Trend + Dashboard (74958)  | Indicador  | Filtro de tendência               | Médio   |
+| 16         | Elder Force Index (75863)             | Indicador  | Feature de volume                 | Médio   |
+| 17         | SuperTrend EA (74894)                 | EA         | Referência de saída               | Estudo  |
+| 18         | Market Miner (74818)                  | EA         | Referência multiestratégia        | Estudo  |
+| 19         | Aegis Quantum Lite (75002)            | EA         | Referência simples                | Estudo  |
 
 ---
 
@@ -328,5 +348,4 @@
 
 ---
 
-*Documento gerado automaticamente a partir de pesquisa no MQL5 Codebase.*
-
+_Documento gerado automaticamente a partir de pesquisa no MQL5 Codebase._

@@ -959,12 +959,24 @@ class ChartsTab:
             tfmap = {1: mt5.TIMEFRAME_M1, 5: mt5.TIMEFRAME_M5, 15: mt5.TIMEFRAME_M15,
                      30: mt5.TIMEFRAME_M30, 60: mt5.TIMEFRAME_H1, 240: mt5.TIMEFRAME_H4,
                      1440: mt5.TIMEFRAME_D1, 10080: mt5.TIMEFRAME_W1}
+            # SEM FALLBACK SILENCIOSO
+            # ========================
+            # Era `tfmap.get(minutes, mt5.TIMEFRAME_M5)`: um timeframe nao
+            # reconhecido virava M5 sem aviso, e o operador via um grafico de
+            # um timeframe que nao pediu, sem como descobrir. Aqui timeframe
+            # desconhecido e recusa com motivo, e a tela mostra a razao.
+            tf = tfmap.get(minutes)
+            if tf is None:
+                raise ValueError(
+                    f"timeframe nao suportado: {minutes} minutos. "
+                    f"use um de {sorted(tfmap)}"
+                )
             with mt5_lock:
                 mt5.symbol_select(symbol, True)
-                rates = mt5.copy_rates_from_pos(symbol, tfmap.get(minutes, mt5.TIMEFRAME_M5), 0, limit)
+                rates = mt5.copy_rates_from_pos(symbol, tf, 0, limit)
                 if rates is None and mt5.initialize():
                     mt5.symbol_select(symbol, True)
-                    rates = mt5.copy_rates_from_pos(symbol, tfmap.get(minutes, mt5.TIMEFRAME_M5), 0, limit)
+                    rates = mt5.copy_rates_from_pos(symbol, tf, 0, limit)
             if rates is not None and len(rates):
                 for r in rates[-limit:]:
                     candles.append({"symbol": symbol,

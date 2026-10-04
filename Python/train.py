@@ -11,12 +11,6 @@ BASE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = BASE_DIR.parent
 sys.path.append(str(BASE_DIR))
 
-# Sentry integration (importar sentry_config já inicializa o SDK automaticamente)
-try:
-    from sentry_config import capture_training_error, capture_backtest_results
-except ImportError:
-    pass
-
 from pipeline import Pipeline
 
 
@@ -55,39 +49,9 @@ def train() -> None:
             else:
                 error_msg = info.get('error', 'Unknown error')
                 print(f"  {symbol}: {status} | {error_msg}")
-                
-                # Captura erro no Sentry
-                try:
-                    capture_training_error(
-                        epoch=0,
-                        loss=0.0,
-                        error_msg=f"{symbol}: {error_msg}"
-                    )
-                except:
-                    pass
-        
-        # Captura resultado final
-        try:
-            from sentry_config import capture_model_performance
-            capture_model_performance({
-                "total_symbols": len(summary),
-                "successful": successful_models,
-                "failed": len(summary) - successful_models,
-                "success_rate": f"{(successful_models/len(summary)*100):.2f}%" if summary else "0%"
-            })
-        except:
-            pass
-            
+
     except Exception as e:
         print(f"Erro critico no treinamento: {e}")
-        try:
-            capture_training_error(
-                epoch=-1,
-                loss=0.0,
-                error_msg=str(e)
-            )
-        except:
-            pass
         raise
 
 

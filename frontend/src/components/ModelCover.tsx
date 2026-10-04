@@ -53,16 +53,26 @@ const PALETA: Record<ClasseAtivo, { base: string; borda: string; glifo: string }
 };
 
 const TF_CURTO: Record<string, string> = {
-  M1: '1M', M5: '5M', M15: '15M', M30: '30M',
-  H1: '1H', H4: '4H', D1: '1D', W1: '1S',
+  M1: '1M',
+  M5: '5M',
+  M15: '15M',
+  M30: '30M',
+  H1: '1H',
+  H4: '4H',
+  D1: '1D',
+  W1: '1S',
 };
 
 function pct(v: number | null | undefined, casas = 1): string {
-  return v === null || v === undefined || !Number.isFinite(v) ? '--' : `${(v * 100).toFixed(casas)}%`;
+  return v === null || v === undefined || !Number.isFinite(v)
+    ? '--'
+    : `${(v * 100).toFixed(casas)}%`;
 }
 
 export default function ModelCover({
-  modelo, selecionado, onSelect,
+  modelo,
+  selecionado,
+  onSelect,
 }: {
   modelo: CapaModelo;
   selecionado?: boolean;
@@ -70,8 +80,9 @@ export default function ModelCover({
 }) {
   const classe = classeDe(modelo.symbol);
   const paleta = PALETA[classe];
-  const tf = TF_CURTO[String(modelo.timeframe || '').toUpperCase()]
-    ?? String(modelo.timeframe || '').toUpperCase();
+  const tf =
+    TF_CURTO[String(modelo.timeframe || '').toUpperCase()] ??
+    String(modelo.timeframe || '').toUpperCase();
   const edge = modelo.edge;
   const temEdge = edge !== null && edge !== undefined && Number.isFinite(edge) && edge > 0;
 
@@ -81,12 +92,16 @@ export default function ModelCover({
         <span className="mc-glifo" style={{ color: paleta.glifo }} aria-hidden="true">
           {assetIcon(modelo.symbol, classe)}
         </span>
-        <span className="mc-tf" style={{ color: paleta.glifo }}>{tf}</span>
+        <span className="mc-tf" style={{ color: paleta.glifo }}>
+          {tf}
+        </span>
       </span>
       <span className="mc-corpo">
         <span className="mc-nome">{modelo.symbol}</span>
         <span className="mc-metricas">
-          <span title="Acurácia no treino">acc <b className="num">{pct(modelo.accuracy)}</b></span>
+          <span title="Acurácia no treino">
+            acc <b className="num">{pct(modelo.accuracy)}</b>
+          </span>
           <span title="Edge no treino" className={temEdge ? 'pos' : 'neg'}>
             edge <b className="num">{pct(edge)}</b>
           </span>
@@ -99,7 +114,11 @@ export default function ModelCover({
   );
 
   if (!onSelect) {
-    return <div className="model-cover" aria-label={`Modelo ${modelo.symbol} ${tf}`}>{conteudo}</div>;
+    return (
+      <div className="model-cover" aria-label={`Modelo ${modelo.symbol} ${tf}`}>
+        {conteudo}
+      </div>
+    );
   }
 
   return (

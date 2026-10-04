@@ -16,8 +16,6 @@ concurrency:
 jobs:
   health:
     runs-on: ubuntu-latest
-    env:
-      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK || secrets.SLACK_WEBHOOK_URL }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -95,8 +93,9 @@ jobs:
           npm ci --no-audit --no-fund
           npm run lint
           npm audit --audit-level=high
-      - name: Verificar API Vercel
-        run: curl --fail --silent --show-error --max-time 30 https://xau-ai-pro-api-apolopanda500.vercel.app/api/health
+      # O passo "Verificar API Vercel" e a notificacao no Slack foram REMOVIDOS
+      # em 04/10/2026: o projeto e 100% local e nao tem API hospedada para
+      # checar. O sinal de problema continua sendo a issue aberta abaixo.
       - name: Abrir issue de manutencao quando falhar
         if: failure()
         env:
@@ -106,10 +105,3 @@ jobs:
           EXISTING=$(gh issue list --state open --search "$TITLE in:title" --json number --jq '.[0].number // empty')
           BODY="A manutenção automática falhou no run $GITHUB_RUN_NUMBER. Analise os logs: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           if [ -n "$EXISTING" ]; then gh issue comment "$EXISTING" --body "$BODY"; else gh issue create --title "$TITLE" --body "$BODY" --label bug; fi
-      - name: Notificar Slack em falha
-        if: failure() && env.SLACK_WEBHOOK_URL != ''
-        uses: slackapi/slack-github-action@v4.0.0
-        with:
-          webhook-type: incoming-webhook
-          payload: |
-            {"text":":warning: Manutenção XAU AI PRO falhou: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"}

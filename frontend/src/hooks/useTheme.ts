@@ -1,7 +1,15 @@
 import { useEffect } from 'react';
 import { useAppStore } from './useAppStore';
 
-export type ThemeName = 'dark' | 'xau_dark' | 'btc_dark' | 'light' | 'ocean_dark' | 'emerald_dark' | 'rose_dark' | 'violet_dark';
+export type ThemeName =
+  | 'dark'
+  | 'xau_dark'
+  | 'btc_dark'
+  | 'light'
+  | 'ocean_dark'
+  | 'emerald_dark'
+  | 'rose_dark'
+  | 'violet_dark';
 
 export const THEMES: { id: ThemeName; label: string; desc: string }[] = [
   { id: 'dark', label: 'Dark (Padrao)', desc: 'Azul elétrico' },

@@ -10,7 +10,7 @@ Plataforma desktop para acompanhamento do MetaTrader 5, análise de mercado e tr
 - Conexão opcional com MetaTrader 5 oficial.
 - EA MQL5, arquivos `.mq5`, `.mqh` e presets `.set` incluídos no instalador.
 - Subgraph de mercado: indicadores, correlação de retornos e classificação de regime.
-- Integrações configuráveis: GitHub, Sentry, Slack, CDN de modelos e MCP.
+- Integrações configuráveis: GitHub, GitLab, Figma e MCP.
 - Planos locais Free, Pro e Business com entitlements e ativação sem cobrança.
 - Social Paper para compartilhar estratégias somente em paper/demo.
 - Atualizações via GitHub Releases e instalador Inno Setup.
@@ -30,15 +30,15 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pytest -q tests
 ```
 
-## CrewAI AMP / A2A
+## Integracoes
 
-The CrewAI deployment exposes the analyst as an A2A server agent. After
-redeploying, use the following URLs in AMP or another A2A client:
+O projeto e **100% local**. As unicas integracoes de terceiros sao
+**GitHub**, **GitLab** e **Figma**. Vercel, Sentry, Slack e Kilo foram
+removidos em 04/10/2026: nao ha API hospedada, telemetria externa nem CDN de
+modelos no produto.
 
-- Agent Card: `https://<deployment-host>/.well-known/agent-card.json`
-- JSON-RPC endpoint: `https://<deployment-host>/a2a`
-
-The reproducible Python environment is defined by `requirements-lock.txt`; redeploy from the repository and configure deployment environment variables in the host platform. Do not commit provider keys or tokens.
+O ambiente reproduzivel e definido por `requirements-lock.txt`. Nao versione
+chaves de provedor nem tokens.
 
 ## Instalador
 

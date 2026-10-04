@@ -25,11 +25,30 @@ import { quantum } from './icons/quantum';
 import { vips } from './icons/vips';
 
 export type IconName =
-  | 'dashboard' | 'market' | 'positions' | 'robot' | 'charts'
-  | 'vision' | 'strategy' | 'tools' | 'integrations' | 'settings'
-  | 'calendar' | 'news' | 'system' | 'info' | 'movements'
-  | 'balances' | 'history' | 'quantum' | 'wallet' | 'lock'
-  | 'warning' | 'bell' | 'chart' | 'vips';
+  | 'dashboard'
+  | 'market'
+  | 'positions'
+  | 'robot'
+  | 'charts'
+  | 'vision'
+  | 'strategy'
+  | 'tools'
+  | 'integrations'
+  | 'settings'
+  | 'calendar'
+  | 'news'
+  | 'system'
+  | 'info'
+  | 'movements'
+  | 'balances'
+  | 'history'
+  | 'quantum'
+  | 'wallet'
+  | 'lock'
+  | 'warning'
+  | 'bell'
+  | 'chart'
+  | 'vips';
 
 interface Props {
   name: IconName;
@@ -39,13 +58,30 @@ interface Props {
 }
 
 const iconMap: Record<IconName, (c: string, a: string) => React.ReactNode> = {
-  dashboard, market, positions, robot, charts, vision, strategy, tools,
-  movements, balances, history, calendar, news, system, settings, info,
-  wallet, lock, quantum, vips,
+  dashboard,
+  market,
+  positions,
+  robot,
+  charts,
+  vision,
+  strategy,
+  tools,
+  movements,
+  balances,
+  history,
+  calendar,
+  news,
+  system,
+  settings,
+  info,
+  wallet,
+  lock,
+  quantum,
+  vips,
   integrations: tools, // fallback
   warning: info, // reuse info icon
-  bell: info,      // reuse info icon
-  chart: charts,   // reuse charts icon
+  bell: info, // reuse info icon
+  chart: charts, // reuse charts icon
 };
 
 export const QuantumIcon: React.FC<Props> = ({ name, size = 24, className, glow = true }) => {

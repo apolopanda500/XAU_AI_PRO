@@ -7,7 +7,26 @@ export default function ExitAppButton() {
   const exit = async () => {
     if (closing) return;
     setClosing(true);
-    try { await invoke('exit_app'); } catch { try { await getCurrentWindow().close(); } catch { setClosing(false); } }
+    try {
+      await invoke('exit_app');
+    } catch {
+      try {
+        await getCurrentWindow().close();
+      } catch {
+        setClosing(false);
+      }
+    }
   };
-  return <div className="card compact-card exit-app-card"><button type="button" className="btn danger exit-app-button" onClick={() => void exit()} disabled={closing}>{closing ? 'Fechando…' : '⏻ Sair do aplicativo'}</button></div>;
+  return (
+    <div className="card compact-card exit-app-card">
+      <button
+        type="button"
+        className="btn danger exit-app-button"
+        onClick={() => void exit()}
+        disabled={closing}
+      >
+        {closing ? 'Fechando…' : '⏻ Sair do aplicativo'}
+      </button>
+    </div>
+  );
 }

@@ -4,7 +4,15 @@
 //==================================================
 
 #property strict
-#property version "1.20"
+// Fonte unica da versao: `VERSION` na raiz, propagada por
+// `scripts/sync_version.py` para os 8 manifestos (pyproject, package.json x2,
+// Cargo.toml x2, tauri.conf.json, version.ts). Este `#property` e a MESMA
+// versao; o MT5 mostra na aba de propriedades do EA.
+//
+// Antes dizia "1.20", que e diferente de 1.2.0 e de 1.2.4 — tres respostas
+// diferentes para "qual versao". `sync_version.py --check` nao pegava porque o
+// `.mq5` nao esta na lista de manifestos dele.
+#property version "1.240"
 
 #include <Trade/Trade.mqh>
 
@@ -73,6 +81,13 @@ CTrade trade;
 //==================================================
 
 #include "Core/SignalCore.mqh"
+// Signal Core v2 (paralelo): seletor SignalCoreVersion + GetActiveSignal.
+// Modulo paralelo ao v1 por decisao propria do autor: nao altera RiskHub,
+// SafetyManager, ExecutionEngine nem a gestao de posicoes.
+#include "Core/SignalCoreV2.mqh"
+// Ponte somente leitura EA -> Gateway -> App. Grava
+// XAU_AI_PRO_heartbeat.json em FILE_COMMON, consumido por backend/ea_manager.py.
+#include "Integration/EAHeartbeat.mqh"
 #include "Core/DecisionEngine.mqh"
 #include "Core/ValidationEngine.mqh"
 
@@ -273,6 +288,8 @@ bool InitializeModules()
 
 // v1.2.1: cache de handles de indicadores do SignalCore
    SignalCoreInit();
+   SignalCoreV2Init();   // modulo paralelo (SignalCoreVersion)
+   EAHeartbeatWrite("RUNNING");
    StateMachineInit();   // v1.4.0 (Etapa 4): maquina de estados
    Print("[INIT] system + signalcore OK");
 
@@ -487,6 +504,8 @@ void ShutdownModules()
 
 // v1.2.1: libera handles cacheados do SignalCore
    ReleaseSignalHandles();
+   SignalCoreV2Release();   // libera handles do modulo paralelo
+   EAHeartbeatWrite("STOPPED");
 
    DataLoggerClose();
 
@@ -693,7 +712,7 @@ void PerformanceSave()
 int OnInit()
   {
    Print("========================================");
-   Print("        XAU_AI_PRO v1.2.0");
+   Print("        XAU_AI_PRO v1.2.4");
    Print("========================================");
 
    Print("Conta.............: ", AccountInfoInteger(ACCOUNT_LOGIN));

@@ -16,25 +16,25 @@ conquistado por **volume**, e a corretora mostra quanto falta.
 
 Cinco níveis acima do Regular. O que muda por nível:
 
-| Tier | Taker fee | Desconto spread | Desconto exchange | Cashback |
-|---|---|---|---|---|
-| Regular | 0,045% | — | 1% | — |
-| VIP1 | 0,044% | 2% | 5% | 1% |
-| VIP2 | 0,042% | 5% | 7% | 2% |
-| VIP3 | 0,04% | 10% | 8% | 5% |
-| VIP4 | 0,03% | 15% | 10% | 10% |
-| VIP5 | 0,015% | 25% | 15% | 10% |
+| Tier    | Taker fee | Desconto spread | Desconto exchange | Cashback |
+| ------- | --------- | --------------- | ----------------- | -------- |
+| Regular | 0,045%    | —               | 1%                | —        |
+| VIP1    | 0,044%    | 2%              | 5%                | 1%       |
+| VIP2    | 0,042%    | 5%              | 7%                | 2%       |
+| VIP3    | 0,04%     | 10%             | 8%                | 5%       |
+| VIP4    | 0,03%     | 15%             | 10%               | 10%      |
+| VIP5    | 0,015%    | 25%             | 15%               | 10%      |
 
 **Maker fee não muda** em nenhum nível.
 
 Volume necessário em 30 dias — e o detalhe que mais importa:
 
-| Tier | Cripto | Forex e CFD |
-|---|---|---|
-| VIP1 | 10.000 USD | 100.000 USD |
-| VIP2 | 100.000 USD | 1.000.000 USD |
-| VIP3 | 1.000.000 USD | 10.000.000 USD |
-| VIP4 | 5.000.000 USD | 45.000.000 USD |
+| Tier | Cripto         | Forex e CFD    |
+| ---- | -------------- | -------------- |
+| VIP1 | 10.000 USD     | 100.000 USD    |
+| VIP2 | 100.000 USD    | 1.000.000 USD  |
+| VIP3 | 1.000.000 USD  | 10.000.000 USD |
+| VIP4 | 5.000.000 USD  | 45.000.000 USD |
 | VIP5 | 25.000.000 USD | 90.000.000 USD |
 
 Duas regras que só a leitura da tabela revela:
@@ -46,8 +46,8 @@ Duas regras que só a leitura da tabela revela:
    tiraria o cliente do nível no meio do ciclo, e ele perderia um desconto
    pelo qual já pagou para entrar.
 
-Existe ainda um caminho paralelo: comprar o nível com saldo do *Reward
-Center*, sem operar.
+Existe ainda um caminho paralelo: comprar o nível com saldo do _Reward
+Center_, sem operar.
 
 ### IC Markets — "Raw Spread Account"
 
@@ -84,19 +84,19 @@ próximo. Um nível isolado não diz se a meta está longe ou perto.
 `escada_completa()` devolve a escada inteira, na ordem, com três campos por
 degrau:
 
-| Campo | O que é | Por que existe |
-|---|---|---|
-| `estado` | `alcancado`, `atual` ou `futuro` | Marca **exatamente um** `atual` |
-| `percentual` | 0–100 pelo grupo **mais atrasado** | Responde "quanto já fiz?" |
-| `minimo_por_grupo` | Os limiares do degrau | O número que a barra mede |
+| Campo              | O que é                            | Por que existe                  |
+| ------------------ | ---------------------------------- | ------------------------------- |
+| `estado`           | `alcancado`, `atual` ou `futuro`   | Marca **exatamente um** `atual` |
+| `percentual`       | 0–100 pelo grupo **mais atrasado** | Responde "quanto já fiz?"       |
+| `minimo_por_grupo` | Os limiares do degrau              | O número que a barra mede       |
 
 **Três decisões que vieram do defeito, não da estética:**
 
-1. **`percentual` usa o grupo mais atrasado.** O nível só conta quando *todos*
+1. **`percentual` usa o grupo mais atrasado.** O nível só conta quando _todos_
    os grupos passam. Usar o melhor grupo mostraria 100% quando o Forex está
    em 5% — o número seria maior que a realidade.
 
-2. **Só um degrau é `atual`.** A primeira versão marcava *todos* os posteriores
+2. **Só um degrau é `atual`.** A primeira versão marcava _todos_ os posteriores
    como `atual`. Isso diria ao operador que ele precisa trabalhar em cinco
    metas ao mesmo tempo, o que é falso: só o próximo conta.
 
@@ -154,4 +154,3 @@ que `JANELA_DIAS` já fazia, mas agora com o motivo escrito.
 Os degraus de comissão da IBKR caem de 0,05% → 0,03% → 0,02% → 0,015% do valor
 negociado conforme o volume cresce. **Esse percentual não foi copiado para
 aqui**: é o preço do produto da IBKR, não o deste projeto.
-

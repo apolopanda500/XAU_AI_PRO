@@ -27,7 +27,7 @@ export interface Resultado {
 
 function ler(chave: string): string {
   try {
-    return typeof window === 'undefined' ? '' : window.localStorage.getItem(chave) ?? '';
+    return typeof window === 'undefined' ? '' : (window.localStorage.getItem(chave) ?? '');
   } catch {
     return '';
   }
@@ -58,7 +58,9 @@ export function normalizeOrigin(valor: string): string {
 }
 
 export function normalizeWsUrl(valor: string, origem: string): string {
-  const bruto = String(valor || '').trim().replace(/\/+$/, '');
+  const bruto = String(valor || '')
+    .trim()
+    .replace(/\/+$/, '');
   if (!bruto) {
     // Sem WS explicito, deriva da origem: https -> wss, http -> ws.
     if (!origem) return '';
@@ -79,17 +81,35 @@ export function gatewayConfigurado(): { apiBase: string; wsUrl: string } {
 }
 
 /** Grava a configuracao. Retorna o motivo da recusa quando invalido. */
-export function salvarGateway(apiBase: string, wsUrl: string): { ok: boolean; erro?: string; apiBase: string; wsUrl: string } {
+export function salvarGateway(
+  apiBase: string,
+  wsUrl: string,
+): { ok: boolean; erro?: string; apiBase: string; wsUrl: string } {
   const origem = normalizeOrigin(apiBase);
   if (!origem) {
-    return { ok: false, erro: 'Informe uma URL completa, por exemplo https://gateway.exemplo.com', apiBase: '', wsUrl: '' };
+    return {
+      ok: false,
+      erro: 'Informe uma URL completa, por exemplo https://gateway.exemplo.com',
+      apiBase: '',
+      wsUrl: '',
+    };
   }
   const ws = normalizeWsUrl(wsUrl, origem);
   if (!ws) {
-    return { ok: false, erro: 'URL de WebSocket invalida; use wss:// em producao', apiBase: '', wsUrl: '' };
+    return {
+      ok: false,
+      erro: 'URL de WebSocket invalida; use wss:// em producao',
+      apiBase: '',
+      wsUrl: '',
+    };
   }
   if (!gravar(CHAVE_API_BASE, origem) || !gravar(CHAVE_WS_URL, ws)) {
-    return { ok: false, erro: 'Nao foi possivel salvar a configuracao neste dispositivo', apiBase: '', wsUrl: '' };
+    return {
+      ok: false,
+      erro: 'Nao foi possivel salvar a configuracao neste dispositivo',
+      apiBase: '',
+      wsUrl: '',
+    };
   }
   return { ok: true, apiBase: origem, wsUrl: ws };
 }
@@ -106,7 +126,11 @@ export function limparGateway(): void {
 /** Uma origem http:// em runtime mobile e recusa com explicacao. */
 export function alertaSeguranca(origem: string, mobile: boolean): string | null {
   if (!mobile) return null;
-  if (/^http:\/\//i.test(origem) && !/^http:\/\/10\.0\.2\.2(:\d+)?$/i.test(origem) && !/^http:\/\/127\.0\.0\.1(:\d+)?$/i.test(origem)) {
+  if (
+    /^http:\/\//i.test(origem) &&
+    !/^http:\/\/10\.0\.2\.2(:\d+)?$/i.test(origem) &&
+    !/^http:\/\/127\.0\.0\.1(:\d+)?$/i.test(origem)
+  ) {
     return 'Conexao sem TLS. Use https:// (o trafego com credencial nao deve viajar em texto claro).';
   }
   return null;
@@ -116,7 +140,12 @@ export function alertaSeguranca(origem: string, mobile: boolean): string | null 
 export async function testarGateway(origem: string, timeoutMs = 6000): Promise<Resultado> {
   const base = normalizeOrigin(origem);
   if (!base) {
-    return { ok: false, origem: String(origem || ''), erro: 'URL invalida', dica: 'Use o formato https://host:porta' };
+    return {
+      ok: false,
+      origem: String(origem || ''),
+      erro: 'URL invalida',
+      dica: 'Use o formato https://host:porta',
+    };
   }
   const inicio = Date.now();
   try {
@@ -130,14 +159,20 @@ export async function testarGateway(origem: string, timeoutMs = 6000): Promise<R
         origem: base,
         status: resposta.status,
         latencia_ms: latencia,
-        detalhe: resposta.status === 401 ? 'gateway no ar, exige token (401)' : `gateway no ar (${resposta.status})`,
+        detalhe:
+          resposta.status === 401
+            ? 'gateway no ar, exige token (401)'
+            : `gateway no ar (${resposta.status})`,
       };
     }
     return {
       ok: false,
       origem: base,
       erro: `HTTP ${resposta.status}`,
-      dica: resposta.status === 404 ? 'essa origem nao expoe /api/health;-check a porta do gateway' : 'o host respondeu, mas nao como gateway',
+      dica:
+        resposta.status === 404
+          ? 'essa origem nao expoe /api/health;-check a porta do gateway'
+          : 'o host respondeu, mas nao como gateway',
     };
   } catch (erro) {
     const mensagem = String(erro);

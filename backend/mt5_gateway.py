@@ -2420,8 +2420,21 @@ def capabilities_contract() -> dict:
 
 
 def _cors_origin(origin: str | None) -> str | None:
+    """Origem liberada para o cabecalho CORS. Vazio = nenhuma.
+
+    ANTES (04/10/2026): `if not origin: return "*"`. Sem cabecalho `Origin` —
+    o caso de qualquer cliente de linha de comando, curl ou script — a resposta
+    saia com `Access-Control-Allow-Origin: *`. Num gateway que exige token
+    para as rotas de comando, o wildcard nao dava acesso sozinho, mas dava a
+    qualquer pagina da web a opcao de tentar, e o `Vary: Origin` deixava de
+    valer para a resposta em cache.
+
+    Agora: sem origem, nao ha origem. Um navegador sempre envia `Origin` em
+    pedido cross-origin, entao a perda real e nenhuma — e o que o navegador
+    faz em `same-origin` e nao enviar, o que tambem nao precisa de CORS.
+    """
     if not origin:
-        return "*"
+        return None
     return origin if origin in CORS_ORIGINS else None
 
 
@@ -2534,6 +2547,15 @@ class Handler(BaseHTTPRequestHandler):
             action = parts[-1] if parts else ""
             if action == "test": self._send(200, {"ok": True, "configured": any(x["id"] == connection_id for x in list_connections()), "credentials_exposed": False}); return
         if parsed.path == "/api/connections": self._send(200, {"ok": True, "connections": list_connections()}); return
+        # LATENCIA AO VIVO POR CORRETORA (rodape estilo MT5)
+        #
+        # Mede round-trip HTTP real contra o endpoint publico de cada venue. E
+        # leitura informativa: falha aqui nunca bloqueia operacao, e uma
+        # corretora sem resposta devolve `ms: None` — nunca 0, porque 0 ms e
+        # mentira que a tela repetiria como se fosse medida.
+        if parsed.path == "/api/latencia":
+            from backend import latencia as _latencia
+            self._send(200, _latencia.medir_todas()); return
         # CALENDARIO ECONOMICO (2026-09-30)
         #
         # A rota estava declarada no mapa de planos (`_ROTAS_GET`) e a funcao

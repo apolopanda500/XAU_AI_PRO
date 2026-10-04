@@ -73,23 +73,22 @@ export default function AIPanel() {
 
   const totalPublicados = modelos.filter((m) => m.publicable && m.pklPresent).length;
 
-  const { sinal, carregando, motivo, disponivel, inferir } = useInferenciaIA(
-    timeframe,
-    aiEnabled,
-  );
+  const { sinal, carregando, motivo, disponivel, inferir } = useInferenciaIA(timeframe, aiEnabled);
 
   // Inventário dos modelos treinados.
   useEffect(() => {
     const controller = new AbortController();
-    void buscarModelosTreinados(controller.signal).then(({ modelos: lista, cpuThreads: cpus, erro }) => {
-      if (controller.signal.aborted) return;
-      setModelos(lista);
-      setCpuThreads(cpus);
-      setErroCatalogo(erro);
-      // Preselecciona o primeiro publicavel com artefato carregado.
-      const primeiro = lista.find((m) => m.publicable && m.pklPresent) ?? lista[0] ?? null;
-      if (primeiro) setModeloId(primeiro.id);
-    });
+    void buscarModelosTreinados(controller.signal).then(
+      ({ modelos: lista, cpuThreads: cpus, erro }) => {
+        if (controller.signal.aborted) return;
+        setModelos(lista);
+        setCpuThreads(cpus);
+        setErroCatalogo(erro);
+        // Preselecciona o primeiro publicavel com artefato carregado.
+        const primeiro = lista.find((m) => m.publicable && m.pklPresent) ?? lista[0] ?? null;
+        if (primeiro) setModeloId(primeiro.id);
+      },
+    );
     return () => controller.abort();
   }, []);
 
@@ -164,220 +163,218 @@ export default function AIPanel() {
         <CopilotPanel />
       ) : (
         <>
-      {/* Seleção de modelo: o operador escolhe o artefato e vê as métricas reais. */}
-      <div className="ai-model-card">
-        <div className="ai-model-info">
-          <div className="ai-model-name">
-            {modelo ? `${modelo.symbol || selectedSymbol} ${modelo.timeframe}` : 'Nenhum modelo'}
-          </div>
-          <span>
-            {modelo?.algorithm ?? '--'} · {modelo?.featureVersion ?? '--'} ·{' '}
-            {modelo?.trainSamples ?? '--'} amostras de treino
-          </span>
-        </div>
-        <div className="ai-model-selector">
-          <label htmlFor="ai-modelo">Modelo</label>
-          <select
-            id="ai-modelo"
-            value={modeloId}
-            onChange={(e) => setModeloId(e.target.value)}
-          >
-            {modelos.length === 0 && <option value="">—</option>}
-            {porSimbolo.map(([simbolo, lista]) => (
-              <optgroup key={simbolo} label={simbolo}>
-                {lista.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.timeframe} · acc {num(m.accuracy, 3)} · edge {pct(m.edge, 3)}
-                    {m.publicable ? '' : ' (reprovado)'}
-                  </option>
+          {/* Seleção de modelo: o operador escolhe o artefato e vê as métricas reais. */}
+          <div className="ai-model-card">
+            <div className="ai-model-info">
+              <div className="ai-model-name">
+                {modelo
+                  ? `${modelo.symbol || selectedSymbol} ${modelo.timeframe}`
+                  : 'Nenhum modelo'}
+              </div>
+              <span>
+                {modelo?.algorithm ?? '--'} · {modelo?.featureVersion ?? '--'} ·{' '}
+                {modelo?.trainSamples ?? '--'} amostras de treino
+              </span>
+            </div>
+            <div className="ai-model-selector">
+              <label htmlFor="ai-modelo">Modelo</label>
+              <select id="ai-modelo" value={modeloId} onChange={(e) => setModeloId(e.target.value)}>
+                {modelos.length === 0 && <option value="">—</option>}
+                {porSimbolo.map(([simbolo, lista]) => (
+                  <optgroup key={simbolo} label={simbolo}>
+                    {lista.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.timeframe} · acc {num(m.accuracy, 3)} · edge {pct(m.edge, 3)}
+                        {m.publicable ? '' : ' (reprovado)'}
+                      </option>
+                    ))}
+                  </optgroup>
                 ))}
-              </optgroup>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      {/* Métricas do modelo escolhido. */}
-      {modelo && (
-        <section className="ai-info-section" aria-label="Desempenho do modelo">
-          <h4>Desempenho medido</h4>
-          <div className="metrics-grid">
-            <div className="card metric-card">
-              <span className="muted">Acurácia</span>
-              <strong>{fmtNum(modelo.accuracy, 4)}</strong>
-              <small>palpite: {num(modelo.baseline, 3)}</small>
-            </div>
-            <div className="card metric-card">
-              <span className="muted">Edge</span>
-              <strong className={modelo.edge != null && modelo.edge > 0 ? 'pos' : ''}>
-                {pct(modelo.edge, 2)}
-              </strong>
-              <small>mínimo exigido: {pct(modelo.edgeMin, 0)}</small>
-            </div>
-            <div className="card metric-card">
-              <span className="muted">Edge médio</span>
-              <strong>{pct(modelo.edgeMean, 2)}</strong>
-              <small>desvio {num(modelo.edgeStd, 3)}</small>
-            </div>
-            <div className="card metric-card">
-              <span className="muted">Teste</span>
-              <strong>{modelo.testSamples ?? '--'}</strong>
-              <small>purga: {modelo.purged ?? '--'} candles</small>
+              </select>
             </div>
           </div>
-          {modelo.edgeFolds.length > 0 && (
-            <p className="muted">
-              Edge por fold: {modelo.edgeFolds.map((e) => pct(e, 2)).join('  ')}
-            </p>
-          )}
-          {!modelo.publicable && (
-            <p className="auth-erro">
-              Modelo reprovado na porta de qualidade — não pode operar. Motivo:{' '}
-              {modelo.reason || 'não registrado'}
-            </p>
-          )}
-        </section>
-      )}
 
-      {/* Sinal. Só aparece quando a inferência rodou de verdade. */}
-      {sinal ? (
-        <div className={`ai-signal-card ${classe}`}>
-          <div className="ai-signal-header">
-            <span className="ai-symbol">
-              {sinal.symbol} {sinal.timeframe}
-            </span>
-            <span className={`ai-direction ${classe}`}>{ROTULO_DIR[sinal.direction]}</span>
-            <span className={`ai-confidence ${classe}`}>
-              {fmtPct(sinal.confidence)}
-            </span>
-          </div>
-          <div className="ai-signal-details">
-            <div className="detail-item">
-              <span className="detail-label">Compra</span>
-              <span className="detail-value mono">{fmtPct(sinal.probBuy * 100)}</span>
-            </div>
-            <div className="detail-item">
-              <span className="detail-label">Venda</span>
-              <span className="detail-value mono">{fmtPct(sinal.probSell * 100)}</span>
-            </div>
-            <div className="detail-item">
-              <span className="detail-label">Neutro</span>
-              <span className="detail-value mono">{fmtPct(sinal.probNeutral * 100)}</span>
-            </div>
-            <div className="detail-item">
-              <span className="detail-label">Preço</span>
-              <span className="detail-value mono">{fmtNum(sinal.price, 2)}</span>
-            </div>
-            <div className="detail-item">
-              <span className="detail-label">ATR</span>
-              <span className="detail-value mono">{fmtNum(sinal.atr, 2)}</span>
-            </div>
-            <div className="detail-item">
-              <span className="detail-label">Modelo</span>
-              <span className="detail-value mono">{sinal.model}</span>
-            </div>
-          </div>
-          <p className="muted">
-            A confiança é a probabilidade que o modelo atribui à decisão. Stop Loss,
-            Take Profit e volume não vêm do modelo: são definidos pelo operador no
-            tamanho da posição, porque dependem da banca e do risco por trade.
-          </p>
-        </div>
-      ) : (
-        <div className="placeholder" role="status">
-          {carregando
-            ? 'Inferindo…'
-            : disponivel
-              ? 'Sem sinal.'
-              : motivo || 'Aguardando inferência.'}
-        </div>
-      )}
-
-      <div className="ai-actions">
-        <button className="btn primary" onClick={() => void rodar()} disabled={carregando || !modelo}>
-          {carregando ? 'Inferindo...' : 'Inferir agora'}
-        </button>
-      </div>
-
-      {historico.length > 0 && (
-        <div className="ai-recent-signals">
-          <h4>Sinais recentes</h4>
-          <div className="ai-signals-list">
-            {historico.map((s) => (
-              <div
-                key={s.id}
-                className={`ai-signal-item ${s.direction === 'BUY' ? 'pos' : s.direction === 'SELL' ? 'neg' : ''}`}
-              >
-                <span className="signal-time">{s.timestamp.toLocaleTimeString('pt-BR')}</span>
-                <span className="signal-symbol">
-                  {s.symbol} {s.timeframe}
-                </span>
-                <span className="signal-direction">{s.direction}</span>
-                <span className="signal-confidence">{fmtPct(s.confidence)}</span>
+          {/* Métricas do modelo escolhido. */}
+          {modelo && (
+            <section className="ai-info-section" aria-label="Desempenho do modelo">
+              <h4>Desempenho medido</h4>
+              <div className="metrics-grid">
+                <div className="card metric-card">
+                  <span className="muted">Acurácia</span>
+                  <strong>{fmtNum(modelo.accuracy, 4)}</strong>
+                  <small>palpite: {num(modelo.baseline, 3)}</small>
+                </div>
+                <div className="card metric-card">
+                  <span className="muted">Edge</span>
+                  <strong className={modelo.edge != null && modelo.edge > 0 ? 'pos' : ''}>
+                    {pct(modelo.edge, 2)}
+                  </strong>
+                  <small>mínimo exigido: {pct(modelo.edgeMin, 0)}</small>
+                </div>
+                <div className="card metric-card">
+                  <span className="muted">Edge médio</span>
+                  <strong>{pct(modelo.edgeMean, 2)}</strong>
+                  <small>desvio {num(modelo.edgeStd, 3)}</small>
+                </div>
+                <div className="card metric-card">
+                  <span className="muted">Teste</span>
+                  <strong>{modelo.testSamples ?? '--'}</strong>
+                  <small>purga: {modelo.purged ?? '--'} candles</small>
+                </div>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <section className="ai-info-section" aria-label="Inventário de modelos">
-        <h4>Inventário de modelos</h4>
-        <p className="muted">
-          {modelos.length} artefatos em {porSimbolo.length} símbolos ·{' '}
-          {totalPublicados} publicados para operar · {cpuThreads} threads de CPU
-        </p>
-        {erroCatalogo && <p className="auth-erro">Catálogo: {erroCatalogo}</p>}
-        {porSimbolo.map(([simbolo, lista]) => {
-          const prontos = lista.filter((m) => m.publicable && m.pklPresent).length;
-          return (
-            <div className="ai-symbol-block" key={simbolo}>
-              <div className="ai-symbol-head">
-                <span className="ai-symbol-code">{simbolo}</span>
-                <span className={`chip ${prontos > 0 ? 'ok' : 'warn'}`}>
-                  {prontos}/{lista.length}
-                </span>
-              </div>
-              <div className="ai-symbol-chips">
-                {lista.map((m) => {
-                  const estado = m.publicable && m.pklPresent
-                    ? 'ok'
-                    : m.publicable
-                      ? 'warn'
-                      : 'bad';
-                  const rotulo = m.publicable && m.pklPresent
-                    ? 'pronto'
-                    : m.publicable
-                      ? 'sem artefato'
-                      : 'reprovado';
-                  return (
-                    <button
-                      type="button"
-                      key={m.id}
-                      className={`ai-model-chip is-${estado}${m.id === modeloId ? ' is-selected' : ''}`}
-                      onClick={() => setModeloId(m.id)}
-                      title={`${m.id} · acc ${num(m.accuracy, 4)} · edge ${pct(m.edge, 4)}`}
-                    >
-                      <span className="chip-tf">{m.timeframe}</span>
-                      <span className="chip-state">{rotulo}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              {lista.some((m) => !m.publicable && m.reason) && (
+              {modelo.edgeFolds.length > 0 && (
                 <p className="muted">
-                  {lista
-                    .filter((m) => !m.publicable && m.reason)
-                    .map((m) => `${m.timeframe}: ${m.reason}`)
-                    .join(' · ')}
+                  Edge por fold: {modelo.edgeFolds.map((e) => pct(e, 2)).join('  ')}
                 </p>
               )}
+              {!modelo.publicable && (
+                <p className="auth-erro">
+                  Modelo reprovado na porta de qualidade — não pode operar. Motivo:{' '}
+                  {modelo.reason || 'não registrado'}
+                </p>
+              )}
+            </section>
+          )}
+
+          {/* Sinal. Só aparece quando a inferência rodou de verdade. */}
+          {sinal ? (
+            <div className={`ai-signal-card ${classe}`}>
+              <div className="ai-signal-header">
+                <span className="ai-symbol">
+                  {sinal.symbol} {sinal.timeframe}
+                </span>
+                <span className={`ai-direction ${classe}`}>{ROTULO_DIR[sinal.direction]}</span>
+                <span className={`ai-confidence ${classe}`}>{fmtPct(sinal.confidence)}</span>
+              </div>
+              <div className="ai-signal-details">
+                <div className="detail-item">
+                  <span className="detail-label">Compra</span>
+                  <span className="detail-value mono">{fmtPct(sinal.probBuy * 100)}</span>
+                </div>
+                <div className="detail-item">
+                  <span className="detail-label">Venda</span>
+                  <span className="detail-value mono">{fmtPct(sinal.probSell * 100)}</span>
+                </div>
+                <div className="detail-item">
+                  <span className="detail-label">Neutro</span>
+                  <span className="detail-value mono">{fmtPct(sinal.probNeutral * 100)}</span>
+                </div>
+                <div className="detail-item">
+                  <span className="detail-label">Preço</span>
+                  <span className="detail-value mono">{fmtNum(sinal.price, 2)}</span>
+                </div>
+                <div className="detail-item">
+                  <span className="detail-label">ATR</span>
+                  <span className="detail-value mono">{fmtNum(sinal.atr, 2)}</span>
+                </div>
+                <div className="detail-item">
+                  <span className="detail-label">Modelo</span>
+                  <span className="detail-value mono">{sinal.model}</span>
+                </div>
+              </div>
+              <p className="muted">
+                A confiança é a probabilidade que o modelo atribui à decisão. Stop Loss, Take Profit
+                e volume não vêm do modelo: são definidos pelo operador no tamanho da posição,
+                porque dependem da banca e do risco por trade.
+              </p>
             </div>
-          );
-        })}
-        {modelos.length === 0 && !erroCatalogo && (
-          <p className="muted">Nenhum metadado de modelo encontrado.</p>
-        )}
-      </section>
+          ) : (
+            <div className="placeholder" role="status">
+              {carregando
+                ? 'Inferindo…'
+                : disponivel
+                  ? 'Sem sinal.'
+                  : motivo || 'Aguardando inferência.'}
+            </div>
+          )}
+
+          <div className="ai-actions">
+            <button
+              className="btn primary"
+              onClick={() => void rodar()}
+              disabled={carregando || !modelo}
+            >
+              {carregando ? 'Inferindo...' : 'Inferir agora'}
+            </button>
+          </div>
+
+          {historico.length > 0 && (
+            <div className="ai-recent-signals">
+              <h4>Sinais recentes</h4>
+              <div className="ai-signals-list">
+                {historico.map((s) => (
+                  <div
+                    key={s.id}
+                    className={`ai-signal-item ${s.direction === 'BUY' ? 'pos' : s.direction === 'SELL' ? 'neg' : ''}`}
+                  >
+                    <span className="signal-time">{s.timestamp.toLocaleTimeString('pt-BR')}</span>
+                    <span className="signal-symbol">
+                      {s.symbol} {s.timeframe}
+                    </span>
+                    <span className="signal-direction">{s.direction}</span>
+                    <span className="signal-confidence">{fmtPct(s.confidence)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <section className="ai-info-section" aria-label="Inventário de modelos">
+            <h4>Inventário de modelos</h4>
+            <p className="muted">
+              {modelos.length} artefatos em {porSimbolo.length} símbolos · {totalPublicados}{' '}
+              publicados para operar · {cpuThreads} threads de CPU
+            </p>
+            {erroCatalogo && <p className="auth-erro">Catálogo: {erroCatalogo}</p>}
+            {porSimbolo.map(([simbolo, lista]) => {
+              const prontos = lista.filter((m) => m.publicable && m.pklPresent).length;
+              return (
+                <div className="ai-symbol-block" key={simbolo}>
+                  <div className="ai-symbol-head">
+                    <span className="ai-symbol-code">{simbolo}</span>
+                    <span className={`chip ${prontos > 0 ? 'ok' : 'warn'}`}>
+                      {prontos}/{lista.length}
+                    </span>
+                  </div>
+                  <div className="ai-symbol-chips">
+                    {lista.map((m) => {
+                      const estado =
+                        m.publicable && m.pklPresent ? 'ok' : m.publicable ? 'warn' : 'bad';
+                      const rotulo =
+                        m.publicable && m.pklPresent
+                          ? 'pronto'
+                          : m.publicable
+                            ? 'sem artefato'
+                            : 'reprovado';
+                      return (
+                        <button
+                          type="button"
+                          key={m.id}
+                          className={`ai-model-chip is-${estado}${m.id === modeloId ? ' is-selected' : ''}`}
+                          onClick={() => setModeloId(m.id)}
+                          title={`${m.id} · acc ${num(m.accuracy, 4)} · edge ${pct(m.edge, 4)}`}
+                        >
+                          <span className="chip-tf">{m.timeframe}</span>
+                          <span className="chip-state">{rotulo}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {lista.some((m) => !m.publicable && m.reason) && (
+                    <p className="muted">
+                      {lista
+                        .filter((m) => !m.publicable && m.reason)
+                        .map((m) => `${m.timeframe}: ${m.reason}`)
+                        .join(' · ')}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+            {modelos.length === 0 && !erroCatalogo && (
+              <p className="muted">Nenhum metadado de modelo encontrado.</p>
+            )}
+          </section>
         </>
       )}
     </div>

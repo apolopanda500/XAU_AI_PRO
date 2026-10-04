@@ -32,7 +32,13 @@ interface Mensagem {
 interface Contexto {
   ok: boolean;
   achados_total: number;
-  controles: { total: number; ativos: number; parciais: number; inoperantes: number; stubs: number };
+  controles: {
+    total: number;
+    ativos: number;
+    parciais: number;
+    inoperantes: number;
+    stubs: number;
+  };
   intents: string[];
   escreve_codigo: boolean;
   previsao_mercado: boolean;
@@ -67,17 +73,29 @@ const SUGESTOES = [
  * Evitar uma dependencia de markdown completa por causa disso.
  */
 function renderizar(texto: string) {
-  const blocos = texto.split("\n");
+  const blocos = texto.split('\n');
   return blocos.map((linha, i) => {
-    if (linha.trim() === '' ) return <div key={i} style={{ height: 8 }} />;
+    if (linha.trim() === '') return <div key={i} style={{ height: 8 }} />;
     if (linha.startsWith('### ')) {
-      return <h4 key={i} className="copilot-h4">{linha.slice(4)}</h4>;
+      return (
+        <h4 key={i} className="copilot-h4">
+          {linha.slice(4)}
+        </h4>
+      );
     }
     if (linha.startsWith('## ')) {
-      return <h3 key={i} className="copilot-h3">{linha.slice(3)}</h3>;
+      return (
+        <h3 key={i} className="copilot-h3">
+          {linha.slice(3)}
+        </h3>
+      );
     }
     if (linha.startsWith('# ')) {
-      return <h3 key={i} className="copilot-h3">{linha.slice(2)}</h3>;
+      return (
+        <h3 key={i} className="copilot-h3">
+          {linha.slice(2)}
+        </h3>
+      );
     }
     if (linha.startsWith('- ') || linha.startsWith('* ')) {
       return (
@@ -99,7 +117,11 @@ function renderizar(texto: string) {
     if (linha.startsWith('---')) {
       return <hr key={i} className="copilot-hr" />;
     }
-    return <p key={i} className="copilot-p">{inline(linha)}</p>;
+    return (
+      <p key={i} className="copilot-p">
+        {inline(linha)}
+      </p>
+    );
   });
 }
 
@@ -111,7 +133,11 @@ function inline(texto: string) {
       return <strong key={i}>{p.slice(2, -2)}</strong>;
     }
     if (p.startsWith('`') && p.endsWith('`')) {
-      return <code key={i} className="copilot-code">{p.slice(1, -1)}</code>;
+      return (
+        <code key={i} className="copilot-code">
+          {p.slice(1, -1)}
+        </code>
+      );
     }
     return <span key={i}>{p}</span>;
   });
@@ -165,52 +191,52 @@ export default function CopilotPanel() {
     fimRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [mensagens, enviando]);
 
-  const enviar = useCallback(async (texto: string) => {
-    const limpa = texto.trim();
-    if (!limpa || enviando) return;
-    setPergunta('');
-    setEnviando(true);
-    setMensagens((m) => [
-      ...m,
-      { id: `u${Date.now()}`, de: 'user', texto: limpa },
-    ]);
-    try {
-      const r = await fetch(`${API}/api/copilot/perguntar`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pergunta: limpa }),
-        signal: AbortSignal.timeout(30000),
-      });
-      const d = (await r.json()) as {
-        ok?: boolean;
-        resposta?: string;
-        intent?: string;
-        error?: string;
-      };
-      setMensagens((m) => [
-        ...m,
-        {
-          id: `c${Date.now()}`,
-          de: 'copilot',
-          // A mensagem de erro do backend aparece como esta. Nao substituimos
-          // falha por texto generico para o usuario nao achar que respondeu.
-          texto: d.resposta ?? d.error ?? 'Sem resposta do copiloto.',
-          intent: d.intent,
-        },
-      ]);
-    } catch (e) {
-      setMensagens((m) => [
-        ...m,
-        {
-          id: `c${Date.now()}`,
-          de: 'copilot',
-          texto: `Copiloto inacessível: ${e instanceof Error ? e.message : 'erro'}. O gateway precisa estar rodando.`,
-        },
-      ]);
-    } finally {
-      setEnviando(false);
-    }
-  }, [enviando]);
+  const enviar = useCallback(
+    async (texto: string) => {
+      const limpa = texto.trim();
+      if (!limpa || enviando) return;
+      setPergunta('');
+      setEnviando(true);
+      setMensagens((m) => [...m, { id: `u${Date.now()}`, de: 'user', texto: limpa }]);
+      try {
+        const r = await fetch(`${API}/api/copilot/perguntar`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pergunta: limpa }),
+          signal: AbortSignal.timeout(30000),
+        });
+        const d = (await r.json()) as {
+          ok?: boolean;
+          resposta?: string;
+          intent?: string;
+          error?: string;
+        };
+        setMensagens((m) => [
+          ...m,
+          {
+            id: `c${Date.now()}`,
+            de: 'copilot',
+            // A mensagem de erro do backend aparece como esta. Nao substituimos
+            // falha por texto generico para o usuario nao achar que respondeu.
+            texto: d.resposta ?? d.error ?? 'Sem resposta do copiloto.',
+            intent: d.intent,
+          },
+        ]);
+      } catch (e) {
+        setMensagens((m) => [
+          ...m,
+          {
+            id: `c${Date.now()}`,
+            de: 'copilot',
+            texto: `Copiloto inacessível: ${e instanceof Error ? e.message : 'erro'}. O gateway precisa estar rodando.`,
+          },
+        ]);
+      } finally {
+        setEnviando(false);
+      }
+    },
+    [enviando],
+  );
 
   return (
     <div className="copilot-panel">
@@ -244,11 +270,7 @@ export default function CopilotPanel() {
         )}
       </div>
 
-      {erroCtx && (
-        <div className="placeholder">
-          Mapa do EA indisponível: {erroCtx}
-        </div>
-      )}
+      {erroCtx && <div className="placeholder">Mapa do EA indisponível: {erroCtx}</div>}
 
       {aba === 'conversa' && (
         <>
@@ -256,24 +278,21 @@ export default function CopilotPanel() {
             {mensagens.length === 0 && (
               <div className="copilot-vazio">
                 <p>
-                  Pergunte sobre o <strong>código do seu EA</strong>. As respostas
-                  citam arquivo e linha, e ele diz quando não sabe.
+                  Pergunte sobre o <strong>código do seu EA</strong>. As respostas citam arquivo e
+                  linha, e ele diz quando não sabe.
                 </p>
                 {contexto && (
                   <ul className="copilot-fatos">
                     <li>{contexto.achados_total} achados verificados no código</li>
                     <li>
                       {contexto.controles.ativos} controles de risco ativos,{' '}
-                      {contexto.controles.inoperantes} inoperantes,{' '}
-                      {contexto.controles.stubs} stub
+                      {contexto.controles.inoperantes} inoperantes, {contexto.controles.stubs} stub
                     </li>
                     <li>
-                      Não escreve MQL5{' '}
-                      <span className="chip warn">leitura apenas</span>
+                      Não escreve MQL5 <span className="chip warn">leitura apenas</span>
                     </li>
                     <li>
-                      Não prevê preço{' '}
-                      <span className="chip warn">edge real é +0,11</span>
+                      Não prevê preço <span className="chip warn">edge real é +0,11</span>
                     </li>
                   </ul>
                 )}
@@ -335,11 +354,7 @@ export default function CopilotPanel() {
             </button>
           </div>
 
-          {contexto && (
-            <p className="hint">
-              {contexto.nota}
-            </p>
-          )}
+          {contexto && <p className="hint">{contexto.nota}</p>}
         </>
       )}
 
@@ -379,12 +394,18 @@ export default function CopilotPanel() {
                   <tr key={a.id} className={`g-${a.gravidade.toLowerCase()}`}>
                     <td className="num">{a.id}</td>
                     <td>
-                      <span className={`chip ${a.gravidade === 'CRITICO' ? 'danger' : a.gravidade === 'ALTO' ? 'warn' : 'neutral'}`}>
+                      <span
+                        className={`chip ${a.gravidade === 'CRITICO' ? 'danger' : a.gravidade === 'ALTO' ? 'warn' : 'neutral'}`}
+                      >
                         {a.gravidade}
                       </span>
                     </td>
-                    <td><strong>{a.titulo}</strong></td>
-                    <td className="mono muted">{a.arquivo}:{a.linha}</td>
+                    <td>
+                      <strong>{a.titulo}</strong>
+                    </td>
+                    <td className="mono muted">
+                      {a.arquivo}:{a.linha}
+                    </td>
                     <td className="muted">{a.por_que_importa}</td>
                   </tr>
                 ))}

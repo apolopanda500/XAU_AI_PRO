@@ -22,12 +22,6 @@ sys.path.insert(0, str(BASE_DIR))
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(message)s", datefmt="%H:%M:%S")
 logger = logging.getLogger("auto_retrain")
 
-try:
-    from sentry_config import capture_training_error
-except ImportError:  # pragma: no cover
-    def capture_training_error(exc):  # type: ignore
-        logger.error("Sentry nao disponivel: %s", exc)
-
 
 def main() -> int:
     from pipeline import Pipeline

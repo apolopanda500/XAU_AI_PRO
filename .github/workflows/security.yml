@@ -88,14 +88,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: "Verify .env.example has no real Sentry DSN"
-        run: |
-          if grep -q "c58d3855cb3d89ff2da34aaefc68106a@o4511837787586560" .env.example; then
-            echo "::error::.env.example contains real Sentry DSN"
-            exit 1
-          else
-            echo "OK: .env.example clean"
-          fi
+      # O passo que caçava um DSN real do Sentry foi REMOVIDO em 04/10/2026: o
+      # Sentry saiu do projeto e o `.env.example` nao tem mais essa variavel.
+      # A regra `custom-sentry-dsn` do `.gitleaks.toml` continua valendo para o
+      # historico git inteiro, que e onde o DSN poderia reaparecer.
 
       - name: "Check for default admin/admin credentials"
         run: |
@@ -215,4 +211,3 @@ jobs:
           image: "node:22-bookworm-slim"
           only-severities: high,critical
           exit-code: false
-

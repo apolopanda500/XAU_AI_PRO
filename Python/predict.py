@@ -11,13 +11,9 @@ BASE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = BASE_DIR.parent
 sys.path.append(str(BASE_DIR))
 
-# Sentry integration (importar sentry_config já inicializa o SDK automaticamente)
-try:
-    from sentry_config import capture_prediction_error, get_logger
-except ImportError:
-    get_logger = None
+import logging
 
-log = get_logger(__name__) if get_logger else None
+log = logging.getLogger(__name__)
 
 from pipeline import Pipeline
 
@@ -58,16 +54,6 @@ def predict() -> None:
                 error_msg = result.get('error', 'Unknown error') if isinstance(result, dict) else str(result)
                 print(f"  {symbol} | erro: {error_msg}")
                 errors_count += 1
-                
-                # Captura erro no Sentry
-                try:
-                    capture_prediction_error(
-                        symbol=symbol,
-                        prediction_type="multi_symbol",
-                        error_msg=error_msg
-                    )
-                except:
-                    pass
         
         print(f"\nResumo: {signals_count} sinais, {errors_count} erros")
         

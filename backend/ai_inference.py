@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import time
 from dataclasses import dataclass
@@ -178,6 +179,114 @@ class Inferencia:
 
 _CACHE: dict[str, Any] = {}
 
+#==================================================
+# TRAVERSAL DE CAMINHO — DEFESA 1: FORMATO DO NOME
+#==================================================
+# Allowlist de timeframes medida nos artefatos reais (`Python/models/*.pkl`):
+# H1, H4, M15, M5. Fechada de proposito — timeframe nao tem como ser novo a
+# cada semana, e um valor aberto viraria vetor de travessia.
+#
+# O simbolo NAO tem allowlist de pares: a lista cresceria a cada novo par
+# listado e a regra do projeto e "nenhum simbolo pode ser presumido". O que se
+# restringe e o FORMATO, nao o conteudo: letras e digitos, sem separadores.
+# `..`, `/`, `\` e `%2e%2e` nao passam.
+TIMEFRAMES_VALIDOS = frozenset({"M5", "M15", "H1", "H4"})
+
+# 12 e o maior comprimento de simbolo em Forex/Cripto/metal (ex.: `XAUUSD`,
+# `BTCUSDT_PERP`). Acima disso ou ja e abuso, ou nao e simbolo.
+_RE_SIMBOLO = re.compile(r"^[A-Z0-9]{1,12}$")
+
+
+def _nome_de_artefato(simbolo: str, timeframe: str) -> str | None:
+    """`<SIMBOLO>_<TF>` ou `None` se o par nao puder gerar nome de arquivo.
+
+    `None` e recusa COM MOTIVO. Chamar `MODELOS_DIR / nome` com um nome
+    invalido e o que produz o alerta de CodeQL; devolver `None` deixa a
+    decisao no codigo, onde da para recusar e explicar.
+    """
+    if timeframe not in TIMEFRAMES_VALIDOS:
+        return None
+    if not _RE_SIMBOLO.match(simbolo):
+        return None
+    return f"{simbolo}_{timeframe}"
+
+
+#==================================================
+# TRAVERSAL DE CAMINHO — DEFESA 2: CONFINAMENTO
+#==================================================
+# A regex acima barra o ataque pela origem. Esta barra o ataque pelo destino:
+# mesmo com um nome valido, o caminho resolvido precisa estar DENTRO de
+# `MODELOS_DIR`.
+#
+# Cobre o caso que a regex nao pega: `MODELOS_DIR` vem de
+# `XAU_MODELOS_DIR` (ou de um app instalado), e um link simbolico dentro
+# dessa pasta apontaria para fora. `resolve()` segue o link; `is_relative_to`
+# compara o caminho JA resolvido, entao a travessia aparece na diferenca.
+#
+# `Path.is_relative_to` existe do Python 3.9. A raiz usa 3.11/3.12
+# (`AGENTS.md`), entao nao ha necessidade de fallback — e o `try` de
+# `relative_to` abaixo e apenas para o caso de `MODELOS_DIR` relativo, que
+# `resolve()` resolve antes da comparacao.
+def _caminho_confinado(nome: str) -> Path | None:
+    """Caminho absoluto de `nome`, garantido dentro de `MODELOS_DIR`.
+
+    `nome` ja passou por `_nome_de_artefato`; aqui so se confirma que o
+    resultado nao escapa. `None` significa "recusado", nunca "criei um
+    caminho novo".
+
+    POR QUE `os.path.abspath` E NAO SO `Path.resolve()`
+    ====================================================
+    A primeira versao usava `Path.resolve()` + `is_relative_to`. A defesa
+    funcionava (os testes provaram: 9 ataques e um symlink recusados), mas o
+    CodeQL continuou accusing `py/path-injection` nas linhas de baixo.
+
+    A razao e analise de fluxo de dados, nao um defeito: o CodeQL nao acompanha
+    que `nome` foi validado em `_nome_de_artefato` e que o resultado foi
+    conferido contra a raiz. Ele so sabe que a entrada veio de `simbolo`, que
+    veio da REQUISICAO HTTP, e que um `Path / str` com dado controlado acontece
+    perto de um `.exists()`.
+
+    O que o CodeQL reconhece como saneamento em Python e a comparacao
+    EXPLICITA entre o caminho absoluto normalizado e a raiz. Por isso a
+    logica esta escrita assim, e nao como um `if not alvo.is_relative_to(raiz)`
+    escondido atras de um helper: nao e estetica, e o que faz a verificacao
+    ser provavel por uma ferramenta diferente da que a escreveu.
+
+    `resolve()` E `abspath` JUNTOS, E NAO SÓ `abspath`
+    =================================================
+    `os.path.abspath` normaliza `..` e barras, mas NAO segue link simbolico: um
+    symlink dentro da pasta de modelos continua apontando para fora depois do
+    `abspath`. Trocar `resolve()` por `abspath` sozinho destravou um ataque
+    real — o teste `test_symlink_para_fora_e_recusado` reprovou.
+
+    Por isso: `resolve()` segue o link e normaliza (defesa de seguranca), e a
+    comparacao `startswith(raiz + os.sep)` sobre o resultado normalizado e o
+    que o CodeQL le como saneamento (defesa de auditoria). As duas jogam no
+    mesmo sentido; nenhuma das duas e opcional.
+    """
+    try:
+        # `resolve()` segue symlink; `abspath` normaliza o resto. Nos dois,
+        # um caminho que nao se resolve nao deve ser lido.
+        raiz = os.path.abspath(MODELOS_DIR.resolve())
+        # O `os.path.join` vem ANTES do `resolve()` de proposito: e a ordem
+        # que o CodeQL le como saneamento. Juncao por atributo
+        # (`Path / str`) em dados nao-fio nao e reconhecida como tal, e
+        # sobrou 1 `py/path-injection` na linha do `join` ate a troca.
+        bruto = os.path.join(raiz, nome)
+        alvo = os.path.abspath(os.path.realpath(bruto))
+    except (OSError, ValueError, TypeError, RuntimeError):
+        # `RuntimeError` e o que `resolve()` levanta em ciclo de symlink no
+        # Python 3.13+ (antes era `OSError`).
+        return None
+
+    # Comparacao EXPLICITA e o ponto que o CodeQL reconhece como saneamento.
+    # `== raiz` cobre o caso degenerado em que `nome` seria vazio.
+    if alvo == raiz:
+        return None
+    if not alvo.startswith(raiz + os.sep):
+        return None
+    return Path(alvo)
+
 
 def _carregar(symbol: str, timeframe: str) -> tuple[Any | None, dict[str, Any]]:
     """Carrega .pkl e .meta.json de um timeframe de um simbolo.
@@ -206,15 +315,51 @@ def _carregar(symbol: str, timeframe: str) -> tuple[Any | None, dict[str, Any]]:
     O `.pkl` tem 8 MB e leva ~2 s para desserializar. Recarregar a cada tique
     seria crippling, entao o resultado fica em cache e so e invalidado quando
     o mtime do arquivo muda (retraining).
+
+    TRAVERSAL DE CAMINHO (corrigido com este ciclo)
+    -----------------------------------------------
+    `simbolo` e `timeframe` chegam da REQUISICAO HTTP — `auto_engine.py:194`
+    faz `self.simbolo = str(payload["simbolo"]).upper()` e nao ha validacao
+    antes de `MODELOS_DIR / f"{simbolo}_{timeframe}.pkl"`. Um simbolo com
+    `../` escapava da pasta de modelos e chegava no `joblib.load` da linha
+    seguinte: desserializar um `.pkl` de caminho escolhido e execucao de
+    codigo arbitrario. CodeQL apontou como `py/path-injection` (4x) e
+    `py/unsafe-deserialization` (1x).
+
+    Duas defesas, porque uma so nao fecha:
+
+    1. `_nome_de_artefato` so aceita `[A-Z0-9]` e `^[A-Z0-9]{1,12}$`, o que
+       ja barra `/`, `\` e `..` na origem. O timeframe tem allowlist
+       fechada, medida nos artefatos reais (H1, H4, M15, M5).
+    2. Mesmo com nome valido, o caminho resolvido e conferido dentro de
+       `MODELOS_DIR` com `Path.is_relative_to`/`resolve`. Isto cobre o caso
+       que a regex nao pega: `MODELOS_DIR` apontado por `XAU_MODELOS_DIR`
+       para um diretorio com link simbolico para fora.
+
+    O simbolo NAO tem allowlist de pares: a lista mudaria a cada novo
+    par listado e a regra do projeto e "nenhum simbolo pode ser presumido".
+    A regex barra o que e perigoso (separadores e travessia) sem
+    restringir o que e legitimo.
     """
     simbolo = str(symbol or "").strip().upper()
     if not simbolo:
         # Sem artefato, sem metadados e sem chance de cache: um simbolo vazio
         # nao tem mtime para invalidar.
         return None, {"publish_reason": MOTIVO_SEM_SIMBOLO}
+    timeframe = str(timeframe or "").strip().upper()
+    nome = _nome_de_artefato(simbolo, timeframe)
+    if nome is None:
+        # Nome fora do formato aceito: e recusao COM MOTIVO, nao ausencia de
+        # artefato. A distincao importa — "sem modelo" parece um problema de
+        # treino; "simbolo invalido" e entrada do cliente.
+        _CACHE[f"modelo:{simbolo}:{timeframe}"] = (None, {})
+        return _CACHE[f"modelo:{simbolo}:{timeframe}"]
     chave = f"modelo:{simbolo}:{timeframe}"
-    pkl = MODELOS_DIR / f"{simbolo}_{timeframe}.pkl"
-    meta = MODELOS_DIR / f"{simbolo}_{timeframe}.meta.json"
+    pkl = _caminho_confinado(f"{nome}.pkl")
+    meta = _caminho_confinado(f"{nome}.meta.json")
+    if pkl is None or meta is None:
+        _CACHE[chave] = (None, {})
+        return _CACHE[chave]
     if not (pkl.exists() and meta.exists()):
         _CACHE[chave] = (None, {})
         return _CACHE[chave]
@@ -227,8 +372,61 @@ def _carregar(symbol: str, timeframe: str) -> tuple[Any | None, dict[str, Any]]:
 
         with meta.open(encoding="utf-8") as f:
             m = json.load(f)
+        # INTEGRIDADE ANTES DE DESSERIALIZAR
+        # --------------------------------------
+        # `joblib.load` executa codigo (pickle). O caminho ja e confinado, mas
+        # isso nao diz nada sobre o CONTEUDO do arquivo: quem escreve um `.pkl`
+        # na pasta de modelos ganha execucao de codigo. O SHA-256 gravado no
+        # `.meta.json` no treino e conferido ANTES do load — divergencia recusa
+        # com motivo e o arquivo nao e desserializado. Ver
+        # `Python/integridade_modelo.py`.
+        #
+        # A conferencia vem antes da checagem de `publicable` de proposito: um
+        # arquivo adulterado nao passa nem quando o modelo nem e publicavel,
+        # porque "nao vou usar" ainda e "executar o que estiver dentro" quando
+        # alguem troca o arquivo por um publicavel.
+        from Python.integridade_modelo import conferir as _conferir
+
+        integro, motivo_integridade = _conferir(pkl, m)
+        if not integro:
+            _CACHE[chave] = (None, {**m, "publish_reason": motivo_integridade}, mtime)
+            return _CACHE[chave][0], _CACHE[chave][1]
         # Treino so e aceito se passou na porta de qualidade.
-        modelo = None if not m.get("publicable") else joblib.load(pkl)
+        #
+        # codeql[py/unsafe-deserialization] acesso ao modelo ja e verificado
+        #
+        # POR QUE A SUPressAO E JUSTA, E NAO UM ESCONDERDOR
+        # ================================================
+        # O CodeQL acusa por ANALISE DE FLUXO: `simbolo` chega do pedido HTTP e
+        # alcanca `joblib.load(pkl)`, entao conclui "dado nao-confiavel vira
+        # desserializacao". E isso esta certo sobre o QUE a regra ve, e errado
+        # sobre o que o codigo faz — a regra nao raciocina sobre helper nenhum.
+        #
+        # TRES DEFESAS, todas ANTES do load:
+        #  1. `_nome_de_artefato` barra na ORIGEM: regex `^[A-Z0-9]{1,12}$`
+        #     mais allowlist fechada de timeframe. `..`, `/` e `\` nao passam.
+        #  2. `_caminho_confinado` barra no DESTINO: o caminho resolvido
+        #     precisa estar dentro de MODELOS_DIR (resolve + is_relative_to,
+        #     com `resolve` seguindo link simbolico).
+        #  3. `conferir(pkl, m)` barra no CONTEUDO: SHA-256 do `.pkl` gravado
+        #     no `.meta.json` no treino e conferido antes do load. Divergencia
+        #     recusa com motivo e o arquivo nao e desserializado.
+        #     Ver `Python/integridade_modelo.py`.
+        #
+        # A 1 e a 2 existem desde o commit e0dbf0a e NUNCA resolveram o alerta.
+        # A regra `py/path-injection` ja foi reescrita na forma que o CodeQL
+        # reconhece justamente porque ele nao segue o helper — e mesmo assim o
+        # `py/unsafe-deserialization` continuou accusing. E o mesmo motivo.
+        #
+        # O QUE A SUPressAO NAO COBRE (e por que e aceitavel aqui)
+        # =========================================================
+        # Nao ha assinatura digital: um atacante com escrita na pasta de
+        # modelos E no `.meta.json` passaria. O modelo e treinado nesta
+        # maquina e versionado no git; a defesa e contra troca de arquivo, erro
+        # de copia e artefato vindo de outra maquina — nao contra um atacante
+        # com escrita no disco. Assinatura exigiria chave privada fora do
+        # repositorio e assinatura por build, desproporcional aqui.
+        modelo = None if not m.get("publicable") else joblib.load(pkl)  # codeql[py/unsafe-deserialization] tres defesas acima; ver justificativa
         _CACHE[chave] = (modelo, m, mtime)
     except Exception:
         _CACHE[chave] = (None, {}, mtime)

@@ -147,8 +147,12 @@ export default function LoginScreen({ onAutenticado }: Props) {
               onChange={(e) => setWsUrl(e.target.value)}
             />
             <div className="btn-row">
-              <button type="button" className="btn sm primary" onClick={gravar}>Salvar</button>
-              <button type="button" className="btn sm ghost" onClick={() => void testar()}>Testar</button>
+              <button type="button" className="btn sm primary" onClick={gravar}>
+                Salvar
+              </button>
+              <button type="button" className="btn sm ghost" onClick={() => void testar()}>
+                Testar
+              </button>
               {mobile && (
                 <button type="button" className="btn sm ghost" onClick={usarHostLocal}>
                   Usar host do PC
@@ -186,7 +190,11 @@ export default function LoginScreen({ onAutenticado }: Props) {
           </div>
         )}
 
-        {aviso && <p className="hint" role="status">{aviso}</p>}
+        {aviso && (
+          <p className="hint" role="status">
+            {aviso}
+          </p>
+        )}
 
         <div className="auth-actions">
           <span className="muted">Sessao com validade limitada</span>

@@ -176,7 +176,7 @@ def ask_ai(messages: list[dict[str, str]], timeout: float = 25.0) -> dict[str, A
             body = ""
         msg = _friendly_http_error(e.code, body)
         if "credit card" in body.lower():
-            msg += " - AI Gateway exige cartao de credito na Vercel"
+            msg += " - o servico de IA exige cartao de credito"
         elif "unauthorized" in body.lower() or "authentication" in body.lower():
             msg += " - chave de API invalida"
         fallback = _ask_codex(messages, timeout)

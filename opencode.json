@@ -1,6 +1,8 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "instructions": ["AGENTS.md"],
+  "instructions": [
+    "AGENTS.md"
+  ],
   "share": "disabled",
   "watcher": {
     "ignore": [
@@ -71,7 +73,11 @@
   "mcp": {
     "xau-trading": {
       "type": "local",
-      "command": [".venv/Scripts/python.exe", "-m", "backend.trading_mcp"],
+      "command": [
+        ".venv/Scripts/python.exe",
+        "-m",
+        "backend.trading_mcp"
+      ],
       "cwd": ".",
       "environment": {
         "XAU_MCP_GATEWAY": "http://127.0.0.1:9001",
@@ -82,7 +88,11 @@
     },
     "github": {
       "type": "local",
-      "command": ["npx", "-y", "@modelcontextprotocol/server-github"],
+      "command": [
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-github"
+      ],
       "cwd": ".",
       "environment": {
         "GITHUB_PERSONAL_ACCESS_TOKEN": "{env:GITHUB_PERSONAL_ACCESS_TOKEN}"
@@ -92,14 +102,22 @@
     },
     "playwright": {
       "type": "local",
-      "command": ["npx", "-y", "@playwright/mcp@latest"],
+      "command": [
+        "npx",
+        "-y",
+        "@playwright/mcp@latest"
+      ],
       "cwd": ".",
       "enabled": false,
       "timeout": 30000
     },
     "context7": {
       "type": "local",
-      "command": ["npx", "-y", "@upstash/context7-mcp@latest"],
+      "command": [
+        "npx",
+        "-y",
+        "@upstash/context7-mcp@latest"
+      ],
       "cwd": ".",
       "environment": {
         "CONTEXT7_API_KEY": "{env:CONTEXT7_API_KEY}"
@@ -109,13 +127,23 @@
     },
     "netdata": {
       "type": "local",
-      "command": ["npx", "-y", "@netdata/netdata-mcp"],
+      "command": [
+        "npx",
+        "-y",
+        "@netdata/netdata-mcp"
+      ],
       "cwd": ".",
       "environment": {
         "NETDATA_URL": "{env:NETDATA_URL}"
       },
       "enabled": false,
       "timeout": 30000
+    },
+    "figma": {
+      "type": "remote",
+      "url": "https://mcp.figma.com/mcp",
+      "enabled": true,
+      "timeout": 60000
     }
   },
   "experimental": {

@@ -31,13 +31,13 @@ Por que importa: código morto que continua sendo corrigido, revisado e pode rei
 
 Existem tríos e quads do mesmo conceito:
 
-| Conceito | Variantes |
-| --- | --- |
+| Conceito           | Variantes                                                                           |
+| ------------------ | ----------------------------------------------------------------------------------- |
 | Terminal universal | `UniversalLiveTerminal`, `UniversalLiveTerminalLatest`, `UniversalLiveTerminalSafe` |
-| Portfolio home | `PortfolioHomeClean`, `PortfolioHomeSafe`, `PortfolioTab` |
-| Dashboard | `DashboardTab`, `DashboardUniversalTab`, `DashboardHomeClean` |
-| Monitor do sistema | `SystemMonitorTab`, `SystemMonitorUniversalTab`, `SystemHealthOnly` |
-| Conectividade | `UniversalConnectivityPanel`, `UniversalConnectivityPanelLight` |
+| Portfolio home     | `PortfolioHomeClean`, `PortfolioHomeSafe`, `PortfolioTab`                           |
+| Dashboard          | `DashboardTab`, `DashboardUniversalTab`, `DashboardHomeClean`                       |
+| Monitor do sistema | `SystemMonitorTab`, `SystemMonitorUniversalTab`, `SystemHealthOnly`                 |
+| Conectividade      | `UniversalConnectivityPanel`, `UniversalConnectivityPanelLight`                     |
 
 Os sufixos `Latest`, `Clean` e `Safe` sugerem substituições incrementais onde a anterior ficou para trás. Sem um marcador de "canônico", qualquer correção pode ser aplicada na variante errada e não aparecer no produto.
 
@@ -77,14 +77,14 @@ O app instalado em `%LOCALAPPDATA%\XAU_AI_PRO_TAURI_TEST` escreveu em `%LOCALAPP
 
 ## 3. Recomendações em ordem de retorno
 
-| # | Ação | Esforço | Risco se não feito |
-| --- | --- | --- | --- |
-| 1 | Eliminar os 28 componentes órfãos, começando por `RealAccessPanel` e `RealCommandPanel` | médio | superfície de código morto em área sensível |
-| 2 | Declarar uma variante canônica por família da 1.2 e apagar as outras | baixo | correções aplicadas na variante errada |
-| 3 | Consolidar as 5 folhas de "apagar" em `global.css` e reduzir o número de imports | médio | custo crescente de manutenção visual |
-| 4 | Adicionar teste de renderização para cada tab | alto | regressão de UI sem detecção |
-| 5 | Fazer o caminho do log derivar do diretório de instalação | baixo | diagnóstico impossible com 2 instalações |
-| 6 | Guardar o token Android fora do APK | médio | credencial exposta no pacote |
+| #   | Ação                                                                                    | Esforço | Risco se não feito                          |
+| --- | --------------------------------------------------------------------------------------- | ------- | ------------------------------------------- |
+| 1   | Eliminar os 28 componentes órfãos, começando por `RealAccessPanel` e `RealCommandPanel` | médio   | superfície de código morto em área sensível |
+| 2   | Declarar uma variante canônica por família da 1.2 e apagar as outras                    | baixo   | correções aplicadas na variante errada      |
+| 3   | Consolidar as 5 folhas de "apagar" em `global.css` e reduzir o número de imports        | médio   | custo crescente de manutenção visual        |
+| 4   | Adicionar teste de renderização para cada tab                                           | alto    | regressão de UI sem detecção                |
+| 5   | Fazer o caminho do log derivar do diretório de instalação                               | baixo   | diagnóstico impossible com 2 instalações    |
+| 6   | Guardar o token Android fora do APK                                                     | médio   | credencial exposta no pacote                |
 
 Nenhuma dessas ações foi executada. Este relatório é diagnóstico.
 

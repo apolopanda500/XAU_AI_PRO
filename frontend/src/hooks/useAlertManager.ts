@@ -26,7 +26,9 @@ export interface AlertManager {
   alerts: Alert[];
   activeAlerts: Alert[];
   recentlyTriggered: Alert[];
-  createAlert: (alert: Omit<Alert, 'id' | 'createdAt' | 'triggeredAt' | 'timesTriggered' | 'notified'>) => Alert;
+  createAlert: (
+    alert: Omit<Alert, 'id' | 'createdAt' | 'triggeredAt' | 'timesTriggered' | 'notified'>,
+  ) => Alert;
   removeAlert: (id: string) => void;
   toggleAlert: (id: string) => void;
   editAlert: (id: string, updates: Partial<Alert>) => void;
@@ -39,66 +41,82 @@ export function useAlertManager(): AlertManager {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const quotes = useAppStore((s) => s.quotes);
   const selectedSymbol = useAppStore((s) => s.selectedSymbol);
-  
+
   // Carregar alertas do localStorage
   useEffect(() => {
     try {
       const stored = localStorage.getItem(ALERTS_KEY);
       if (stored) {
         const parsed = JSON.parse(stored) as Alert[];
-        setAlerts(parsed.map(a => ({
-          ...a,
-          createdAt: new Date(a.createdAt),
-          triggeredAt: a.triggeredAt ? new Date(a.triggeredAt) : null,
-        })));
+        setAlerts(
+          parsed.map((a) => ({
+            ...a,
+            createdAt: new Date(a.createdAt),
+            triggeredAt: a.triggeredAt ? new Date(a.triggeredAt) : null,
+          })),
+        );
       }
     } catch (e) {
       console.error('[useAlertManager] Erro ao carregar:', e);
     }
   }, []);
-  
+
   // Salvar alertas
   const saveAlerts = useCallback((newAlerts: Alert[]) => {
     localStorage.setItem(ALERTS_KEY, JSON.stringify(newAlerts));
     setAlerts(newAlerts);
   }, []);
-  
+
   // Criar alerta
-  const createAlert = useCallback((data: Omit<Alert, 'id' | 'createdAt' | 'triggeredAt' | 'timesTriggered' | 'notified'>): Alert => {
-    const newAlert: Alert = {
-      ...data,
-      id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
-      createdAt: new Date(),
-      triggeredAt: null,
-      timesTriggered: 0,
-      notified: false,
-    };
-    saveAlerts([newAlert, ...alerts]);
-    return newAlert;
-  }, [alerts, saveAlerts]);
-  
+  const createAlert = useCallback(
+    (
+      data: Omit<Alert, 'id' | 'createdAt' | 'triggeredAt' | 'timesTriggered' | 'notified'>,
+    ): Alert => {
+      const newAlert: Alert = {
+        ...data,
+        id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
+        createdAt: new Date(),
+        triggeredAt: null,
+        timesTriggered: 0,
+        notified: false,
+      };
+      saveAlerts([newAlert, ...alerts]);
+      return newAlert;
+    },
+    [alerts, saveAlerts],
+  );
+
   // Remover alerta
-  const removeAlert = useCallback((id: string) => {
-    saveAlerts(alerts.filter(a => a.id !== id));
-  }, [alerts, saveAlerts]);
-  
+  const removeAlert = useCallback(
+    (id: string) => {
+      saveAlerts(alerts.filter((a) => a.id !== id));
+    },
+    [alerts, saveAlerts],
+  );
+
   // Ativar/desativar
-  const toggleAlert = useCallback((id: string) => {
-    saveAlerts(alerts.map(a => 
-      a.id === id ? { ...a, active: !a.active, notified: false } : a
-    ));
-  }, [alerts, saveAlerts]);
-  
+  const toggleAlert = useCallback(
+    (id: string) => {
+      saveAlerts(
+        alerts.map((a) => (a.id === id ? { ...a, active: !a.active, notified: false } : a)),
+      );
+    },
+    [alerts, saveAlerts],
+  );
+
   // Editar
-  const editAlert = useCallback((id: string, updates: Partial<Alert>) => {
-    saveAlerts(alerts.map(a => a.id === id ? { ...a, ...updates } : a));
-  }, [alerts, saveAlerts]);
-  
+  const editAlert = useCallback(
+    (id: string, updates: Partial<Alert>) => {
+      saveAlerts(alerts.map((a) => (a.id === id ? { ...a, ...updates } : a)));
+    },
+    [alerts, saveAlerts],
+  );
+
   // Obter cotação selecionada
   const getSelectedQuote = useCallback((): Quote | undefined => {
-    return quotes.find(q => q.symbol === selectedSymbol);
+    return quotes.find((q) => q.symbol === selectedSymbol);
   }, [quotes, selectedSymbol]);
-  
+
   const activeAlerts = alerts.filter((a) => a.active);
   const recentlyTriggered = alerts
     .filter((a) => a.triggeredAt)
@@ -128,7 +146,12 @@ export function useAlertManager(): AlertManager {
           `Alerta ${a.symbol}`,
           `${a.type.replace('_', ' ')}: ${q.price} (alvo ${a.value})`,
         );
-        return { ...a, triggeredAt: new Date(), timesTriggered: a.timesTriggered + 1, notified: true };
+        return {
+          ...a,
+          triggeredAt: new Date(),
+          timesTriggered: a.timesTriggered + 1,
+          notified: true,
+        };
       });
       if (changed) saveAlerts(next);
     };
@@ -146,7 +169,9 @@ export function useAlertManager(): AlertManager {
         const r = await fetch(`${apiBase()}/api/economic/alerts?hours=6&tz=BRT`, {
           signal: AbortSignal.timeout(8000),
         });
-        const d = (await r.json()) as { events?: Array<{ title?: string; when?: string; currency?: string; impact?: string }> };
+        const d = (await r.json()) as {
+          events?: Array<{ title?: string; when?: string; currency?: string; impact?: string }>;
+        };
         if (!r.ok || !d.events?.length) return;
         for (const e of d.events) {
           const key = `${e.title}-${e.when}`;

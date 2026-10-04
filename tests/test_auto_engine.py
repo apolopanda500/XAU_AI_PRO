@@ -40,10 +40,20 @@ def risco(ok=True, open_positions=0, daily_trades=0):
 
 
 def enviar_espiao(chamadas: list[dict], resposta=None):
+    """Captura o payload que o motor entrega ao caminho de ordem.
+
+    O motor envia os NOMES CANONICOS (`quantity`/`stop_loss`/`take_profit`),
+    que sao os que o `UniversalOrderRequest` le. Antes este duble lia
+    `payload["sl"]` e os testes abaixo conferiam `p["volume"]`: ou seja, o
+    proprio teste fixava o vocabulario errado como se fosse o esperado, e o
+    motor nao conseguia enviar ordem nenhuma sem que nada reprovasse.
+    Ver `tests/test_contrato_do_motor.py` para a prova de que isso era o bug.
+    """
     def _enviar(payload):
         chamadas.append(payload)
         return resposta if resposta is not None else {
-            "ok": True, "order": 1, "retcode": 10009, "price": payload["sl"],
+            "ok": True, "order": 1, "retcode": 10009,
+            "price": payload["stop_loss"],
         }
     return _enviar
 
@@ -56,9 +66,15 @@ def motor_pronto(**kwargs) -> MotorAuto:
     m = MotorAuto()
     m.simbolo = ATIVO
     m.timeframe = PERIODO
+    # TODOS os campos sao preenchidos aqui, porque `LimitesAuto()` nasce ZERADO
+    # desde 04/10/2026. E o que o motor deve receber: limite escolhido, nunca
+    # palpite do codigo. O helper existe para o teste NAO precisar repetir os
+    # dez valores — mas continua sendo explicito o que esta em jogo.
     m.limites = LimitesAuto(
         banca=20.0, risco_por_trade_pct=1.0, confianca_minima=55.0,
         edge_minimo=0.05, max_posicoes=2, max_operacoes_dia=20,
+        perda_diaria_max_pct=2.0, sl_atr=1.5, tp_atr=3.0,
+        intervalo_minutos=15,
     )
     for k, v in kwargs.items():
         setattr(m.limites, k, v)
@@ -69,36 +85,43 @@ def motor_pronto(**kwargs) -> MotorAuto:
 
 
 class TestLimites:
-    def test_padrao_e_valido(self):
-        ok, motivo = LimitesAuto().valido()
-        assert ok, motivo
+    def test_padrao_nao_e_valido(self):
+        """`LimitesAuto()` nasce ZERADO e NAO pode operar.
 
-    @pytest.mark.parametrize("campo,valor", [
-        ("banca", 0), ("banca", -5),
-        ("risco_por_trade_pct", 0), ("risco_por_trade_pct", 50),
-        ("confianca_minima", 0), ("confianca_minima", 150),
-        ("max_posicoes", 0),
-        ("max_operacoes_dia", 0),
-        ("perda_diaria_max_pct", 0), ("perda_diaria_max_pct", 200),
-        ("sl_atr", 0), ("tp_atr", -1),
-        ("intervalo_minutos", 0),
-    ])
-    def test_rejeita_valor_fora_da_faixa(self, campo, valor):
-        limites = LimitesAuto(**{campo: valor})
-        ok, _ = limites.valido()
-        assert ok is False, f"{campo}={valor} deveria ser rejeitado"
+        Este teste afirmava o contrario (`test_padrao_e_valido`): o padrao era
+        valido porque vinha com banca=20 e perda diaria=2%. O dono pediu zero
+        em tudo, e com razao: o operador via na tela numeros que nao tinha
+        escolhido, e o motor operava com o risco de outra pessoa.
+        """
+        ok, motivo = LimitesAuto().valido()
+        assert ok is False
+        assert "nenhum valor vem por padrao" in motivo
+
+    def test_erro_nomeia_os_campos_que_faltam(self):
+        """A mensagem diz o que preencher, nao "valor invalido"."""
+        _, motivo = LimitesAuto(banca=1000.0).valido()
+        for campo in ("confianca minima", "edge minimo", "maximo de posicoes"):
+            assert campo in motivo, f"{campo} nao listado: {motivo}"
+
+    def test_um_campo_preenchido_nao_basta(self):
+        ok, _ = LimitesAuto(max_operacoes_dia=10).valido()
+        assert ok is False
 
     def test_perda_diaria_alta_e_aceita(self):
-        # O operador avancido pode escolher risco alto. O motor tem de
-        # respeitar a escolha, nao景色 silosamente estreitar o intervalo.
-        ok, _ = LimitesAuto(perda_diaria_max_pct=20.0).valido()
-        assert ok is True
+        # O operador avancado escolhe o risco alto. O motor respeita a
+        # escolha em vez de estreitar o intervalo silenciosamente.
+        ok, motivo = LimitesAuto(
+            banca=1000.0, risco_por_trade_pct=1.0, confianca_minima=55.0,
+            edge_minimo=0.05, max_posicoes=2, max_operacoes_dia=20,
+            sl_atr=1.5, tp_atr=3.0, intervalo_minutos=15,
+            perda_diaria_max_pct=20.0,
+        ).valido()
+        assert ok is True, motivo
 
 
 # ------------------------------------------------------- nao abre quando nao deve
 
 
-class TestNaoAbreSemSinal:
     def test_sem_inferencia_nao_opera(self):
         m = motor_pronto()
         chamadas: list[dict] = []
@@ -231,8 +254,8 @@ class TestOperaQuandoDeve:
         assert p["symbol"] == ATIVO
         assert p["side"] == "BUY"
         assert p["confirm"] is True
-        assert p["sl"] < p["tp"], "BUY tem SL abaixo e TP acima"
-        assert p["volume"] > 0
+        assert p["stop_loss"] < p["take_profit"], "BUY tem SL abaixo e TP acima"
+        assert p["quantity"] > 0
         assert p["origin"] == "motor_auto"
 
     def test_venda_tem_sl_acima_e_tp_abaixo(self):
@@ -243,7 +266,7 @@ class TestOperaQuandoDeve:
             enviar_espiao(chamadas), risco)
         p = chamadas[0]
         assert p["side"] == "SELL"
-        assert p["sl"] > p["tp"]
+        assert p["stop_loss"] > p["take_profit"]
 
     def test_protecao_vem_do_atr_real(self):
         m = motor_pronto(sl_atr=2.0, tp_atr=4.0)
@@ -253,8 +276,8 @@ class TestOperaQuandoDeve:
             enviar_espiao(chamadas), risco)
         p = chamadas[0]
         # BUY: sl = preco - 2*ATR, tp = preco + 4*ATR
-        assert p["sl"] == pytest.approx(4300.0 - 10.0, abs=0.01)
-        assert p["tp"] == pytest.approx(4300.0 + 20.0, abs=0.01)
+        assert p["stop_loss"] == pytest.approx(4300.0 - 10.0, abs=0.01)
+        assert p["take_profit"] == pytest.approx(4300.0 + 20.0, abs=0.01)
 
     def test_volume_respeita_banca_e_risco(self):
         m = motor_pronto(banca=1000.0, risco_por_trade_pct=1.0, sl_atr=1.0)
@@ -265,7 +288,7 @@ class TestOperaQuandoDeve:
         p = chamadas[0]
         # risco = 1000 * 1% = 10; distancia = 5 => volume = 2, mas o teto
         # do gateway e 0.10.
-        assert p["volume"] == pytest.approx(0.10, abs=0.01)
+        assert p["quantity"] == pytest.approx(0.10, abs=0.01)
 
     def test_registra_decisao_com_proveniencia(self):
         m = motor_pronto()

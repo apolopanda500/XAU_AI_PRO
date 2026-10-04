@@ -5,6 +5,12 @@
 //+------------------------------------------------------------------+
 // ETAPA 7 - DATA RECOVERY & BACKUP
 //
+// `VersionManager` entra AQUI, e nao so pelo `.mq5`: o manifesto do backup
+// grava a versao do EA e este arquivo e incluido (linha 162 do `.mq5`) ANTES
+// do `VersionManager` (linha 166). Sem este include, `EA_VERSION_STRING` nao
+// existe neste ponto e a compilacao falha com `error 256`.
+// O `#ifndef` do VersionManager torna a segunda inclusao um no-op.
+//
 // Correcoes vs v1:
 //  1. WILDCARDS: FileCopy() NAO expande *.set/*.json/*.db/*.log.
 //     O v2 expande os padroes com FileFindFirst/FileFindNext nos
@@ -26,6 +32,8 @@
 //  7. LIMPEZA: CleanupOldBackups() remove snapshots antigos
 //     mantendo apenas BackupMaxKeep, recursivamente.
 //+------------------------------------------------------------------+
+
+#include "VersionManager.mqh"   // EA_VERSION_STRING (fonte unica da versao)
 
 #ifndef BACKUP_MANAGER_MQH
 #define BACKUP_MANAGER_MQH
@@ -427,7 +435,12 @@ bool CBackupManager::WriteManifest(
    FileWrite(h, "#XAU_AI_PRO_BACKUP_MANIFEST|v2");
    FileWrite(h, "created|" + TimeToString(TimeCurrent(), TIME_DATE | TIME_SECONDS));
    FileWrite(h, "snapshot|" + timestamp);
-   FileWrite(h, "ea|XAU_AI_PRO v1.2.0");
+   // Versao do EA gravada no manifesto do backup. Usa a MESMA fonte do
+// `VersionManager` (`EA_VERSION_STRING`) em vez de um literal solto: dois
+// literais independentes divergem, e este aparecia como "v1.2.0" em um backup
+// cujo produto era 1.2.4. O campo e lido na restauracao, entao a divergencia
+// nao era visivel na tela — so no arquivo.
+FileWrite(h, "ea|XAU_AI_PRO v" + EA_VERSION_STRING);
    FileWrite(h, "files|" + IntegerToString(m_recordCount));
 
    for(int i = 0; i < m_recordCount; i++)

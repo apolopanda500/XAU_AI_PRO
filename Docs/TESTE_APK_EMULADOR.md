@@ -2,13 +2,13 @@
 
 ## Estado em 2026-09-27
 
-| Etapa | Estado |
-| --- | --- |
-| APK `x86_64`/universal gerado e assinado | **OK** — `XAU-AI-PRO-1.2.3-universal.apk`, 32,5 MB, v2+v3, `zipalign` OK |
-| Emulador sobe e registra no `adb` | **OK** — `sys.boot_completed=1` |
-| APK instala no emulador | **OK** — `Success` |
-| App inicia sem crash | **OK** — pid ativo, `topResumedActivity=com.xau_ai_pro.desktop/.MainActivity` |
-| Tela renderiza conteudo | **BLOQUEADO** — tela preta; ver causa abaixo |
+| Etapa                                    | Estado                                                                        |
+| ---------------------------------------- | ----------------------------------------------------------------------------- |
+| APK `x86_64`/universal gerado e assinado | **OK** — `XAU-AI-PRO-1.2.3-universal.apk`, 32,5 MB, v2+v3, `zipalign` OK      |
+| Emulador sobe e registra no `adb`        | **OK** — `sys.boot_completed=1`                                               |
+| APK instala no emulador                  | **OK** — `Success`                                                            |
+| App inicia sem crash                     | **OK** — pid ativo, `topResumedActivity=com.xau_ai_pro.desktop/.MainActivity` |
+| Tela renderiza conteudo                  | **BLOQUEADO** — tela preta; ver causa abaixo                                  |
 
 ## A tela preta NAO e bug do app
 
@@ -28,11 +28,11 @@ E chromium: [ERROR:tile_manager.cc(982)] WARNING: tile memory limits exceeded, s
 O WebView do Chromium sobe, a Activity fica em `topResumedActivity`, e mesmo
 assim nada e desenhado. Confirmado por dois caminhos:
 
-1. Documentacao do Android Studio: *"ATDs improve runtime performance... Disable
-   hardware rendering"* e a tabela de componentes removidos inclui SystemUI.
+1. Documentacao do Android Studio: _"ATDs improve runtime performance... Disable
+   hardware rendering"_ e a tabela de componentes removidos inclui SystemUI.
 2. Bug conhecido da comunidade (scrcpy #4609, "Blank screen when connected to
-   Android ATD virtual device"): *"If I change to regular, non-ATD device,
-   display output gets forwarded properly."*
+   Android ATD virtual device"): _"If I change to regular, non-ATD device,
+   display output gets forwarded properly."_
 
 Nao adianta aumentar RAM nem trocar GPU: o renderizador esta desligado na imagem.
 **A correcao e usar uma imagem com UI real.**

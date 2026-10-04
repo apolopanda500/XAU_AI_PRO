@@ -14,11 +14,10 @@
 }
 
 .quantum-clock::before {
-  content: "";
+  content: '';
   position: absolute;
   inset: 0;
-  background:
-    radial-gradient(ellipse at 50% 30%, var(--quantum-glow-soft) 0%, transparent 60%);
+  background: radial-gradient(ellipse at 50% 30%, var(--quantum-glow-soft) 0%, transparent 60%);
   pointer-events: none;
 }
 
@@ -59,15 +58,30 @@
 }
 
 @keyframes clock-blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
 }
 
 @keyframes clock-flicker {
-  0%, 95%, 100% { opacity: 1; }
-  96% { opacity: 0.8; }
-  97% { opacity: 1; }
-  98% { opacity: 0.9; }
+  0%,
+  95%,
+  100% {
+    opacity: 1;
+  }
+  96% {
+    opacity: 0.8;
+  }
+  97% {
+    opacity: 1;
+  }
+  98% {
+    opacity: 0.9;
+  }
 }
 
 .clock-date {

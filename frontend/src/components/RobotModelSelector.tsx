@@ -50,9 +50,15 @@ export default function RobotModelSelector() {
           <h2 id="robot-model-title">Modelo</h2>
           <span className="muted">Modelo que o robô avalia antes de operar</span>
         </div>
-        <span className="chip">{selecionavel.length} disponíve{selecionavel.length === 1 ? 'l' : 'is'}</span>
+        <span className="chip">
+          {selecionavel.length} disponíve{selecionavel.length === 1 ? 'l' : 'is'}
+        </span>
       </div>
-      {erro && <p className="hint" role="status">{erro}</p>}
+      {erro && (
+        <p className="hint" role="status">
+          {erro}
+        </p>
+      )}
       {/* POR QUE CANDOS DE CAPA E NAO UM <select>
           A lista tem 25 modelos carregaveis. Num select eles viram 25 linhas
           de texto com tres numeros, e comparar "qual tem edge maior" vira
@@ -76,7 +82,9 @@ export default function RobotModelSelector() {
               pklPresent: m.pklPresent,
             }}
             selecionado={m.id === modeloId}
-            onSelect={(id) => { setModeloId(id); }}
+            onSelect={(id) => {
+              setModeloId(id);
+            }}
           />
         ))}
       </div>
@@ -99,14 +107,25 @@ export default function RobotModelSelector() {
         </label>
         {escolhida && (
           <dl className="robot-model-metrics">
-            <div><dt>Acurácia</dt><dd className="num">{pct(escolhida.accuracy)}</dd></div>
-            <div><dt>Edge</dt><dd className="num">{pct(escolhida.edge)}</dd></div>
-            <div><dt>F1</dt><dd className="num">{pct(escolhida.f1)}</dd></div>
+            <div>
+              <dt>Acurácia</dt>
+              <dd className="num">{pct(escolhida.accuracy)}</dd>
+            </div>
+            <div>
+              <dt>Edge</dt>
+              <dd className="num">{pct(escolhida.edge)}</dd>
+            </div>
+            <div>
+              <dt>F1</dt>
+              <dd className="num">{pct(escolhida.f1)}</dd>
+            </div>
           </dl>
         )}
       </div>
       {!selecionavel.length && !erro && (
-        <p className="hint">Nenhum modelo tem artefato carregavel. Treine em <code>Python/ai/train_v2.py</code>.</p>
+        <p className="hint">
+          Nenhum modelo tem artefato carregavel. Treine em <code>Python/ai/train_v2.py</code>.
+        </p>
       )}
     </section>
   );

@@ -10,7 +10,7 @@ const viteEnv: ViteEnv = (import.meta as unknown as ViteEnv) ?? {};
 function stored(key: string): string {
   try {
     // window.localStorage explícito: evita colisão com o localStorage experimental do Node 26 em testes.
-    return typeof window !== 'undefined' ? window.localStorage.getItem(key) ?? '' : '';
+    return typeof window !== 'undefined' ? (window.localStorage.getItem(key) ?? '') : '';
   } catch {
     return '';
   }
@@ -72,8 +72,7 @@ export function clearSessionToken(): void {
 }
 
 export type LoginResult =
-  | { ok: true; userId: number; expiresIn: number }
-  | { ok: false; error: string };
+  { ok: true; userId: number; expiresIn: number } | { ok: false; error: string };
 
 // Type guard explicito. O tsconfig roda com "strict": false, e sem
 // strictNullChecks o TypeScript nao estreita a uniao discriminada por
@@ -146,5 +145,3 @@ export function isGatewayRequest(input: unknown): boolean {
     return false;
   }
 }
-
-

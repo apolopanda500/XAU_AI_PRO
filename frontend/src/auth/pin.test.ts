@@ -36,7 +36,10 @@ describe('definirPin', () => {
   it('grava salt, hash e 150k iteracoes, sem o PIN em claro', async () => {
     invoke.mockResolvedValue(null);
     await definirPin('4321');
-    const [cmd, args] = invoke.mock.calls[0] as unknown as [string, { payload: Record<string, unknown> }];
+    const [cmd, args] = invoke.mock.calls[0] as unknown as [
+      string,
+      { payload: Record<string, unknown> },
+    ];
     expect(cmd).toBe('save_auth');
     expect(args.payload.iterations).toBe(ITERACOES);
     expect(args.payload.salt_b64).toEqual(expect.any(String));
@@ -48,7 +51,8 @@ describe('definirPin', () => {
     invoke.mockResolvedValue(null);
     await definirPin('4321');
     await definirPin('4321');
-    const primeiro = (invoke.mock.calls[0][1] as { payload: { salt_b64: string } }).payload.salt_b64;
+    const primeiro = (invoke.mock.calls[0][1] as { payload: { salt_b64: string } }).payload
+      .salt_b64;
     const segundo = (invoke.mock.calls[1][1] as { payload: { salt_b64: string } }).payload.salt_b64;
     expect(primeiro).not.toBe(segundo);
   });

@@ -59,18 +59,54 @@ export default function RiskTab() {
   const maxOps = limiteNum('max_daily_trades', 20);
 
   const linhas: Linha[] = [
-    { regra: 'Perda diaria', medido: `${num(perda)}%`, limite: `${maxPerda}%`, pct: perda ?? 0, critico: maxPerda, severidade: nivel(perda ?? 0, maxPerda, maxPerda / 2) },
-    { regra: 'Exposicao', medido: `${num(exposicao)}%`, limite: `${maxExpo}%`, pct: exposicao ?? 0, critico: maxExpo, severidade: nivel(exposicao ?? 0, maxExpo, maxExpo / 2) },
-    { regra: 'Drawdown', medido: `${num(drawdown)}%`, limite: `${maxDD}%`, pct: drawdown ?? 0, critico: maxDD, severidade: nivel(drawdown ?? 0, maxDD, maxDD * 0.53) },
-    { regra: 'Posicoes abertas', medido: num(posicoes, 0), limite: String(maxPos), pct: (posicoes ?? 0) / maxPos * 100, critico: 100, severidade: nivel((posicoes ?? 0) / maxPos * 100, 100, 80) },
-    { regra: 'Operacoes no dia', medido: num(operacoes, 0), limite: String(maxOps), pct: (operacoes ?? 0) / maxOps * 100, critico: 100, severidade: nivel((operacoes ?? 0) / maxOps * 100, 100, 80) },
+    {
+      regra: 'Perda diaria',
+      medido: `${num(perda)}%`,
+      limite: `${maxPerda}%`,
+      pct: perda ?? 0,
+      critico: maxPerda,
+      severidade: nivel(perda ?? 0, maxPerda, maxPerda / 2),
+    },
+    {
+      regra: 'Exposicao',
+      medido: `${num(exposicao)}%`,
+      limite: `${maxExpo}%`,
+      pct: exposicao ?? 0,
+      critico: maxExpo,
+      severidade: nivel(exposicao ?? 0, maxExpo, maxExpo / 2),
+    },
+    {
+      regra: 'Drawdown',
+      medido: `${num(drawdown)}%`,
+      limite: `${maxDD}%`,
+      pct: drawdown ?? 0,
+      critico: maxDD,
+      severidade: nivel(drawdown ?? 0, maxDD, maxDD * 0.53),
+    },
+    {
+      regra: 'Posicoes abertas',
+      medido: num(posicoes, 0),
+      limite: String(maxPos),
+      pct: ((posicoes ?? 0) / maxPos) * 100,
+      critico: 100,
+      severidade: nivel(((posicoes ?? 0) / maxPos) * 100, 100, 80),
+    },
+    {
+      regra: 'Operacoes no dia',
+      medido: num(operacoes, 0),
+      limite: String(maxOps),
+      pct: ((operacoes ?? 0) / maxOps) * 100,
+      critico: 100,
+      severidade: nivel(((operacoes ?? 0) / maxOps) * 100, 100, 80),
+    },
   ];
 
   const killAtivo = real.kill.status === 'ativo';
   const executar = (acao: 'stop' | 'resume') => {
-    const pergunta = acao === 'stop'
-      ? 'Parar a execucao agora?\n\nO gateway recusara novas ordens ate a retomada.'
-      : 'Retomar a execucao?\n\nO gateway exige XAU_ENABLE_EMERGENCY_RESUME=1.';
+    const pergunta =
+      acao === 'stop'
+        ? 'Parar a execucao agora?\n\nO gateway recusara novas ordens ate a retomada.'
+        : 'Retomar a execucao?\n\nO gateway exige XAU_ENABLE_EMERGENCY_RESUME=1.';
     if (window.confirm(pergunta)) void (acao === 'stop' ? real.parar() : real.retomar());
   };
 
@@ -79,20 +115,48 @@ export default function RiskTab() {
       <div className="section-head">
         <h2 id="risk-title">Risco</h2>
         <div className="btn-row">
-          {killAtivo
-            ? <button className="btn xs danger" onClick={() => executar('resume')} disabled={real.kill.busy}>Retomar execucao</button>
-            : <button className="btn xs warning" onClick={() => executar('stop')} disabled={real.kill.busy}>Parar execucao</button>}
-          <button className="btn xs ghost" onClick={() => void real.refresh()} disabled={real.carregando}>
+          {killAtivo ? (
+            <button
+              className="btn xs danger"
+              onClick={() => executar('resume')}
+              disabled={real.kill.busy}
+            >
+              Retomar execucao
+            </button>
+          ) : (
+            <button
+              className="btn xs warning"
+              onClick={() => executar('stop')}
+              disabled={real.kill.busy}
+            >
+              Parar execucao
+            </button>
+          )}
+          <button
+            className="btn xs ghost"
+            onClick={() => void real.refresh()}
+            disabled={real.carregando}
+          >
             {real.carregando ? 'Atualizando…' : 'Atualizar'}
           </button>
         </div>
       </div>
 
       {killAtivo && (
-        <p className="risk-stopped" role="status">Execucao parada. O gateway recusa novas ordens ate a retomada.</p>
+        <p className="risk-stopped" role="status">
+          Execucao parada. O gateway recusa novas ordens ate a retomada.
+        </p>
       )}
-      {real.erro && <p className="risk-stopped" role="status">Gateway nao devolveu o estado: {real.erro}</p>}
-      {real.kill.erro && <p className="risk-stopped" role="status">{real.kill.erro}</p>}
+      {real.erro && (
+        <p className="risk-stopped" role="status">
+          Gateway nao devolveu o estado: {real.erro}
+        </p>
+      )}
+      {real.kill.erro && (
+        <p className="risk-stopped" role="status">
+          {real.kill.erro}
+        </p>
+      )}
 
       <div className="table-scroll">
         <table className="tbl compact-table risk-grid">
@@ -120,18 +184,30 @@ export default function RiskTab() {
                     />
                   </span>
                 </td>
-                <td><span className={`chip ${l.severidade}`}>{l.severidade === 'danger' ? 'crítico' : l.severidade === 'warn' ? 'atenção' : 'normal'}</span></td>
+                <td>
+                  <span className={`chip ${l.severidade}`}>
+                    {l.severidade === 'danger'
+                      ? 'crítico'
+                      : l.severidade === 'warn'
+                        ? 'atenção'
+                        : 'normal'}
+                  </span>
+                </td>
               </tr>
             ))}
             {!linhas.length && (
-              <tr><td colSpan={5}>Nenhum limite devolvido pelo gateway.</td></tr>
+              <tr>
+                <td colSpan={5}>Nenhum limite devolvido pelo gateway.</td>
+              </tr>
             )}
           </tbody>
         </table>
       </div>
 
       <div className="risk-foot">
-        <span className="muted">Mesma fonte que o risk_gate usa para liberar ou recusar a ordem.</span>
+        <span className="muted">
+          Mesma fonte que o risk_gate usa para liberar ou recusar a ordem.
+        </span>
         <button className="btn xs ghost" type="button" onClick={() => setMostrarAjuste((v) => !v)}>
           {mostrarAjuste ? 'Ocultar' : 'Ajustar pelo app'}
         </button>
@@ -139,9 +215,9 @@ export default function RiskTab() {
 
       {mostrarAjuste && (
         <p className="muted risk-note">
-          Estes campos sao apenas uma leitura local e nao alteram o risk_gate. Para mudar os
-          limites que valem de verdade, use os campos de <strong>Operacao automatica</strong> acima,
-          que vao para o gateway.
+          Estes campos sao apenas uma leitura local e nao alteram o risk_gate. Para mudar os limites
+          que valem de verdade, use os campos de <strong>Operacao automatica</strong> acima, que vao
+          para o gateway.
         </p>
       )}
     </section>

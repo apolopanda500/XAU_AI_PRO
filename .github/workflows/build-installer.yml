@@ -3,7 +3,7 @@ name: Build Installer
 on:
   # Build automatico em tags v* (release) ou manual pela aba Actions
   push:
-    tags: ['v*']
+    tags: ["v*"]
   workflow_dispatch:
 
 permissions:
@@ -43,8 +43,8 @@ jobs:
       - name: Setup Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-          cache: 'pip'
+          python-version: "3.11"
+          cache: "pip"
 
       - name: Instalar dependencias de build
         run: pip install -r requirements-build.txt -r requirements-dev.txt

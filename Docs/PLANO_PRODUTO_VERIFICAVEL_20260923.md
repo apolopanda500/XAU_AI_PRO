@@ -4,15 +4,15 @@
 
 ## Escopo que o código permite afirmar hoje
 
-| Objetivo | Estado verificável | Condição para anunciar |
-|---|---|---|
-| Conta MT5 do usuário | Gateway consulta a conta conectada ao terminal local; não é integração certificada com todas as corretoras MT5 | Testar cada servidor, símbolo, lote, modo de preenchimento, hedge/netting e falhas em DEMO |
-| EA do usuário | Bridge própria recebe heartbeat/posições; não existe protocolo universal comprovado para EAs de terceiros | Definir adaptador opt-in, identificação do EA e autorização explícita; nunca assumir controle de EA externo |
-| Binance e MEXC | Adaptadores presentes para algumas leituras/mercados | Matriz de cobertura por mercado, permissões, respostas e reconciliação; nenhuma alegação de suporte irrestrito |
-| Modelos treinados/importados | Há pipeline e metadados de modelo, mas o histórico de deals não identifica um modelo com atribuição auditável | Vincular `model_id`/versão/hash de decisão a intenção, ordem, deal, conta e intervalo; reconciliar após reinício |
-| PnL/trades por modelo | **Indisponível** com a evidência atual; PnL da conta não é PnL do modelo | Calcular somente trades fechados atribuídos, separar custos, entradas/parciais, depósitos e moedas; mostrar lacunas de atribuição |
-| Copiloto de IA | Proposta futura; previsões não substituem confirmação do terminal nem controles de risco | Iniciar somente leitura com fonte, horário, incerteza e explicação; nenhum envio automático de ordem |
-| Conta REAL | Rotas de ordem REAL agora recusam incondicionalmente; não há liberação por variável de ambiente | Projetar idempotência persistente, reconciliação e autorização operacional independente; testar integralmente em DEMO antes de considerar implementação REAL |
+| Objetivo                     | Estado verificável                                                                                             | Condição para anunciar                                                                                                                                       |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Conta MT5 do usuário         | Gateway consulta a conta conectada ao terminal local; não é integração certificada com todas as corretoras MT5 | Testar cada servidor, símbolo, lote, modo de preenchimento, hedge/netting e falhas em DEMO                                                                   |
+| EA do usuário                | Bridge própria recebe heartbeat/posições; não existe protocolo universal comprovado para EAs de terceiros      | Definir adaptador opt-in, identificação do EA e autorização explícita; nunca assumir controle de EA externo                                                  |
+| Binance e MEXC               | Adaptadores presentes para algumas leituras/mercados                                                           | Matriz de cobertura por mercado, permissões, respostas e reconciliação; nenhuma alegação de suporte irrestrito                                               |
+| Modelos treinados/importados | Há pipeline e metadados de modelo, mas o histórico de deals não identifica um modelo com atribuição auditável  | Vincular `model_id`/versão/hash de decisão a intenção, ordem, deal, conta e intervalo; reconciliar após reinício                                             |
+| PnL/trades por modelo        | **Indisponível** com a evidência atual; PnL da conta não é PnL do modelo                                       | Calcular somente trades fechados atribuídos, separar custos, entradas/parciais, depósitos e moedas; mostrar lacunas de atribuição                            |
+| Copiloto de IA               | Proposta futura; previsões não substituem confirmação do terminal nem controles de risco                       | Iniciar somente leitura com fonte, horário, incerteza e explicação; nenhum envio automático de ordem                                                         |
+| Conta REAL                   | Rotas de ordem REAL agora recusam incondicionalmente; não há liberação por variável de ambiente                | Projetar idempotência persistente, reconciliação e autorização operacional independente; testar integralmente em DEMO antes de considerar implementação REAL |
 
 ## Avanço de segurança em 23/09/2026
 

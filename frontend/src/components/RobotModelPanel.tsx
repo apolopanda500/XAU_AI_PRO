@@ -19,15 +19,34 @@ import '../theme/robot-model.css';
 
 const API = `${apiBase()}`;
 
-type Modelo = { id: string; symbol: string; timeframe: string; accuracy: number | null; edge: number | null; pkl_present: boolean; publicable: boolean };
+type Modelo = {
+  id: string;
+  symbol: string;
+  timeframe: string;
+  accuracy: number | null;
+  edge: number | null;
+  pkl_present: boolean;
+  publicable: boolean;
+};
 
 type Previsao = {
-  signal?: string; confidence?: number; prob_buy?: number; prob_sell?: number; prob_neutral?: number;
-  price?: number; edge?: number | null; inference_ms?: number; reason?: string; disponivel?: boolean; available?: boolean;
+  signal?: string;
+  confidence?: number;
+  prob_buy?: number;
+  prob_sell?: number;
+  prob_neutral?: number;
+  price?: number;
+  edge?: number | null;
+  inference_ms?: number;
+  reason?: string;
+  disponivel?: boolean;
+  available?: boolean;
 };
 
 function pct(v: number | null | undefined, casas = 1): string {
-  return v === null || v === undefined || !Number.isFinite(v) ? '--' : `${(v * 100).toFixed(casas)}%`;
+  return v === null || v === undefined || !Number.isFinite(v)
+    ? '--'
+    : `${(v * 100).toFixed(casas)}%`;
 }
 
 export default function RobotModelPanel() {
@@ -60,10 +79,7 @@ export default function RobotModelPanel() {
     return simbolos[0] ?? '';
   }, [selectedSymbol, simbolos]);
 
-  const visiveis = useMemo(
-    () => modelos.filter((m) => m.symbol === simbolo),
-    [modelos, simbolo],
-  );
+  const visiveis = useMemo(() => modelos.filter((m) => m.symbol === simbolo), [modelos, simbolo]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -77,7 +93,9 @@ export default function RobotModelPanel() {
         setErroLista('');
         if (lista.length && !lista.some((m) => m.id === modeloId)) setModeloId(lista[0].id);
       })
-      .catch(() => { if (!controller.signal.aborted) setErroLista('Nao foi possivel ler os modelos.'); });
+      .catch(() => {
+        if (!controller.signal.aborted) setErroLista('Nao foi possivel ler os modelos.');
+      });
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -104,11 +122,16 @@ export default function RobotModelPanel() {
     try {
       // O backend resolve o modelo por (symbol, timeframe), nao pelo id.
       const tf = escolhido?.timeframe ?? modeloId.split('_')[1] ?? 'H1';
-      const r = await fetch(`${API}/api/ai/predict?symbol=${encodeURIComponent(simbolo)}&timeframe=${encodeURIComponent(tf)}`);
+      const r = await fetch(
+        `${API}/api/ai/predict?symbol=${encodeURIComponent(simbolo)}&timeframe=${encodeURIComponent(tf)}`,
+      );
       const d = (await r.json()) as Previsao;
       setPrevisao(d);
       const ok = d.disponivel ?? d.available;
-      void notify(ok ? `Sinal ${d.signal}` : 'Previsao indisponivel', ok ? `Confianca ${pct(d.confidence)}` : (d.reason ?? 'sem motivo informado'));
+      void notify(
+        ok ? `Sinal ${d.signal}` : 'Previsao indisponivel',
+        ok ? `Confianca ${pct(d.confidence)}` : (d.reason ?? 'sem motivo informado'),
+      );
     } catch (e) {
       setPrevisao({ reason: `Gateway indisponivel: ${e instanceof Error ? e.message : 'erro'}` });
     } finally {
@@ -136,25 +159,53 @@ export default function RobotModelPanel() {
             aria-label="Ativo do robo"
             value={simbolo}
             disabled={!simbolos.length}
-            onChange={(e) => { setSelectedSymbol(e.target.value.toUpperCase()); setPrevisao(null); }}
+            onChange={(e) => {
+              setSelectedSymbol(e.target.value.toUpperCase());
+              setPrevisao(null);
+            }}
           >
             {!simbolos.length && <option value={simbolo}>{simbolo}</option>}
-            {simbolos.map((s) => <option key={s} value={s}>{s}</option>)}
+            {simbolos.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
           </select>
         </label>
         <label className="field">
           <span>Modelo</span>
-          <select aria-label="Modelo do robo" value={modeloId} onChange={(e) => { setModeloId(e.target.value); setPrevisao(null); }} disabled={!visiveis.length}>
+          <select
+            aria-label="Modelo do robo"
+            value={modeloId}
+            onChange={(e) => {
+              setModeloId(e.target.value);
+              setPrevisao(null);
+            }}
+            disabled={!visiveis.length}
+          >
             {!visiveis.length && <option value="">Nenhum modelo carregavel para {simbolo}</option>}
-            {visiveis.map((m) => <option key={m.id} value={m.id}>{m.timeframe} · acc {pct(m.accuracy)} · edge {pct(m.edge)}</option>)}
+            {visiveis.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.timeframe} · acc {pct(m.accuracy)} · edge {pct(m.edge)}
+              </option>
+            ))}
           </select>
         </label>
-        <button className="btn sm primary" type="button" onClick={() => void prever()} disabled={!modeloId || ocupado}>
-            {ocupado ? 'Calculando…' : `Prever ${simbolo}`}
+        <button
+          className="btn sm primary"
+          type="button"
+          onClick={() => void prever()}
+          disabled={!modeloId || ocupado}
+        >
+          {ocupado ? 'Calculando…' : `Prever ${simbolo}`}
         </button>
       </div>
 
-      {erroLista && <p className="hint" role="status">{erroLista}</p>}
+      {erroLista && (
+        <p className="hint" role="status">
+          {erroLista}
+        </p>
+      )}
 
       {previsao && (
         <div className="rm-signal">
@@ -163,20 +214,38 @@ export default function RobotModelPanel() {
             <span className="rm-conf">{pct(previsao.confidence)}</span>
           </div>
           <div className="rm-probs">
-            <span>Compra <b className="pos">{pct(previsao.prob_buy)}</b></span>
-            <span>Venda <b className="neg">{pct(previsao.prob_sell)}</b></span>
-            <span>Neutro <b>{pct(previsao.prob_neutral)}</b></span>
+            <span>
+              Compra <b className="pos">{pct(previsao.prob_buy)}</b>
+            </span>
+            <span>
+              Venda <b className="neg">{pct(previsao.prob_sell)}</b>
+            </span>
+            <span>
+              Neutro <b>{pct(previsao.prob_neutral)}</b>
+            </span>
           </div>
           <div className="rm-meta">
-            <span>Preco <b className="num">{previsao.price ?? '--'}</b></span>
-            {escolhido && <span>Edge treino <b className="num">{pct(escolhido.edge)}</b></span>}
-            {previsao.inference_ms ? <span>Latencia <b className="num">{Math.round(previsao.inference_ms)} ms</b></span> : null}
+            <span>
+              Preco <b className="num">{previsao.price ?? '--'}</b>
+            </span>
+            {escolhido && (
+              <span>
+                Edge treino <b className="num">{pct(escolhido.edge)}</b>
+              </span>
+            )}
+            {previsao.inference_ms ? (
+              <span>
+                Latencia <b className="num">{Math.round(previsao.inference_ms)} ms</b>
+              </span>
+            ) : null}
           </div>
         </div>
       )}
 
       {previsao && !disponivel && (
-        <p className="hint" role="status">Previsao indisponivel: {previsao.reason ?? 'sem motivo informado'}</p>
+        <p className="hint" role="status">
+          Previsao indisponivel: {previsao.reason ?? 'sem motivo informado'}
+        </p>
       )}
     </section>
   );

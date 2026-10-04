@@ -274,13 +274,41 @@ bool ExecuteTrade(string symbol,int signal)
       // rejeitado) e `GetLastError()` vem da API local (134 = sem margem,
       // 4108 = ordem invalida). O servidor pode recusar por politica
       // enquanto a API estava correta.
-      int  erroApi    = GetLastError();
-      uint erroBroker = (uint)OrderSendResult();
-      string motivo   = StringFormat(
-                           "retcode_broker=%u | erro_api=%d",
-                           erroBroker,
-                           erroApi
-                        );
+      //
+      // COMO PEGAR O retcode (03/10/2026)
+      // ----------------------------------
+      // `OrderSendResult()` NAO EXISTE em MQL5 — nao e funcao da linguagem e
+      // nao de `Trade.mqh`. A linha `uint erroBroker = (uint)OrderSendResult();`
+      // foi introduzida no commit dbdce10 e nunca compilou:
+      //
+      //   ExecutionEngine.mqh(278,31) : error 256: undeclared identifier 'OrderSendResult'
+      //   Result: 2 errors, 3 warnings
+      //
+      // Nao havia `.ex5` no repositorio para revelar isso: o EA estava
+      // quebrado desde entao e a suite Python nao compila MQL5.
+      //
+      // A forma correta neste ponto do codigo e `GetLastError()`. O
+      // `MqlTradeResult` com o `retcode` do servidor vive dentro de
+      // `CSmartExecution::ExecuteOrder`, que e `private`; o `ExecResult`
+      // devolvido por `OpenPosition` aqui e um enum local que nao carrega o
+      // retcode. Entao este ponto registra o codigo da API, que e 134 =
+      // "Not enough money" — exatamente o `EXEC_NO_MARGIN` medido.
+      int  erroApi = GetLastError();
+
+      // O `EXEC_NO_MARGIN` mapeia para o erro 134 da API do MT5
+      // (TRADE_RETCODE_ERROR / ERROR_TRADE_NOT_ENOUGH_MONEY). Traduzir aqui
+      // deixa o log do broker legivel sem inventar um retcode de servidor.
+      string causaBroker;
+      if(execResult == EXEC_NO_MARGIN)
+         causaBroker = StringFormat(
+            "margem insuficiente (erro_api=%d, sem_margem=%d)",
+            erroApi, 134);
+      else if(execResult == EXEC_SPREAD_TOO_HIGH)
+         causaBroker = StringFormat("spread alto demais (erro_api=%d)", erroApi);
+      else
+         causaBroker = StringFormat("erro_api=%d", erroApi);
+
+      string motivo = causaBroker;
 
       Print(
          "ERRO EXECUCAO | ",
@@ -289,8 +317,8 @@ bool ExecuteTrade(string symbol,int signal)
          signal,
          " | Result=",
          EnumToString(execResult),
-         " | RETCODE_BROKER=",
-         erroBroker,
+         " | CAUSA=",
+         motivo,
          " | ERRO_API=",
          erroApi
       );

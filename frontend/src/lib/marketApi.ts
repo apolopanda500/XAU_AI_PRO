@@ -13,7 +13,16 @@ export const MARKET_ENDPOINTS = {
 } as const;
 
 export type MarketBroker = 'mt5' | 'binance' | 'mexc' | 'bybit' | 'okx';
-export type MarketKind = 'forex' | 'metals' | 'indices' | 'stocks' | 'commodities' | 'bonds' | 'other' | 'crypto-spot' | 'crypto-futures';
+export type MarketKind =
+  | 'forex'
+  | 'metals'
+  | 'indices'
+  | 'stocks'
+  | 'commodities'
+  | 'bonds'
+  | 'other'
+  | 'crypto-spot'
+  | 'crypto-futures';
 
 export interface MarketSource {
   broker: MarketBroker;
@@ -247,14 +256,20 @@ export interface MarketRequestOptions {
   fetcher?: typeof fetch;
 }
 
-export type MarketApiErrorCode = 'aborted' | 'http' | 'invalid' | 'network' | 'simulated_source' | 'identity';
+export type MarketApiErrorCode =
+  'aborted' | 'http' | 'invalid' | 'network' | 'simulated_source' | 'identity';
 
 export class MarketApiError extends Error {
   readonly code: MarketApiErrorCode;
   readonly endpoint: string | null;
   readonly status: number | null;
 
-  constructor(message: string, code: MarketApiErrorCode, endpoint: string | null = null, status: number | null = null) {
+  constructor(
+    message: string,
+    code: MarketApiErrorCode,
+    endpoint: string | null = null,
+    status: number | null = null,
+  ) {
     super(message);
     this.name = 'MarketApiError';
     this.code = code;
@@ -294,8 +309,28 @@ export interface MarketCapabilities {
 // klines, depth e trades. Aqui estavam como `enabled: false`, o que fazia a UI
 // esconder duas corretoras que funcionam e contradizia o registro.
 export const MARKET_SOURCES: readonly MarketSourceOption[] = [
-  { broker: 'mt5', label: 'MetaTrader 5', markets: ['forex', 'metals', 'indices', 'stocks', 'commodities', 'bonds', 'crypto-spot', 'crypto-futures', 'other'], enabled: true },
-  { broker: 'binance', label: 'Binance', markets: ['crypto-spot', 'crypto-futures'], enabled: true },
+  {
+    broker: 'mt5',
+    label: 'MetaTrader 5',
+    markets: [
+      'forex',
+      'metals',
+      'indices',
+      'stocks',
+      'commodities',
+      'bonds',
+      'crypto-spot',
+      'crypto-futures',
+      'other',
+    ],
+    enabled: true,
+  },
+  {
+    broker: 'binance',
+    label: 'Binance',
+    markets: ['crypto-spot', 'crypto-futures'],
+    enabled: true,
+  },
   { broker: 'mexc', label: 'MEXC', markets: ['crypto-spot', 'crypto-futures'], enabled: true },
   { broker: 'bybit', label: 'Bybit', markets: ['crypto-spot', 'crypto-futures'], enabled: true },
   { broker: 'okx', label: 'OKX', markets: ['crypto-spot', 'crypto-futures'], enabled: true },
@@ -372,7 +407,8 @@ function sourceValue(value: unknown): string | null {
 
 function assertRealSource(value: unknown, endpoint: string | null = null): void {
   if (typeof value === 'string') {
-    if (SOURCE_REJECTION.test(value)) throw new MarketApiError('Fonte simulada ou mock rejeitada.', 'simulated_source', endpoint);
+    if (SOURCE_REJECTION.test(value))
+      throw new MarketApiError('Fonte simulada ou mock rejeitada.', 'simulated_source', endpoint);
     return;
   }
   if (Array.isArray(value)) {
@@ -381,27 +417,61 @@ function assertRealSource(value: unknown, endpoint: string | null = null): void 
   }
   if (!isRecord(value)) return;
   Object.entries(value).forEach(([key, nested]) => {
-    if (PROVIDER_KEYS.has(key) || key.toLowerCase().includes('source') || key.toLowerCase().includes('provider')) {
+    if (
+      PROVIDER_KEYS.has(key) ||
+      key.toLowerCase().includes('source') ||
+      key.toLowerCase().includes('provider')
+    ) {
       const candidate = sourceValue(nested);
-      if (candidate && SOURCE_REJECTION.test(candidate)) throw new MarketApiError('Fonte simulada ou mock rejeitada.', 'simulated_source', endpoint);
+      if (candidate && SOURCE_REJECTION.test(candidate))
+        throw new MarketApiError('Fonte simulada ou mock rejeitada.', 'simulated_source', endpoint);
     }
     if (isRecord(nested) || Array.isArray(nested)) assertRealSource(nested, endpoint);
   });
 }
 
 function sourceFor(raw: Record<string, unknown>, fallback: string, receivedAt: string): Provenance {
-  const candidate = sourceValue(firstDefined(raw.source, raw.provider, raw.data_source, raw.origin, raw.feed));
+  const candidate = sourceValue(
+    firstDefined(raw.source, raw.provider, raw.data_source, raw.origin, raw.feed),
+  );
   const source = candidate ?? fallback;
   assertRealSource(source);
-  const providerTimestamp = readTimestamp(firstDefined(raw.provider_timestamp, raw.providerTimestamp, raw.exchange_timestamp, raw.timestamp, raw.time, raw.ts));
-  const receivedTimestamp = readTimestamp(firstDefined(raw.received_at, raw.receivedAt, raw.received)) ?? receivedAt;
+  const providerTimestamp = readTimestamp(
+    firstDefined(
+      raw.provider_timestamp,
+      raw.providerTimestamp,
+      raw.exchange_timestamp,
+      raw.timestamp,
+      raw.time,
+      raw.ts,
+    ),
+  );
+  const receivedTimestamp =
+    readTimestamp(firstDefined(raw.received_at, raw.receivedAt, raw.received)) ?? receivedAt;
   return { source, received_at: receivedTimestamp, provider_timestamp: providerTimestamp };
 }
 
-function responseSource(payload: Record<string, unknown>, fallback: string, receivedAt: string): Provenance {
+function responseSource(
+  payload: Record<string, unknown>,
+  fallback: string,
+  receivedAt: string,
+): Provenance {
   assertRealSource(payload);
-  const source = sourceValue(firstDefined(payload.source, payload.provider, payload.data_source, payload.origin, payload.feed));
-  if (!source) throw new MarketApiError(`A resposta de ${fallback} não informa a fonte real.`, 'invalid', fallback);
+  const source = sourceValue(
+    firstDefined(
+      payload.source,
+      payload.provider,
+      payload.data_source,
+      payload.origin,
+      payload.feed,
+    ),
+  );
+  if (!source)
+    throw new MarketApiError(
+      `A resposta de ${fallback} não informa a fonte real.`,
+      'invalid',
+      fallback,
+    );
   return sourceFor(payload, source, receivedAt);
 }
 
@@ -409,15 +479,20 @@ function marketMatches(actual: string, expected: MarketKind): boolean {
   const value = actual.trim().toLowerCase();
   if (value === expected.toLowerCase()) return true;
   if (expected === 'crypto-spot') return value === 'spot' || value === 'crypto';
-  if (expected === 'crypto-futures') return value === 'futures' || value === 'futuro' || value === 'futuros';
+  if (expected === 'crypto-futures')
+    return value === 'futures' || value === 'futuro' || value === 'futuros';
   return false;
 }
 
-function assertPayloadIdentity(payload: Record<string, unknown>, expected: MarketSource & { symbol?: string }): void {
+function assertPayloadIdentity(
+  payload: Record<string, unknown>,
+  expected: MarketSource & { symbol?: string },
+): void {
   const broker = readString(payload.broker);
   const market = readString(payload.market);
   const symbol = readString(payload.symbol);
-  if (!broker || !market) throw new MarketApiError('A resposta não informa corretora e mercado.', 'identity');
+  if (!broker || !market)
+    throw new MarketApiError('A resposta não informa corretora e mercado.', 'identity');
   if (broker.toLowerCase() !== expected.broker.toLowerCase()) {
     throw new MarketApiError('A resposta veio de outra corretora.', 'identity');
   }
@@ -429,13 +504,19 @@ function assertPayloadIdentity(payload: Record<string, unknown>, expected: Marke
   }
 }
 
-function assertRowIdentity(row: Record<string, unknown>, expected: MarketSource & { symbol?: string }): void {
+function assertRowIdentity(
+  row: Record<string, unknown>,
+  expected: MarketSource & { symbol?: string },
+): void {
   const broker = readString(row.broker);
   const market = readString(row.market);
   const symbol = readString(row.symbol);
-  if (broker && broker.toLowerCase() !== expected.broker.toLowerCase()) throw new MarketApiError('A linha veio de outra corretora.', 'identity');
-  if (market && !marketMatches(market, expected.market as MarketKind)) throw new MarketApiError('A linha veio de outro mercado.', 'identity');
-  if (expected.symbol && symbol && symbol.toUpperCase() !== expected.symbol.toUpperCase()) throw new MarketApiError('A linha veio de outro ativo.', 'identity');
+  if (broker && broker.toLowerCase() !== expected.broker.toLowerCase())
+    throw new MarketApiError('A linha veio de outra corretora.', 'identity');
+  if (market && !marketMatches(market, expected.market as MarketKind))
+    throw new MarketApiError('A linha veio de outro mercado.', 'identity');
+  if (expected.symbol && symbol && symbol.toUpperCase() !== expected.symbol.toUpperCase())
+    throw new MarketApiError('A linha veio de outro ativo.', 'identity');
 }
 
 function rowsFrom(payload: unknown, keys: string[]): unknown[] | null {
@@ -468,10 +549,15 @@ function errorMessage(value: unknown, fallback: string): string {
 }
 
 function itemErrors(payload: Record<string, unknown>): MarketItemError[] {
-  const values = Array.isArray(payload.errors) ? payload.errors : Array.isArray(payload.failures) ? payload.failures : [];
+  const values = Array.isArray(payload.errors)
+    ? payload.errors
+    : Array.isArray(payload.failures)
+      ? payload.failures
+      : [];
   return values.map((value) => {
     if (typeof value === 'string') return { symbol: null, error: value };
-    if (isRecord(value)) return { symbol: readString(value.symbol), error: errorMessage(value, 'Falha da fonte.') };
+    if (isRecord(value))
+      return { symbol: readString(value.symbol), error: errorMessage(value, 'Falha da fonte.') };
     return { symbol: null, error: 'Falha da fonte.' };
   });
 }
@@ -484,7 +570,9 @@ function accountSnapshot(value: unknown): MarketAccountSnapshot | null {
     currency: readString(value.currency ?? value.asset),
     balance: readNumber(value.balance ?? value.totalWalletBalance ?? value.walletBalance),
     equity: readNumber(value.equity ?? value.marginBalance ?? value.totalMarginBalance),
-    available: readNumber(value.available ?? value.availableBalance ?? value.free_margin ?? value.margin_free),
+    available: readNumber(
+      value.available ?? value.availableBalance ?? value.free_margin ?? value.margin_free,
+    ),
     margin: readNumber(value.margin ?? value.marginUsed),
     mode: readString(value.mode),
     trade_allowed: readBoolean(value.trade_allowed ?? value.tradeAllowed),
@@ -500,7 +588,9 @@ function positionSnapshot(value: unknown): MarketPositionSnapshot | null {
     side: readString(value.side ?? value.type),
     quantity: readNumber(value.quantity ?? value.volume ?? value.amount),
     entry_price: readNumber(value.entry_price ?? value.open_price ?? value.entryPrice),
-    mark_price: readNumber(value.mark_price ?? value.current_price ?? value.price_current ?? value.markPrice),
+    mark_price: readNumber(
+      value.mark_price ?? value.current_price ?? value.price_current ?? value.markPrice,
+    ),
     unrealized_pnl: readNumber(value.unrealized_pnl ?? value.profit ?? value.unRealizedProfit),
     stop_loss: readNumber(value.stop_loss ?? value.sl),
     take_profit: readNumber(value.take_profit ?? value.tp),
@@ -508,7 +598,11 @@ function positionSnapshot(value: unknown): MarketPositionSnapshot | null {
   };
 }
 
-function responseRows(payload: Record<string, unknown>, keys: string[], endpoint: string): unknown[] {
+function responseRows(
+  payload: Record<string, unknown>,
+  keys: string[],
+  endpoint: string,
+): unknown[] {
   const rows = rowsFrom(payload, keys);
   if (!rows) throw new MarketApiError(`Resposta inválida de ${endpoint}.`, 'invalid', endpoint);
   return rows;
@@ -518,11 +612,20 @@ function normalizeSymbol(value: unknown): string | null {
   return readString(value)?.toUpperCase() ?? null;
 }
 
-function normalizeSource(raw: Record<string, unknown>, fallback: string, receivedAt: string): Provenance {
+function normalizeSource(
+  raw: Record<string, unknown>,
+  fallback: string,
+  receivedAt: string,
+): Provenance {
   return sourceFor(raw, fallback, receivedAt);
 }
 
-function normalizeAsset(rawValue: unknown, expected: MarketSource, fallback: string, receivedAt: string): MarketAsset | null {
+function normalizeAsset(
+  rawValue: unknown,
+  expected: MarketSource,
+  fallback: string,
+  receivedAt: string,
+): MarketAsset | null {
   const raw = isRecord(rawValue) ? rawValue : { symbol: rawValue };
   const symbol = normalizeSymbol(firstDefined(raw.symbol, raw.ticker, raw.code, raw.name));
   if (!symbol) return null;
@@ -532,21 +635,46 @@ function normalizeAsset(rawValue: unknown, expected: MarketSource, fallback: str
     return null;
   }
   const provenance = normalizeSource(raw, fallback, receivedAt);
-  const capabilities = Array.isArray(raw.capabilities) ? raw.capabilities.map((item) => readString(item)).filter((item): item is string => item !== null) : [];
-  const restrictions = Array.isArray(raw.restrictions) ? raw.restrictions.map((item) => readString(item)).filter((item): item is string => item !== null) : [];
+  const capabilities = Array.isArray(raw.capabilities)
+    ? raw.capabilities
+        .map((item) => readString(item))
+        .filter((item): item is string => item !== null)
+    : [];
+  const restrictions = Array.isArray(raw.restrictions)
+    ? raw.restrictions
+        .map((item) => readString(item))
+        .filter((item): item is string => item !== null)
+    : [];
   const availabilityValue = readString(raw.availability);
-  const availability = availabilityValue === 'available' || availabilityValue === 'restricted' || availabilityValue === 'unavailable' || availabilityValue === 'unverified' ? availabilityValue : 'unverified';
-  const capabilityMatrix = Array.isArray(raw.capability_matrix) ? raw.capability_matrix.flatMap((item) => {
-    if (!isRecord(item)) return [];
-    const capability = readString(item.capability);
-    const status = readString(item.status);
-    if (!capability) return [];
-    return [{
-      capability,
-      status: status === 'available' || status === 'unsupported' || status === 'unverified' ? status as 'available' | 'unsupported' | 'unverified' : 'unverified' as const,
-      restrictions: Array.isArray(item.restrictions) ? item.restrictions.map((entry) => readString(entry)).filter((entry): entry is string => entry !== null) : [],
-    }];
-  }) : [];
+  const availability =
+    availabilityValue === 'available' ||
+    availabilityValue === 'restricted' ||
+    availabilityValue === 'unavailable' ||
+    availabilityValue === 'unverified'
+      ? availabilityValue
+      : 'unverified';
+  const capabilityMatrix = Array.isArray(raw.capability_matrix)
+    ? raw.capability_matrix.flatMap((item) => {
+        if (!isRecord(item)) return [];
+        const capability = readString(item.capability);
+        const status = readString(item.status);
+        if (!capability) return [];
+        return [
+          {
+            capability,
+            status:
+              status === 'available' || status === 'unsupported' || status === 'unverified'
+                ? (status as 'available' | 'unsupported' | 'unverified')
+                : ('unverified' as const),
+            restrictions: Array.isArray(item.restrictions)
+              ? item.restrictions
+                  .map((entry) => readString(entry))
+                  .filter((entry): entry is string => entry !== null)
+              : [],
+          },
+        ];
+      })
+    : [];
   return {
     ...provenance,
     broker: expected.broker,
@@ -571,16 +699,29 @@ function normalizeAsset(rawValue: unknown, expected: MarketSource, fallback: str
   };
 }
 
-function normalizeQuote(rawValue: unknown, expected: MarketIdentity, fallback: string, receivedAt: string): MarketQuote | null {
+function normalizeQuote(
+  rawValue: unknown,
+  expected: MarketIdentity,
+  fallback: string,
+  receivedAt: string,
+): MarketQuote | null {
   if (!isRecord(rawValue)) return null;
   const symbol = normalizeSymbol(firstDefined(rawValue.symbol, rawValue.ticker));
   if (!symbol || symbol !== expected.symbol.toUpperCase()) return null;
   assertRowIdentity(rawValue, expected);
   const provenance = normalizeSource(rawValue, fallback, receivedAt);
-  const bid = readNumber(firstDefined(rawValue.bid, rawValue.bidPrice, rawValue.bidPx, rawValue.bid1));
-  const ask = readNumber(firstDefined(rawValue.ask, rawValue.askPrice, rawValue.askPx, rawValue.ask1));
-  const last = readNumber(firstDefined(rawValue.last, rawValue.price, rawValue.lastPrice, rawValue.lastTradedPrice));
-  const spread = readNumber(firstDefined(rawValue.spread, rawValue.spread_abs)) ?? (bid !== null && ask !== null ? ask - bid : null);
+  const bid = readNumber(
+    firstDefined(rawValue.bid, rawValue.bidPrice, rawValue.bidPx, rawValue.bid1),
+  );
+  const ask = readNumber(
+    firstDefined(rawValue.ask, rawValue.askPrice, rawValue.askPx, rawValue.ask1),
+  );
+  const last = readNumber(
+    firstDefined(rawValue.last, rawValue.price, rawValue.lastPrice, rawValue.lastTradedPrice),
+  );
+  const spread =
+    readNumber(firstDefined(rawValue.spread, rawValue.spread_abs)) ??
+    (bid !== null && ask !== null ? ask - bid : null);
   return {
     ...provenance,
     broker: expected.broker,
@@ -591,18 +732,49 @@ function normalizeQuote(rawValue: unknown, expected: MarketIdentity, fallback: s
     bid,
     ask,
     spread,
-    high: readNumber(firstDefined(rawValue.high, rawValue.highPrice, rawValue.dayHigh, rawValue.high24h)),
-    low: readNumber(firstDefined(rawValue.low, rawValue.lowPrice, rawValue.dayLow, rawValue.low24h)),
+    high: readNumber(
+      firstDefined(rawValue.high, rawValue.highPrice, rawValue.dayHigh, rawValue.high24h),
+    ),
+    low: readNumber(
+      firstDefined(rawValue.low, rawValue.lowPrice, rawValue.dayLow, rawValue.low24h),
+    ),
     change: readNumber(firstDefined(rawValue.change, rawValue.priceChange, rawValue.change_abs)),
-    change_pct: readNumber(firstDefined(rawValue.change_pct, rawValue.changePct, rawValue.priceChangePercent, rawValue.changePercent)),
-    volume: readNumber(firstDefined(rawValue.volume, rawValue.baseVolume, rawValue.base_volume, rawValue.v, rawValue.qty)),
+    change_pct: readNumber(
+      firstDefined(
+        rawValue.change_pct,
+        rawValue.changePct,
+        rawValue.priceChangePercent,
+        rawValue.changePercent,
+      ),
+    ),
+    volume: readNumber(
+      firstDefined(
+        rawValue.volume,
+        rawValue.baseVolume,
+        rawValue.base_volume,
+        rawValue.v,
+        rawValue.qty,
+      ),
+    ),
     digits: readNumber(firstDefined(rawValue.digits, rawValue.precision)),
     point: readNumber(firstDefined(rawValue.point, rawValue.tickSize)),
-    timestamp: readTimestamp(firstDefined(rawValue.provider_timestamp, rawValue.providerTimestamp, rawValue.timestamp, rawValue.time)),
+    timestamp: readTimestamp(
+      firstDefined(
+        rawValue.provider_timestamp,
+        rawValue.providerTimestamp,
+        rawValue.timestamp,
+        rawValue.time,
+      ),
+    ),
   };
 }
 
-function normalizeStats(payload: Record<string, unknown>, expected: MarketIdentity, fallback: string, receivedAt: string): MarketStats24h | null {
+function normalizeStats(
+  payload: Record<string, unknown>,
+  expected: MarketIdentity,
+  fallback: string,
+  receivedAt: string,
+): MarketStats24h | null {
   const raw = isRecord(payload.stats) ? { ...payload, ...payload.stats } : payload;
   assertPayloadIdentity(raw, expected);
   const provenance = normalizeSource(raw, fallback, receivedAt);
@@ -622,19 +794,43 @@ function normalizeStats(payload: Record<string, unknown>, expected: MarketIdenti
     change: readNumber(firstDefined(raw.change, raw.priceChange)),
     change_pct: readNumber(firstDefined(raw.change_pct, raw.changePct, raw.priceChangePercent)),
     volume: readNumber(firstDefined(raw.volume, raw.baseVolume, raw.base_volume)),
-    quote_volume: readNumber(firstDefined(raw.quote_volume, raw.quoteVolume, raw.volumeQuote, raw.turnover)),
+    quote_volume: readNumber(
+      firstDefined(raw.quote_volume, raw.quoteVolume, raw.volumeQuote, raw.turnover),
+    ),
     trades_count: readNumber(firstDefined(raw.trades_count, raw.tradeCount, raw.count)),
     spread: readNumber(raw.spread) ?? (bid !== null && ask !== null ? ask - bid : null),
   };
 }
 
-function candleValues(rawValue: unknown): { time: unknown; open: unknown; high: unknown; low: unknown; close: unknown; volume: unknown } | null {
+function candleValues(
+  rawValue: unknown,
+): {
+  time: unknown;
+  open: unknown;
+  high: unknown;
+  low: unknown;
+  close: unknown;
+  volume: unknown;
+} | null {
   if (Array.isArray(rawValue)) {
-    return { time: rawValue[0], open: rawValue[1], high: rawValue[2], low: rawValue[3], close: rawValue[4], volume: rawValue[5] };
+    return {
+      time: rawValue[0],
+      open: rawValue[1],
+      high: rawValue[2],
+      low: rawValue[3],
+      close: rawValue[4],
+      volume: rawValue[5],
+    };
   }
   if (!isRecord(rawValue)) return null;
   return {
-    time: firstDefined(rawValue.time, rawValue.timestamp, rawValue.openTime, rawValue.open_time, rawValue.t),
+    time: firstDefined(
+      rawValue.time,
+      rawValue.timestamp,
+      rawValue.openTime,
+      rawValue.open_time,
+      rawValue.t,
+    ),
     open: firstDefined(rawValue.open, rawValue.o),
     high: firstDefined(rawValue.high, rawValue.h),
     low: firstDefined(rawValue.low, rawValue.l),
@@ -643,7 +839,12 @@ function candleValues(rawValue: unknown): { time: unknown; open: unknown; high: 
   };
 }
 
-function normalizeCandle(rawValue: unknown, expected: MarketIdentity, fallback: string, receivedAt: string): MarketCandle | null {
+function normalizeCandle(
+  rawValue: unknown,
+  expected: MarketIdentity,
+  fallback: string,
+  receivedAt: string,
+): MarketCandle | null {
   const values = candleValues(rawValue);
   if (!values) return null;
   const timestamp = readTimestamp(values.time);
@@ -652,7 +853,8 @@ function normalizeCandle(rawValue: unknown, expected: MarketIdentity, fallback: 
   const high = readNumber(values.high);
   const low = readNumber(values.low);
   const close = readNumber(values.close);
-  if (time === null || open === null || high === null || low === null || close === null) return null;
+  if (time === null || open === null || high === null || low === null || close === null)
+    return null;
   const raw = isRecord(rawValue) ? rawValue : {};
   try {
     assertRowIdentity(raw, expected);
@@ -674,19 +876,37 @@ function normalizeCandle(rawValue: unknown, expected: MarketIdentity, fallback: 
 }
 
 function depthLevel(rawValue: unknown): DepthLevel | null {
-  if (Array.isArray(rawValue)) return { price: readNumber(rawValue[0]), quantity: readNumber(rawValue[1] ?? rawValue[2]) };
+  if (Array.isArray(rawValue))
+    return { price: readNumber(rawValue[0]), quantity: readNumber(rawValue[1] ?? rawValue[2]) };
   if (!isRecord(rawValue)) return null;
   return {
     price: readNumber(firstDefined(rawValue.price, rawValue.p, rawValue.level, rawValue[0])),
-    quantity: readNumber(firstDefined(rawValue.quantity, rawValue.qty, rawValue.size, rawValue.amount, rawValue.volume)),
+    quantity: readNumber(
+      firstDefined(
+        rawValue.quantity,
+        rawValue.qty,
+        rawValue.size,
+        rawValue.amount,
+        rawValue.volume,
+      ),
+    ),
   };
 }
 
-function normalizeDepth(payload: Record<string, unknown>, expected: MarketIdentity, fallback: string, receivedAt: string): MarketDepthResponse {
+function normalizeDepth(
+  payload: Record<string, unknown>,
+  expected: MarketIdentity,
+  fallback: string,
+  receivedAt: string,
+): MarketDepthResponse {
   assertPayloadIdentity(payload, expected);
   const provenance = normalizeSource(payload, fallback, receivedAt);
-  const asksRaw = Array.isArray(payload.asks) ? payload.asks : rowsFrom(payload.asks, ['asks']) ?? [];
-  const bidsRaw = Array.isArray(payload.bids) ? payload.bids : rowsFrom(payload.bids, ['bids']) ?? [];
+  const asksRaw = Array.isArray(payload.asks)
+    ? payload.asks
+    : (rowsFrom(payload.asks, ['asks']) ?? []);
+  const bidsRaw = Array.isArray(payload.bids)
+    ? payload.bids
+    : (rowsFrom(payload.bids, ['bids']) ?? []);
   return {
     ...provenance,
     broker: expected.broker,
@@ -699,31 +919,70 @@ function normalizeDepth(payload: Record<string, unknown>, expected: MarketIdenti
 
 function tradeSide(raw: Record<string, unknown>): 'BUY' | 'SELL' | null {
   const side = readString(firstDefined(raw.side, raw.takerSide, raw.direction));
-  if (side) return side.toUpperCase() === 'SELL' || side.toUpperCase() === 'S' ? 'SELL' : side.toUpperCase() === 'BUY' || side.toUpperCase() === 'B' ? 'BUY' : null;
+  if (side)
+    return side.toUpperCase() === 'SELL' || side.toUpperCase() === 'S'
+      ? 'SELL'
+      : side.toUpperCase() === 'BUY' || side.toUpperCase() === 'B'
+        ? 'BUY'
+        : null;
   const buyerMaker = readBoolean(firstDefined(raw.isBuyerMaker, raw.is_buyer_maker));
   return buyerMaker === null ? null : buyerMaker ? 'SELL' : 'BUY';
 }
 
-function tradeValues(rawValue: unknown): { raw: Record<string, unknown>; id: unknown; price: unknown; quantity: unknown; quoteQuantity: unknown; time: unknown } | null {
+function tradeValues(
+  rawValue: unknown,
+): {
+  raw: Record<string, unknown>;
+  id: unknown;
+  price: unknown;
+  quantity: unknown;
+  quoteQuantity: unknown;
+  time: unknown;
+} | null {
   if (Array.isArray(rawValue)) {
-    return { raw: {}, id: rawValue[0], price: rawValue[1], quantity: rawValue[2], time: rawValue[3] ?? rawValue[5], quoteQuantity: rawValue[4] };
+    return {
+      raw: {},
+      id: rawValue[0],
+      price: rawValue[1],
+      quantity: rawValue[2],
+      time: rawValue[3] ?? rawValue[5],
+      quoteQuantity: rawValue[4],
+    };
   }
   if (!isRecord(rawValue)) return null;
   return {
     raw: rawValue,
     id: firstDefined(rawValue.id, rawValue.trade_id, rawValue.tradeId),
     price: firstDefined(rawValue.price, rawValue.p),
-    quantity: firstDefined(rawValue.quantity, rawValue.qty, rawValue.size, rawValue.amount, rawValue.q),
-    quoteQuantity: firstDefined(rawValue.quoteQty, rawValue.quote_qty, rawValue.quoteQuantity, rawValue.quote_quantity),
+    quantity: firstDefined(
+      rawValue.quantity,
+      rawValue.qty,
+      rawValue.size,
+      rawValue.amount,
+      rawValue.q,
+    ),
+    quoteQuantity: firstDefined(
+      rawValue.quoteQty,
+      rawValue.quote_qty,
+      rawValue.quoteQuantity,
+      rawValue.quote_quantity,
+    ),
     time: firstDefined(rawValue.timestamp, rawValue.time, rawValue.T, rawValue.ts),
   };
 }
 
-function normalizeTrade(rawValue: unknown, expected: MarketIdentity, fallback: string, receivedAt: string): PublicTrade | null {
+function normalizeTrade(
+  rawValue: unknown,
+  expected: MarketIdentity,
+  fallback: string,
+  receivedAt: string,
+): PublicTrade | null {
   const values = tradeValues(rawValue);
   if (!values) return null;
   const timestamp = readTimestamp(values.time);
-  const symbol = normalizeSymbol(firstDefined(values.raw.symbol, values.raw.symbolName)) ?? expected.symbol.toUpperCase();
+  const symbol =
+    normalizeSymbol(firstDefined(values.raw.symbol, values.raw.symbolName)) ??
+    expected.symbol.toUpperCase();
   if (symbol !== expected.symbol.toUpperCase()) return null;
   try {
     assertRowIdentity(values.raw, expected);
@@ -750,13 +1009,18 @@ function buildUrl(path: string, params: Record<string, string | number | undefin
   const base = apiBase().replace(/\/+$/, '');
   const query = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && String(value).length > 0) query.set(key, String(value));
+    if (value !== undefined && value !== null && String(value).length > 0)
+      query.set(key, String(value));
   });
   const suffix = query.toString();
   return `${base}${path}${suffix ? `?${suffix}` : ''}`;
 }
 
-async function requestJson(endpoint: string, params: Record<string, string | number | undefined>, options: MarketRequestOptions = {}): Promise<{ payload: Record<string, unknown>; receivedAt: string }> {
+async function requestJson(
+  endpoint: string,
+  params: Record<string, string | number | undefined>,
+  options: MarketRequestOptions = {},
+): Promise<{ payload: Record<string, unknown>; receivedAt: string }> {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const controller = new AbortController();
   const onAbort = () => controller.abort();
@@ -768,23 +1032,45 @@ async function requestJson(endpoint: string, params: Record<string, string | num
   const fetcher = options.fetcher ?? (typeof fetch === 'function' ? fetch : null);
   if (!fetcher) throw new MarketApiError('Fetch indisponível neste ambiente.', 'network', endpoint);
   try {
-    const response = await fetcher(buildUrl(endpoint, params), { method: 'GET', signal: controller.signal, headers: { Accept: 'application/json' } });
+    const response = await fetcher(buildUrl(endpoint, params), {
+      method: 'GET',
+      signal: controller.signal,
+      headers: { Accept: 'application/json' },
+    });
     let payload: unknown;
     try {
       payload = await response.json();
     } catch {
-      throw new MarketApiError(`Resposta JSON inválida de ${endpoint}.`, 'invalid', endpoint, response.status);
+      throw new MarketApiError(
+        `Resposta JSON inválida de ${endpoint}.`,
+        'invalid',
+        endpoint,
+        response.status,
+      );
     }
     if (!response.ok || (isRecord(payload) && payload.ok === false)) {
-      const message = isRecord(payload) ? errorMessage(payload.error ?? payload.message, `Gateway HTTP ${response.status}.`) : `Gateway HTTP ${response.status}.`;
+      const message = isRecord(payload)
+        ? errorMessage(payload.error ?? payload.message, `Gateway HTTP ${response.status}.`)
+        : `Gateway HTTP ${response.status}.`;
       throw new MarketApiError(message, 'http', endpoint, response.status);
     }
-    if (!isRecord(payload)) throw new MarketApiError(`Resposta inválida de ${endpoint}.`, 'invalid', endpoint, response.status);
+    if (!isRecord(payload))
+      throw new MarketApiError(
+        `Resposta inválida de ${endpoint}.`,
+        'invalid',
+        endpoint,
+        response.status,
+      );
     return { payload, receivedAt: DEFAULT_RECEIVED_AT() };
   } catch (error) {
     if (error instanceof MarketApiError) throw error;
-    if (controller.signal.aborted || (options.signal?.aborted)) throw new MarketApiError('Requisição cancelada.', 'aborted', endpoint);
-    throw new MarketApiError(error instanceof Error ? error.message : 'Falha de rede.', 'network', endpoint);
+    if (controller.signal.aborted || options.signal?.aborted)
+      throw new MarketApiError('Requisição cancelada.', 'aborted', endpoint);
+    throw new MarketApiError(
+      error instanceof Error ? error.message : 'Falha de rede.',
+      'network',
+      endpoint,
+    );
   } finally {
     clearTimeout(timer);
     options.signal?.removeEventListener('abort', onAbort);
@@ -797,7 +1083,11 @@ function normalizeOverview(payload: Record<string, unknown>, receivedAt: string)
   const connections = connectionsRaw.map((value): MarketConnection => {
     const row = isRecord(value) ? value : {};
     const account = accountSnapshot(row.account);
-    const positions = Array.isArray(row.positions) ? row.positions.map(positionSnapshot).filter((item): item is MarketPositionSnapshot => item !== null) : [];
+    const positions = Array.isArray(row.positions)
+      ? row.positions
+          .map(positionSnapshot)
+          .filter((item): item is MarketPositionSnapshot => item !== null)
+      : [];
     const pnlRecord = isRecord(row.pnl) ? row.pnl : {};
     return {
       id: readString(row.id),
@@ -830,7 +1120,9 @@ function sourceParams(source: MarketSource): Record<string, string> {
 }
 
 export function marketsForBroker(broker: MarketBroker): MarketKind[] {
-  return MARKET_SOURCES.find((item) => item.broker === broker && item.enabled)?.markets.slice() ?? [];
+  return (
+    MARKET_SOURCES.find((item) => item.broker === broker && item.enabled)?.markets.slice() ?? []
+  );
 }
 
 export function normalizeMarketSource(broker: string, market: string): MarketSource | null {
@@ -838,29 +1130,51 @@ export function normalizeMarketSource(broker: string, market: string): MarketSou
   const option = MARKET_SOURCES.find((item) => item.broker === normalizedBroker);
   if (!option || !option.enabled) return null;
   const rawMarket = market.trim().toLowerCase();
-  const normalizedMarket = (rawMarket === 'spot' || rawMarket === 'crypto' ? 'crypto-spot' : rawMarket === 'futures' || rawMarket === 'futuros' ? 'crypto-futures' : rawMarket) as MarketKind;
-  return option.markets.includes(normalizedMarket) ? { broker: option.broker, market: normalizedMarket } : null;
+  const normalizedMarket = (
+    rawMarket === 'spot' || rawMarket === 'crypto'
+      ? 'crypto-spot'
+      : rawMarket === 'futures' || rawMarket === 'futuros'
+        ? 'crypto-futures'
+        : rawMarket
+  ) as MarketKind;
+  return option.markets.includes(normalizedMarket)
+    ? { broker: option.broker, market: normalizedMarket }
+    : null;
 }
 
-export async function getCapabilities(options: MarketRequestOptions = {}): Promise<MarketCapabilities> {
+export async function getCapabilities(
+  options: MarketRequestOptions = {},
+): Promise<MarketCapabilities> {
   const result = await requestJson(MARKET_ENDPOINTS.capabilities, {}, options);
   const provenance = responseSource(result.payload, 'fastapi_gateway', result.receivedAt);
-  const matrix = Array.isArray(result.payload.matrix) ? result.payload.matrix.flatMap((value): MarketCapabilityRow[] => {
-    if (!isRecord(value)) return [];
-    const broker = readString(value.broker);
-    const market = readString(value.market);
-    if (!broker || !market) return [];
-    return [{
-      broker: broker as MarketBroker,
-      market: market as MarketKind,
-      status: readString(value.status) ?? 'unverified',
-      read_only: readBoolean(value.read_only) ?? false,
-      capabilities: Array.isArray(value.capabilities) ? value.capabilities.map((item) => readString(item)).filter((item): item is string => item !== null) : [],
-      execution: Array.isArray(value.execution) ? value.execution.map((item) => readString(item)).filter((item): item is string => item !== null) : [],
-      withdrawals: readBoolean(value.withdrawals) ?? true,
-      transfers: readBoolean(value.transfers) ?? true,
-    }];
-  }) : [];
+  const matrix = Array.isArray(result.payload.matrix)
+    ? result.payload.matrix.flatMap((value): MarketCapabilityRow[] => {
+        if (!isRecord(value)) return [];
+        const broker = readString(value.broker);
+        const market = readString(value.market);
+        if (!broker || !market) return [];
+        return [
+          {
+            broker: broker as MarketBroker,
+            market: market as MarketKind,
+            status: readString(value.status) ?? 'unverified',
+            read_only: readBoolean(value.read_only) ?? false,
+            capabilities: Array.isArray(value.capabilities)
+              ? value.capabilities
+                  .map((item) => readString(item))
+                  .filter((item): item is string => item !== null)
+              : [],
+            execution: Array.isArray(value.execution)
+              ? value.execution
+                  .map((item) => readString(item))
+                  .filter((item): item is string => item !== null)
+              : [],
+            withdrawals: readBoolean(value.withdrawals) ?? true,
+            transfers: readBoolean(value.transfers) ?? true,
+          },
+        ];
+      })
+    : [];
   return { ...provenance, matrix };
 }
 
@@ -869,29 +1183,56 @@ export async function getOverview(options: MarketRequestOptions = {}): Promise<M
   return normalizeOverview(result.payload, result.receivedAt);
 }
 
-export async function getAssets(source: MarketSource, options: MarketRequestOptions = {}): Promise<MarketAssetResponse> {
+export async function getAssets(
+  source: MarketSource,
+  options: MarketRequestOptions = {},
+): Promise<MarketAssetResponse> {
   const expected = normalizeMarketSource(source.broker, source.market);
-  if (!expected) throw new MarketApiError('Fonte não habilitada.', 'identity', MARKET_ENDPOINTS.assets);
+  if (!expected)
+    throw new MarketApiError('Fonte não habilitada.', 'identity', MARKET_ENDPOINTS.assets);
   const result = await requestJson(MARKET_ENDPOINTS.assets, sourceParams(expected), options);
   assertPayloadIdentity(result.payload, expected);
   const provenance = responseSource(result.payload, fallbackSource(expected), result.receivedAt);
-  const assets = responseRows(result.payload, ['assets', 'symbols', 'data'], MARKET_ENDPOINTS.assets)
+  const assets = responseRows(
+    result.payload,
+    ['assets', 'symbols', 'data'],
+    MARKET_ENDPOINTS.assets,
+  )
     .map((row) => normalizeAsset(row, expected, provenance.source, result.receivedAt))
     .filter((row): row is MarketAsset => row !== null);
   return { ...provenance, ...expected, assets, errors: itemErrors(result.payload) };
 }
 
-export async function getQuotes(source: MarketSource, symbols: string[], options: MarketRequestOptions = {}): Promise<MarketQuoteResponse> {
+export async function getQuotes(
+  source: MarketSource,
+  symbols: string[],
+  options: MarketRequestOptions = {},
+): Promise<MarketQuoteResponse> {
   const expected = normalizeMarketSource(source.broker, source.market);
-  if (!expected) throw new MarketApiError('Fonte não habilitada.', 'identity', MARKET_ENDPOINTS.quotes);
-  const normalized = [...new Set(symbols.map((symbol) => symbol.trim().toUpperCase()).filter(Boolean))].slice(0, 24);
-  if (!normalized.length) throw new MarketApiError('Informe ao menos um símbolo.', 'invalid', MARKET_ENDPOINTS.quotes);
-  const result = await requestJson(MARKET_ENDPOINTS.quotes, { ...sourceParams(expected), symbols: normalized.join(',') }, options);
+  if (!expected)
+    throw new MarketApiError('Fonte não habilitada.', 'identity', MARKET_ENDPOINTS.quotes);
+  const normalized = [
+    ...new Set(symbols.map((symbol) => symbol.trim().toUpperCase()).filter(Boolean)),
+  ].slice(0, 24);
+  if (!normalized.length)
+    throw new MarketApiError('Informe ao menos um símbolo.', 'invalid', MARKET_ENDPOINTS.quotes);
+  const result = await requestJson(
+    MARKET_ENDPOINTS.quotes,
+    { ...sourceParams(expected), symbols: normalized.join(',') },
+    options,
+  );
   assertPayloadIdentity(result.payload, expected);
   const provenance = responseSource(result.payload, fallbackSource(expected), result.receivedAt);
   const requested = new Set(normalized);
   const quotes = responseRows(result.payload, ['quotes', 'data', 'items'], MARKET_ENDPOINTS.quotes)
-    .map((row) => normalizeQuote(row, { ...expected, symbol: rowSymbol(row) ?? '' }, provenance.source, result.receivedAt))
+    .map((row) =>
+      normalizeQuote(
+        row,
+        { ...expected, symbol: rowSymbol(row) ?? '' },
+        provenance.source,
+        result.receivedAt,
+      ),
+    )
     .filter((row): row is MarketQuote => row !== null && requested.has(row.symbol));
   return { ...provenance, ...expected, quotes, errors: itemErrors(result.payload) };
 }
@@ -901,22 +1242,51 @@ function rowSymbol(row: unknown): string | null {
   return normalizeSymbol(firstDefined(row.symbol, row.ticker));
 }
 
-export async function getStats24h(identity: MarketIdentity, options: MarketRequestOptions = {}): Promise<MarketStatsResponse> {
+export async function getStats24h(
+  identity: MarketIdentity,
+  options: MarketRequestOptions = {},
+): Promise<MarketStatsResponse> {
   const expected = normalizeIdentity(identity, MARKET_ENDPOINTS.stats24h);
-  const result = await requestJson(MARKET_ENDPOINTS.stats24h, { ...sourceParams(expected), symbol: expected.symbol }, options);
+  const result = await requestJson(
+    MARKET_ENDPOINTS.stats24h,
+    { ...sourceParams(expected), symbol: expected.symbol },
+    options,
+  );
   assertPayloadIdentity(result.payload, expected);
   const provenance = responseSource(result.payload, fallbackSource(expected), result.receivedAt);
-  return { ...provenance, ...expected, stats: normalizeStats(result.payload, expected, provenance.source, result.receivedAt) };
+  return {
+    ...provenance,
+    ...expected,
+    stats: normalizeStats(result.payload, expected, provenance.source, result.receivedAt),
+  };
 }
 
-export async function getCandles(identity: MarketIdentity, timeframe = 'M5', limit = 300, options: MarketRequestOptions = {}): Promise<MarketCandleResponse> {
+export async function getCandles(
+  identity: MarketIdentity,
+  timeframe = 'M5',
+  limit = 300,
+  options: MarketRequestOptions = {},
+): Promise<MarketCandleResponse> {
   const expected = normalizeIdentity(identity, MARKET_ENDPOINTS.candles);
   const safeTimeframe = timeframe.trim().toUpperCase() || 'M5';
   const safeLimit = Math.max(10, Math.min(2000, Math.floor(Number(limit) || 300)));
-  const result = await requestJson(MARKET_ENDPOINTS.candles, { ...sourceParams(expected), symbol: expected.symbol, timeframe: safeTimeframe, limit: safeLimit }, options);
+  const result = await requestJson(
+    MARKET_ENDPOINTS.candles,
+    {
+      ...sourceParams(expected),
+      symbol: expected.symbol,
+      timeframe: safeTimeframe,
+      limit: safeLimit,
+    },
+    options,
+  );
   assertPayloadIdentity(result.payload, expected);
   const provenance = responseSource(result.payload, fallbackSource(expected), result.receivedAt);
-  const candles = responseRows(result.payload, ['candles', 'data', 'result', 'items'], MARKET_ENDPOINTS.candles)
+  const candles = responseRows(
+    result.payload,
+    ['candles', 'data', 'result', 'items'],
+    MARKET_ENDPOINTS.candles,
+  )
     .map((row) => normalizeCandle(row, expected, provenance.source, result.receivedAt))
     .filter((row): row is MarketCandle => row !== null)
     .sort((a, b) => a.time - b.time)
@@ -924,20 +1294,40 @@ export async function getCandles(identity: MarketIdentity, timeframe = 'M5', lim
   return { ...provenance, ...expected, timeframe: safeTimeframe, candles };
 }
 
-export async function getDepth(identity: MarketIdentity, limit = 20, options: MarketRequestOptions = {}): Promise<MarketDepthResponse> {
+export async function getDepth(
+  identity: MarketIdentity,
+  limit = 20,
+  options: MarketRequestOptions = {},
+): Promise<MarketDepthResponse> {
   const expected = normalizeIdentity(identity, MARKET_ENDPOINTS.depth);
   const safeLimit = Math.max(1, Math.min(100, Math.floor(Number(limit) || 20)));
-  const result = await requestJson(MARKET_ENDPOINTS.depth, { ...sourceParams(expected), symbol: expected.symbol, limit: safeLimit }, options);
+  const result = await requestJson(
+    MARKET_ENDPOINTS.depth,
+    { ...sourceParams(expected), symbol: expected.symbol, limit: safeLimit },
+    options,
+  );
   return normalizeDepth(result.payload, expected, fallbackSource(expected), result.receivedAt);
 }
 
-export async function getTrades(identity: MarketIdentity, limit = 20, options: MarketRequestOptions = {}): Promise<MarketTradesResponse> {
+export async function getTrades(
+  identity: MarketIdentity,
+  limit = 20,
+  options: MarketRequestOptions = {},
+): Promise<MarketTradesResponse> {
   const expected = normalizeIdentity(identity, MARKET_ENDPOINTS.trades);
   const safeLimit = Math.max(1, Math.min(100, Math.floor(Number(limit) || 20)));
-  const result = await requestJson(MARKET_ENDPOINTS.trades, { ...sourceParams(expected), symbol: expected.symbol, limit: safeLimit }, options);
+  const result = await requestJson(
+    MARKET_ENDPOINTS.trades,
+    { ...sourceParams(expected), symbol: expected.symbol, limit: safeLimit },
+    options,
+  );
   assertPayloadIdentity(result.payload, expected);
   const provenance = responseSource(result.payload, fallbackSource(expected), result.receivedAt);
-  const trades = responseRows(result.payload, ['trades', 'data', 'result', 'items'], MARKET_ENDPOINTS.trades)
+  const trades = responseRows(
+    result.payload,
+    ['trades', 'data', 'result', 'items'],
+    MARKET_ENDPOINTS.trades,
+  )
     .map((row) => normalizeTrade(row, expected, provenance.source, result.receivedAt))
     .filter((row): row is PublicTrade => row !== null);
   return { ...provenance, ...expected, trades };
@@ -948,19 +1338,25 @@ export async function getMt5Status(options: MarketRequestOptions = {}): Promise<
   const payload = result.payload;
   const provenance = responseSource(payload, 'mt5_gateway', result.receivedAt);
   const heartbeatRaw = isRecord(payload.ea_heartbeat) ? payload.ea_heartbeat : null;
-  const heartbeat = heartbeatRaw ? {
-    live: readBoolean(heartbeatRaw.live),
-    age_sec: readNumber(heartbeatRaw.age_sec ?? heartbeatRaw.ageSec),
-    symbol: readString(heartbeatRaw.symbol),
-    autotrading: readBoolean(firstDefined(heartbeatRaw.autotrading, heartbeatRaw.autoTrading)),
-    source: readString(heartbeatRaw.source),
-  } : null;
+  const heartbeat = heartbeatRaw
+    ? {
+        live: readBoolean(heartbeatRaw.live),
+        age_sec: readNumber(heartbeatRaw.age_sec ?? heartbeatRaw.ageSec),
+        symbol: readString(heartbeatRaw.symbol),
+        autotrading: readBoolean(firstDefined(heartbeatRaw.autotrading, heartbeatRaw.autoTrading)),
+        source: readString(heartbeatRaw.source),
+      }
+    : null;
   return {
     ...provenance,
     gateway: readString(payload.gateway),
     mt5_connected: readBoolean(firstDefined(payload.mt5_connected, payload.terminal_connected)),
     account: accountSnapshot(payload.account),
-    positions: Array.isArray(payload.positions) ? payload.positions.map(positionSnapshot).filter((item): item is MarketPositionSnapshot => item !== null) : [],
+    positions: Array.isArray(payload.positions)
+      ? payload.positions
+          .map(positionSnapshot)
+          .filter((item): item is MarketPositionSnapshot => item !== null)
+      : [],
     ea_heartbeat: heartbeat,
   };
 }
@@ -968,7 +1364,8 @@ export async function getMt5Status(options: MarketRequestOptions = {}): Promise<
 function normalizeIdentity(identity: MarketIdentity, endpoint: string): MarketIdentity {
   const source = normalizeMarketSource(identity.broker, identity.market);
   const symbol = normalizeSymbol(identity.symbol);
-  if (!source || !symbol) throw new MarketApiError('Identidade de mercado inválida.', 'identity', endpoint);
+  if (!source || !symbol)
+    throw new MarketApiError('Identidade de mercado inválida.', 'identity', endpoint);
   return { ...source, symbol };
 }
 
@@ -993,4 +1390,11 @@ export const marketApi = {
   status: getMt5Status,
 };
 
-export { buildUrl as buildMarketUrl, sourceFor as marketProvenance, normalizeCandle, normalizeDepth, normalizeQuote, normalizeTrade };
+export {
+  buildUrl as buildMarketUrl,
+  sourceFor as marketProvenance,
+  normalizeCandle,
+  normalizeDepth,
+  normalizeQuote,
+  normalizeTrade,
+};

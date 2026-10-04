@@ -21,14 +21,14 @@ O gateway Python escuta em `0.0.0.0:9001` quando exposto (HTTP) e `9002` (WebSoc
 
 Proteções ativas que **não** podem ser desligadas na exposição:
 
-| Trava | Comportamento verificado |
-| --- | --- |
-| `XAU_GATEWAY_TOKEN` | `/health`, `/api/boot` e o Core retornam **401** sem token (validado em 2026-09-25) |
-| `XAU_MCP_TRADING` | manter em `0` |
-| `XAU_ENABLE_REAL_ORDERS` | manter em `0` |
-| `XAU_ENABLE_EMERGENCY_RESUME` | manter em `0` |
-| Clientes externos | exigem **HTTPS** e bloqueiam redirect para destino não permitido |
-| SSRF guard | ativo nas rotas de saída |
+| Trava                         | Comportamento verificado                                                            |
+| ----------------------------- | ----------------------------------------------------------------------------------- |
+| `XAU_GATEWAY_TOKEN`           | `/health`, `/api/boot` e o Core retornam **401** sem token (validado em 2026-09-25) |
+| `XAU_MCP_TRADING`             | manter em `0`                                                                       |
+| `XAU_ENABLE_REAL_ORDERS`      | manter em `0`                                                                       |
+| `XAU_ENABLE_EMERGENCY_RESUME` | manter em `0`                                                                       |
+| Clientes externos             | exigem **HTTPS** e bloqueiam redirect para destino não permitido                    |
+| SSRF guard                    | ativo nas rotas de saída                                                            |
 
 ## Passo a passo
 

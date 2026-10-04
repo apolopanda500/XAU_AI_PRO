@@ -9,14 +9,14 @@
 
 ## 1. O que foi pedido e o que foi feito
 
-| Pedido | Estado medido |
-|---|---|
-| Liberar espaço | `frontend\src-tauri\NONE` (88 MB) + `.pytest_cache` removidos |
+| Pedido                                 | Estado medido                                                                     |
+| -------------------------------------- | --------------------------------------------------------------------------------- |
+| Liberar espaço                         | `frontend\src-tauri\NONE` (88 MB) + `.pytest_cache` removidos                     |
 | Ler a pasta `Docs` e entender o estado | [`SESSAO_20261001_VALIDACAO_E_PUSH.md`](./SESSAO_20261001_VALIDACAO_E_PUSH.md) §4 |
-| Corrigir dois comandos | `install_app.bat` e `build_app.bat` — Seção 2 |
-| Limpar ambiente | Preflight de **2 falhas para 0** — §1 do documento de validação |
-| Instalar, rodar, aprovar | §2 e §4 do documento de validação |
-| `git push` | GitHub sincronizado — §3 do documento de validação |
+| Corrigir dois comandos                 | `install_app.bat` e `build_app.bat` — Seção 2                                     |
+| Limpar ambiente                        | Preflight de **2 falhas para 0** — §1 do documento de validação                   |
+| Instalar, rodar, aprovar               | §2 e §4 do documento de validação                                                 |
+| `git push`                             | GitHub sincronizado — §3 do documento de validação                                |
 
 ---
 
@@ -84,15 +84,13 @@ M  i  c  r  o  s  o  f  t     C  /  C  +  +     M  S  F     7  .  0  0
 ciclo de build anterior. Não é versionado, não é lido por nada e o `cargo
 build` recria quando precisa.
 
-| Data | Tamanho |
-|---|---|
-| 29/09/2026 | 11,2 MB |
+| Data       | Tamanho   |
+| ---------- | --------- |
+| 29/09/2026 | 11,2 MB   |
 | 30/09/2026 | **88 MB** |
 
 Foi para a allowlist do `limpeza_segura.ps1`: da próxima vez sai por comando,
 não por investigação.
-
-
 
 > Registro do ciclo de limpeza do Windows e do repositório, da revalidação da
 > suíte inteira e do build. Complementa
@@ -107,39 +105,39 @@ não por investigação.
 
 ## 1. O ponto de partida: o disco travava o build
 
-| Medida | Antes | Depois |
-|---|---|---|
-| Disco C livre | **5,44 GB** | **22,02 GB** |
-| `core\target\debug` | 1.561,6 MB | removido |
-| `Temp\hist.log` | 276 MB | removido |
-| `frontend\src-tauri\NONE` | 11,2 MB | removido |
+| Medida                    | Antes       | Depois       |
+| ------------------------- | ----------- | ------------ |
+| Disco C livre             | **5,44 GB** | **22,02 GB** |
+| `core\target\debug`       | 1.561,6 MB  | removido     |
+| `Temp\hist.log`           | 276 MB      | removido     |
+| `frontend\src-tauri\NONE` | 11,2 MB     | removido     |
 
 O build Rust precisa de ~4 GB. Com 5,44 GB o ciclo anterior já tinha
-falhado duas vezes com *Espaço insuficiente no disco* (erro 112) — está
+falhado duas vezes com _Espaço insuficiente no disco_ (erro 112) — está
 registrado em `AGENTS.md`.
 
 ### O que foi removido, e por quê
 
 Tudo aqui é **regenerável por comando**. Nada versionado foi tocado:
 
-| Alvo | Tamanho | Como se regenera |
-|---|---|---|
-| `core\target\debug` | 1,56 GB | `cargo test` recompila (~3 min) |
-| `.pytest_cache` | pequeno | pytest recria |
-| `frontend\dist` | 7,8 MB | `npm run build` |
-| `Temp\hist.log` | 276 MB | diff de git já commitado em `c552bce` |
-| `Temp\*.log`, `*.err`, `*.out` de 29/09 | ~120 KB | 65 arquivos de sessão anterior |
-| `src-tauri\NONE` | 11,2 MB | **não deve regenerar** — ver §3 |
-| `src-tauri\bg_build.ps1` | 1 KB | substituído por `scripts\build_app.bat` |
-| `src-tauri\*.log`, `*.flag` | 34 KB | flags de build do ciclo anterior |
-| `cmd.exe` na raiz | 344 KB | **é cópia do Windows** — ver §3 |
+| Alvo                                    | Tamanho | Como se regenera                        |
+| --------------------------------------- | ------- | --------------------------------------- |
+| `core\target\debug`                     | 1,56 GB | `cargo test` recompila (~3 min)         |
+| `.pytest_cache`                         | pequeno | pytest recria                           |
+| `frontend\dist`                         | 7,8 MB  | `npm run build`                         |
+| `Temp\hist.log`                         | 276 MB  | diff de git já commitado em `c552bce`   |
+| `Temp\*.log`, `*.err`, `*.out` de 29/09 | ~120 KB | 65 arquivos de sessão anterior          |
+| `src-tauri\NONE`                        | 11,2 MB | **não deve regenerar** — ver §3         |
+| `src-tauri\bg_build.ps1`                | 1 KB    | substituído por `scripts\build_app.bat` |
+| `src-tauri\*.log`, `*.flag`             | 34 KB   | flags de build do ciclo anterior        |
+| `cmd.exe` na raiz                       | 344 KB  | **é cópia do Windows** — ver §3         |
 
 ---
 
 ## 2. `.pytest_cache` e `cmd.exe`: a mesma ACL corrompida
 
 Os dois já estavam documentados como sintoma. A causa é uma **ACL herdada
-quebrada** — `icacls` responde *Acesso negado* até para listar.
+quebrada** — `icacls` responde _Acesso negado_ até para listar.
 
 O que funciona sem administrador, em ordem:
 
@@ -191,10 +189,10 @@ Estava lá desde **24/06/2026** — 344.064 bytes, hash
 
 Não é código, não é versionado (`.gitignore` linha `/cmd.exe`), e
 `scripts\preflight.py:53` lista `cmd.exe` em `SCRIPTS_BLOQUEADOS`
-justamente porque *"binario solto sombreia o do sistema"*.
+justamente porque _"binario solto sombreia o do sistema"_.
 
 **Efeito real:** `tests/test_preflight.py::test_scripts_bloqueados_ausentes`
-falhava, e o `preflight` barrava a operação com *"BLOQUEADO: 1 falha(s)"*.
+falhava, e o `preflight` barrava a operação com _"BLOQUEADO: 1 falha(s)"_.
 Um `.exe` do Windows na raiz do repositório também atrai heurística de
 antivírus.
 
@@ -232,22 +230,22 @@ Linha em branco extra no fim de ambos. Removida. `git diff --check` limpo.
 
 Tudo medido neste ciclo, nada herdado de relatório anterior:
 
-| Camada | Comando | Resultado |
-|---|---|---|
-| Python | `pytest -q tests` | **659 passed, 0 failed** (2:22) |
-| Frontend | `npx tsc --noEmit` | **exit 0** |
-| Frontend | `npm test -- --run` | **179 passed (19 arquivos)** |
-| Frontend | `npm run build` | **exit 0** — 170 módulos, 531 ms |
-| Backend | `npm run lint` | **sem erro** |
-| Core Rust | `cargo fmt --all -- --check` | **exit 0** |
-| Core Rust | `cargo test --locked` | **38 passed, 0 failed** (3:08) |
-| Tauri | `cargo fmt --all -- --check` | **exit 0** |
-| Versão | `sync_version.py --check` | **8 alvos OK** |
-| Preflight | `scripts\preflight.py` | **0 bloqueantes** |
-| Segredos | `scripts\auditar_segredos.py` | **0 bloqueios** |
-| MQL5 | `git status --porcelain MQL5` | **vazio — intocado** |
-| Saque | grep `withdrawals_enabled.*True` | **0 violações** |
-| Saque | grep `transfers.*: True` | **0 violações** |
+| Camada    | Comando                          | Resultado                        |
+| --------- | -------------------------------- | -------------------------------- |
+| Python    | `pytest -q tests`                | **659 passed, 0 failed** (2:22)  |
+| Frontend  | `npx tsc --noEmit`               | **exit 0**                       |
+| Frontend  | `npm test -- --run`              | **179 passed (19 arquivos)**     |
+| Frontend  | `npm run build`                  | **exit 0** — 170 módulos, 531 ms |
+| Backend   | `npm run lint`                   | **sem erro**                     |
+| Core Rust | `cargo fmt --all -- --check`     | **exit 0**                       |
+| Core Rust | `cargo test --locked`            | **38 passed, 0 failed** (3:08)   |
+| Tauri     | `cargo fmt --all -- --check`     | **exit 0**                       |
+| Versão    | `sync_version.py --check`        | **8 alvos OK**                   |
+| Preflight | `scripts\preflight.py`           | **0 bloqueantes**                |
+| Segredos  | `scripts\auditar_segredos.py`    | **0 bloqueios**                  |
+| MQL5      | `git status --porcelain MQL5`    | **vazio — intocado**             |
+| Saque     | grep `withdrawals_enabled.*True` | **0 violações**                  |
+| Saque     | grep `transfers.*: True`         | **0 violações**                  |
 
 > **Vitest subiu de 169 para 179** em relação ao mapeamento de 30/09 de
 > manhã. Não é perda nem inconsistência: são os testes novos das etapas de
@@ -255,13 +253,13 @@ Tudo medido neste ciclo, nada herdado de relatório anterior:
 
 ### Catálogo de IA (chaves reais: `symbol`, `reason`)
 
-| Métrica | Valor |
-|---|---|
-| Metadados no catálogo | **36** |
-| Publicáveis | **25** |
-| Símbolos cobertos | **9** (AUDUSD, BTCUSD, ETHUSD, EURUSD, GBPUSD, NZDUSD, USDCAD, USDJPY, XAUUSD) |
-| Órfãos (publicável sem `.pkl`) | **0** |
-| Reprovados sem motivo | **0** |
+| Métrica                        | Valor                                                                          |
+| ------------------------------ | ------------------------------------------------------------------------------ |
+| Metadados no catálogo          | **36**                                                                         |
+| Publicáveis                    | **25**                                                                         |
+| Símbolos cobertos              | **9** (AUDUSD, BTCUSD, ETHUSD, EURUSD, GBPUSD, NZDUSD, USDCAD, USDJPY, XAUUSD) |
+| Órfãos (publicável sem `.pkl`) | **0**                                                                          |
+| Reprovados sem motivo          | **0**                                                                          |
 
 ---
 
@@ -317,7 +315,7 @@ repetir:
    artefatos dos §3 e o whitespace do §4 — coisas que a suíte de testes
    não pega sozinha.
 3. **`.pytest_cache` e binários na raiz quebram `preflight` por ACL.** Se
-   `takeown`  falhar, é sinal de que a pasta precisa de um shell elevado
+   `takeown` falhar, é sinal de que a pasta precisa de um shell elevado
    uma vez — e não de que a limpeza falhou.
 
 > Um detalhe de método: o `preflight` **estava certo** e o `icacls` do
