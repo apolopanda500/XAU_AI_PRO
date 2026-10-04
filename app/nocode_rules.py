@@ -13,7 +13,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from app.market_symbols import DEFAULT_TIMEFRAME, base_symbol, default_symbol_fallback
+from app.market_symbols import resolve_timeframe, base_symbol, default_symbol_fallback
 
 ACTIONS = {"comprar": "buy", "compra": "buy", "buy": "buy",
            "vender": "sell", "venda": "sell", "sell": "sell",
@@ -53,7 +53,7 @@ def parse_rule(text: str, symbol: str = "", timeframe: str = "") -> dict[str, An
     tp = _num(low, r"tp\s*([0-9]+)")
     risk = _num(low, r"(?:risk|risc[oo])\s*([0-9]+(?:\.[0-9]+)?)\s*%?")
     sym = base_symbol(symbol) if symbol else default_symbol_fallback()
-    tf = (timeframe or "").upper() or DEFAULT_TIMEFRAME
+    tf = resolve_timeframe(timeframe)
     return {"ok": True, "rule": {"action": action, "conditions": conditions,
                                  "sl_points": sl, "tp_points": tp, "risk_percent": risk,
                                  "symbol": sym, "timeframe": tf, "source_text": raw}}

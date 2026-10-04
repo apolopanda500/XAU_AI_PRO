@@ -166,13 +166,53 @@ def get_account():
 
 
 @app.get("/market/live")
-def market_live():
+def market_live(symbols: str = ""):
+    """Cota ao vivo dos simbolos PEDIDOS, ou dos configurados.
+
+    POR QUE A LISTA SUMIU
+    =====================
+    A rota tinha `symbols = ["XAUUSD", "BTCUSD", "ETHUSD", "EURUSD",
+    "GBPUSD", "USDJPY"]` fixo. Tres problemas, todos do mesmo tipo:
+
+    1. **Presumia os ativos do operador.** Quem opera NIKKEI ou PETROLEIO
+       recebia cotacao de seis pares que nao pediu.
+    2. **Esqueceria silenciosamente.** Um par novo nao aparecia, sem erro.
+    3. **Contradizia o AGENTS.md**: "nenhum simbolo pode ser presumido".
+
+    Agora a lista vem do chamador (`?symbols=A,B`) ou da configuracao do
+    operador. Sem os dois, a resposta e recusa com motivo — e nao seis pares
+    inventados.
+    """
     m = _market()
     if m is None:
         raise HTTPException(status_code=503, detail="Market provider unavailable")
-    symbols = ["XAUUSD", "BTCUSD", "ETHUSD", "EURUSD", "GBPUSD", "USDJPY"]
-    quotes = m.get_many(symbols)
-    return {"count": len(quotes), "quotes": quotes}
+
+    pedidos = [s.strip().upper() for s in (symbols or "").split(",") if s.strip()]
+    if not pedidos:
+        configados = _simbolos_configurados()
+        if not configurados:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "nenhum simbolo informado e nenhum configurado. "
+                    "informe ?symbols=XAUUSD,EURUSD ou configure em Configuracoes > Mercado"
+                ),
+            )
+        pedidos = configurados
+
+    quotes = m.get_many(pedidos)
+    return {"count": len(quotes), "symbols": pedidos, "quotes": quotes}
+
+
+def _simbolos_configurados() -> list[str]:
+    """Simbolos que o OPERADOR configurou. Vazio e honesto, nunca um default."""
+    try:
+        from app.config_manager import get_config
+
+        lista = get_config().get("market", "symbols", default=[]) or []
+        return [str(s).strip().upper() for s in lista if str(s).strip()]
+    except Exception:
+        return []
 
 
 @app.get("/market/live/{symbol}")
