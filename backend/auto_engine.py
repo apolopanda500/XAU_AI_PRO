@@ -39,6 +39,43 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+# --------------------------------------------------------------- traducao
+
+
+def pedido_para_router(payload: dict[str, Any], broker: str, market: str,
+                       account_id: str) -> dict[str, Any]:
+    """Traduz o payload do painel para o pedido do `UniversalRouter`.
+
+    POR QUE ESTA FUNCAO FOI EXTRAIDA
+    ================================
+    Ela vivia dentro do `_loop.enviar`, marcado `# pragma: no cover` por ser
+    thread de producao. Sem cobertura, a traducao ficou sem teste: e la que
+    `payload["volume"]` continuou lendo uma chave que a montagem nao produz.
+    O resultado na tela do operador era `envio falhou: 'volume'` — e o motor
+    nao enviava ordem nenhuma.
+
+    O teste anterior replicava a traducao dentro do proprio teste, e por isso
+    passava com o codigo real quebrado: um duble que repete a logica prova
+    que a logica foi escrita, nao que ela esta no caminho.
+
+    `quantity` e o nome canonico do `UniversalOrderRequest`, e o mesmo que a
+    montagem em `ciclo_unico` usa. Os dois lados falam a mesma lingua por
+    construcao, e nao por Dois dicionarios que cada um le por sua conta.
+    """
+    return {
+        "request_id": payload["request_id"],
+        "broker": broker,
+        "market": market,
+        "symbol": payload["symbol"],
+        "side": "buy" if str(payload["side"]).upper() == "BUY" else "sell",
+        "quantity": payload["quantity"],
+        "price": payload.get("price"),
+        "order_type": "market",
+        "confirm": True,
+        "account_id": account_id,
+    }
+
+
 # ------------------------------------------------------------------ limites
 
 
@@ -70,6 +107,13 @@ class LimitesAuto:
     tp_atr: float = 0.0
     #: Intervalo minimo entre duas avaliacoes do mesmo simbolo.
     intervalo_minutos: int = 0
+    # MODO SIMPLES (painel so mostra LOTE + SL + TP + AUTO).
+    # Lote direto, sem conta de banca; SL/TP em preco absoluto, sem ATR.
+    # Zero = nao declarado. Quando os tres estao preenchidos, o resto e
+    # opcional: o risk_gate do gateway continua limitando a exposicao real.
+    lote: float = 0.0
+    sl_preco: float = 0.0
+    tp_preco: float = 0.0
 
     #: Rotulo de cada campo: o erro diz o que FALTA, nao "valor invalido".
     ROTULOS = {
@@ -83,7 +127,14 @@ class LimitesAuto:
         "sl_atr": "multiplicador de ATR do stop loss",
         "tp_atr": "multiplicador de ATR do take profit",
         "intervalo_minutos": "intervalo entre avaliacoes (minutos)",
+        "lote": "lote",
+        "sl_preco": "stop loss (preco)",
+        "tp_preco": "take profit (preco)",
     }
+
+    def modo_simples(self) -> bool:
+        """Lote + SL + TP preenchidos: o painel simples decide tudo."""
+        return self.lote > 0 and self.sl_preco > 0 and self.tp_preco > 0
 
     def valido(self) -> tuple[bool, str]:
         """Zero e AUSENTE, nao "pode ser zero".
@@ -92,10 +143,19 @@ class LimitesAuto:
         digitou 0 e para quem digitou -5 — o operador nao sabia se tinha
         escolhido o valor ou se o sistema tinha preenchido por ele.
         """
+        # Modo simples primeiro: lote + SL + TP bastam. O risk_gate do
+        # gateway limita volume e exposicao; nada aqui e presumido.
+        simples = [n for n in ("lote", "sl_preco", "tp_preco") if getattr(self, n) != 0]
+        if simples:
+            faltam = [self.ROTULOS[n] for n in ("lote", "sl_preco", "tp_preco")
+                      if getattr(self, n) <= 0]
+            if faltam:
+                return False, "defina lote, stop loss e take profit para operar"
+            return True, ""
         faltando = [
             self.ROTULOS[nome]
             for nome in self.ROTULOS
-            if getattr(self, nome) == 0
+            if nome not in ("lote", "sl_preco", "tp_preco") and getattr(self, nome) == 0
         ]
         if faltando:
             return False, (
@@ -105,18 +165,23 @@ class LimitesAuto:
             )
         if self.banca < 0:
             return False, "banca nao pode ser negativa"
-        if not 0 < self.risco_por_trade_pct <= 10:
-            return False, "risco por operacao tem de estar entre 0 e 10%"
+        # Sem teto e sem piso alem de $1: a partir de 1 dolar ja opera. O
+        # risco por operacao e escolha do operador (o risk_gate limita a
+        # exposicao real); travar em 10% seria o codigo decidindo o risco.
+        if not 1 <= self.banca:
+            return False, "banca minima de 1 para operar"
+        if not self.risco_por_trade_pct > 0:
+            return False, "risco por operacao tem de ser maior que zero"
         if not 0 < self.confianca_minima <= 100:
             return False, "confianca minima tem de estar entre 0 e 100"
-        if not 0 < self.edge_minimo <= 1:
-            return False, "edge minimo tem de estar entre 0 e 1"
+        if not self.edge_minimo > 0:
+            return False, "edge minimo tem de ser maior que zero"
         if self.max_posicoes < 1:
             return False, "maximo de posicoes tem de ser ao menos 1"
         if self.max_operacoes_dia < 1:
             return False, "maximo de operacoes por dia tem de ser ao menos 1"
-        if not 0 < self.perda_diaria_max_pct <= 100:
-            return False, "perda diaria maxima tem de estar entre 0 e 100%"
+        if not self.perda_diaria_max_pct > 0:
+            return False, "perda diaria maxima tem de ser maior que zero"
         if self.sl_atr <= 0 or self.tp_atr <= 0:
             return False, "multiplicadores de ATR tem de ser positivos"
         if self.intervalo_minutos < 1:
@@ -397,7 +462,6 @@ class MotorAuto:
             self.ativo = False
         self._parar.set()
         return {"ok": True, "status": "desligado"}
-
     # -------------------------------------------------------------- ciclo
 
     def _registrar(self, decisao: Decisao) -> Decisao:
@@ -463,12 +527,15 @@ class MotorAuto:
         modelo_ciclo = str(getattr(inf, "modelo", "") or "")
 
         # 3. O modelo precisa ter edge e confianca minima.
-        if edge is not None and float(edge) < float(limites["edge_minimo"]):
+        # Modo simples: sem travas de confianca/edge/perda — o operador
+        # decidiu o lote e as protecoes; o risk_gate do gateway limita.
+        simples = bool(limites.get("lote")) and bool(limites.get("sl_preco")) and bool(limites.get("tp_preco"))
+        if not simples and edge is not None and float(edge) < float(limites["edge_minimo"]):
             return self._registrar(Decisao(
                 agora, simbolo, timeframe, False,
                 f"edge {float(edge):+.4f} abaixo do minimo {float(limites['edge_minimo']):+.4f}",
                 sinal, confianca, edge, modelo=modelo_ciclo))
-        if confianca < float(limites["confianca_minima"]):
+        if not simples and confianca < float(limites["confianca_minima"]):
             return self._registrar(Decisao(
                 agora, simbolo, timeframe, False,
                 f"confianca {confianca:.1f}% abaixo do minimo {float(limites['confianca_minima']):.1f}%",
@@ -482,30 +549,55 @@ class MotorAuto:
                 agora, simbolo, timeframe, False,
                 "sem ATR ou preco real para dimensionar protecao", sinal, confianca, edge, modelo=modelo_ciclo))
 
-        # 4. Limites de exposicao vindos do risk_gate.
-        if int(risco.get("open_positions", 0)) >= int(limites["max_posicoes"]):
+        # 4. Limites de exposicao vindos do risk_gate (modo avancado; no
+        # simples o risk_gate do gateway continua valendo no envio).
+        if not simples and int(risco.get("open_positions", 0)) >= int(limites["max_posicoes"]):
             return self._registrar(Decisao(
                 agora, simbolo, timeframe, False,
                 f"ja ha {risco.get('open_positions')} posicoes (max {limites['max_posicoes']})",
                 sinal, confianca, edge, modelo=modelo_ciclo))
-        if int(risco.get("daily_trades", 0)) >= int(limites["max_operacoes_dia"]):
+        if not simples and int(risco.get("daily_trades", 0)) >= int(limites["max_operacoes_dia"]):
             return self._registrar(Decisao(
                 agora, simbolo, timeframe, False,
                 f"limite diario de {limites['max_operacoes_dia']} operacoes atingido",
                 sinal, confianca, edge, modelo=modelo_ciclo))
 
-        # 5. Tamanho pela banca e pelo risco por trade, com ATR real.
-        sl = preco - atr * float(limites["sl_atr"]) if sinal == "BUY" else preco + atr * float(limites["sl_atr"])
-        tp = preco + atr * float(limites["tp_atr"]) if sinal == "BUY" else preco - atr * float(limites["tp_atr"])
-        distancia = abs(preco - sl)
-        if distancia <= 0:
-            return self._registrar(Decisao(
-                agora, simbolo, timeframe, False, "Stop Loss calculou zero", sinal, confianca, edge, modelo=modelo_ciclo))
-        risco_moeda = float(limites["banca"]) * float(limites["risco_por_trade_pct"]) / 100.0
-        volume = risco_moeda / distancia
+        # 5. Tamanho e protecao. Simples: lote e precos do painel, com
+        # coerencia por lado (BUY: SL < preco < TP). Avancado: banca/risco/ATR.
+        if simples:
+            volume = round(float(limites["lote"]), 2)
+            sl, tp = round(float(limites["sl_preco"]), 2), round(float(limites["tp_preco"]), 2)
+            if volume <= 0:
+                return self._registrar(Decisao(
+                    agora, simbolo, timeframe, False, "lote zerado", sinal, confianca, edge, modelo=modelo_ciclo))
+            if sinal == "BUY" and not (sl < preco < tp):
+                return self._registrar(Decisao(
+                    agora, simbolo, timeframe, False,
+                    f"para BUY exija SL < preco < TP (SL {sl}, preco {preco}, TP {tp})",
+                    sinal, confianca, edge, modelo=modelo_ciclo))
+            if sinal == "SELL" and not (tp < preco < sl):
+                return self._registrar(Decisao(
+                    agora, simbolo, timeframe, False,
+                    f"para SELL exija TP < preco < SL (TP {tp}, preco {preco}, SL {sl})",
+                    sinal, confianca, edge, modelo=modelo_ciclo))
+            risco_moeda = 0.0
+            distancia = abs(preco - sl)
+        else:
+            sl = preco - atr * float(limites["sl_atr"]) if sinal == "BUY" else preco + atr * float(limites["sl_atr"])
+            tp = preco + atr * float(limites["tp_atr"]) if sinal == "BUY" else preco - atr * float(limites["tp_atr"])
+            distancia = abs(preco - sl)
+            if distancia <= 0:
+                return self._registrar(Decisao(
+                    agora, simbolo, timeframe, False, "Stop Loss calculou zero", sinal, confianca, edge, modelo=modelo_ciclo))
+            risco_moeda = float(limites["banca"]) * float(limites["risco_por_trade_pct"]) / 100.0
+            volume = risco_moeda / distancia
         # O gateway recusa acima de 0.10 e o volume do MT5 tem degraus. O
         # motor respeita o teto em vez de descobrir a recusa na ordem.
+        # Piso de 0.01 (lote minimo): conta de $1 calcula volume fracionario
+        # que arredonda para zero — sem o piso, banca pequena nunca opera.
         volume = min(volume, 0.10)
+        if 0 < volume < 0.01:
+            volume = 0.01
         if volume <= 0:
             return self._registrar(Decisao(
                 agora, simbolo, timeframe, False, "volume calculado zero", sinal, confianca, edge, modelo=modelo_ciclo))
@@ -518,7 +610,8 @@ class MotorAuto:
         # (broker, ativo, TF) na mesma janela e duplicata e nao envia.
         with self._lock:
             _broker_slot = str(self.broker or "").strip().lower()
-        slot = f"{_broker_slot}:{simbolo}:{timeframe}:{int(time.time() // (int(limites['intervalo_minutos']) * 60))}"
+        _intervalo = max(1, int(limites.get("intervalo_minutos") or 0))
+        slot = f"{_broker_slot}:{simbolo}:{timeframe}:{int(time.time() // (_intervalo * 60))}"
         with self._lock:
             if slot in self._vistos:
                 return self._registrar(Decisao(
@@ -542,8 +635,20 @@ class MotorAuto:
         # O contrato agora aceita os dois nomes (ver `universal_contracts`), mas
         # o motor envia o canonico de proposito: dois lugares falando o mesmo
         # idioma e o que impede o desacamento de voltar.
+        #
+        # ALIAS POR CORRETORA: a decisao e do MODELO (`XAUUSD`), mas a ordem
+        # vai com o simbolo que a corretora entende (`GOLD` na XM). O mapa
+        # e configuracao do operador (`symbol_aliases.json`), nunca codigo.
+        with self._lock:
+            _broker_envio = str(self.broker or "").strip().lower()
+        try:
+            from backend.symbol_aliases import para_corretora as _para_corretora
+
+            simbolo_envio = _para_corretora(_broker_envio, simbolo) or simbolo
+        except Exception:
+            simbolo_envio = simbolo
         payload = {
-            "symbol": simbolo,
+            "symbol": simbolo_envio,
             "side": sinal,
             "quantity": volume,
             "stop_loss": round(sl, 2),
@@ -698,24 +803,15 @@ class MotorAuto:
             return account_id
 
         def enviar(payload: dict[str, Any]) -> dict[str, Any]:
-            """Ordem pelo UniversalRouter, com intent_log e gate da corretora."""
+            """Ordem pelo UniversalRouter, com intent_log e gate da corretora.
+
+            A traducao vive em `pedido_para_router`, no modulo, porque ela e o
+            ponto onde o payload do painel vira pedido do router — e onde o
+            `volume`/`quantity` ja desacou duas vezes.
+            """
             broker, market = escopo()
-            pedido = {
-                "request_id": payload["request_id"],
-                "broker": broker,
-                "market": market,
-                "symbol": payload["symbol"],
-                "side": "buy" if str(payload["side"]).upper() == "BUY" else "sell",
-                "quantity": payload["volume"],
-                "price": payload.get("price"),
-                "order_type": "market",
-                "confirm": True,
-                # Antes era `payload.get("account_id", "")`, que era sempre
-                # vazio: o `Decisao` nao tem esse campo. Toda ordem caia em
-                # "account_id e obrigatorio" no contrato universal. A conta
-                # vem da conexao ativa da corretora escolhida neste ciclo.
-                "account_id": conta_da_corretora(broker, market),
-            }
+            pedido = pedido_para_router(
+                payload, broker, market, conta_da_corretora(broker, market))
             return router.execute(pedido, explicit_authorization=True)
 
         while not self._parar.is_set():
@@ -728,9 +824,14 @@ class MotorAuto:
                 # `candles()` ja devolve a serie no formato do treino e ja
                 # recusa com motivo quando a corretora nao tem dado. A traducao
                 # MT5 -> treino (que ja falhou em tres lugares isolados) fica
-                # em um unico ponto, dentro dele.
+                # em um unico ponto, dentro dele. O simbolo pedido e o da
+                # CORRETORA (alias: `GOLD` na XM); a inferencia abaixo usa o
+                # do MODELO (`XAUUSD`).
+                from backend.symbol_aliases import para_corretora as _para_corretora
+
                 linhas = candles_da_corretora(
-                    broker, market, self.simbolo, self.timeframe, 600
+                    broker, market, _para_corretora(broker, self.simbolo) or self.simbolo,
+                    self.timeframe, 600,
                 )
                 df = linhas if hasattr(linhas, "empty") else pd.DataFrame(linhas)
                 if df.empty:

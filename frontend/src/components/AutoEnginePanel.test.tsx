@@ -117,16 +117,13 @@ describe('AutoEnginePanel — par, comandos e config', () => {
     const config = chamadas.find((c) => c.url.includes('/api/auto/config'));
     expect(config?.body.simbolo).toBe('ATIVOB');
     expect(config?.body.timeframe).toBe('H1');
-    // Todos os limites nascem em ZERO (04/10/2026). O painel nao preenche
+    // Todos os limites nascem em ZERO. O painel nao preenche
     // nada por conta propria: o que o operador nao digitar continua zero, e o
-    // backend recusa o motor nomeando o campo que falta.
-    //
-    // Este teste afirmava `banca: 20` e `risco_por_trade_pct: 1` — os defaults
-    // antigos, que o painel mandava como se o operador tivesse escolhido. Era
-    // a tela affirmando um risco que ninguem definiu.
-    expect(config?.body.banca).toBe(0);
-    expect(config?.body.risco_por_trade_pct).toBe(0);
-    expect(config?.body.intervalo_minutos).toBe(0);
+    // backend recusa o motor nomeando o campo que falta. Painel simples:
+    // so lote, stop e alvo.
+    expect(config?.body.lote).toBe(0);
+    expect(config?.body.sl_preco).toBe(0);
+    expect(config?.body.tp_preco).toBe(0);
     // O estado volta pelo mesmo hook que o Mini Terminal lê.
     expect(E.refetch).toHaveBeenCalled();
   });

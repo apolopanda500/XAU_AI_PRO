@@ -30,16 +30,9 @@ import '../theme/auto-engine.css';
 const API = `${apiBase()}`;
 
 type Limites = {
-  banca: number;
-  risco_por_trade_pct: number;
-  confianca_minima: number;
-  edge_minimo: number;
-  max_posicoes: number;
-  max_operacoes_dia: number;
-  perda_diaria_max_pct: number;
-  sl_atr: number;
-  tp_atr: number;
-  intervalo_minutos: number;
+  lote: number;
+  sl_preco: number;
+  tp_preco: number;
 };
 
 type Estado = {
@@ -71,26 +64,9 @@ type Estado = {
 type Modelo = { id: string; symbol: string; timeframe: string; pkl_present: boolean };
 
 const CAMPOS: Array<{ chave: keyof Limites; rotulo: string; dica: string; passo: number }> = [
-  { chave: 'banca', rotulo: 'Banca', dica: 'Base de calculo, nao o saldo da conta', passo: 10 },
-  { chave: 'risco_por_trade_pct', rotulo: 'Risco por trade %', dica: '0 a 10', passo: 0.1 },
-  {
-    chave: 'confianca_minima',
-    rotulo: 'Confianca minima %',
-    dica: 'Probabilidade real do modelo',
-    passo: 1,
-  },
-  { chave: 'edge_minimo', rotulo: 'Edge minimo', dica: '0.05 = 5%', passo: 0.01 },
-  { chave: 'max_posicoes', rotulo: 'Max posicoes', dica: 'Simultaneas', passo: 1 },
-  { chave: 'max_operacoes_dia', rotulo: 'Operacoes/dia', dica: 'Teto diario', passo: 1 },
-  {
-    chave: 'perda_diaria_max_pct',
-    rotulo: 'Perda diaria %',
-    dica: 'Ao atingir, o motor para',
-    passo: 0.5,
-  },
-  { chave: 'sl_atr', rotulo: 'Stop (x ATR)', dica: 'Multiplicador de ATR', passo: 0.1 },
-  { chave: 'tp_atr', rotulo: 'Alvo (x ATR)', dica: 'Multiplicador de ATR', passo: 0.1 },
-  { chave: 'intervalo_minutos', rotulo: 'Intervalo (min)', dica: 'Entre avaliacoes', passo: 1 },
+  { chave: 'lote', rotulo: 'Quantidade (lote)', dica: 'A partir de 0.01 — sem minimo de banca', passo: 0.01 },
+  { chave: 'sl_preco', rotulo: 'Stop Loss (preco)', dica: 'Preco de protecao', passo: 0.1 },
+  { chave: 'tp_preco', rotulo: 'Take Profit (preco)', dica: 'Preco do alvo', passo: 0.1 },
 ];
 
 function num(v: string): number {
@@ -98,28 +74,13 @@ function num(v: string): number {
 }
 
 export default function AutoEnginePanel() {
-  // NENHUM DEFAULT. Todos os limites nascem em zero.
-//
-// Antes vinham preenchidos: banca 20, confianca 55, intervalo 15 min,
-// sl_atr 1.5, tp_atr 3. O operador via esses numeros na tela e ligava o motor
-// sem saber que estava operando com o risco de outra pessoa.
-//
-// Zero aqui tambem evita o outro bug: o intervalo fixo em 15 minutos e
-// absurdo em H4 e curto demais em M5. Cada par e cada modelo tem a sua
-// paciencia, e a escolha e do operador. O backend foi zerado no mesmo dia
-// (ver `backend/auto_engine.py::LimitesAuto`), senao a tela dizia "nao
-// escolhido" e o motor operava com o valor antigo assim mesmo.
+  // PAINEL SIMPLES: LOTE + SL + TP + AUTO. Sem banca, risco, confianca,
+  // perda ou ATR — o operador decide o tamanho e as protecoes, e o
+  // risk_gate do gateway limita a exposicao real. Tudo nasce zerado.
 const [limites, setLimites] = useState<Limites>({
-    banca: 0,
-    risco_por_trade_pct: 0,
-    confianca_minima: 0,
-    edge_minimo: 0,
-    max_posicoes: 0,
-    max_operacoes_dia: 0,
-    perda_diaria_max_pct: 0,
-    sl_atr: 0,
-    tp_atr: 0,
-    intervalo_minutos: 0,
+    lote: 0,
+    sl_preco: 0,
+    tp_preco: 0,
   });
   const [status, setStatus] = useState('');
   const [ocupado, setOcupado] = useState(false);

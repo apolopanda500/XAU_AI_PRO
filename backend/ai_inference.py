@@ -200,28 +200,19 @@ _RE_SIMBOLO = re.compile(r"^[A-Z0-9]{1,12}$")
 def base_do_ativo(simbolo: str) -> str:
     """Base do ativo sem o quote da corretora: `BTCUSDT` -> `BTC`.
 
-    MEXC/Binance/Bybit/OKX operam contra USDT/USDC; MT5 (XM) opera contra
-    USD. Os modelos sao treinados no par do terminal (`BTCUSD`), entao o
-    par da exchange precisa resolver para o mesmo artefato — sem trocar de
-    ativo (BTC nunca vira ETH) e sem presumir nada quando vazio.
+    Delega a `backend.symbols` (fonte unica): MEXC/Binance/Bybit/OKX operam
+    contra USDT/USDC; MT5 (XM) opera contra USD. Sem nomes de ativos.
     """
-    s = str(simbolo or "").strip().upper()
-    for sufixo in ("USDT", "USDC", "USD", "EUR", "BUSD", "FDUSD", "TUSD"):
-        if len(s) > len(sufixo) and s.endswith(sufixo):
-            return s[: -len(sufixo)]
-    if s.endswith("_PERP"):
-        return base_do_ativo(s[: -len("_PERP")])
-    return s
+    from backend.symbols import base as _base
+
+    return _base(simbolo)
 
 
 def mesmo_ativo(a: str, b: str) -> bool:
     """Mesmo ativo em quotes diferentes (`BTCUSDT` == `BTCUSD`)."""
-    sa, sb = (str(a or "").strip().upper(), str(b or "").strip().upper())
-    if not sa or not sb:
-        return False
-    if sa == sb:
-        return True
-    return base_do_ativo(sa) == base_do_ativo(sb) and bool(base_do_ativo(sa))
+    from backend.symbols import mesmo_ativo as _igual
+
+    return _igual(a, b)
 
 
 def candidatos_de_simbolo(simbolo: str) -> list[str]:
@@ -230,15 +221,9 @@ def candidatos_de_simbolo(simbolo: str) -> list[str]:
     Ordem: o pedido literal primeiro (um `BTCUSDT_H1.pkl` treinado na
     exchange vence o alias); depois as formas no quote do terminal.
     """
-    s = str(simbolo or "").strip().upper()
-    if not s:
-        return []
-    base = base_do_ativo(s)
-    candidatos = [s]
-    for forma in (f"{base}USD", f"{base}USDT", f"{base}USDC"):
-        if forma != s and forma not in candidatos:
-            candidatos.append(forma)
-    return candidatos
+    from backend.symbols import formas as _formas
+
+    return _formas(simbolo)
 
 
 def _nome_de_artefato(simbolo: str, timeframe: str) -> str | None:

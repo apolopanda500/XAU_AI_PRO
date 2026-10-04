@@ -107,8 +107,7 @@ class TestLimites:
         ok, _ = LimitesAuto(max_operacoes_dia=10).valido()
         assert ok is False
 
-    def test_perda_diaria_alta_e_aceita(self):
-        # O operador avancado escolhe o risco alto. O motor respeita a
+    def test_perda_diaria_alta_e_aceita(self):        # O operador avancado escolhe o risco alto. O motor respeita a
         # escolha em vez de estreitar o intervalo silenciosamente.
         ok, motivo = LimitesAuto(
             banca=1000.0, risco_por_trade_pct=1.0, confianca_minima=55.0,
@@ -117,6 +116,16 @@ class TestLimites:
             perda_diaria_max_pct=20.0,
         ).valido()
         assert ok is True, motivo
+
+    def test_modo_simples_lote_sl_tp_basta(self):
+        """Painel simples: TP, SL, LOTE. Sem banca, risco, confianca ou perda."""
+        ok, motivo = LimitesAuto(lote=0.01, sl_preco=4290.0, tp_preco=4310.0).valido()
+        assert ok is True, motivo
+
+    def test_modo_simples_incompleto_recusa(self):
+        ok, motivo = LimitesAuto(lote=0.01).valido()
+        assert ok is False
+        assert "stop" in motivo.lower() or "take" in motivo.lower()
 
 
 # ------------------------------------------------------- nao abre quando nao deve
@@ -289,6 +298,44 @@ class TestOperaQuandoDeve:
         # risco = 1000 * 1% = 10; distancia = 5 => volume = 2, mas o teto
         # do gateway e 0.10.
         assert p["quantity"] == pytest.approx(0.10, abs=0.01)
+
+    def test_modo_simples_opera_com_lote_e_precos_do_painel(self):
+        m = MotorAuto()
+        m.simbolo = ATIVO
+        m.timeframe = PERIODO
+        m.limites = LimitesAuto(lote=0.01, sl_preco=4290.0, tp_preco=4310.0)
+        chamadas: list[dict] = []
+        d = m.ciclo_unico(
+            lambda s, t: InferenciaFalsa(signal="BUY", price=4300.0, atr=5.0,
+                                         confianca=72.0, edge=0.12),
+            enviar_espiao(chamadas), risco)
+        assert d.agir is True, d.motivo
+        p = chamadas[0]
+        assert p["quantity"] == pytest.approx(0.01)
+        assert p["stop_loss"] == pytest.approx(4290.0)
+        assert p["take_profit"] == pytest.approx(4310.0)
+
+    def test_modo_simples_recusa_sl_incoerente_com_buy(self):
+        m = MotorAuto()
+        m.simbolo = ATIVO
+        m.timeframe = PERIODO
+        m.limites = LimitesAuto(lote=0.01, sl_preco=4310.0, tp_preco=4290.0)
+        d = m.ciclo_unico(
+            lambda s, t: InferenciaFalsa(signal="BUY", price=4300.0, atr=5.0,
+                                         confianca=72.0, edge=0.12),
+            enviar_espiao([]), risco)
+        assert d.agir is False
+        assert "SL" in d.motivo
+
+    def test_banca_de_1_dolar_tem_piso_de_lote(self):
+        """Conta de $1: o volume fracionario nao pode arredondar para zero."""
+        m = motor_pronto(banca=1.0, risco_por_trade_pct=1.0, sl_atr=1.0)
+        chamadas: list[dict] = []
+        d = m.ciclo_unico(
+            lambda s, t: InferenciaFalsa(signal="BUY", price=4300.0, atr=5.0, confianca=72.0),
+            enviar_espiao(chamadas), risco)
+        assert d.agir is True, d.motivo
+        assert chamadas[0]["quantity"] == pytest.approx(0.01)
 
     def test_registra_decisao_com_proveniencia(self):
         m = motor_pronto()

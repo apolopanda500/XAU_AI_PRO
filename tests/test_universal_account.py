@@ -41,7 +41,8 @@ def test_universal_quotes_normalize_source_identity(monkeypatch):
 
 def test_read_scope_rejects_cross_market_and_oversized_symbol():
     assert validate_read_scope("binance", "spot", "btcusdt") == {
-        "broker": "binance", "market": "crypto-spot", "symbol": "BTCUSDT"
+        "broker": "binance", "market": "crypto-spot", "symbol": "BTCUSDT",
+        "symbol_canonical": "BTCUSDT",
     }
     with pytest.raises(ValueError, match="mercado"):
         validate_read_scope("binance", "forex", "EURUSD")
