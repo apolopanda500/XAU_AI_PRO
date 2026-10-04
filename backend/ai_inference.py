@@ -268,7 +268,12 @@ def _caminho_confinado(nome: str) -> Path | None:
         # `resolve()` segue symlink; `abspath` normaliza o resto. Nos dois,
         # um caminho que nao se resolve nao deve ser lido.
         raiz = os.path.abspath(MODELOS_DIR.resolve())
-        alvo = os.path.abspath((MODELOS_DIR.resolve() / nome).resolve())
+        # O `os.path.join` vem ANTES do `resolve()` de proposito: e a ordem
+        # que o CodeQL le como saneamento. Juncao por atributo
+        # (`Path / str`) em dados nao-fio nao e reconhecida como tal, e
+        # sobrou 1 `py/path-injection` na linha do `join` ate a troca.
+        bruto = os.path.join(raiz, nome)
+        alvo = os.path.abspath(os.path.realpath(bruto))
     except (OSError, ValueError, TypeError, RuntimeError):
         # `RuntimeError` e o que `resolve()` levanta em ciclo de symlink no
         # Python 3.13+ (antes era `OSError`).
