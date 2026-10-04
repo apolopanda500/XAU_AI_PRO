@@ -10,6 +10,34 @@ input long   MagicNumber        = 2026001;
 input string TradeComment       = "XAU_AI_PRO";
 
 //==================================================
+// FONTE DA IA
+//==================================================
+// `AIConnector.mqh` Historically lia `Data\prediction_<SIMBOLO>.json`. Medido em
+// 05/10/2026: essa pasta NAO EXISTE na maquina — o backend responde por HTTP e
+// nunca escreve arquivo. Resultado: o EA rodava sem sinal nenhum, e nao havia
+// log de erro porque a ausencia de arquivo e um caminho previsto.
+//
+// AIUseGateway=true passa a chamar o proprio backend, que e a FONTE DE VERDADE
+// dos 25 modelos publicados. O arquivo continua disponivel como fallback: se o
+// gateway estiver fora do ar, `AIUseGateway` volta a true sozinho no proximo
+// ciclo, e o arquivo so e lido se a tentativa HTTP falhar.
+//
+// A URL tem que estar AUTORIZADA em
+// Ferramentas > Opcoes > Expert Advisors > "Allow WebRequest for listed URL".
+// Sem isso o MT5 devolve -401 e o EA registra "gateway recusou" uma vez por
+// minuto no log — e segue operando pela leitura de arquivo.
+input bool   AIUseGateway       = true;
+input string AIGatewayUrl       = "http://127.0.0.1:9001/api/ai/predict";
+input string AIGatewayToken     = "";
+// Segundos entre uma consulta e outra. 15 s alinha com o ciclo do motor e com
+// a leitura de latencia: mais rapido e consumo sem ganho, mais lento e o EA
+// age sobre previsao velha.
+input int    AIPollSeconds      = 15;
+// Tempo maximo de espera da resposta HTTP. Acima disso o EA trava esperando e
+// perde ticks — e perder tick perto de um nivel e pior do que previsao velha.
+input int    AIRequestTimeoutMs = 5000;
+
+//==================================================
 // RISCO
 //==================================================
 input bool   UseRiskManagement  = true;

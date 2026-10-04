@@ -1,0 +1,138 @@
+﻿/* =============================================================================
+   MESA XM + MT5 — ticket em uma faixa
+   =============================================================================
+   O layout segue o do MT5: lado, volume, protecao e botao na MESMA faixa, com
+   o preco ao vivo logo acima. A regra e uma so — o botao de enviar fica na
+   MESMA linha que os campos que ele envia. O operador nao le um campo, rola a
+   tela e clica em outro lugar: o que ele digitou e o que ele mandou.
+
+   O que mudou nesta versao (04/10/2026):
+   - os presets SL:TP entram como faixa propria, porque calcular "quanto
+     stop" e a parte que trava o operador iniciante;
+   - o preset e PREENCHIDO, nao travado: quem opera tem ajuste a fazer depois
+     que ve o preco real.
+   ========================================================================== */
+
+.mesa-presets {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-top: var(--space-2);
+}
+
+/* O botao de preset precisa de alvo maior que o texto: e acao de uma, e o
+   operador vai clicar rapido, muitas vezes, no meio da operacao. */
+.mesa-presets .btn {
+  min-height: var(--hit-min);
+  min-width: 44px;
+  font-variant-numeric: tabular-nums;
+}
+
+.mesa-presets .btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.mesa-presets-passo {
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+/* O PRECO e o numero mais importante da mesa. Ele fica grande de proposito:
+   e a referencia de todas as decisoes de SL/TP abaixo, e um numero pequeno
+   faz o operador abrir a tabela de especificacao do ativo para conferir. */
+.mesa-ticket-preco {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-family: var(--mono);
+  font-size: 1.4rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* O LADO e a decisao mais consequente do ticket. Botao grande, area de clique
+   de verdade: e o alvo que o operador acerta sob pressa de mercado. */
+.mesa-lado {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.mesa-lado .btn {
+  flex: 1;
+  min-height: 44px;
+  min-width: 96px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* Estado selecionado: fundo cheio + texto do lado contrario. Cor sozinha nao
+   distingue selecionado de nao-selecionado para quem nao ve bem as cores, entao
+   o preenchimento差 e o que carrega a informacao. */
+.mesa-lado .btn.is-buy[aria-pressed='true'] {
+  background: var(--ok);
+  border-color: var(--ok);
+  color: var(--bg);
+}
+
+.mesa-lado .btn.is-sell[aria-pressed='true'] {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--bg);
+}
+
+/* O botao de enviar repete o LADO na cor: o clique final nao pode exigir que
+   o operador releia o campo de cima para saber se esta comprando ou vendendo. */
+.mesa-enviar {
+  min-height: 44px;
+  font-weight: 600;
+}
+
+.mesa-enviar.is-buy {
+  background: var(--ok);
+  border-color: var(--ok);
+  color: var(--bg);
+}
+
+.mesa-enviar.is-sell {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--bg);
+}
+
+.mesa-enviar:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Os campos de protecao ficam juntos: SL e TP sao uma decisao so, e separadas
+   por outros campos o operador confere uma e esquece a outra. */
+.mesa-protecao {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.mesa-protecao .field {
+  flex: 1;
+  min-width: 0;
+}
+
+/* No rodape, a mesa entrega o resultado e o mercado comeca a trabalhar. */
+.mesa-resultado {
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+
+.mesa-resultado.ok {
+  border-color: var(--ok);
+}
+
+.mesa-resultado.falha {
+  border-color: var(--danger);
+}

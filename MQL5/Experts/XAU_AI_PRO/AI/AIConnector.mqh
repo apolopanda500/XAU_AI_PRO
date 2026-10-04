@@ -131,139 +131,16 @@ string NormalizeAISymbol(string symbol)
 
 
 //==================================================
-// LOAD AI PREDICTION
+// PARSE PREDICTION JSON
 //==================================================
-
-bool LoadAIPrediction(string symbol="")
+// Um parser para as DUAS fontes. O gateway devolve JSON e o arquivo tambem;
+// se cada um tivesse o seu corpo, a divergencia entre os dois apareceria
+// como "o gateway funciona, o arquivo nao" — sem nenhuma pista do porque.
+//
+// `json` e o corpo ja lido; `esperado` e o simbolo normalizado, para recusar
+// previsao de outro ativo.
+bool ParsePredictionJSON(string json, string esperado, bool logOnce)
 {
-   // Log de diagnostico 1x por minuto (evita spam a cada tick)
-   static datetime lastLogTime = 0;
-   datetime logNow = TimeCurrent();
-   bool logOnce = (logNow - lastLogTime >= 60);
-   if(logOnce)
-      lastLogTime = logNow;
-
-   if(symbol=="")
-      symbol=_Symbol;
-
-   StringTrimLeft(symbol);
-   StringTrimRight(symbol);
-
-   if(symbol=="")
-      return false;
-
-   // SÃƒÂ­mbolo normalizado (nome base do pipeline Python)
-   string normalized = NormalizeAISymbol(symbol);
-
-   string fileName=
-      "Data\\prediction_" +
-      symbol +
-      ".json";
-
-   // Fallback: se o arquivo exato nÃƒÂ£o existe, tenta o nome normalizado
-   // (pipeline Python gera prediction_XAUUSD.json, nÃƒÂ£o prediction_GOLD#.json)
-   if(!FileIsExist(fileName) && normalized!=symbol)
-   {
-      string altName=
-         "Data\\prediction_" +
-         normalized +
-         ".json";
-
-      if(FileIsExist(altName))
-         fileName=altName;
-   }
-
-
-   if(logOnce)
-      Print(
-         "AI LOAD | SYMBOL=",
-         symbol,
-         " | FILE=",
-         fileName
-      );
-
-
-   ResetLastError();
-
-
-   //================================================
-   // FILE EXISTS
-   //================================================
-
-   if(!FileIsExist(fileName))
-   {
-      if(logOnce)
-         Print(
-            "AI FILE NOT FOUND | ",
-            fileName
-         );
-
-      return false;
-   }
-
-
-   //================================================
-   // OPEN FILE
-   //================================================
-
-   int file=
-      FileOpen(
-         fileName,
-         FILE_READ |
-         FILE_TXT |
-         FILE_ANSI
-      );
-
-
-   if(file==INVALID_HANDLE)
-   {
-      if(logOnce)
-         Print(
-            "AI FILE ERROR | ",
-            symbol,
-            " | ERROR=",
-            GetLastError()
-         );
-
-      return false;
-   }
-
-
-   //================================================
-   // READ JSON
-   //================================================
-
-   string json="";
-
-
-   while(!FileIsEnding(file))
-   {
-      string line=
-         FileReadString(file);
-
-      json+=line;
-   }
-
-
-   FileClose(file);
-
-
-   //================================================
-   // VALIDATE JSON
-   //================================================
-
-   if(json=="")
-   {
-      if(logOnce)
-         Print(
-            "AI JSON EMPTY | ",
-            symbol
-         );
-
-      return false;
-   }
-
-
    //================================================
    // EXTRACT VALUES
    //================================================
@@ -271,7 +148,7 @@ bool LoadAIPrediction(string symbol="")
    string jsonSymbol=
       ExtractJSON(
          json,
-         "symbol"
+         "esperado"
       );
 
 
@@ -381,7 +258,7 @@ bool LoadAIPrediction(string symbol="")
       if(logOnce)
          Print(
             "AI INVALID JSON SYMBOL | ",
-            symbol
+            esperado
          );
 
       return false;
@@ -397,7 +274,7 @@ bool LoadAIPrediction(string symbol="")
       if(logOnce)
          Print(
             "AI INVALID JSON SIGNAL | ",
-            symbol
+            esperado
          );
 
       return false;
@@ -407,20 +284,19 @@ bool LoadAIPrediction(string symbol="")
    //================================================
    // SYMBOL MATCH
    // Aceita o sÃƒÂ­mbolo exato ou o normalizado
-   // (ex: arquivo prediction_XAUUSD.json com symbol=XAUUSD
+   // (ex: arquivo prediction_XAUUSD.json com esperado=XAUUSD
    //  ÃƒÂ© aceito para o sÃƒÂ­mbolo do broker GOLD#).
    //================================================
 
-   bool symbolOk =
-      StringCompare(jsonSymbol, symbol, false)==0 ||
-      StringCompare(jsonSymbol, normalized, false)==0;
+   bool esperadoOk =
+      StringCompare(jsonSymbol, esperado, false)==0;
 
-   if(!symbolOk)
+   if(!esperadoOk)
    {
       if(logOnce)
          Print(
             "AI SYMBOL MISMATCH | REQUEST=",
-            symbol,
+            esperado,
             " | JSON=",
             jsonSymbol
          );
@@ -434,7 +310,7 @@ bool LoadAIPrediction(string symbol="")
    //================================================
 
    AI_Symbol=
-      symbol;
+      esperado;
 
 
    AI_Signal=
@@ -547,7 +423,7 @@ bool LoadAIPrediction(string symbol="")
 
                Print(
                   "AI PREDICTION STALE | ",
-                  symbol,
+                  esperado,
                   " | AGE=",
                   (string)age,
                   "s > LIMIT=",
@@ -605,6 +481,335 @@ bool LoadAIPrediction(string symbol="")
 
 
    return true;
+}
+
+
+//==================================================
+// PERIODO DO GRAFICO, NO NOME DO MODELO
+//==================================================
+// O MT5 entrega o periodo como `ENUM_TIMEFRAMES` (um numero: 16385 = H1), e o
+// backend nomeia os artefatos por texto (`XAUUSD_H1`). Sem esta traducao, a
+// consulta seria `?timeframe=16385` e o gateway nao acharia modelo nenhum —
+// recusa correta, mas com o motivo errado: o operador culparia o modelo.
+//
+// Os nomes sao os do `TIMEFRAMES_VALIDOS` do backend (M5, M15, H1, H4). Um
+// periodo que nao estiver nessa lista nao tem modelo e a resposta recusa com
+// o motivo certo.
+//
+// `PERIOD_CURRENT` (0) NAO E TRADUZIDO: ele significa "o que esta no grafico",
+// e inventar um nome seria exatamente o "nenhum valor pode ser presumido". O
+// EA usa `Period()` ja resolvido, que o MT5 preenche com o valor concreto.
+
+string PeriodLabel()
+{
+   ENUM_TIMEFRAMES p = (ENUM_TIMEFRAMES)Period();
+
+   if(p == PERIOD_M5)
+      return "M5";
+
+   if(p == PERIOD_M15)
+      return "M15";
+
+   if(p == PERIOD_H1)
+      return "H1";
+
+   if(p == PERIOD_H4)
+      return "H4";
+
+   if(p == PERIOD_M1)
+      return "M1";
+
+   if(p == PERIOD_M30)
+      return "M30";
+
+   if(p == PERIOD_D1)
+      return "D1";
+
+   // Fora da lista de modelos: devolve o nome do enum, que o gateway recusa
+   // com motivo. Vazio seria pior — a consulta sairia sem timeframe nenhum e o
+   // backend escolheria um.
+   return EnumToString(p);
+}
+
+
+//==================================================
+// FETCH VIA GATEWAY (WebRequest)
+//==================================================
+// POR QUE ISTO EXISTE (medido em 05/10/2026)
+// ==========================================
+// O conector lia `Data\prediction_<SIMBOLO>.json`. Medido nesta maquina: essa
+// pasta NAO EXISTE. O backend tem 25 modelos publicados e responde por HTTP, mas
+// ninguem escreve o arquivo — entao o EA vivia sem sinal, e sem erro visivel
+// porque "arquivo ausente" e um caminho previsto do codigo.
+//
+// Com `AIUseGateway`, o EA passa a ler do proprio backend: uma fonte de
+// verdade so, com os 25 modelos que mediram inferencia real.
+//
+// SEMPRE VOLTA `false` QUANDO O GATEWAY NAO RESPONDE
+// --------------------------------------------------
+// A falha aqui cai no arquivo, nunca em sinal inventado. Um `WebRequest` que
+// devolve corpo vazio e sucesso HTTP seria o pior caso: o EA receberia
+// `signal=""` e `AIBuyAllowed` devolveria false — por sorte, e nao por
+// desenho. A funcao verifica que veio JSON antes de aceitar.
+//
+// LIMITE DE TAXA
+// --------------
+// `AIPollSeconds` e o intervalo entre consultas. Sem ele, `AIBuyAllowed` seria
+// chamado a cada tick e o gateway receberia centenas de requisicoes por
+// segundo, com a inferencia real (que carrega o `.pkl` e monta 25 features)
+// por baixo. A previsao antiga de 15 s e melhor do que perder o tick.
+
+bool FetchPredictionFromGateway(
+   string symbol,
+   string timeframe,
+   string &json
+)
+{
+   string url = AIGatewayUrl;
+   if(StringLen(url) == 0)
+      return false;
+
+   // Simbolo e timeframe no endereco: o gateway le por query string
+   // (`/api/ai/predict?symbol=&timeframe=`), e um simbolo vazio e recusa
+   // com motivo la — o mesmo "nenhum simbolo pode ser presumido".
+   StringReplace(url, "{symbol}", symbol);
+   StringReplace(url, "{timeframe}", timeframe);
+   if(StringFind(url, "symbol=") < 0)
+      url = url + "?symbol=" + symbol + "&timeframe=" + timeframe;
+
+   char post[], result[];
+   string headers = "Content-Type: application/json\r\n";
+   if(StringLen(AIGatewayToken) > 0)
+      headers = headers + "X-Gateway-Token: " + AIGatewayToken + "\r\n";
+
+   string payload = "{}";
+   StringToCharArray(payload, post, 0, StringLen(payload), CP_UTF8);
+
+   ResetLastError();
+   int status = WebRequest(
+      "POST",
+      url,
+      headers,
+      AIRequestTimeoutMs,
+      post,
+      result,
+      headers
+   );
+
+   if(status == -1)
+   {
+      int err = GetLastError();
+      // -401 e o caso que mais importa: URL nao autorizada em
+      // Ferramentas > Opcoes > Expert Advisors. E erro de CONFIGURACAO do
+      // operador, nao do codigo, entao a mensagem diz exatamente o que fazer.
+      if(err == 401)
+         Print("AI GATEWAY | URL nao autorizada (-401) | ", url,
+               " | Autorize em Ferramentas > Opcoes > Expert Advisors");
+      else if(err == 406)
+         Print("AI GATEWAY | URL nao permitida (-406) | ", url);
+      return false;
+   }
+
+   string corpo = CharArrayToString(result, 0, WHOLE_ARRAY, CP_UTF8);
+
+   // Corpo vazio com HTTP 200 e o pior resultado possivel: o EA receberia uma
+   // string sem sinal e acharia que a IA foi consultada. Recusa aqui.
+   if(StringLen(corpo) < 10)
+      return false;
+
+   json = corpo;
+   return true;
+}
+
+
+//==================================================
+// LOAD AI PREDICTION
+//==================================================
+
+bool LoadAIPrediction(string symbol="")
+{
+   // Log de diagnostico 1x por minuto (evita spam a cada tick)
+   static datetime lastLogTime = 0;
+   datetime logNow = TimeCurrent();
+   bool logOnce = (logNow - lastLogTime >= 60);
+   if(logOnce)
+      lastLogTime = logNow;
+
+   if(symbol=="")
+      symbol=_Symbol;
+
+   StringTrimLeft(symbol);
+   StringTrimRight(symbol);
+
+   if(symbol=="")
+      return false;
+
+   // SÃƒÂ­mbolo normalizado (nome base do pipeline Python)
+   string normalized = NormalizeAISymbol(symbol);
+
+   //==================================================
+   // FONTE 1: GATEWAY (padrao)
+   //==================================================
+   // Um limite de taxa por simbolo: `AIBuyAllowed` e chamado a cada tick, e a
+   // inferencia real carrega o `.pkl` e monta 25 features. Sem este cache, o
+   // gateway receberia centenas de requisicoes por segundo.
+   //
+   // A previsao com 15 s e melhor do que perder tick perto de um nivel, que e
+   // quando o tick importa.
+   static string ultimoSimboloConsultado = "";
+   static datetime ultimaConsulta = 0;
+
+   if(AIUseGateway)
+   {
+      if(ultimoSimboloConsultado != normalized ||
+         (TimeCurrent() - ultimaConsulta) >= AIPollSeconds)
+      {
+         string jsonGateway = "";
+         if(FetchPredictionFromGateway(normalized, PeriodLabel(), jsonGateway))
+         {
+            ultimoSimboloConsultado = normalized;
+            ultimaConsulta = TimeCurrent();
+
+            if(logOnce)
+               Print("AI GATEWAY | ", normalized, " | ", PeriodLabel(),
+                     " | ", StringLen(jsonGateway), " bytes");
+
+            // O JSON do gateway entra pelo MESMO parser do arquivo. Um
+            // formato, um parser: se os dois divergirem, a divergencia aparece
+            // num so lugar.
+            return ParsePredictionJSON(jsonGateway, normalized, logOnce);
+         }
+
+         // Gateway fora do ar: o arquivo e o plano B, e a proxima tentativa
+         // acontece no proximo ciclo. Nao ha loop de retentativa aqui — um
+         // tick bloqueado esperando HTTP e o pior resultado para quem opera.
+      }
+      else if(AI_Symbol == normalized)
+      {
+         // Dentro da janela: a previsao do gateway ainda vale. Devolve sem
+         // tocar a rede.
+         return true;
+      }
+   }
+
+   //==================================================
+   // FONTE 2: ARQUIVO (fallback e modo legado)
+   //==================================================
+   string fileName=
+      "Data\\prediction_" +
+      symbol +
+      ".json";
+
+   // Fallback: se o arquivo exato nÃƒÂ£o existe, tenta o nome normalizado
+   // (pipeline Python gera prediction_XAUUSD.json, nÃƒÂ£o prediction_GOLD#.json)
+   if(!FileIsExist(fileName) && normalized!=symbol)
+   {
+      string altName=
+         "Data\\prediction_" +
+         normalized +
+         ".json";
+
+      if(FileIsExist(altName))
+         fileName=altName;
+   }
+
+
+   if(logOnce)
+      Print(
+         "AI LOAD | SYMBOL=",
+         symbol,
+         " | FILE=",
+         fileName
+      );
+
+
+   ResetLastError();
+
+
+   //================================================
+   // FILE EXISTS
+   //================================================
+
+   if(!FileIsExist(fileName))
+   {
+      if(logOnce)
+         Print(
+            "AI FILE NOT FOUND | ",
+            fileName
+         );
+
+      return false;
+   }
+
+
+   //================================================
+   // OPEN FILE
+   //================================================
+
+   int file=
+      FileOpen(
+         fileName,
+         FILE_READ |
+         FILE_TXT |
+         FILE_ANSI
+      );
+
+
+   if(file==INVALID_HANDLE)
+   {
+      if(logOnce)
+         Print(
+            "AI FILE ERROR | ",
+            symbol,
+            " | ERROR=",
+            GetLastError()
+         );
+
+      return false;
+   }
+
+
+   //================================================
+   // READ JSON
+   //================================================
+
+   string json="";
+
+
+   while(!FileIsEnding(file))
+   {
+      string line=
+         FileReadString(file);
+
+      json+=line;
+   }
+
+
+   FileClose(file);
+
+
+   //================================================
+   // VALIDATE JSON
+   //================================================
+
+   if(json=="")
+   {
+      if(logOnce)
+         Print(
+            "AI JSON EMPTY | ",
+            symbol
+         );
+
+      return false;
+   }
+
+
+   //================================================
+   //================================================
+   // PARSE (mesmo caminho do gateway)
+   //================================================
+
+   return ParsePredictionJSON(json, normalized, logOnce);
 }
 
 

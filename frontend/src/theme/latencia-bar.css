@@ -17,6 +17,107 @@
       alvo pequeno dentro de uma barra de status apertada.
    ========================================================================== */
 
+/* =============================================================================
+   RODAPE DE LATENCIA — canto inferior esquerdo, selecao com lista (MEXC)
+   =============================================================================
+   O dono pediu: "esconder barra de l ms, colocar no canto inferior esquerdo,
+   estilo MEXC, tipo selecao com lista".
+
+   O que fica SEMPRE visivel e um item compacto: um ponto colorido e o `ms` da
+   CORRETORA ATIVA. Sao os dois dados que o operador usa sem clicar. A lista
+   com todas as corretoras abre sob demanda — cinco barras no cabecalho
+   disputavam espaco com o relogio e o status do EA.
+
+   A DISTANCIA e o que o operador decide: `melhor_em_ms` diz quanto custa
+   trocar de corretora agora. Esse numero fica na lista, no `title` da linha.
+
+   ACESSIBILIDADE (pesquisa Figma: modo e cor):
+   - a cor do ponto e APOIO; o `ms` esta em texto, entao quem nao distingue
+     verde de vermelho le o numero;
+   - a lista abre com clique E com `Escape`, e fecha ao clicar fora;
+   - o gatilho tem `--hit-min` de altura, para ser clicavel com o dedo.
+   ========================================================================== */
+
+.latencia-rodape {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+
+/* O gatilho COMPACTO: ponto + ms. E o que fica sempre na tela. */
+.latencia-gatilho {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--hit-min);
+  padding: 0 var(--space-2);
+  font: inherit;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.latencia-gatilho:hover,
+.latencia-gatilho:focus-visible {
+  border-color: var(--border);
+  background: var(--panel2);
+  color: var(--text);
+}
+
+/* O ponto e o unico elemento colorido do gatilho. O `ms` ao lado e o dado. */
+.latencia-gatilho-ponto {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+
+.latencia-gatilho-ms {
+  min-width: 5.5em;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+
+.latencia-gatilho-seta {
+  width: 0;
+  height: 0;
+  border-left: 3px solid transparent;
+  border-right: 3px solid transparent;
+  border-top: 4px solid currentColor;
+  opacity: 0.7;
+}
+
+/* A LISTA abre para CIMA: o rodape e a ultima faixa da tela, e uma lista
+   para baixo sairia fora da janela. */
+.latencia-lista {
+  position: absolute;
+  bottom: calc(100% + var(--space-1));
+  left: 0;
+  z-index: 40;
+  min-width: 260px;
+  padding: var(--space-2);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 28%);
+}
+
+/* A corretora ATIVA tem barra lateral, nao so cor: quem nao distingue as
+   cores ainda sabe qual e a que opera. */
+.latencia-item.latencia-ativa {
+  box-shadow: inset 2px 0 0 currentColor;
+  padding-left: var(--space-2);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
 .latencia-bar {
   display: inline-flex;
   align-items: center;
