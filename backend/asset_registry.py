@@ -72,5 +72,12 @@ def discover_assets(mt5, include_hidden: bool = True) -> list[dict]:
             "volume_max": _number(_value(item, "volume_max", None)),
             "volume_step": _number(_value(item, "volume_step", None)),
             "change_pct": None,
+            # Ficha de especificacao (ideia da pagina de simbolo da XM):
+            # tamanho do contrato, spread em pontos e swaps. Tudo lido do
+            # terminal — nenhum valor fixo, nenhuma corretora presumida.
+            "contract_size": _number(_value(item, "trade_contract_size", None)),
+            "spread_points": _integer(_value(item, "spread", None)),
+            "swap_long": _number(_value(item, "swap_long", None)),
+            "swap_short": _number(_value(item, "swap_short", None)),
         })
     return sorted(rows, key=lambda row: row["symbol"].upper())

@@ -374,6 +374,30 @@ export default function RobotAssetTable() {
             {MARKET_LABELS[market] ?? market}.
           </div>
         )}
+        {(() => {
+          // Ficha de especificacao do ativo selecionado (ideia da pagina de
+          // simbolo da XM): contrato, lote min/max, spread e swaps — tudo da
+          // corretora, nada fixo. So aparece com ativo selecionado.
+          const ficha = selected ? infoPorSimbolo.get(selected) : undefined;
+          if (!ficha) return null;
+          const cel = (rotulo: string, valor: string) => (
+            <span>
+              <em>{rotulo}</em>
+              <strong className="num">{valor}</strong>
+            </span>
+          );
+          const num = (v: number | null) => (typeof v === 'number' && Number.isFinite(v) ? String(v) : '--');
+          return (
+            <div className="mt-status-strip" title={`Especificações de ${selected} em ${brokerLabel(broker)}`}>
+              {cel('Contrato', num(ficha.contractSize))}
+              {cel('Lote min', num(ficha.volumeMin))}
+              {cel('Lote max', num(ficha.volumeMax))}
+              {cel('Spread pts', num(ficha.spreadPoints))}
+              {cel('Swap long', num(ficha.swapLong))}
+              {cel('Swap short', num(ficha.swapShort))}
+            </div>
+          );
+        })()}
         {symbols.length > MAX_BATCH && (
           <p className="hint">
             Exibindo e consultando os {MAX_BATCH} primeiros ativos do catálogo.

@@ -188,13 +188,35 @@ _CACHE: dict[str, Any] = {}
 #
 # O simbolo NAO tem allowlist de pares: a lista cresceria a cada novo par
 # listado e a regra do projeto e "nenhum simbolo pode ser presumido". O que se
-# restringe e o FORMATO, nao o conteudo: letras e digitos, sem separadores.
-# `..`, `/`, `\` e `%2e%2e` nao passam.
+# restringe e o FORMATO, nao o conteudo: letras, digitos e o underscore de
+#familia. `..`, `/`, `\` e `%2e%2e` nao passam — o ponto e a barra sao o que
+# constroi travessia de caminho, e nenhum dos dois esta na classe.
 TIMEFRAMES_VALIDOS = frozenset({"M5", "M15", "H1", "H4"})
 
-# 12 e o maior comprimento de simbolo em Forex/Cripto/metal (ex.: `XAUUSD`,
-# `BTCUSDT_PERP`). Acima disso ou ja e abuso, ou nao e simbolo.
-_RE_SIMBOLO = re.compile(r"^[A-Z0-9]{1,12}$")
+# O UNDERSCORE ENTRA POR CAUSA DOS MODELOS MULTI_CLASSE (medido 04/10/2026).
+# --------------------------------------------------------------------------
+# Os artefatos `MULTI_METALS.pkl`, `MULTI_FIAT.pkl` e `MULTI_CRYPTO.pkl` levam
+# o `_` no nome. Com `^[A-Z0-9]{1,12}$` os TRES eram INALCANCAVEIS:
+# `_nome_de_artefato()` devolvia `None` e a tela dizia "modelo nao publicado
+# ou ausente" — para artefatos que existem no disco, com `publicable: true` e
+# o maior edge do catalogo (MULTI_METALS +0.2497, 67.678 amostras).
+#
+# E o comentario desta constante JA citava `BTCUSDT_PERP` como exemplo de
+# simbolo valido: o comentario e o regex discordavam, e o regex era o que
+# valia. Por isso o defeito nao apareceu em revisao — os dois pareciam certos.
+#
+# A DEFESA CONTRA TRAVERSIA CONTINUA INTEIRA: o conjunto permitido e
+# `[A-Z0-9_]`, que nao contem ponto, barra nem barra invertida. `..`, `/` e
+# `\` seguem barrados por construcao, nao por lista de excecao. O
+# confinamento de destino em `_caminho_confinado` e a segunda barreira e
+# continua valendo.
+#
+# O LIMITE CONTINUA EM 12. Subi para 24 achando que precisaria de folga para
+# `MULTI_METALS` (12) + `_H1` (3) = 15 — mas o limite conta o SIMBOLO, nao o
+# nome do arquivo. Medido: MULTI_METALS 12, MULTI_CRYPTO 12, BTCUSDT_PERP 12.
+# Nenhum precisa de mais. `tests/test_traversal_modelos.py` barrava `A * 13`
+# e estava CERTO: subir o limite seria afrouxar seguranca sem necessidade.
+_RE_SIMBOLO = re.compile(r"^[A-Z0-9_]{1,12}$")
 
 
 def base_do_ativo(simbolo: str) -> str:
@@ -227,15 +249,31 @@ def candidatos_de_simbolo(simbolo: str) -> list[str]:
 
 
 def _nome_de_artefato(simbolo: str, timeframe: str) -> str | None:
-    """`<SIMBOLO>_<TF>` ou `None` se o par nao puder gerar nome de arquivo.
+    """`<SIMBOLO>_<TF>`, ou so `<SIMBOLO>`, ou `None` se nao puder nomear.
 
     `None` e recusa COM MOTIVO. Chamar `MODELOS_DIR / nome` com um nome
     invalido e o que produz o alerta de CodeQL; devolver `None` deixa a
     decisao no codigo, onde da para recusar e explicar.
+
+    `timeframe` VAZIO devolve o nome geral (`MULTI_METALS`), que e o modelo
+    unico que cobre varios periodos. E o que `_nomes_de_artefato` tenta
+    depois do especifico.
+
+    POR QUE O VAZIO CONTINUA SENDO RECUSA NO `inferir`
+    ---------------------------------------------------
+    A porta do vazio existe aqui, dentro do resolvedor de NOME, e nao no
+    `inferir`. `inferir` ja recusa timeframe fora da allowlist antes de
+    chegar aqui, entao um pedido do operador nunca usa esta porta — ela so
+    e alcancavel pela propria `_nomes_de_artefato`, que sabe o que esta
+    fazendo. Um `timeframe` QUE NAO EXISTE na allowlist continua recusando:
+    a allowlist e o que impede que qualquer string vire nome de arquivo.
     """
-    if timeframe not in TIMEFRAMES_VALIDOS:
-        return None
     if not _RE_SIMBOLO.match(simbolo):
+        return None
+    if not timeframe:
+        # Nome geral: `<SIMBOLO>.pkl`, o modelo unico multi-periodo.
+        return simbolo
+    if timeframe not in TIMEFRAMES_VALIDOS:
         return None
     return f"{simbolo}_{timeframe}"
 
@@ -382,14 +420,15 @@ def _carregar(symbol: str, timeframe: str) -> tuple[Any | None, dict[str, Any]]:
     # `_caminho_confinado` (destino) — o alias nao afrouxa nenhuma defesa.
     ultimo_meta: dict[str, Any] = {}
     for candidato in candidatos_de_simbolo(simbolo):
-        nome = _nome_de_artefato(candidato, timeframe)
-        if nome is None:
-            continue
-        carregado, meta = _carregar_artefato(candidato, nome)
-        if carregado is not None:
-            return carregado, meta
-        if meta:
-            ultimo_meta = meta
+        # Dois nomes por candidato: o especifico (`XAUUSD_H1`) e o geral
+        # (`MULTI_METALS`). Ver `_nomes_de_artefato` — o motivo de o segundo
+        # existir e os tres modelos de maior edge do catalogo.
+        for nome in _nomes_de_artefato(candidato, timeframe):
+            carregado, meta = _carregar_artefato(candidato, nome)
+            if carregado is not None:
+                return carregado, meta
+            if meta:
+                ultimo_meta = meta
     if ultimo_meta:
         _CACHE[f"modelo:{simbolo}:{timeframe}"] = (None, ultimo_meta)
         return None, ultimo_meta
@@ -398,6 +437,42 @@ def _carregar(symbol: str, timeframe: str) -> tuple[Any | None, dict[str, Any]]:
     # treino; "simbolo invalido" e entrada do cliente.
     _CACHE[f"modelo:{simbolo}:{timeframe}"] = (None, {})
     return _CACHE[f"modelo:{simbolo}:{timeframe}"]
+
+
+def _nomes_de_artefato(candidato: str, timeframe: str) -> list[str]:
+    """Nomes a tentar, do mais especifico ao mais geral.
+
+    POR QUE EXISTE (medido em 04/10/2026)
+    ======================================
+    Os artefatos tem dois formatos, porque foram treinados por dois motivos
+    diferentes:
+
+    1. `<SIMBOLO>_<TF>.pkl` — um modelo por ativo e por periodo:
+       `XAUUSD_H1.pkl`, `EURUSD_H4.pkl`.
+
+    2. `<SIMBOLO>.pkl` — um modelo UNICO que cobre varios periodos. E o caso
+       dos `MULTI_*`: `MULTI_METALS.pkl`, treinado sobre a uniao de metais,
+       vale para H1, H4 e M15.
+
+    O codigo so procurava o formato 1. Resultado medido: os tres `MULTI_*`
+    respondiam "modelo nao publicado ou ausente" — sendo que existem no
+    disco, tem `publicable: true` e o MAIOR edge do catalogo (MULTI_METALS
+    +0,2497, 58,3% de acerto, 67.678 amostras).
+
+    A ORDEM IMPORTA: o nome COM timeframe e o mais especifico e precisa
+    ganhar. Um `XAUUSD_H1` especifico tem sempre preferencia sobre um
+    `XAUUSD` geral — caso contrario, pedir H1 cairia no modelo de H4.
+
+    NENHUM ARQUIVO E RENOMEADO. O artefato continua como o treino o gravou;
+    o que muda e que o codigo passa a saber PROCURAR-lo.
+    """
+    especifico = _nome_de_artefato(candidato, timeframe)
+    geral = _nome_de_artefato(candidato, "")
+    saida: list[str] = []
+    for nome in (especifico, geral):
+        if nome and nome not in saida:
+            saida.append(nome)
+    return saida
 
 
 def _carregar_artefato(candidato: str, nome: str) -> tuple[Any | None, dict[str, Any]]:

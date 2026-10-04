@@ -4,25 +4,26 @@
 // Antes: oito painéis num scroll, depois cinco, depois quatro, depois cinco com
 // EA próprio. Cada mudança reorganizava o mesmo conteúdo.
 //
-// Agora: uma sub-aba, "Operar", com DOIS painéis — automático e posições ao
-// vivo (2026-09-30). Ordem manual e guardian SAÍRAM a pedido do dono:
-// "operacao automatica, terminal, posicoes abertas so isso".
-//
-// A ordem manual saía principalmente por duplicar o seletor de corretora: o
-// OrderPanel mantem o proprio `Broker`/`MERCADOS`, e a tela podia afirmar uma
-// corretora enquanto o motor operava outra.
+// Agora: uma sub-aba, "Operar": mesa XM+MT5, automatico, acompanhar e
+// posicoes ao vivo. A ordem manual VOLTOU a pedido do dono (2026-10-04),
+// SEM seletor proprio de corretora — ela opera o escopo ativo, o mesmo do
+// Mini Terminal. O defeito antigo (OrderPanel afirmando corretora diferente
+// do motor) nao pode voltar: a mesa nao tem seletor de corretora.
 //
 // O que este teste garante:
 //   (a) existe uma única sub-aba;
-//   (b) os dois painéis ficam MONTADOS juntos — desmontar jogaria fora a
+//   (b) os paineis ficam MONTADOS juntos — desmontar jogaria fora a
 //       seleção de ativo e qualquer leitura em andamento;
-//   (c) ordem manual e guardian NAO voltam por descuido.
+//   (c) guardian NAO volta por descuido; ordem manual so existe SEM seletor
+//       de corretora (ver 'mesa sem seletor de corretora').
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 
 vi.mock('./AutoEnginePanel', () => ({ default: () => <div data-testid="painel-auto" /> }));
 vi.mock('./tabs/RiskTab', () => ({ default: () => <div data-testid="painel-risco" /> }));
 vi.mock('./UniversalLiveTerminal', () => ({ default: () => <div data-testid="painel-mini" /> }));
+vi.mock('./AcompanharModelos', () => ({ default: () => <div data-testid="painel-acompanhar" /> }));
+vi.mock('./MesaXM', () => ({ default: () => <div data-testid="painel-mesa" /> }));
 
 const { default: RobotTabs } = await import('./RobotTabs');
 const { useAppStore, ROBOT_SUBS, LEGADO_ROBOT_SUB } = await import('../hooks/useAppStore');
@@ -50,21 +51,21 @@ describe('RobotTabs — sub-aba unica', () => {
   it('a mesa inteira esta montada na mesma tela', () => {
     render(<RobotTabs />);
     expect(visivel('robot-panel-operar').hidden).toBe(false);
-    // Ordem de operacao: decide -> acompanha -> envia -> protege.
-    // O Risco saiu daqui em 2026-09-29: ele trazia a parada de emergencia,
-    // que ja existia tambem no OrderPanel. Dois botoes de corte na mesma tela
-    // e o risco real de o operador clicar no errado; ficou so o do OrderPanel.
+    // Ordem de operacao: mesa -> automatico -> acompanhar -> posicoes.
+    expect(screen.getByTestId('painel-mesa')).toBeTruthy();
     expect(screen.getByTestId('painel-auto')).toBeTruthy();
+    expect(screen.getByTestId('painel-acompanhar')).toBeTruthy();
     expect(screen.getByTestId('painel-mini')).toBeTruthy();
   });
 
-  it('ordem manual e guardian NAO estao mais na aba Robo', () => {
-    // Regressao de 2026-09-30: o dono pediu "so isso" e a tela ainda tinha os
-    // quatro blocos. Este teste existe para o bloco nao voltar por engano.
+  it('guardian NAO volta; ordem manual so sem seletor de corretora', () => {
+    // Guardian saiu a pedido do dono e nao volta por descuido. A mesa voltou
+    // com a condicao de nao ter seletor proprio (ver MesaXM: sem select de
+    // corretora/mercado — opera o escopo ativo).
     render(<RobotTabs />);
-    expect(screen.queryByTestId('painel-ordem')).toBeNull();
     expect(screen.queryByTestId('painel-guardian')).toBeNull();
     expect(screen.queryByTestId('painel-risco')).toBeNull();
+    expect(screen.getByTestId('painel-mesa')).toBeTruthy();
   });
 
   it('todo nome de sub-aba antigo cai em "operar"', () => {

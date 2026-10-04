@@ -107,6 +107,8 @@ export type AutoState = {
   ativo?: boolean;
   simbolo?: string;
   timeframe?: string;
+  broker?: string;
+  market?: string;
   ciclo?: number;
   threads?: number;
   updated_at?: string;

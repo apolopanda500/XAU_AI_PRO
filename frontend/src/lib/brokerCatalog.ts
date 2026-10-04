@@ -83,6 +83,13 @@ export interface AssetRow {
   volumeMin: number | null;
   volumeMax: number | null;
   tradeMode: number | null;
+  // Ficha de especificacao (pagina de simbolo da XM): contrato, spread em
+  // pontos e swaps. Null = nao informado pela corretora, nunca zero.
+  // Opcionais para payload antigo sem os campos continuar tipando.
+  contractSize?: number | null;
+  spreadPoints?: number | null;
+  swapLong?: number | null;
+  swapShort?: number | null;
 }
 
 /** Extrai o catálogo real devolvido por /api/universal/assets. */
@@ -106,6 +113,10 @@ export function parseAssetCatalog(payload: unknown): AssetRow[] {
       volumeMin: typeof row.volume_min === 'number' ? row.volume_min : null,
       volumeMax: typeof row.volume_max === 'number' ? row.volume_max : null,
       tradeMode: typeof row.trade_mode === 'number' ? row.trade_mode : null,
+      contractSize: typeof row.contract_size === 'number' ? row.contract_size : null,
+      spreadPoints: typeof row.spread_points === 'number' ? row.spread_points : null,
+      swapLong: typeof row.swap_long === 'number' ? row.swap_long : null,
+      swapShort: typeof row.swap_short === 'number' ? row.swap_short : null,
     });
   }
   return rows;

@@ -614,6 +614,13 @@ def _assets_from_raw(broker: str, market: str, raw: object, endpoint: str = "exc
             "point": optional_number(first_value(row, "point", "tickSize", "priceTick")),
             "digits": optional_number(first_value(row, "digits", "pricePrecision"), integer=True),
             "trade_mode": trade_mode,
+            # Ficha de especificacao (pagina de simbolo da XM): contrato,
+            # spread em pontos e swaps. Vem do discover do MT5 ou do
+            # exchange_info; ausente = nao informado, nunca zero presumido.
+            "contract_size": optional_number(first_value(row, "contract_size", "contractSize")),
+            "spread_points": optional_number(first_value(row, "spread_points", "spread"), integer=True),
+            "swap_long": optional_number(first_value(row, "swap_long", "swapLong")),
+            "swap_short": optional_number(first_value(row, "swap_short", "swapShort")),
             "availability": availability,
             "restrictions": restrictions,
             "capabilities": list(broker_capabilities),
@@ -810,8 +817,16 @@ def _universal_candles(broker: str, market: str, symbol: str, timeframe: str = "
     if broker not in READ_BROKERS:
         return canonical_unavailable(broker=broker, market=market, source="universal_gateway", reason="corretora não suportada", status="unsupported", symbol=symbol, candles=[], count=0)
     key = ("candles", broker, market, symbol, str(timeframe or "M5").upper(), int(limit))
+    # Alias modelo -> corretora (`XAUUSD` -> `GOLD` na XM): a leitura usa o
+    # simbolo que a corretora entende. Config do operador, nunca codigo.
+    try:
+        from backend.symbol_aliases import para_corretora as _para_corretora
+
+        leitura = _para_corretora(broker, symbol) or symbol
+    except Exception:
+        leitura = symbol
     if broker == "mt5":
-        return _cached_market(key, lambda: _candles_from_raw("mt5", market, symbol, _mt5_candles(symbol, timeframe, limit).get("candles", []), timeframe, "copy_rates_from_pos"))
+        return _cached_market(key, lambda: _candles_from_raw("mt5", market, symbol, _mt5_candles(leitura, timeframe, limit).get("candles", []), timeframe, "copy_rates_from_pos"))
     client = _exchange_client(broker, market)
     if not hasattr(client, "klines"):
         return canonical_unavailable(broker=broker, market=market, source=f"{broker}_api", reason="candles não implementados", symbol=symbol, candles=[], count=0)
@@ -1009,7 +1024,14 @@ def _universal_quotes(broker: str, market: str, symbols: list[str]) -> dict:
     for symbol in requested:
         if broker == "mt5":
             try:
-                raw = _quote(symbol)
+                # Alias modelo -> corretora na leitura (`XAUUSD` -> `GOLD`).
+                try:
+                    from backend.symbol_aliases import para_corretora as _para_corretora
+
+                    leitura = _para_corretora(broker, symbol) or symbol
+                except Exception:
+                    leitura = symbol
+                raw = _quote(leitura)
             except Exception as exc:
                 errors.append({"symbol": symbol, "error": str(exc)})
                 unavailable.append(symbol)
@@ -1839,6 +1861,14 @@ def _trade_order(payload: dict) -> dict:
     tp = float(payload.get("tp", 0) or 0)
     if not symbol or side not in {"BUY", "SELL"} or not (0 < volume <= 0.10) or sl <= 0 or tp <= 0:
         raise ValueError("symbol, side, volume <= 0.10, sl e tp validos sao obrigatorios")
+    # Alias modelo -> corretora (`XAUUSD` -> `GOLD` na XM): a ordem manual
+    # sai com o simbolo que o terminal entende. Config do operador.
+    try:
+        from backend.symbol_aliases import para_corretora as _para_corretora
+
+        symbol = _para_corretora("mt5", symbol) or symbol
+    except Exception:
+        pass
     # Risco REAL do dia: perda diaria e exposicao lidas do MT5 (nao mais 0.0 fixo).
     # Antes desta correcao o risk_gate recebia daily_loss_pct=0.0 e exposure_pct=0.0,
     # o que desarmava os dois limites mais importantes em conta de dinheiro real.

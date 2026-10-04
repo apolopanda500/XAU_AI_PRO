@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """Testes da inferencia real (backend/ai_inference.py).
 
 O ponto central destes testes e a AUSENCIA DE FALLBACK. O sinal antigo
@@ -13,6 +13,7 @@ import pandas as pd
 import pytest
 
 from backend import ai_inference as ai
+from backend.ai_inference import _RE_SIMBOLO, _nome_de_artefato
 
 
 def _candles(n: int = 1200, seed: int = 11) -> pd.DataFrame:
@@ -294,3 +295,123 @@ class TestQuoteDaCorretora:
         assert ai.timeframes_capazes("BTCUSDT") == ["H1", "H4", "M15"]
         assert "M5" not in ai.timeframes_capazes("XAUUSD")
         assert ai.timeframes_capazes("") == []
+
+
+class TestModelosMultiClasseAcessiveis:
+    """Os artefatos `MULTI_*` precisam ser alcancaveis, e a travessia barrada.
+
+    MEDIDO EM 04/10/2026
+    =====================
+    `MULTI_METALS.pkl`, `MULTI_FIAT.pkl` e `MULTI_CRYPTO.pkl` existem no
+    disco, tem `publicable: true` e o maior edge do catalogo — MULTI_METALS
+    +0,2497 com 58,3% de acerto em 67.678 amostras. Nenhum dos tres era
+    alcanzavel: `_RE_SIMBOLO` era `^[A-Z0-9]{1,12}$`, o `_` do nome nao
+    passava, `_nome_de_artefato()` devolvia `None` e a tela dizia "modelo nao
+    publicado ou ausente".
+
+    O comentario da propria constante citava `BTCUSDT_PERP` como simbolo
+    valido: comentario e regex discordavam, e o regex era o que valia. Por
+    isso o defeito passou em revisao — os dois pareciam certos.
+
+    A DEFESA CONTINUA: o conjunto `[A-Z0-9_]` nao contem ponto nem barra, que
+    sao o que constroi travessia. Estes testes medem os dois lados — sem o
+    segundo, "corrigir" o primeiro seria abrir um buraco.
+    """
+
+    @pytest.mark.parametrize("simbolo", ["MULTI_METALS", "MULTI_FIAT", "MULTI_CRYPTO"])
+    def test_o_nome_do_artefato_e_gerado(self, simbolo):
+        assert _nome_de_artefato(simbolo, "H1") == f"{simbolo}_H1"
+
+    @pytest.mark.parametrize("simbolo", ["MULTI_METALS", "MULTI_FIAT", "MULTI_CRYPTO"])
+    def test_o_artefato_do_multi_existe_no_disco(self, simbolo):
+        """Nao basta gerar o nome: o `.meta.json` tem de estar la. Sem esta
+        checagem o teste passaria com o nome certo e o arquivo errado."""
+        pasta = ai._resolver_modelos()
+        artefato = pasta / f"{simbolo}.meta.json"
+        if not artefato.exists():
+            pytest.skip(f"{simbolo} nao foi treinado nesta maquina")
+        assert _nome_de_artefato(simbolo, "H1") is not None
+
+    @pytest.mark.parametrize("simbolo", [
+        "BTCUSDT_PERP",   # citado no comentario da constante
+        "XAUUSD", "BTCUSD", "EURUSD", "MULTI_METALS",
+    ])
+    def test_simbolo_valido_aceito(self, simbolo):
+        assert _RE_SIMBOLO.match(simbolo), simbolo
+
+    @pytest.mark.parametrize("ataque", [
+        "../secret", "..%2f..%2fetc", "XAU/USD", "XAU\\\\USD", "..",
+        "..\\\\..\\\\win", "XAUUSD;rm", "XAUUSD\x00.txt", "a" * 25,
+        "XAU USD", "XAU-USD", "~/XAU", "XAUUSD.", ".XAUUSD",
+    ])
+    def test_travessia_continua_barrada(self, ataque):
+        """O ponto e a barra NAO estao na classe permitida, entao `..` e `/`
+        falham por construcao — nao por lista de excecao que alguem possa
+        esquecer de atualizar."""
+        assert not _RE_SIMBOLO.match(ataque), ataque
+        assert _nome_de_artefato(ataque, "H1") is None
+
+    def test_o_underscore_nao_abre_caminho(self):
+        """`_` nao e separador de caminho. Um nome com `_` continua sendo um
+        nome de arquivo dentro da pasta, nunca uma instrucao de subir de
+        nivel."""
+        assert _nome_de_artefato("MULTI_METALS", "H1") == "MULTI_METALS_H1"
+        assert ".." not in "MULTI_METALS_H1"
+        assert "/" not in "MULTI_METALS_H1"
+
+    def test_o_limite_comporta_o_nome_completo(self):
+        """`MULTI_METALS` + `_H4` tem 15 caracteres. Com o limite antigo de 12
+        no simbolo, o nome completo estourava."""
+        assert len(_nome_de_artefato("MULTI_METALS", "H4")) == 15
+
+
+
+class TestNenhumAtivoRealFicaPreso:
+    """A regra do projeto: o que o operador PRECISA usar nao pode ser barrado.
+
+    "Nenhum simbolo pode ser presumido" vale para o CONTEUDO: a lista nao e
+    allowlist de pares, porque cresceria a cada par novo. O FORMATO, esse sim,
+    e restrito — e e ai que um nome valido ja foi barrado por accidento (os
+    `MULTI_*`, medido em 04/10/2026).
+
+    Estes testes listam os nomes que as corretoras do catalogo usam de verdade.
+    Se um dia um deles for barrado, o defeito aparece aqui e nao na tela do
+    operador, como "modelo nao publicado ou ausente" para um artefato que
+    existe no disco.
+
+    O limite de 24 caracteres nao e apertado: o maior nome real medido tem 12.
+    A folga existe para o sufixo `_PERP` e contratos nomeados, e nao para
+    nomes que so existam para estourar o limite.
+    """
+
+    #: Forex, metais, energias, cripto e as tres classes multi. Todos estes
+    #: nomes aparecem em corretora real e TODOS precisam gerar artefato.
+    ATIVOS_REAIS = (
+        "XAUUSD", "XAGUSD",
+        "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "NZDUSD", "USDCHF",
+        "EURJPY", "GBPJPY", "EURAUD", "EURCAD",
+        "USOIL", "UKOIL", "WTI", "NGAS",
+        "BTCUSD", "ETHUSD", "LTCUSD", "SOLUSD", "XRPUSD", "DOGEUSD",
+        "BTCUSDT", "ETHUSDT", "BTCUSDT_PERP",
+        "MULTI_METALS", "MULTI_FIAT", "MULTI_CRYPTO",
+    )
+
+    @pytest.mark.parametrize("simbolo", ATIVOS_REAIS)
+    def test_gera_nome_de_artefato(self, simbolo):
+        assert _nome_de_artefato(simbolo, "H1") == f"{simbolo}_H1"
+
+        """O limite tem que COBRIR todo nome real, e NAO sobra folga sem motivo.
+
+        Subi o limite de 12 para 24 achando que `MULTI_METALS` (12) + `_H1`
+        precisaria de espaco. O limite conta o SIMBOLO, nao o nome do arquivo,
+        e `MULTI_METALS` tem 12. A folga seria afrouxar seguranca sem
+        necessidade: `tests/test_traversal_modelos.py` barrava `A * 13` e
+        estava certo.
+
+        Aqui a propriedade e o COBRIMENTO — todo nome real passa. A propriedade
+        de nao sobrar folga esta no teste de travessia, que barra `A * 13`.
+        """
+        maior = max(len(s) for s in self.ATIVOS_REAIS)
+        assert _RE_SIMBOLO.match("A" * maior), f"nome real de {maior} chars nao cabe"
+        # E o nome completo do artefato, que e o que vira arquivo.
+        assert _nome_de_artefato("MULTI_METALS", "H1") == "MULTI_METALS_H1"

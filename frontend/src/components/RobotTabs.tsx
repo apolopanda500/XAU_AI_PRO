@@ -33,6 +33,8 @@ import type { ReactNode } from 'react';
 import { useAppStore, ROBOT_SUBS, type RobotSub } from '../hooks/useAppStore';
 import ErrorBoundary from './ErrorBoundary';
 import AutoEnginePanel from './AutoEnginePanel';
+import AcompanharModelos from './AcompanharModelos';
+import MesaXM from './MesaXM';
 import RiskTab from './tabs/RiskTab';
 import UniversalLiveTerminal from './UniversalLiveTerminal';
 import '../theme/robot-subtabs.css';
@@ -80,8 +82,14 @@ export default function RobotTabs() {
   const paineis: Record<RobotSub, ReactNode> = {
     operar: (
       <>
+        <Secao nome="Mesa XM MT5">
+          <MesaXM />
+        </Secao>
         <Secao nome="Operação automática">
           <AutoEnginePanel />
+        </Secao>
+        <Secao nome="Acompanhar modelos">
+          <AcompanharModelos />
         </Secao>
         <Secao nome="Posições ao vivo">
           <UniversalLiveTerminal />

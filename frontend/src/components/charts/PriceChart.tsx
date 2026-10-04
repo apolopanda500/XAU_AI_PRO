@@ -29,6 +29,10 @@ type PriceChartProps = {
   loading?: boolean;
   error?: string;
   sourceLabel?: string;
+  // Marcadores de sinal do modelo (BUY abaixo da barra, SELL acima).
+  // Tempo em segundos (mesma base dos candles) e texto curto com a
+  // confianca — o operador ve ONDE o modelo decidiu, nao so o numero.
+  markers?: Array<{ time: number; signal: string; text?: string }>;
 };
 
 function defaultMarket(broker: MarketBroker): MarketKind {
@@ -46,6 +50,7 @@ export default function PriceChart({
   loading = false,
   error = '',
   sourceLabel,
+  markers = [],
 }: PriceChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi>(null);
@@ -152,8 +157,22 @@ export default function PriceChart({
       close: candle.close,
     }));
     series.setData(data);
+    // Sinais do modelo sobre as barras. So BUY/SELL entram; NEUTRAL e
+    // recusa nao marcam o grafico (marcador sem decisao e ruido).
+    const times = new Set(data.map((d) => d.time));
+    series.setMarkers(
+      markers
+        .filter((m) => (m.signal === 'BUY' || m.signal === 'SELL') && times.has(m.time as UTCTimestamp))
+        .map((m) => ({
+          time: m.time as UTCTimestamp,
+          position: m.signal === 'BUY' ? 'belowBar' : 'aboveBar',
+          color: m.signal === 'BUY' ? '#2ecc71' : '#e74c3c',
+          shape: m.signal === 'BUY' ? 'arrowUp' : 'arrowDown',
+          text: m.text ?? m.signal,
+        })),
+    );
     if (data.length) chartRef.current?.timeScale().fitContent();
-  }, [chartReady, displayCandles]);
+  }, [chartReady, displayCandles, markers]);
 
   const changeTimeframe = (next: ChartTimeframe) => {
     if (onTimeframeChange) onTimeframeChange(next);

@@ -50,9 +50,42 @@ SUFIXOS_CORRETORA: tuple[str, ...] = (
 )
 
 #: Separadores que o operador digita e as venues nao aceitam.
+#:
 #: O ponto NAO entra aqui de proposito: ele e parte do nome do contrato na XM
 #: (`EURUSD.m`), e remove-lo antes de tirar o sufixo apagaria o proprio sufixo.
-SEPARADORES: str = "/-_ "
+#:
+#: O UNDERSCORE TAMBEM NAO ENTRA MAIS (medido em 04/10/2026). Ele separava
+#: `XAU_USD` de `XAUUSD` na digitacao — util — mas tambem APAGAVA o
+#: underscore dos nomes de classe: `MULTI_METALS` virava `MULTIMETALS`, que
+#: nao existe em disco. Os tres modelos de maior edge do catalogo
+#: (MULTI_METALS +0,2497) ficavam inacessiveis por causa de um caractere que
+#: o operador nunca digitaria.
+#:
+#: A troca e QUASE DEZRADA, com uma excecao que o teste mede: `BTC_USDT`
+#: continua virando `BTCUSDT`. O `canonico` remove o underscore SO ENTRE
+#: LETRAS, quando ele separa as duas metades do par; o `_` de `MULTI_METALS`
+#: fica porque o prefixo `MULTI_` e um marcador de nome de classe, nao um
+#: separador de par. Ver `_e_separador_de_par`.
+SEPARADORES: str = "/- "
+
+#: Prefixos que indicam CLASSE DE ATIVO, e nao par. O underscore depois deles
+#: faz parte do nome e nunca e separador.
+PREFIXOS_DE_CLASSE: tuple[str, ...] = ("MULTI_",)
+
+
+def _e_separador_de_par(s: str) -> bool:
+    """O underscore em `s` separa as metades de um par, ou faz parte do nome?
+
+    `BTC_USDT` -> sim, e o par `BTCUSDT`. `MULTI_METALS` -> nao: `MULTI_` e
+    marcador de classe de ativo, e o nome em disco tem o underscore.
+
+    Sem esta distincao, uma das duas grafias funciona e a outra nao — e o
+    operador descobre qual so quando o modelo nao carrega.
+    """
+    for prefixo in PREFIXOS_DE_CLASSE:
+        if s.startswith(prefixo):
+            return False
+    return "_" in s
 
 #: Marcador de contrato perpetuo em algumas venues.
 SUFIXO_PERP: str = "_PERP"
@@ -81,6 +114,11 @@ def canonico(symbol: str) -> str:
         s = s[:-1]
     for sep in SEPARADORES:
         s = s.replace(sep, "")
+    # O underscore entre letras separa as metades do par (`BTC_USDT`), e some.
+    # O underscore de nome de CLASSE fica (`MULTI_METALS`). Ver
+    # `_e_separador_de_par`.
+    if _e_separador_de_par(s):
+        s = s.replace("_", "")
     return s
 
 
