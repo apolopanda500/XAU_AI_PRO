@@ -50,7 +50,7 @@ vez disso, siga os passos abaixo:
 | Secret Scanning | ✅ Ativo | Escaneamento nativo + padrões personalizados |
 | npm audit | ✅ Ativo | Verificação de vulnerabilidades npm (audit-level=high) |
 | .gitignore | ✅ Ativo | Arquivos `.env` não são versionados |
-| Pinned dependencies | ✅ Parcial | crewai==1.15.20 |
+| Pinned dependencies | ✅ Ativo | `requirements-lock.txt` fixado por versão |
 | Branch protection | 🛡️ Manual | Proteção da branch `main` via GitHub Settings |
 | SECURITY.md | ✅ Este arquivo | Política de divulgação responsável |
 
@@ -84,6 +84,5 @@ Use **GitHub Secrets** para:
 
 - **E-mail segurança**: `apolopanda500@gmail.com`
 - **GitHub Security**: [https://github.com/apolopanda500/XAU_AI_PRO/security](https://github.com/apolopanda500/XAU_AI_PRO/security)
-- **Sentry**: [https://sentry.io/organizations/henrique-7n/](https://sentry.io/organizations/henrique-7n/)
 
 Agradecemos a todos que ajudam a manter o XAU_AI_PRO seguro! 🛡️

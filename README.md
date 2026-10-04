@@ -10,7 +10,7 @@ Plataforma desktop para acompanhamento do MetaTrader 5, análise de mercado e tr
 - Conexão opcional com MetaTrader 5 oficial.
 - EA MQL5, arquivos `.mq5`, `.mqh` e presets `.set` incluídos no instalador.
 - Subgraph de mercado: indicadores, correlação de retornos e classificação de regime.
-- Integrações configuráveis: GitHub, Sentry, Slack, CDN de modelos e MCP.
+- Integrações configuráveis: GitHub, GitLab, Figma e MCP.
 - Planos locais Free, Pro e Business com entitlements e ativação sem cobrança.
 - Social Paper para compartilhar estratégias somente em paper/demo.
 - Atualizações via GitHub Releases e instalador Inno Setup.
