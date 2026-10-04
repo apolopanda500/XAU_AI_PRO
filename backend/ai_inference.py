@@ -233,18 +233,54 @@ def _caminho_confinado(nome: str) -> Path | None:
     `nome` ja passou por `_nome_de_artefato`; aqui so se confirma que o
     resultado nao escapa. `None` significa "recusado", nunca "criei um
     caminho novo".
+
+    POR QUE `os.path.abspath` E NAO SO `Path.resolve()`
+    ====================================================
+    A primeira versao usava `Path.resolve()` + `is_relative_to`. A defesa
+    funcionava (os testes provaram: 9 ataques e um symlink recusados), mas o
+    CodeQL continuou accusing `py/path-injection` nas linhas de baixo.
+
+    A razao e analise de fluxo de dados, nao um defeito: o CodeQL nao acompanha
+    que `nome` foi validado em `_nome_de_artefato` e que o resultado foi
+    conferido contra a raiz. Ele so sabe que a entrada veio de `simbolo`, que
+    veio da REQUISICAO HTTP, e que um `Path / str` com dado controlado acontece
+    perto de um `.exists()`.
+
+    O que o CodeQL reconhece como saneamento em Python e a comparacao
+    EXPLICITA entre o caminho absoluto normalizado e a raiz. Por isso a
+    logica esta escrita assim, e nao como um `if not alvo.is_relative_to(raiz)`
+    escondido atras de um helper: nao e estetica, e o que faz a verificacao
+    ser provavel por uma ferramenta diferente da que a escreveu.
+
+    `resolve()` E `abspath` JUNTOS, E NAO SÓ `abspath`
+    =================================================
+    `os.path.abspath` normaliza `..` e barras, mas NAO segue link simbolico: um
+    symlink dentro da pasta de modelos continua apontando para fora depois do
+    `abspath`. Trocar `resolve()` por `abspath` sozinho destravou um ataque
+    real — o teste `test_symlink_para_fora_e_recusado` reprovou.
+
+    Por isso: `resolve()` segue o link e normaliza (defesa de seguranca), e a
+    comparacao `startswith(raiz + os.sep)` sobre o resultado normalizado e o
+    que o CodeQL le como saneamento (defesa de auditoria). As duas jogam no
+    mesmo sentido; nenhuma das duas e opcional.
     """
     try:
-        raiz = MODELOS_DIR.resolve()
-        alvo = (raiz / nome).resolve()
-    except (OSError, ValueError):
-        # `resolve()` lanca em path invalido ou symlink quebrado. Recusar e a
-        # resposta correta: um caminho que nao se resolve nao deve ser lido.
+        # `resolve()` segue symlink; `abspath` normaliza o resto. Nos dois,
+        # um caminho que nao se resolve nao deve ser lido.
+        raiz = os.path.abspath(MODELOS_DIR.resolve())
+        alvo = os.path.abspath((MODELOS_DIR.resolve() / nome).resolve())
+    except (OSError, ValueError, TypeError, RuntimeError):
+        # `RuntimeError` e o que `resolve()` levanta em ciclo de symlink no
+        # Python 3.13+ (antes era `OSError`).
         return None
 
-    if alvo == raiz or not alvo.is_relative_to(raiz):
+    # Comparacao EXPLICITA e o ponto que o CodeQL reconhece como saneamento.
+    # `== raiz` cobre o caso degenerado em que `nome` seria vazio.
+    if alvo == raiz:
         return None
-    return alvo
+    if not alvo.startswith(raiz + os.sep):
+        return None
+    return Path(alvo)
 
 
 def _carregar(symbol: str, timeframe: str) -> tuple[Any | None, dict[str, Any]]:
