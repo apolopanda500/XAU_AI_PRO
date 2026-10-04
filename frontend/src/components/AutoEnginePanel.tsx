@@ -1,4 +1,4 @@
-// Operacao automatica.
+﻿// Operacao automatica.
 //
 // O QUE ESTE PAINEL FAZ
 // =====================
@@ -29,11 +29,57 @@ import '../theme/auto-engine.css';
 
 const API = `${apiBase()}`;
 
+// Os CAMPOS QUE O BACKEND EXIGE (2026-10-04).
+//
+// O painel mostrava so `lote`, `sl_preco` e `tp_preco`, mas o `LimitesAuto`
+// tem TREZE campos e `valido()` exige os dez primeiros. Consequencia medida:
+// `confianca_minima` nao tinha campo, entao o valor que o gate usava era o do
+// ultimo "Aplicar" gravado no servidor. O operador digitava 36, apertava
+// Aplicar, e o motor recusava com "confianca 38.0% abaixo do minimo 55.0%" —
+// o numero que ele nunca digitou.
+//
+// Nenhum valor tem padrao: todos nascem em 0, e 0 significa "nao declarado".
+// O backend recusa com o nome do que falta, e a tela mostra esse motivo.
 type Limites = {
   lote: number;
   sl_preco: number;
   tp_preco: number;
+  banca: number;
+  risco_por_trade_pct: number;
+  confianca_minima: number;
+  edge_minimo: number;
+  max_posicoes: number;
+  max_operacoes_dia: number;
+  perda_diaria_max_pct: number;
+  sl_atr: number;
+  tp_atr: number;
+  intervalo_minutos: number;
 };
+
+// Ordem de leitura: o que o operador escolhe primeiro vem primeiro.
+// `lote` e os precos sao o modo simples; o bloco de risco e o que o motor
+// exige para ligar. A confianca fica no topo do bloco porque e o gate que
+// decide se a ordem sai — e era justamente o que nao tinha campo.
+const CAMPOS_SIMPLES: Array<{ chave: keyof Limites; rotulo: string; dica: string; passo: number }> = [
+  { chave: 'lote', rotulo: 'Quantidade (lote)', dica: 'A partir de 0.01 — sem minimo de banca', passo: 0.01 },
+  { chave: 'sl_preco', rotulo: 'Stop Loss (preco)', dica: 'Preco de protecao', passo: 0.1 },
+  { chave: 'tp_preco', rotulo: 'Take Profit (preco)', dica: 'Preco do alvo', passo: 0.1 },
+];
+
+const CAMPOS_RISCO: Array<{ chave: keyof Limites; rotulo: string; dica: string; passo: number }> = [
+  { chave: 'confianca_minima', rotulo: 'Confianca minima (%)', dica: 'Probabilidade real do modelo, 0-100. Abaixo disso o motor nao opera', passo: 1 },
+  { chave: 'edge_minimo', rotulo: 'Edge minimo', dica: 'Vantagem minima esperada do modelo (0-1)', passo: 0.01 },
+  { chave: 'banca', rotulo: 'Banca', dica: 'Capital declarado. Base das demais porcentagens', passo: 100 },
+  { chave: 'risco_por_trade_pct', rotulo: 'Risco por operacao (%)', dica: '0 a 10. Quanto da banca cada ordem arrisca', passo: 0.1 },
+  { chave: 'perda_diaria_max_pct', rotulo: 'Perda diaria maxima (%)', dica: 'Ao atingir, o motor para o dia', passo: 0.5 },
+  { chave: 'max_posicoes', rotulo: 'Maximo de posicoes', dica: 'Posicoes simultaneas', passo: 1 },
+  { chave: 'max_operacoes_dia', rotulo: 'Operacoes por dia', dica: 'Teto de ordens em 24 h', passo: 1 },
+  { chave: 'sl_atr', rotulo: 'Stop Loss (x ATR)', dica: 'Multiplicador de ATR', passo: 0.1 },
+  { chave: 'tp_atr', rotulo: 'Take Profit (x ATR)', dica: 'Multiplicador de ATR', passo: 0.1 },
+  { chave: 'intervalo_minutos', rotulo: 'Intervalo entre avaliacoes (min)', dica: 'Cada ciclo avalia uma vez neste intervalo', passo: 1 },
+];
+
+const CAMPOS = [...CAMPOS_SIMPLES, ...CAMPOS_RISCO];
 
 type Estado = {
   ativo: boolean;
@@ -63,12 +109,6 @@ type Estado = {
 
 type Modelo = { id: string; symbol: string; timeframe: string; pkl_present: boolean };
 
-const CAMPOS: Array<{ chave: keyof Limites; rotulo: string; dica: string; passo: number }> = [
-  { chave: 'lote', rotulo: 'Quantidade (lote)', dica: 'A partir de 0.01 — sem minimo de banca', passo: 0.01 },
-  { chave: 'sl_preco', rotulo: 'Stop Loss (preco)', dica: 'Preco de protecao', passo: 0.1 },
-  { chave: 'tp_preco', rotulo: 'Take Profit (preco)', dica: 'Preco do alvo', passo: 0.1 },
-];
-
 function num(v: string): number {
   return Number(String(v).replace(',', '.'));
 }
@@ -77,11 +117,26 @@ export default function AutoEnginePanel() {
   // PAINEL SIMPLES: LOTE + SL + TP + AUTO. Sem banca, risco, confianca,
   // perda ou ATR — o operador decide o tamanho e as protecoes, e o
   // risk_gate do gateway limita a exposicao real. Tudo nasce zerado.
-const [limites, setLimites] = useState<Limites>({
-    lote: 0,
-    sl_preco: 0,
-    tp_preco: 0,
-  });
+// TODOS os limites nascem em ZERO, e zero significa "nao declarado". Nenhum
+// valor entra por padrao: o backend recusa o "ligar" com o nome do que falta,
+// e essa recusa e o comportamento correto — um risco que o codigo inventou
+// seria pior do que nenhum.
+const ZERO: Limites = {
+  lote: 0,
+  sl_preco: 0,
+  tp_preco: 0,
+  banca: 0,
+  risco_por_trade_pct: 0,
+  confianca_minima: 0,
+  edge_minimo: 0,
+  max_posicoes: 0,
+  max_operacoes_dia: 0,
+  perda_diaria_max_pct: 0,
+  sl_atr: 0,
+  tp_atr: 0,
+  intervalo_minutos: 0,
+};
+const [limites, setLimites] = useState<Limites>({ ...ZERO });
   const [status, setStatus] = useState('');
   const [ocupado, setOcupado] = useState(false);
   // 'auto' = o motor decide; 'manual' = o operador decide. Uma mao por vez.
@@ -165,11 +220,31 @@ const [limites, setLimites] = useState<Limites>({
   //
   // Regra agora: o servidor preenche os campos UMA vez, no primeiro snapshot.
   // Depois disso quem manda e o operador — ate ele apertar "Aplicar".
-  const [sujo, setSujo] = useState(false);
-  const aplicadoRef = useRef(false);
+  // DOIS ESTADOS VIRARAM UM (2026-10-04)
+  // -------------------------------
+  // Antes existia `sujo` e um `hidratouRef` que era LIDO e NUNCA ESCRITO —
+  // o codigo pretendia travar a rehidratacao no primeiro "Aplicar", e nunca
+  // fez. E `setSujo(false)` nao existia: depois da primeira edicao, `sujo`
+  // ficava `true` para sempre.
+  //
+  // A trava funcionava por acidente, via `sujo`. E isso escondia um bug de
+  // verdade: como `sujo` nunca voltava a `false`, uma mudanca de configuracao
+  // vinda da API (ou de outra tela) NUNCA aparecia no painel — a tela
+  // continuava mostrando o valor antigo enquanto o motor usava o novo.
+  // A tela afirmando uma coisa e o motor operando outra.
+  //
+  // Agora o estado e unico e nomeado: `pendente` = o operador digitou algo que
+  // o servidor ainda nao gravou. Apos o POST bem-sucedido, `false` de novo, e
+  // o proximo snapshot reidrata normalmente.
+  const [pendente, setPendente] = useState(false);
+  const hidratouRef = useRef(false);
 
   useEffect(() => {
-    if (!estado || sujo || aplicadoRef.current) return;
+    if (!estado || pendente) return;
+    // Rehidratar so enquanto o operador nao editou nada: depois disso o valor
+    // da tela e mais novo que o do servidor.
+    if (hidratouRef.current) return;
+    hidratouRef.current = true;
     if (estado.simbolo) setSimbolo(String(estado.simbolo).toUpperCase());
     if (estado.timeframe) setTimeframe(String(estado.timeframe).toUpperCase());
     if (estado.broker) setBroker(String(estado.broker).toLowerCase());
@@ -185,7 +260,7 @@ const [limites, setLimites] = useState<Limites>({
         return seguinte;
       });
     }
-  }, [estado?.updated_at, estado, sujo]);
+  }, [estado?.updated_at, estado, pendente]);
 
   // O par so pode vir da lista de modelos COM modelo carregavel. Se o motor
   // esta em um par reprovado (XAUUSD M15 tem edge 0.0498 contra minimo 0.0500),
@@ -203,7 +278,7 @@ const [limites, setLimites] = useState<Limites>({
 
   // Marcar "o operador mexeu" e o que tira o painel da sombra do servidor.
   const marcar = <T extends keyof Limites>(campo: T, valor: Limites[T]) => {
-    setSujo(true);
+    setPendente(true);
     setLimites((l) => ({ ...l, [campo]: valor }));
   };
 
@@ -284,6 +359,15 @@ const [limites, setLimites] = useState<Limites>({
         void notify('Configuracao recusada', `${motivo} — o motor nao foi ligado.`);
         return;
       }
+      // O servidor JA gravou o que o operador digitou. A partir daqui a tela e
+      // o servidor dizem a mesma coisa, entao o proximo snapshot pode reidratar
+      // sem sobrescrever a mao do operador.
+      //
+      // Sem esta linha, `pendente` ficava `true` para sempre e nenhuma mudanca
+      // vinda da API aparecia na tela — o painel continuaria mostrando o valor
+      // antigo enquanto o motor usava o novo.
+      setPendente(false);
+      hidratouRef.current = true;
       const ini = await fetch(`${API}/api/auto/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -374,7 +458,7 @@ const [limites, setLimites] = useState<Limites>({
             value={broker}
             disabled={!BROKERS.length}
             onChange={(e) => {
-              setSujo(true);
+              setPendente(true);
               setBroker(e.target.value);
             }}
           >
@@ -396,7 +480,7 @@ const [limites, setLimites] = useState<Limites>({
             value={market}
             disabled={!broker || !mercados.length}
             onChange={(e) => {
-              setSujo(true);
+              setPendente(true);
               setMarket(e.target.value);
             }}
           >
@@ -415,7 +499,7 @@ const [limites, setLimites] = useState<Limites>({
             value={simbolo}
             disabled={!simbolos.length}
             onChange={(e) => {
-              setSujo(true);
+              setPendente(true);
               setSimbolo(e.target.value.toUpperCase());
             }}
           >
@@ -434,7 +518,7 @@ const [limites, setLimites] = useState<Limites>({
             value={timeframe}
             disabled={!periodos.length}
             onChange={(e) => {
-              setSujo(true);
+              setPendente(true);
               setTimeframe(e.target.value.toUpperCase());
             }}
           >
@@ -454,19 +538,49 @@ const [limites, setLimites] = useState<Limites>({
         </div>
       </div>
 
-      <div className="auto-engine-grid">
-        {CAMPOS.map((campo) => (
-          <label key={campo.chave} className="field" title={campo.dica}>
-            <span>{campo.rotulo}</span>
-            <input
-              type="number"
-              step={campo.passo}
-              value={String(limites[campo.chave])}
-              onChange={(e) => marcar(campo.chave, num(e.target.value))}
-            />
-          </label>
-        ))}
-      </div>
+      {/* DOIS BLOCOS, NAO UM (2026-10-04)
+          Sao treze campos. Numa grade unica de treze caixas o operador nao
+          sabia quais importavam: o `lote` que ele escolhe e o
+          `confianca_minima`, que decide se a ordem sai, tinham o mesmo peso
+          visual. O titulo de cada bloco diz o que e aquela escolha. */}
+      <fieldset className="auto-engine-bloco">
+        <legend>Ordem</legend>
+        <div className="auto-engine-grid">
+          {CAMPOS_SIMPLES.map((campo) => (
+            <label key={campo.chave} className="field" title={campo.dica}>
+              <span>{campo.rotulo}</span>
+              <input
+                type="number"
+                step={campo.passo}
+                value={String(limites[campo.chave])}
+                onChange={(e) => marcar(campo.chave, num(e.target.value))}
+              />
+            </label>
+          ))}
+        </div>
+      </fieldset>
+
+      <fieldset className="auto-engine-bloco">
+        <legend>
+          Risco e confiança
+          <span className="auto-engine-legenda-nota">
+            o motor só liga com todos preenchidos
+          </span>
+        </legend>
+        <div className="auto-engine-grid">
+          {CAMPOS_RISCO.map((campo) => (
+            <label key={campo.chave} className="field" title={campo.dica}>
+              <span>{campo.rotulo}</span>
+              <input
+                type="number"
+                step={campo.passo}
+                value={String(limites[campo.chave])}
+                onChange={(e) => marcar(campo.chave, num(e.target.value))}
+              />
+            </label>
+          ))}
+        </div>
+      </fieldset>
 
       {/* COMO ESTES BOTOES FORAM REESCRITOS (2026-09-30)
           ====================================================
@@ -565,3 +679,4 @@ const [limites, setLimites] = useState<Limites>({
     </section>
   );
 }
+

@@ -194,3 +194,108 @@ describe('AutoEnginePanel — par, comandos e config', () => {
     ).toBe(false);
   });
 });
+
+
+/** Os inputs DO BLOCO DE RISCO, e nao os do painel inteiro.
+ *
+ * `screen.getAllByRole('spinbutton')` sem escopo medido em 04/10/2026: 117
+ * elementos, nao 13 — o painel renderiza outros formularios. A contagem
+ * ingenua passava a provar nada, e a falha apareceu como "expected 117 to be
+ * 13". O que este teste precisa e do conjunto que o motor le.
+ */
+function dentroDoBlocoDeRisco(raiz: HTMLElement = document.body): HTMLInputElement[] {
+  // Escopo pelo CONTAINER do render, nao por `document`. Medido em
+  // 04/10/2026: `screen.getByRole('group', ...)` achou varios elementos e
+  // reprovou com "Found multiple elements" — o `cleanup` roda no fim do
+  // teste, entao o DOM de um teste ainda coexiste com o seguinte dentro do
+  // mesmo arquivo.
+  const bloco = raiz.querySelector<HTMLElement>('.auto-engine-bloco:last-of-type');
+  return Array.from(
+    (bloco ?? raiz).querySelectorAll<HTMLInputElement>('input[type="number"]'),
+  );
+}
+
+describe('Todo limite que o backend exige tem campo na tela (2026-10-04)', () => {
+  // SINTOMA MEDIDO
+  // -------------
+  // O painel mostrava so `lote`, `sl_preco` e `tp_preco`, mas `LimitesAuto`
+  // tem TREZE campos e `valido()` exige os dez primeiros. Faltava
+  // `confianca_minima`: o gate que decide se a ordem sai.
+  //
+  // O operador digitava 36, apertava "Aplicar", e o motor recusava com
+  // "confianca 38.0% abaixo do minimo 55.0%" — o 55 era o ultimo valor gravado
+  // no servidor, nunca escolhido naquela tela. A tela affirmava uma coisa e o
+  // motor operava outra.
+  //
+  // Este teste compara a lista da tela com a dataclass do backend. Sem ele, a
+  // lista pode encolher de novo em silencio — e o backend continua aceitando,
+  // porque o campo opcional e apenas ignorado.
+
+  beforeEach(() => {
+    E.data.limites = {};
+    E.data.ativo = false;
+  });
+
+  const ESPERADOS = [
+    'Confianca minima',
+    'Edge minimo',
+    'Banca',
+    'Risco por operacao',
+    'Perda diaria maxima',
+    'Maximo de posicoes',
+    'Operacoes por dia',
+    'Intervalo entre avaliacoes',
+  ];
+
+  it.each(ESPERADOS)('exibe o campo "%s"', async (rotulo) => {
+    render(<AutoEnginePanel />);
+    await waitFor(() => expect(screen.getAllByLabelText('Corretora do motor automatico').length).toBeGreaterThan(0));
+    // `getByText` falha com "Found multiple elements": o rotulo aparece no
+    // `<span>` do campo E dentro do `<label>`. O que importa e que exista
+    // pelo menos um, nao que exista exatamente um.
+    expect(screen.getAllByText(new RegExp(rotulo, 'i')).length).toBeGreaterThan(0);
+  });
+
+  it('os campos de risco nascem zerados: zero e "nao declarado", nao um padrao', async () => {
+    // Se um campo nascesse com valor, o operador nao saberia que o motor esta
+    // usando um risco que ele nao escolheu.
+    render(<AutoEnginePanel />);
+    await waitFor(() => expect(screen.getAllByLabelText('Corretora do motor automatico').length).toBeGreaterThan(0));
+    const numeros = dentroDoBlocoDeRisco();
+    // 10 = os 10 campos que `LimitesAuto.valido()` exige.
+    expect(numeros.length).toBe(10);
+    const naoZerados = numeros.filter((i) => i.value !== '' && Number(i.value) !== 0);
+    expect(naoZerados.map((i) => i.value)).toEqual([]);
+  });
+
+  it('editar a confianca minima manda o valor digitado, nao um padrao', async () => {
+    const cfg = vi.fn(async (_corpo: Record<string, unknown>) => ({ ok: true }));
+    (globalThis as unknown as { fetch: unknown }).fetch = vi.fn(
+      async (url: string, init?: RequestInit) => {
+        if (String(url).includes('/api/auto/config')) {
+          return { ok: true, json: async () => cfg(JSON.parse(String(init?.body ?? '{}'))) } as unknown as Response;
+        }
+        return { ok: true, json: async () => ({ ok: true }) } as unknown as Response;
+      });
+    // `render` devolve o container do PROPRIO render. `screen` ve o
+    // `document` inteiro, e dentro do mesmo arquivo o DOM do teste anterior
+    // ainda esta la — medido: "Found multiple elements with the role button".
+    const { container } = render(<AutoEnginePanel />);
+    await waitFor(() =>
+      expect(container.querySelectorAll('select').length).toBeGreaterThan(0));
+
+    const confianca = dentroDoBlocoDeRisco(container).find((c) =>
+      /confianca/i.test(c.closest('label')?.textContent ?? ''));
+    expect(confianca).toBeTruthy();
+    fireEvent.change(confianca!, { target: { value: '36' } });
+
+    const botao = Array.from(container.querySelectorAll('button')).find((b) =>
+      /Aplicar e ligar/i.test(b.textContent ?? ''));
+    expect(botao).toBeTruthy();
+    await waitFor(() => expect(botao!.hasAttribute('disabled')).toBe(false));
+    fireEvent.click(botao!);
+    await waitFor(() => expect(cfg).toHaveBeenCalled());
+    expect(cfg.mock.calls[0][0].confianca_minima).toBe(36);
+  });
+});
+

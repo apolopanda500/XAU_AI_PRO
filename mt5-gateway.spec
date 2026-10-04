@@ -127,6 +127,15 @@ a = Analysis(
         # coloca no executavel. Sem ele, `classe_de` cai em `OUTROS` no app
         # instalado e a progressao VIP perde a separacao por grupo.
         'backend.asset_classes',
+        # SIMBOLOS E ALIAS (2026-10-04)
+        #
+        # `symbols` e a fonte unica do simbolo canonico (importado dentro
+        # de funcao em `ai_inference` e `broker_registry`); `symbol_aliases`
+        # resolve modelo -> corretora (`XAUUSD` -> `GOLD` na XM) no motor.
+        # Sem os dois, o app instalado volta a nao achar modelo para par
+        # de exchange e a pedir `XAUUSD` a XM que so tem `GOLD`.
+        'backend.symbols',
+        'backend.symbol_aliases',
         'backend.watchdog',
         'backend.guardian_engine',
         'backend.persistent_queue',
