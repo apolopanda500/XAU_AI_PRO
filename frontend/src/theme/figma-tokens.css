@@ -1,0 +1,25 @@
+/* ==========================================================
+ * TOKENS GERADOS DA FIGMA - NAO EDITE COM A MAO
+ * ==========================================================
+ * Fonte: Figma (variaveis e estilos do design system publicado).
+ * Gerador: scripts/sincronizar_figma.py --aplicar
+ *
+ * ESTE ARQUIVO ESTA VAZIO DE PROPOSITO.
+ *
+ * Medido em 04/10/2026: o arquivo "XAU AI PRO" da Figma tem 0 componentes,
+ * 0 estilos e 0 variaveis publicados. Nao ha design system para trazer.
+ *
+ * Ele existe no repositorio mesmo vazio por tres motivos:
+ *  1. o import em main.tsx nao quebra o build quando o design system existir
+ *  2. o lugar do token da Figma ja esta definido: publicar na Figma e rodar o
+ *     gerador e suficiente, sem passo de integracao esquecido
+ *  3. enquanto vazio, o app usa o CSS manual sem erro nenhum
+ *
+ * Para preencher: crie os estilos/variaveis na Figma e rode
+ *   .\.venv\Scripts\python.exe scripts\sincronizar_figma.py --aplicar
+ *
+ * Roteiro do que criar: docs/FIGMA_DESIGN_SYSTEM.md
+ * ========================================================== */
+
+:root {
+}

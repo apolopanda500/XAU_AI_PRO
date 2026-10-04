@@ -30,6 +30,20 @@ import './theme/guardian.css';
 // vence as folhas que inventaram valores proprios. Ver theme/scale.css.
 import './theme/scale.css';
 
+// TOKENS DA FIGMA — carregados por ULTIMO de todos.
+//
+// A ordem e o que faz a Figma ganhar: este arquivo vem depois do
+// `scale.css`, entao os valores que a Figma definir VENCEM o que estiver no
+// CSS escrito a mao. Sem essa ordem, o token da Figma seria sobrescrito e a
+// mudanca na Figma nao apareceria na app — que e o modo silencioso de uma
+// fonte de verdade nao estar na fonte da verdade.
+//
+// O arquivo e gerado por `scripts/sincronizar_figma.py --aplicar` e contem SO
+// o que existe na Figma. Enquanto ele nao existir, o app segue usando o CSS
+// manual sem nenhum erro: e por isso que o arquivo precisa existir no repo
+// mesmo vazio.
+import './theme/figma-tokens.css';
+
 // Ajusta para Tauri (mobile viewport)
 const metaViewport = document.querySelector('meta[name="viewport"]');
 if (metaViewport) {
