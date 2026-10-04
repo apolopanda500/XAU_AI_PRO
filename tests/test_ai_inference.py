@@ -252,3 +252,45 @@ class TestNenhumAtivoPresumido:
             assert "BTCUSD" in declarado.upper(), (
                 f"pediu BTCUSD e recebeu {declarado!r}"
             )
+
+
+class TestQuoteDaCorretora:
+    """O par da exchange resolve para o modelo do terminal, sem trocar de ativo.
+
+    MEXC/Binance operam `BTCUSDT`; o modelo foi treinado como `BTCUSD`.
+    A regra e generica (sufixo de quote), sem nenhum nome de ativo no codigo:
+    BTC nunca vira outro ativo, e desconhecido continua recusado.
+    """
+
+    def test_usdt_carrega_modelo_usd(self):
+        ai.limpar_cache()
+        modelo, meta = ai._carregar("BTCUSDT", "H1")
+        assert modelo is not None, (
+            "BTCUSDT deveria resolver para o artefato BTCUSD_H1"
+        )
+        assert ai.mesmo_ativo(meta.get("symbol", ""), "BTCUSDT")
+
+    def test_usdt_nao_troca_de_ativo(self):
+        ai.limpar_cache()
+        modelo, meta = ai._carregar("BTCUSDT", "H1")
+        if modelo is not None:
+            assert not ai.mesmo_ativo(meta.get("symbol", ""), "EURUSD")
+
+    def test_desconhecido_em_usdt_continua_recusado(self):
+        ai.limpar_cache()
+        modelo, _ = ai._carregar("ZZZQUSDT", "H1")
+        assert modelo is None
+
+    def test_recusa_diz_onde_o_ativo_opera(self):
+        ai.limpar_cache()
+        r = ai.inferir("XAUUSD", _candles(), "M5")
+        assert r.disponivel is False
+        assert "H1" in r.motivo or "H4" in r.motivo, (
+            f"a recusa deveria dizer os timeframes capazes: {r.motivo!r}"
+        )
+
+    def test_timeframes_capazes_por_ativo(self):
+        ai.limpar_cache()
+        assert ai.timeframes_capazes("BTCUSDT") == ["H1", "H4", "M15"]
+        assert "M5" not in ai.timeframes_capazes("XAUUSD")
+        assert ai.timeframes_capazes("") == []

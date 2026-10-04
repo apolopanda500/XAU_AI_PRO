@@ -488,3 +488,75 @@ class TestRoteamentoPorCorretora:
         assert r["ok"] is False
         assert "corretora" in r["error"].lower()
         assert m.ativo is False
+
+
+class TestMultiAlvos:
+    """Varios graficos, horarios diferentes, sem duplicar."""
+
+    def test_alvo_duplicado_recusa(self):
+        m = motor_pronto()
+        r = m.configurar_alvos([
+            {"broker": "mt5", "market": "forex", "symbol": "EURUSD", "timeframe": "H1"},
+            {"broker": "mt5", "market": "forex", "symbol": "EURUSD", "timeframe": "H1"},
+        ])
+        assert r["ok"] is False
+        assert "duplicado" in r["error"].lower()
+
+    def test_mesmo_ativo_dois_timeframes_recusa(self):
+        m = motor_pronto()
+        r = m.configurar_alvos([
+            {"broker": "mt5", "market": "forex", "symbol": "EURUSD", "timeframe": "H1"},
+            {"broker": "mt5", "market": "forex", "symbol": "EURUSD", "timeframe": "M15"},
+        ])
+        assert r["ok"] is False
+        assert "um tf por ativo" in r["error"].lower()
+
+    def test_mesmo_ativo_em_corretoras_diferentes_ok(self):
+        m = motor_pronto()
+        r = m.configurar_alvos([
+            {"broker": "mt5", "market": "crypto-spot", "symbol": "BTCUSD", "timeframe": "H1"},
+            {"broker": "mexc", "market": "crypto-spot", "symbol": "BTCUSDT", "timeframe": "H1"},
+        ])
+        assert r["ok"] is True
+        assert len(r["alvos"]) == 2
+
+    def test_mercado_incompativel_recusa(self):
+        m = motor_pronto()
+        r = m.configurar_alvos([
+            {"broker": "mexc", "market": "forex", "symbol": "EURUSD", "timeframe": "H1"},
+        ])
+        assert r["ok"] is False
+
+    def test_ciclo_alvos_opera_cada_um_uma_vez(self):
+        m = motor_pronto()
+        m.configurar_alvos([
+            {"broker": "mt5", "market": "forex", "symbol": "EURUSD", "timeframe": "H1"},
+            {"broker": "mexc", "market": "crypto-spot", "symbol": "BTCUSDT", "timeframe": "H1"},
+        ])
+        chamadas: list[dict] = []
+        resultados = m.ciclo_alvos(
+            lambda s, t: InferenciaFalsa(signal="BUY", confianca=72.0, edge=0.12),
+            enviar_espiao(chamadas), risco)
+        assert len(resultados) == 2
+        assert all(d.agir for d in resultados)
+        assert len(chamadas) == 2
+        # Segunda passada na mesma janela: nenhuma duplicata.
+        resultados2 = m.ciclo_alvos(
+            lambda s, t: InferenciaFalsa(signal="BUY", confianca=72.0, edge=0.12),
+            enviar_espiao(chamadas), risco)
+        assert all(not d.agir for d in resultados2)
+        assert len(chamadas) == 2
+
+    def test_falha_de_um_nao_derruba_os_outros(self):
+        m = motor_pronto()
+        m.configurar_alvos([
+            {"broker": "mt5", "market": "forex", "symbol": "EURUSD", "timeframe": "H1"},
+            {"broker": "mexc", "market": "crypto-spot", "symbol": "BTCUSDT", "timeframe": "H1"},
+        ])
+        def _inferir(s, t):
+            if "EUR" in s:
+                raise RuntimeError("MT5 fora do ar")
+            return InferenciaFalsa(signal="BUY", confianca=72.0, edge=0.12)
+        resultados = m.ciclo_alvos(_inferir, enviar_espiao([]), risco)
+        assert len(resultados) == 2
+        assert resultados[1].agir is True or resultados[1].motivo

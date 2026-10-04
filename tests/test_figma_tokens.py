@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """O gerador de tokens da Figma produz CSS que serve para alguma coisa.
 
 POR QUE ESTE TESTE EXISTE
@@ -18,6 +18,7 @@ existirem de verdade.
 """
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -121,3 +122,91 @@ class TestGeraCssUtil:
     def test_arquivo_gerado_avisa_que_nao_e_para_editar_mao(self):
         css = gerar_css({"a": variavel("cor/dark/bg", default=cor("#0f1420"))}, [])
         assert "NAO EDITE COM A MAO" in css
+
+# =====================================================================
+#  TEMA COMPLETO POR PAPEL  (medido em 04/10/2026)
+# =====================================================================
+# `ok`, `warn` e `danger` so eram declarados no tema `light`. Os outros 7
+# pegavam estes tres do `:root` sem ninguem ter escolhido — funciona por
+# acaso, porque todo tema novo nasce com o verde calibrado para o `dark`.
+# E a mesma classe de defeito do `DEFAULT_TIMEFRAME = "M5"`: um valor que
+# ninguem escolheu decidindo por todos.
+#
+# Nenhum teste de frontend pega isso: o CSS compila sem uma variavel e a tela
+# abre normalmente.
+
+CSS = Path(__file__).resolve().parent.parent / "frontend" / "src" / "theme" / "global.css"
+USE_THEME = Path(__file__).resolve().parent.parent / "frontend" / "src" / "hooks" / "useTheme.ts"
+
+# `primary-contrast` entra porque texto sobre `primary` sem ele fica ilegivel.
+PAPEIS = ("bg", "panel", "panel2", "border", "text", "muted",
+          "primary", "primary-contrast", "ok", "warn", "danger")
+
+
+def _temas_do_css() -> dict[str, dict[str, str]]:
+    """Mapa seletor -> variaveis, contando o nivel de chaves.
+
+    Um `.*?` nao aninhado para no `}` errado quando o bloco tem chave interna,
+    e o tema seguinte desaparece do mapa sem erro. Foi assim que `xau_dark` e
+    `btc_dark` sairam da folha de estilos com "-" sendo que o CSS estava certo.
+    """
+    texto = CSS.read_text(encoding="utf-8")
+    achados: dict[str, dict[str, str]] = {}
+    padrao = r"((?:\[data-theme='[a-z_]+'\]\s*,\s*)*\[data-theme='[a-z_]+'\])\s*\{"
+    for m in re.finditer(padrao, texto):
+        nomes = re.findall(r"\[data-theme='([a-z_]+)'\]", m.group(1))
+        i, nivel = m.end(), 1
+        while i < len(texto) and nivel:
+            if texto[i] == "{":
+                nivel += 1
+            elif texto[i] == "}":
+                nivel -= 1
+            i += 1
+        variaveis = dict(re.findall(r"--([a-z0-9-]+):\s*([^;]+);", texto[m.end():i]))
+        for nome in nomes:
+            achados.setdefault(nome, {}).update(variaveis)
+    return achados
+
+
+# Os 8 temas reais. Um `re.findall` solto sobre o `useTheme.ts` tambem pega
+# `react` e `undefined` do codigo vizinho, e o teste passa a acusar tema que
+# nao existe. A lista e explicita porque ela E o contrato: um tema novo
+# entra aqui e no CSS, nunca so num dos dois.
+TEMAS = ("dark", "xau_dark", "btc_dark", "light", "ocean_dark",
+         "emerald_dark", "rose_dark", "violet_dark")
+
+
+def _temas_oferecidos() -> set[str]:
+    return set(TEMAS)
+
+
+class TestCadaTemaTemTodosOsPapeis:
+    def test_nenhum_tema_fica_sem_um_papel(self):
+        css = _temas_do_css()
+        faltando = []
+        for tema in sorted(_temas_oferecidos()):
+            if tema not in css:
+                faltando.append(f"{tema}: sem bloco no CSS")
+                continue
+            for papel in PAPEIS:
+                if papel not in css[tema]:
+                    faltando.append(f"{tema}: sem --{papel}")
+        assert not faltando, "tema incompleto: " + "; ".join(faltando)
+
+    def test_estados_nao_dependem_do_root(self):
+        """`ok`/`warn`/`danger` por tema, nunca herdados do `:root`."""
+        css = _temas_do_css()
+        for tema, variaveis in sorted(css.items()):
+            for papel in ("ok", "warn", "danger"):
+                assert papel in variaveis, f"[{tema}] herdaria --{papel} do :root"
+
+    def test_o_css_tem_as_chaves_balanceadas(self):
+        """Um bloco de tema sem `}` engole o CSS seguinte em silencio.
+
+        Foi assim que os blocos chegaram a sumir: o `/* Utilitarios */` ficou
+        dentro do `[data-theme=...]`, as variaveis daquele tema nunca
+        existiram, o build passou e a tela herdou o tema anterior.
+        """
+        texto = CSS.read_text(encoding="utf-8")
+        assert texto.count("{") == texto.count("}"), (
+            f"chaves desbalanceadas: {texto.count('{')} abre / {texto.count('}')} fecha")

@@ -72,9 +72,17 @@ def candles(broker: str, market: str, symbol: str, timeframe: str, limit: int = 
     simbolo = str(symbol or "").strip().upper()
     if not simbolo:
         raise SemCaminhoError("escolha o ativo: simbolo vazio nao tem serie")
+    # O par e normalizado pelo quote da corretora DENTRO dos clientes
+    # (`exchange_symbols.par_exchange`: `BTCUSD` vira `BTCUSDT` na MEXC,
+    # `BTC-USDT` na OKX, fica `BTCUSD` no MT5). Forex em exchange recusa
+    # com `ParInvalido` la dentro; aqui a recusa vira `SemCaminhoError`
+    # com o nome da corretora, para o motor registrar ONDE recusou.
     from backend.mt5_gateway import _universal_candles
 
-    resposta = _universal_candles(escopo["broker"], escopo["market"], simbolo, timeframe, limit)
+    try:
+        resposta = _universal_candles(escopo["broker"], escopo["market"], simbolo, timeframe, limit)
+    except ValueError as exc:
+        raise SemCaminhoError(f"{escopo['label']} recusou {simbolo}: {exc}") from exc
     linhas = resposta.get("candles") if isinstance(resposta, dict) else None
     if not linhas:
         motivo = ""

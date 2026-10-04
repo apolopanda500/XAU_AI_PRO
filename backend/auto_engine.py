@@ -191,6 +191,10 @@ class MotorAuto:
         # request_id por decisao, para idempotencia: o mesmo ciclo nao pode
         # gerar duas ordens se a resposta se perder e o motor repetir.
         self._vistos: dict[str, float] = {}
+        # Multi-alvos: [{broker, market, symbol, timeframe}]. Um TF por
+        # ativo: dois TFs do mesmo ativo na mesma janela gerariam duas
+        # ordens do mesmo sinal — duplicata, nao diversificacao.
+        self.alvos: list[dict[str, str]] = []
 
     # ------------------------------------------------------------- estado
 
@@ -205,6 +209,7 @@ class MotorAuto:
                 # ainda nao foi escolhida nenhuma corretora.
                 "broker": self.broker or "",
                 "market": self.market or "",
+                "alvos": [dict(a) for a in self.alvos],
                 "ciclo": self.ciclo,
                 "limites": asdict(self.limites),
                 "decisoes": [d.para_dict() for d in self.decisoes[-20:]],
@@ -274,7 +279,83 @@ class MotorAuto:
                 "limites": asdict(self.limites),
                 "broker": self.broker or "",
                 "market": self.market or "",
+                "alvos": [dict(a) for a in self.alvos],
             }
+
+    def configurar_alvos(self, alvos: list[dict[str, Any]]) -> dict[str, Any]:
+        """Define os alvos operacionais. Um TF por ativo, sem duplicar.
+
+        Cada alvo e {broker, market, symbol, timeframe}, validado contra o
+        catalogo. Dois alvos com mesmo (broker, symbol, timeframe) sao a
+        mesma operacao — o segundo e recusado. Timeframes diferentes do
+        MESMO ativo na MESMA corretora sao recusados: o sinal se repetiria
+        em duas janelas e viraria duas ordens do mesmo modelo.
+        """
+        from backend.broker_registry import get_broker, normalize_market
+
+        if not isinstance(alvos, list) or not alvos:
+            return {"ok": False, "error": "informe ao menos um alvo {broker, market, symbol, timeframe}"}
+        normalizados: list[dict[str, str]] = []
+        vistos: set[str] = set()
+        for item in alvos:
+            if not isinstance(item, dict):
+                return {"ok": False, "error": "cada alvo precisa ser {broker, market, symbol, timeframe}"}
+            broker = str(item.get("broker") or "").strip().lower()
+            market = normalize_market(str(item.get("market") or ""))
+            symbol = str(item.get("symbol") or "").strip().upper()
+            timeframe = str(item.get("timeframe") or "").strip().upper()
+            if not broker or not market or not symbol or not timeframe:
+                return {"ok": False, "error": f"alvo incompleto: {item}"}
+            definicao = get_broker(broker)
+            if definicao is None:
+                return {"ok": False, "error": f"corretora desconhecida: {broker}"}
+            if not definicao.execution:
+                return {"ok": False, "error": f"{definicao.label} nao tem execucao no catalogo"}
+            if market not in definicao.markets:
+                return {"ok": False, "error": f"{definicao.label} nao opera em '{market}'"}
+            chave = f"{broker}:{symbol}:{timeframe}"
+            if chave in vistos:
+                return {"ok": False, "error": f"alvo duplicado: {chave}"}
+            vistos.add(chave)
+            # Mesmo ativo na mesma corretora em outro TF: o par (broker,
+            # symbol) ja apareceu com timeframe diferente — duplicata de sinal.
+            for outro in normalizados:
+                if outro["broker"] == broker and outro["symbol"] == symbol:
+                    return {"ok": False, "error": (
+                        f"{symbol} em {broker} ja opera em {outro['timeframe']}: "
+                        "um TF por ativo, sem duplicar sinal"
+                    )}
+            normalizados.append({"broker": broker, "market": market,
+                                 "symbol": symbol, "timeframe": timeframe})
+        with self._lock:
+            self.alvos = normalizados
+        return {"ok": True, "alvos": [dict(a) for a in normalizados]}
+
+    def ciclo_alvos(
+        self,
+        inferir: Callable[[str, str], Any],
+        enviar: Callable[[dict[str, Any]], dict[str, Any]],
+        risk_state: Callable[[], dict[str, Any]],
+    ) -> list[Decisao]:
+        """Um ciclo por alvo, sem duplicar. Falha de um nao derruba os outros."""
+        with self._lock:
+            alvos = [dict(a) for a in self.alvos]
+        if not alvos:
+            return [self.ciclo_unico(inferir, enviar, risk_state)]
+        resultados: list[Decisao] = []
+        for alvo in alvos:
+            with self._lock:
+                self.simbolo = alvo["symbol"]
+                self.timeframe = alvo["timeframe"]
+                self.broker = alvo["broker"]
+                self.market = alvo["market"]
+            try:
+                resultados.append(self.ciclo_unico(inferir, enviar, risk_state))
+            except Exception as exc:
+                resultados.append(self._registrar(Decisao(
+                    datetime.now(timezone.utc).isoformat(), alvo["symbol"],
+                    alvo["timeframe"], False, f"alvo falhou sem derrubar os outros: {exc}")))
+        return resultados
 
     def ligar(self) -> dict[str, Any]:
         ok, motivo = self.limites.valido()
@@ -432,7 +513,12 @@ class MotorAuto:
         volume = round(volume, 2)
 
         # 6. Idempotencia: um ciclo por slot de tempo, sem repetir ordem.
-        slot = f"{simbolo}:{timeframe}:{int(time.time() // (int(limites['intervalo_minutos']) * 60))}"
+        # O slot inclui a corretora: o mesmo ativo na MEXC e no MT5 na
+        # mesma janela sao duas operacoes legitimas; repetir o MESMO
+        # (broker, ativo, TF) na mesma janela e duplicata e nao envia.
+        with self._lock:
+            _broker_slot = str(self.broker or "").strip().lower()
+        slot = f"{_broker_slot}:{simbolo}:{timeframe}:{int(time.time() // (int(limites['intervalo_minutos']) * 60))}"
         with self._lock:
             if slot in self._vistos:
                 return self._registrar(Decisao(
@@ -513,7 +599,14 @@ class MotorAuto:
                 False, f"sem modelo carregado para {self.timeframe}; nada foi enviado"))
             raise RuntimeError(f"modelo ausente para {self.timeframe}")
         treino = str(meta.get("symbol") or "").upper()
-        if treino and treino != simbolo:
+        # Mesmo ativo em quote de outra corretora (MEXC: `BTCUSDT`, modelo:
+        # `BTCUSD`): comparacao pela base, sem lista de ativos no codigo.
+        try:
+            from backend.ai_inference import mesmo_ativo as _mesmo_ativo
+            _igual = _mesmo_ativo(treino, simbolo)
+        except Exception:
+            _igual = (treino == simbolo)
+        if treino and not _igual:
             self._registrar(Decisao(
                 datetime.now(timezone.utc).isoformat(), self.simbolo, self.timeframe,
                 False,

@@ -197,6 +197,50 @@ TIMEFRAMES_VALIDOS = frozenset({"M5", "M15", "H1", "H4"})
 _RE_SIMBOLO = re.compile(r"^[A-Z0-9]{1,12}$")
 
 
+def base_do_ativo(simbolo: str) -> str:
+    """Base do ativo sem o quote da corretora: `BTCUSDT` -> `BTC`.
+
+    MEXC/Binance/Bybit/OKX operam contra USDT/USDC; MT5 (XM) opera contra
+    USD. Os modelos sao treinados no par do terminal (`BTCUSD`), entao o
+    par da exchange precisa resolver para o mesmo artefato — sem trocar de
+    ativo (BTC nunca vira ETH) e sem presumir nada quando vazio.
+    """
+    s = str(simbolo or "").strip().upper()
+    for sufixo in ("USDT", "USDC", "USD", "EUR", "BUSD", "FDUSD", "TUSD"):
+        if len(s) > len(sufixo) and s.endswith(sufixo):
+            return s[: -len(sufixo)]
+    if s.endswith("_PERP"):
+        return base_do_ativo(s[: -len("_PERP")])
+    return s
+
+
+def mesmo_ativo(a: str, b: str) -> bool:
+    """Mesmo ativo em quotes diferentes (`BTCUSDT` == `BTCUSD`)."""
+    sa, sb = (str(a or "").strip().upper(), str(b or "").strip().upper())
+    if not sa or not sb:
+        return False
+    if sa == sb:
+        return True
+    return base_do_ativo(sa) == base_do_ativo(sb) and bool(base_do_ativo(sa))
+
+
+def candidatos_de_simbolo(simbolo: str) -> list[str]:
+    """Formas do mesmo ativo onde pode haver artefato (`BTCUSDT_H1`...).
+
+    Ordem: o pedido literal primeiro (um `BTCUSDT_H1.pkl` treinado na
+    exchange vence o alias); depois as formas no quote do terminal.
+    """
+    s = str(simbolo or "").strip().upper()
+    if not s:
+        return []
+    base = base_do_ativo(s)
+    candidatos = [s]
+    for forma in (f"{base}USD", f"{base}USDT", f"{base}USDC"):
+        if forma != s and forma not in candidatos:
+            candidatos.append(forma)
+    return candidatos
+
+
 def _nome_de_artefato(simbolo: str, timeframe: str) -> str | None:
     """`<SIMBOLO>_<TF>` ou `None` se o par nao puder gerar nome de arquivo.
 
@@ -347,25 +391,48 @@ def _carregar(symbol: str, timeframe: str) -> tuple[Any | None, dict[str, Any]]:
         # nao tem mtime para invalidar.
         return None, {"publish_reason": MOTIVO_SEM_SIMBOLO}
     timeframe = str(timeframe or "").strip().upper()
-    nome = _nome_de_artefato(simbolo, timeframe)
-    if nome is None:
-        # Nome fora do formato aceito: e recusao COM MOTIVO, nao ausencia de
-        # artefato. A distincao importa — "sem modelo" parece um problema de
-        # treino; "simbolo invalido" e entrada do cliente.
-        _CACHE[f"modelo:{simbolo}:{timeframe}"] = (None, {})
-        return _CACHE[f"modelo:{simbolo}:{timeframe}"]
-    chave = f"modelo:{simbolo}:{timeframe}"
+    # O par da exchange (MEXC: `BTCUSDT`) resolve para o artefato treinado no
+    # terminal (`BTCUSD_H1`): mesmo ativo, quote da corretora diferente. Cada
+    # candidato e validado por `_nome_de_artefato` (formato) e por
+    # `_caminho_confinado` (destino) — o alias nao afrouxa nenhuma defesa.
+    ultimo_meta: dict[str, Any] = {}
+    for candidato in candidatos_de_simbolo(simbolo):
+        nome = _nome_de_artefato(candidato, timeframe)
+        if nome is None:
+            continue
+        carregado, meta = _carregar_artefato(candidato, nome)
+        if carregado is not None:
+            return carregado, meta
+        if meta:
+            ultimo_meta = meta
+    if ultimo_meta:
+        _CACHE[f"modelo:{simbolo}:{timeframe}"] = (None, ultimo_meta)
+        return None, ultimo_meta
+    # Nome fora do formato aceito: e recusao COM MOTIVO, nao ausencia de
+    # artefato. A distincao importa — "sem modelo" parece um problema de
+    # treino; "simbolo invalido" e entrada do cliente.
+    _CACHE[f"modelo:{simbolo}:{timeframe}"] = (None, {})
+    return _CACHE[f"modelo:{simbolo}:{timeframe}"]
+
+
+def _carregar_artefato(candidato: str, nome: str) -> tuple[Any | None, dict[str, Any]]:
+    """Carrega UM artefato ja validado. Extraido de `_carregar` sem mudar nada."""
+    chave = f"modelo:{candidato}:{nome.split('_')[-1]}"
     pkl = _caminho_confinado(f"{nome}.pkl")
     meta = _caminho_confinado(f"{nome}.meta.json")
     if pkl is None or meta is None:
-        _CACHE[chave] = (None, {})
-        return _CACHE[chave]
+        _CACHE[chave] = (None, {}, None)
+        return _CACHE[chave][0], _CACHE[chave][1]
     if not (pkl.exists() and meta.exists()):
-        _CACHE[chave] = (None, {})
-        return _CACHE[chave]
+        _CACHE[chave] = (None, {}, None)
+        return _CACHE[chave][0], _CACHE[chave][1]
     mtime = pkl.stat().st_mtime
+    # A entrada do cache e (modelo, meta, mtime). O mtime decide se o arquivo
+    # em disco mudou desde a leitura: sem ele, retreinar o modelo no mesmo
+    # processo continuaria servindo o artefato antigo, e o operador veria o
+    # nome do modelo novo com a previsao antiga.
     em_cache = _CACHE.get(chave)
-    if em_cache is not None and em_cache[2] == mtime:
+    if em_cache is not None and len(em_cache) == 3 and em_cache[2] == mtime:
         return em_cache[0], em_cache[1]
     try:
         import joblib
@@ -435,6 +502,45 @@ def _carregar(symbol: str, timeframe: str) -> tuple[Any | None, dict[str, Any]]:
 
 def limpar_cache() -> None:
     _CACHE.clear()
+
+
+def timeframes_capazes(symbol: str) -> list[str]:
+    """Timeframes com modelo publicavel para este ativo, na ordem H1/H4/M15/M5.
+
+    Cada ativo tem sua habilidade e seu periodo: em vez de o operador
+    descobrir tentando, a recusa do `inferir` diz onde aquele ativo opera.
+    Le so os `.meta.json` (sem desserializar `.pkl`), e aceita o par no
+    quote de qualquer corretora (mesma regra generica de `_carregar`).
+    """
+    s = str(symbol or "").strip().upper()
+    if not s:
+        return []
+    formas = set(candidatos_de_simbolo(s))
+    achados: dict[str, bool] = {}
+    try:
+        for meta_path in MODELOS_DIR.glob("*.meta.json"):
+            # `stem` de `BTCUSD_H1.meta.json` e `BTCUSD_H1.meta`: corta o
+            # sufixo duplo pelo nome, nao pelo stem.
+            nome_arquivo = meta_path.name
+            nome = nome_arquivo[: -len(".meta.json")] if nome_arquivo.endswith(".meta.json") else ""
+            if "_" not in nome:
+                continue
+            base_tf = nome.rsplit("_", 1)
+            if len(base_tf) != 2:
+                continue
+            forma, tf = base_tf
+            if forma not in formas or tf not in TIMEFRAMES_VALIDOS:
+                continue
+            try:
+                with meta_path.open(encoding="utf-8") as f:
+                    m = json.load(f)
+            except Exception:
+                continue
+            if m.get("publicable"):
+                achados[tf] = True
+    except OSError:
+        return []
+    return [tf for tf in ("H1", "H4", "M15", "M5") if achados.get(tf)]
 
 
 def _nome_do_modelo(symbol: str, timeframe: str, meta: dict[str, Any]) -> str:
@@ -541,6 +647,9 @@ def inferir(symbol: str, candles: pd.DataFrame, timeframe: str = "H1") -> Infere
     modelo, meta = _carregar(symbol, timeframe)
     if modelo is None:
         motivo = meta.get("publish_reason") or "modelo nao publicado ou ausente"
+        capazes = timeframes_capazes(symbol)
+        if capazes:
+            motivo = f"{motivo} (este ativo opera em: {', '.join(capazes)})"
         return Inferencia(False, motivo, symbol, timeframe)
 
     try:
