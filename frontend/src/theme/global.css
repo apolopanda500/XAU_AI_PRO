@@ -174,6 +174,17 @@ a {
   --space-5: 24px;
   --space-6: 32px;
 
+  /* Densidade de tabela: tres niveis em vez de altura livre. E o que a regra
+     "altura fixa, nao altura de conteudo" precisa para a coluna alinhar —
+     sem isso a tabela pula quando o texto do motivo quebra em duas linhas. */
+  --row-h-compacta: 28px;
+  --row-h-normal: 36px;
+  --row-h-confortavel: 44px;
+
+  /* Alvo de clique minimo. Abaixo disso o operador erra a chave em uso vivo,
+     e esta e uma tela de uso vivo. */
+  --hit-min: 32px;
+
   /* Foco visivel e unico. Todo elemento interativo usa este token, para
      que o anel de foco tenha a mesma forma em toda a app - antes ele era
      herdado do navegador e mudava de thicken entre botao e link. */

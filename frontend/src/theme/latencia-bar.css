@@ -1,0 +1,80 @@
+/* =============================================================================
+   BARRA DE LATENCIA AO VIVO — rodape no estilo MT5
+   =============================================================================
+   Regras aplicadas (pesquisa Figma: tokens, densidade e modo):
+
+   1. TOKEN, NAO PIXEL SOLTO. Os tres niveis sao `latencia-otima/ok/ruim`, e o
+      intervalo que decide o nivel mora em um unico lugar (`--latencia-alvo`).
+      Mudar o que conta como "bom" e uma decisao, entao e uma alteracao de
+      token e nao de tres seletores.
+   2. O NUMERO E O DADO; A BARRA E APOIO. O operador precisa ler "338 ms", nao
+      interpretar um retangulo. Por isso a barra e decorativa (`aria-hidden`)
+      e o valor esta em texto.
+   3. COR NAO E O UNICO SINAL. Quem tem daltonismo nao distingue verde de
+      vermelho; o numero e a posicao da barra continuam valendo. E o mesmo
+      principio da barra da aba ativa.
+   4. ALVO DE CLIQUE. A barra tem `--hit-min` de altura util, para nao ser um
+      alvo pequeno dentro de uma barra de status apertada.
+   ========================================================================== */
+
+.latencia-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-left: var(--space-3);
+  padding-left: var(--space-3);
+  border-left: 1px solid var(--border);
+}
+
+.latencia-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--hit-min);
+  font-size: 11px;
+  font-family: var(--mono);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* O NOME fica fixo para que os numeros alinham em coluna: e o que permite
+   comparar corretora a corretora sem ler cada linha inteira. */
+.latencia-nome {
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  min-width: 4.5em;
+}
+
+.latencia-medidor {
+  display: inline-block;
+  width: 56px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--panel2);
+  overflow: hidden;
+}
+
+.latencia-medidor > i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: currentColor;
+  /* A barra responde ao valor, mas sem transition longa: numa leitura ao vivo
+     um atraso de 400 ms faria a barra mostrar o valor antigo. */
+  transition: width 200ms linear;
+}
+
+.latencia-ms {
+  min-width: 4.2em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Niveis. O nome da classe e o dado; a cor e so a leitura rapida. */
+.latencia-otima { color: var(--ok); }
+.latencia-ok { color: var(--text); }
+.latencia-ruim { color: var(--warn); }
+.latencia-off { color: var(--danger); }
+
+@media (prefers-reduced-motion: reduce) {
+  .latencia-medidor > i { transition: none; }
+}
