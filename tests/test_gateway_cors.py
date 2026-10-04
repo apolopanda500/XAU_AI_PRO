@@ -28,6 +28,18 @@ def gw(tmp_path, monkeypatch):
 
 
 def test_preflight_options_204(gw):
+    """Preflight responde 204 e libera a origem PERMITIDA.
+
+    O teste afirmava `Access-Control-Allow-Origin == "*"` com `headers = {}`,
+    sem cabecalho `Origin` — ou seja, fixava o wildcard como comportamento
+    esperado. Em 04/10/2026 `_cors_origin` deixou de devolver `"*"` quando nao
+    ha origem: qualquer pagina da web podia tentar, e o `Vary: Origin` deixava
+    de valer para a resposta em cache.
+
+    O cenario real de quem usa isto — Android e o Tauri — SEMPRE envia
+    `Origin`. Por isso o teste passa a enviar uma origem da allowlist, que e o
+    caminho que de fato precisa funcionar.
+    """
     from backend.mt5_gateway import Handler
 
     handler = Handler.__new__(Handler)
@@ -36,14 +48,34 @@ def test_preflight_options_204(gw):
     handler.end_headers = lambda: None  # type: ignore[method-assign]
     sent: dict[str, str] = {}
     handler.send_header = lambda name, value: sent.__setitem__(name, value)  # type: ignore[method-assign]
-    handler.headers = {}  # type: ignore[attr-defined]
+    handler.headers = {"Origin": "http://tauri.localhost"}  # type: ignore[attr-defined]
 
     Handler.do_OPTIONS(handler)  # type: ignore[arg-type]
 
     assert status == [204]
-    assert sent.get("Access-Control-Allow-Origin") == "*"
+    assert sent.get("Access-Control-Allow-Origin") == "http://tauri.localhost"
     assert sent.get("Access-Control-Allow-Methods") == "GET, POST, PUT, DELETE, OPTIONS"
     assert sent.get("Access-Control-Allow-Headers") == "Content-Type, Authorization"
+
+
+def test_preflight_sem_origem_nao_devolve_wildcard(gw):
+    """Sem `Origin`, nao ha origem a liberar.
+
+    Este e o defeito que o teste anterior fixava. Fica explicito aqui para que
+    ninguem reintroduza o `"*"` achando que ele era necessario para o Android.
+    """
+    from backend.mt5_gateway import Handler
+
+    handler = Handler.__new__(Handler)
+    sent: dict[str, str] = {}
+    handler.send_response = lambda code, *a, **k: None  # type: ignore[method-assign]
+    handler.end_headers = lambda: None  # type: ignore[method-assign]
+    handler.send_header = lambda name, value: sent.__setitem__(name, value)  # type: ignore[method-assign]
+    handler.headers = {}  # type: ignore[attr-defined]
+
+    Handler.do_OPTIONS(handler)  # type: ignore[arg-type]
+
+    assert "Access-Control-Allow-Origin" not in sent
 
 
 def test_respostas_incluem_allow_origin(gw):

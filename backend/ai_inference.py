@@ -372,6 +372,25 @@ def _carregar(symbol: str, timeframe: str) -> tuple[Any | None, dict[str, Any]]:
 
         with meta.open(encoding="utf-8") as f:
             m = json.load(f)
+        # INTEGRIDADE ANTES DE DESSERIALIZAR
+        # --------------------------------------
+        # `joblib.load` executa codigo (pickle). O caminho ja e confinado, mas
+        # isso nao diz nada sobre o CONTEUDO do arquivo: quem escreve um `.pkl`
+        # na pasta de modelos ganha execucao de codigo. O SHA-256 gravado no
+        # `.meta.json` no treino e conferido ANTES do load — divergencia recusa
+        # com motivo e o arquivo nao e desserializado. Ver
+        # `Python/integridade_modelo.py`.
+        #
+        # A conferencia vem antes da checagem de `publicable` de proposito: um
+        # arquivo adulterado nao passa nem quando o modelo nem e publicavel,
+        # porque "nao vou usar" ainda e "executar o que estiver dentro" quando
+        # alguem troca o arquivo por um publicavel.
+        from Python.integridade_modelo import conferir as _conferir
+
+        integro, motivo_integridade = _conferir(pkl, m)
+        if not integro:
+            _CACHE[chave] = (None, {**m, "publish_reason": motivo_integridade}, mtime)
+            return _CACHE[chave][0], _CACHE[chave][1]
         # Treino so e aceito se passou na porta de qualidade.
         modelo = None if not m.get("publicable") else joblib.load(pkl)
         _CACHE[chave] = (modelo, m, mtime)

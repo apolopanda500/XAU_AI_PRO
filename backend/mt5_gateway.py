@@ -2420,8 +2420,21 @@ def capabilities_contract() -> dict:
 
 
 def _cors_origin(origin: str | None) -> str | None:
+    """Origem liberada para o cabecalho CORS. Vazio = nenhuma.
+
+    ANTES (04/10/2026): `if not origin: return "*"`. Sem cabecalho `Origin` —
+    o caso de qualquer cliente de linha de comando, curl ou script — a resposta
+    saia com `Access-Control-Allow-Origin: *`. Num gateway que exige token
+    para as rotas de comando, o wildcard nao dava acesso sozinho, mas dava a
+    qualquer pagina da web a opcao de tentar, e o `Vary: Origin` deixava de
+    valer para a resposta em cache.
+
+    Agora: sem origem, nao ha origem. Um navegador sempre envia `Origin` em
+    pedido cross-origin, entao a perda real e nenhuma — e o que o navegador
+    faz em `same-origin` e nao enviar, o que tambem nao precisa de CORS.
+    """
     if not origin:
-        return "*"
+        return None
     return origin if origin in CORS_ORIGINS else None
 
 
