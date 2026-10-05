@@ -202,6 +202,63 @@ describe('coerencia entre abas', () => {
   });
 });
 
+describe('duplicatas no historico (chave de deduplicacao)', () => {
+  /*
+    O dono reportou operacao repetida na tela. A causa era a chave: `dealChave`
+    montava broker|id|symbol|horario|side e deixava de fora tres campos que ja
+    existiam no tipo `Deal`. Cada teste abaixo mede um deles.
+  */
+
+  it('preserva abertura e fechamento da MESMA posicao no mesmo segundo', () => {
+    // Mesmo ticket, mesmo relogio, mesmo simbolo: o que separa e `entry`.
+    // Sem `entry` na chave, o fechamento sumia da tela.
+    const abertura = {
+      id: '5', broker: 'mt5', symbol: 'BTCUSD', position_id: 77,
+      executedAt: '2026-10-05T02:12:25Z', entry: 'IN', type: 'BUY', profit: 0,
+    };
+    const fechamento = { ...abertura, entry: 'OUT', type: 'SELL', profit: 2.01 };
+    expect(dealChave(abertura)).not.toBe(dealChave(fechamento));
+    expect(deduplicar([abertura, fechamento])).toHaveLength(2);
+  });
+
+  it('separa duas operacoes que so mudam o position_id', () => {
+    // Mesmo ticket e mesmo horario, posicoes diferentes. `position_id` existe
+    // no tipo desde o inicio e era ignorado pela chave.
+    const a = { id: '9', broker: 'mt5', symbol: 'BTCUSD', position_id: 1, executedAt: '2026-10-05T02:12:25Z', entry: 'OUT' };
+    const b = { ...a, position_id: 2 };
+    expect(deduplicar([a, b])).toHaveLength(2);
+  });
+
+  it('lanca o lado do MT5 (`type`) quando nao ha `side`', () => {
+    // Quinta ocorrencia da regra do AGENTS.md: o MT5 manda `type`, o campo
+    // lido era `side`. Toda operacao do MT5 ficava com lado vazio, e dois
+    // deals do mesmo instante colidiam.
+    const a = { id: '1', broker: 'mt5', symbol: 'BTCUSD', executedAt: '2026-10-05T01:00:00Z', type: 'SELL' };
+    const b = { id: '2', broker: 'mt5', symbol: 'BTCUSD', executedAt: '2026-10-05T01:00:00Z', type: 'BUY' };
+    expect(dealChave(a)).not.toBe(dealChave(b));
+    expect(deduplicar([a, b])).toHaveLength(2);
+  });
+
+  it('AINDA remove repeticao exata (a guarda nao foi afrouxada)', () => {
+    // Prova negativa: sem isso, "corrigir" a chave seria so acrescentar campos
+    // e a deduplicacao deixaria de funcionar.
+    const d = {
+      id: '1', broker: 'mt5', symbol: 'BTCUSD', position_id: 3,
+      executedAt: '2026-10-05T01:00:00Z', entry: 'IN', type: 'BUY',
+    };
+    expect(deduplicar([d, { ...d }])).toHaveLength(1);
+  });
+
+  it('movimentacoes do mesmo instante nao colidem entre si', () => {
+    // MEDIDO na conta real 391773676: CD-AST-PIC e EXP05-AST-PIC entraram com
+    // o mesmo segundo. Sem `type`, as duas tinham chave identica e uma
+    // desaparecia do historico.
+    const a = { id: '613', broker: 'mt5', executedAt: '2026-10-04T21:53:54Z', type: 'BALANCE', movimentacao: 'Deposito', profit: 5.52 };
+    const b = { id: '614', broker: 'mt5', executedAt: '2026-10-04T21:53:54Z', type: 'BALANCE', movimentacao: 'Deposito', profit: 0.1 };
+    expect(deduplicar([a, b])).toHaveLength(2);
+  });
+});
+
 describe('deduplicar deals', () => {
   it('remove o mesmo ticket em contas diferentes', () => {
     // O `id` do gateway e o ticket, que e contador POR CONTA. Junta de varias

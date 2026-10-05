@@ -217,18 +217,34 @@ export interface HistoricoOptions {
  * da mesma posicao (mesmo ticket, mesmo conta) continuariam colidindo.
  */
 export function dealChave(deal: Deal, indice = 0): string {
+  /*
+    A chave precisa do que torna o deal unico DENTRO da conta.
+    `realizedPnl` e `type` entram como alternativa a `side`, nao em vez dele:
+    `side` vem das exchanges e `type` vem do MT5. Ler so `side` deixava toda
+    operacao do MT5 com lado vazio, e o resultado eram colisoes falsas.
+  */
   const partes = [
     deal.broker ?? '',
     String(deal.id ?? ''),
     deal.symbol ?? '',
     deal.executedAt ?? deal.close_time ?? '',
-    String(deal.side ?? ''),
+    String(deal.side ?? deal.type ?? ''),
+    // `position_id` e `entry` faltavam aqui, e o dono viu operacao repetida na
+    // tela. Sem eles:
+    //   - abertura e fechamento da MESMA posicao (mesmo ticket, mesmo segundo)
+    //     viravam um registro so;
+    //   - duas operacoes que compartilham ticket e horario na mesma conta
+    //     colidiam.
+    // `position_id` ja existia no tipo `Deal` e era ignorado — e exatamente
+    // para isso que ele existe.
+    String(deal.position_id ?? ''),
+    String(deal.entry ?? ''),
   ];
   const chave = partes.join('|');
   // O indice so entra quando o resto e vazio: sem ticket, horario e lado, dois
   // deals seriam indistinguiveis e um deles sumiria da tela. Quando existe
   // qualquer um desses campos, dois deals de verdade NUNCA tem a mesma chave.
-  return chave === '||||' ? `sem-campos|${indice}` : chave;
+  return chave === '|||||||' ? `sem-campos|${indice}` : chave;
 }
 
 /** Remove deals repetidos, preservando a ordem de chegada. */

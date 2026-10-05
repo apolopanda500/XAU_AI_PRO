@@ -1,50 +1,182 @@
-# XAU AI PRO
+﻿# AGENTS.md — XAU AI PRO
 
-## Escopo
+> Documento de trabalho para qualquer agente que mexe neste repositório.
+> Sem data e sem hora de propósito: as regras valem para sempre, os números
+> não. Se um número aqui divergir do que o comando medir, **o comando vence**;
+> corrija o número.
 
-Este repositório contém o app XAU AI PRO, o gateway Python, o backend Node, o frontend React/Tauri, o core Rust e os Expert Advisors MQL5.
+## 1. O que este projeto é
 
-O app é **100% desbloqueado**: execução DEMO e REAL, EA editável, MCP de trading e todas as rotas estão liberados.
-
-Alterar `.mq5`, `.mqh`, `.mq4` ou `.set` **exige recompilar no MetaEditor64** (`C:\Program Files\MetaTrader 5\MetaEditor64.exe`) e **reanexar o EA ao gráfico**. Compilar não reanexa: o `.ex5` novo só entra em vigor quando o EA é trocado no gráfico.
-
-**Nenhum workflow compila MQL5.** Verificado em 04/10/2026: existem runners `windows-latest` em `build-installer.yml`, `ci.yml` e `xau-ai-pro-validation.yml`, e **nenhum** invoca o MetaEditor. O `.ex5` também não é versionado (`.gitignore:37`, `MQL5/Experts/*/*.ex5`), então o artefato que prova a compilação não existe no repositório — por decisão.
-
-A consequência é medida e precisa estar explícita: **um `.mq5` quebrado passa o CI inteiro.**
+Plataforma de operação de múltiplas corretoras. Uma conta **REAL** opera por
+três caminhos independentes, e o dono escolhe qual usar a cada momento:
 
 ```
-Core\ExecutionEngine.mqh(278) : error 256: undeclared identifier 'OrderSendResult'
+MOTOR -> IA -> decide ativo, timeframe e limites -> opera   (backend Python)
+EA    -> IA -> decide sinal                             -> opera   (MT5)
+MESA  -> voce -> monta a ordem                            -> opera   (grafico)
 ```
 
-Essa linha entrou no commit `dbdce10` e sobreviveu a **três ciclos** com 842 testes Python verdes ao lado — porque a suíte Python roda contra o fonte, e `mq5`/`mqh` não são módulos.
+Não há botão de confirmação por ordem. A responsabilidade de operar é do
+dono; a de decidir é da IA ou dele, conforme o caminho escolhido.
 
-O que fecha essa lacuna, e é obrigatório antes de considerar uma mudança de EA pronta:
+### Componentes
+
+| Pasta | Responsabilidade |
+|---|---|
+| `backend/` | gateway local (porta 9001), adaptadores de corretora, risco, auditoria, fila, MCP de trading |
+| `frontend/` | interface React/TypeScript empacotada por Tauri |
+| `core/` | componentes Rust do Core (portas 9002/9003) |
+| `MQL5/Experts/XAU_AI_PRO/` | Expert Advisors, editáveis com recompilação manual |
+| `app/` | interface Tkinter legada, integração local, memória e configuração |
+| `tests/` | suíte Python do gateway e da lógica de aplicação |
+| `scripts/` | build, instalador, preflight, auditorias e ferramentas de prova |
+| `Docs/` | decisões, levantamentos e o estado medido de cada ciclo |
+| `mcp/` | catálogo interno de servidores MCP; não é configuração do OpenCode |
+
+---
+
+## 2. A única proibição
+
+**Nenhum saque, transferência, resgate ou movimentação de fundos para fora da
+corretora. Em nenhum adaptador, em nenhuma rota, em nenhum cliente, em
+nenhuma tela.**
+
+`withdrawals_enabled` e `transfers` permanecem `False` fixos. Uma ordem de
+compra ou venda não altera esse valor, e nenhuma refatoração pode torná-lo
+condicional.
+
+**Ler** movimentação de saldo é permitido e necessário: o histórico mostra
+depósito, saque, crédito, bônus e comissão porque o operador precisa saber de
+onde veio o dinheiro. **Mover** dinheiro é proibido.
+
+A trava é `tests/test_movimentacoes.py::TestNadaDeDinheiroForaDaCorretora`:
+lê o fonte do gateway e reprova se aparecer `/api/withdraw`, `/api/transfer`,
+`/api/saque` ou `/api/transferencia`. **Nunca remova nem enfraqueça esse teste.**
+
+---
+
+## 3. Nenhum ativo e nenhuma corretora são presumidos
+
+Duas regras do dono, ambas verificadas por teste.
+
+**Nenhum símbolo pode ser presumido.** Símbolo vazio é **recusa com motivo**,
+nunca um ativo padrão. Uma lista fixa de ativos contra os milhares que a
+corretora oferece é exatamente essa presunção. A classe de um ativo vem da
+**hierarquia que a corretora preenche**, não de palavra solta no nome — sem
+fronteira de palavra, `SOL` casa dentro de "Solvar".
+
+Trava: `tests/test_ai_inference.py::TestNenhumAtivoPresumido`.
+
+**Nenhuma corretora pode ser caminho exclusivo.** `backend/broker_registry.py`
+é o catálogo. Escolher uma corretora na tela tem de ser a corretora que
+realmente opera, e a resposta segue sendo a que a corretora devolveu.
+
+Trava: `tests/test_auto_engine.py::TestRoteamentoPorCorretora`.
+
+O que **não** viola a regra: tabelas de mapeamento, o `Literal` de
+`backend/universal_contracts.py` (é a lista do que é suportado) e o próprio
+`broker_registry` (é o catálogo).
+
+
+---
+
+## 4. Execução REAL
+
+Execução real exige, nesta ordem: validação completa em DEMO, forward test
+aprovado, endurance test e autorização explícita do dono.
+
+Gates, liberadas por padrão e podendo ser ligadas:
+
+```
+XAU_ENABLE_MEXC_EXECUTION=1     XAU_ENABLE_BINANCE_EXECUTION=1
+XAU_ENABLE_BYBIT_EXECUTION=1    XAU_ENABLE_OKX_EXECUTION=1
+XAU_ENABLE_MT5_EXECUTION=1      XAU_ENABLE_TRADE_COMMANDS=1
+XAU_MCP_TRADING=1               XAU_ENABLE_EMERGENCY_RESUME=1
+XAU_ENABLE_DEMO_ORDERS=1        XAU_ENABLE_REAL_ORDERS=1
+```
+
+**Toda** ordem continua exigindo `confirm=true` e `request_id` idempotente, e
+passa por `risk_gate`, `intent_log` e `audit_log`. Nenhuma refatoração remove
+essas três camadas para "simplificar".
+
+O token de sessão é injetado pelo Tauri por sessão e **prevalece** sobre o
+`.env`. Sem ele o gateway recusa tudo com 401 — isso é **fail-closed correto**,
+não defeito. Não "conserte" isso.
+
+---
+
+## 5. A regra que mais caro neste projeto
+
+**Onde dois lados do mesmo dado discordam do nome, o sintoma é recusa com
+motivo errado — e o operador culpa a coisa errada.**
+
+Já aconteceu com `volume`/`quantity`, `ts`/`timestamp`, `symbol`/`esperado`,
+`X-Gateway-Token`/`Authorization`, `/health`/`/api/health` e `side`/`type`.
+Cada vez, o defeito real era do **cliente**, e o relatório mandava o operador
+olhar o **servidor**.
+
+Antes de investigar qualquer "recusa", "campo faltando" ou "não funciona",
+confirme **qual nome o outro lado realmente lê**. Leia o código de quem
+consome, não o de quem produz.
+
+O mesmo vale no sentido inverso: um teste que **repete** o código em vez de
+importá-lo prova que o código está certo mesmo quando está errado. O teste
+precisa exercitar o caminho inteiro.
+
+---
+
+## 6. Teste verde pode estar escondendo defeito
+
+Já aconteceu de três formas independentes:
+
+- um duble de teste lia o **campo errado** e o teste passava;
+- um teste de tradução **repetia** o código em vez de importá-lo;
+- uma verificação contava **117 elementos** quando esperava 13.
+
+Portanto:
+
+1. **Nunca** `xfail` onde existe compilador e código. Onde há erro, tem de
+   reprovar. `skip` que mascare erro é o mesmo defeito que o teste existe para
+   pegar.
+2. **Nunca** afrouxar uma trava para ela parar de reprovar. Se o teste falha,
+   ou o código está errado, ou o teste está errado — as duas outras opções são
+   fingir.
+3. `pytest.ini` promove `PytestReturnNotNoneWarning` a **erro**: um teste que
+   **retorna** valor em vez de usar `assert` não verifica nada, e passa calado
+   no fim de uma saída de mil pontos.
+
+**Toda correção precisa de prova negativa.** Um teste que só passa não prova
+que a guarda funciona. Escreva também o caso que **deveria reprovar** e
+confirme que reprova.
+
+---
+
+## 7. MQL5 compila fora do repositório
+
+Alterar `.mq5`, `.mqh`, `.mq4` ou `.set` **exige recompilar no MetaEditor64**
+(`C:\Program Files\MetaTrader 5\MetaEditor64.exe`) e **reanexar o EA ao
+gráfico**. Compilar não reanexa.
+
+**Nenhum workflow compila MQL5.** O `.ex5` não é versionado. A consequência é
+medida e precisa estar escrita: **um `.mq5` quebrado passa o CI inteiro.**
+
+O que fecha a lacuna, obrigatório antes de considerar a mudança pronta:
 
 ```powershell
-python -m pytest tests/test_mql5_compila.py
+.\.venv\Scripts\python.exe -m pytest -q tests/test_mql5_compila.py
 ```
 
-Esse teste invoca o `MetaEditor64` de verdade e reprova em qualquer erro de compilação. Ele **pula** quando o MetaEditor não está disponível (CI em Linux) — nunca `xfail`, porque um `skip` que mascarasse erro seria o mesmo defeito que ele existe para pegar.
+Esse teste invoca o MetaEditor de verdade. Ele pula onde o MetaEditor não
+existe (CI em Linux) — nunca `xfail`.
 
-Guarda de alteração: `scripts/preflight.py::checar_mql5()` reprova qualquer diff em `MQL5/Experts` que não esteja declarado em `AUTORIZACOES_MQL5`. Alteração declarada dá `aviso`, nunca `ok`, porque compilar e reanexar são passos fora do repositório.
+Guarda de alteração: `scripts/preflight.py::checar_mql5()` reprova qualquer
+diff em `MQL5/Experts` que não esteja declarado em `AUTORIZACOES_MQL5`.
+Alteração declarada dá **aviso**, nunca `ok`, porque compilar e reanexar são
+passos fora do repositório.
 
-## Única proibição
+---
 
-**Nenhum saque, transferência, resgate ou movimentação de fundos para fora da corretora, em nenhum adaptador, rota ou cliente.**
-
-`withdrawals_enabled` e `transfers` permanecem `False` fixos em todo o código. Uma ordem de compra/venda não altera esse valor.
-
-## Componentes
-
-- `app/`: interface Tkinter, integração local, memória, alertas e configuração.
-- `backend/`: gateway local, adaptadores de corretoras, risco, auditoria, fila e MCP de trading.
-- `frontend/`: interface React/TypeScript/Tauri.
-- `core/`: componentes Rust do Core.
-- `MQL5/Experts/XAU_AI_PRO/`: Expert Advisors, editáveis com recompilação manual.
-- `tests/`: testes Python do gateway e da lógica de aplicação.
-- `mcp/`: catálogo interno de servidores; não é configuração nativa do OpenCode.
-
-## Desenvolvimento
+## 8. Desenvolvimento
 
 A raiz usa Python 3.11 ou 3.12. As dependências legíveis estão em `requirements.txt`; as dependências de desenvolvimento estão em `requirements-dev.txt`.
 
@@ -81,160 +213,117 @@ cargo check --locked
 cargo test --locked
 ```
 
-O cache de build do Rust vive **fora** do disco do código, em
-`Temp\cargo-target` (definido por `scripts\build_app.bat`). Em 30/09/2026 o
-`target` dentro do repositório chegou a 3,9 GB e o `cargo check` falhou duas
-vezes com _Espaço insuficiente no disco_ antes de qualquer teste. `Temp/` já
-está no `.gitignore` e na allowlist de `scripts\limpeza_segura.ps1`.
 
-## Nenhum ativo e nenhuma corretora são fixos
+O cache de build do Rust vive **fora** do disco de codigo, em
+`Temp\cargo-target` (definido por `scripts\build_app.bat`). O `target` dentro
+do repositorio ja chegou a alguns GB e derrubou o `cargo check` com erro de
+disco cheio antes de qualquer teste.
 
-Duas regras do dono, ambas verificadas por teste:
+### Validacao antes de dizer que terminou
 
-- **Nenhum símbolo pode ser presumido.** Símbolo vazio é **recusa com
-  motivo**, nunca um ativo padrão. A regra já estava escrita em
-  `app/market_symbols.py` (`return ""  # sem ativo fixo`).
-- **Nenhuma corretora pode ser caminho exclusivo.** MT5 é uma entrada entre
-  nove em `backend/broker_registry.py`, não o padrão. Escolher uma corretora
-  na tela tem de ser a corretora que realmente opera.
+| Mudanca | Validacao minima |
+|---|---|
+| gateway / adaptador | `pytest -q tests/test_execution_adapters.py tests/test_universal_execution.py tests/test_broker_coverage.py` |
+| historico / movimentacao | `pytest -q tests/test_movimentacoes.py` |
+| EA (`.mq5`/`.mqh`) | `pytest -q tests/test_mql5_compila.py` **e** reanexar no grafico |
+| frontend | `npx tsc --noEmit` **e** `npx vitest run` |
+| qualquer coisa | a suite Python inteira |
 
-Trava: `tests/test_ai_inference.py::TestNenhumAtivoPresumido` e
-`tests/test_auto_engine.py::TestRoteamentoPorCorretora`.
+Nao reporte "pronto" com suite parcial rodando. **Meça e mostre o numero.**
 
-O que **não** viola a regra: tabelas de mapeamento (`app/market_data.py`),
-o `Literal` de `backend/universal_contracts.py` (é a lista de suportadas) e o
-`broker_registry` (é o catálogo). Ver `docs/LEVANTAMENTO_20260930.md` §4.
+### Preflight
 
-## Gates de execução
+```powershell
+.\.venv\Scripts\python.exe scripts\preflight.py --etapa app-rodando
+```
 
-As gates estão liberadas por padrão e podem ficar ligadas:
-
-- `XAU_ENABLE_MEXC_EXECUTION=1`, `XAU_ENABLE_BINANCE_EXECUTION=1`, `XAU_ENABLE_BYBIT_EXECUTION=1`, `XAU_ENABLE_OKX_EXECUTION=1`, `XAU_ENABLE_MT5_EXECUTION=1`
-- `XAU_ENABLE_TRADE_COMMANDS=1`
-- `XAU_MCP_TRADING=1`
-- `XAU_ENABLE_EMERGENCY_RESUME=1`
-- `XAU_ENABLE_DEMO_ORDERS=1`
-- `XAU_ENABLE_REAL_ORDERS=1` (apenas após validação completa em DEMO)
-
-Toda ordem continua exigindo `confirm=true` e `request_id` idempotente, e passa por `risk_gate`, `intent_log` e `audit_log`.
-
-## Regras operacionais
-
-- Não habilitar saques nem transferências. Essa é a única trava obrigatória.
-- Não registrar tokens, senhas, DSNs, chaves de API ou conteúdo de `.env` em log, mensagem, commit ou resposta HTTP.
-- Não usar dados simulados como se fossem dados de mercado reais; rotular backfill, cache e payload mockado.
-- Manter aliases de usuário, requisições e intenções idempotentes por `request_id`.
-- Não habilitar MCPs opcionais sem credencial, dependência verificada e teste de conexão.
-- Execução REAL exige: validação completa em DEMO, forward test aprovado, endurance test, e autorização explícita do proprietário.
-
-## OpenCode
-
-- A configuração do projeto está em `opencode.json`.
-- O MCP `xau-trading` é local, inicia com o gateway Python e roda com `XAU_MCP_TRADING=1`.
-- O MCP GitKraken fica desabilitado até autenticação e validação explícita.
-- O hook automático do GitKraken está neutralizado por segurança; só reativar após login, teste e revisão explícita do plugin.
-- Reiniciar o OpenCode após alterar arquivos de configuração, plugins ou skills.
-
-## Validação de mudanças
-
-Executar as validações relacionadas ao componente alterado. Antes de concluir uma mudança de gateway, executar a suíte Python e verificar o status do Git sem incluir segredos.
-
-Alteração em adaptador de execução: rodar `pytest -q tests/test_execution_adapters.py tests/test_universal_execution.py tests/test_broker_coverage.py`.
-
-Alteração em EA: recompilar no MetaEditor64 antes de considerar pronta a mudança.
-
-## Pendencias atuais (verificado em 04/10/2026, revalidado em 05/10/2026)
-
-Revalidacao 05/10: suite Python **1030 passed, 0 failed**; `Core/Config.mqh`
-(timeout 5000 -> 15000) declarado em `AUTORIZACOES_MQL5` e compilado
-(`test_mql5_compila.py` verde); 6 commits de outra sessao integrados
-(alias ouro na leitura, EA via WebRequest, MULTI alcancaveis, ponto da XM,
-13 limites no painel, traducao do pedido); 3 testes de auth ajustados ao
-fail-closed com `.env` (mandam Bearer, miram o codigo da regra).
-
-O estado abaixo foi medido por comando nesta sessao, nao herdado de
-relatorio anterior. Onde a leitura antiga estava errada, esta marcado.
-
-### Fechado (prova por comando)
-
-| Item                                   | Prova                                                                                           |
-| -------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| Nenhum ativo presumido                 | `TestNenhumAtivoPresumido` - 4 verdes                                                           |
-| Nenhuma corretora como padrao          | `TestRoteamentoPorCorretora` - 4 verdes                                                         |
-| Motor multi-corretora                  | `_loop` usa `UniversalRouter` + `market_access`                                                 |
-| MT5 no mesmo fluxo de conexao          | `test_connection_contract` - 6 verdes                                                           |
-| Nome real do modelo na tela            | lido do `.meta.json`                                                                            |
-| Supervisor de processos (Tauri)        | `cargo test`                                                                                    |
-| Build Rust linkando                    | `.cargo/config.toml` com `/PDB:NONE`                                                            |
-| **Lockfiles versionados**              | `git ls-files` traz `frontend/package-lock.json` e `backend/package-lock.json`                  |
-| **EA compila e tem trava de artefato** | `tests/test_mql5_compila.py`; MetaEditor `0 errors, 0 warnings`                                 |
-| **Cron agendado**                      | `develop` foi mergeado em `main` (`46fd23b`); o YAML com `ref: develop` chegou a branch default |
-| **Empacotamento no CI**                | passo "Preparar pasta de modelos" em `xau-ai-pro-validation.yml`                                |
-| **Estilo com configuracao real**       | `.prettierrc.json` medido em checkout limpo; 202 arquivos formatados                            |
-
-O item 7 da lista anterior ("`git push` dos lockfiles") esta **resolvido**: os dois
-lockfiles estao versionados. O item 5 do `npm audit`NAO esta resolvido — ver abaixo.
-
-### Pendente de CREDENCIAL (nao e codigo)
-
-1. **Chaves de MEXC, Binance, Bybit e OKX** na maquina do operador. Os 4
-   adaptadores tem envio HTTP real e testes verdes. Sem chave a resposta e
-   `EXECUTION_NO_CREDENTIALS` e nada e enviado - correto.
-2. **Conta corretora REAL** - hoje `MetaQuotes-Demo`, confirmado pelo heartbeat
-   em disco (`%APPDATA%\MetaQuotes\Terminal\Common\Files\XAU_AI_PRO_heartbeat.json`).
-   **Ultimo item da fila**, por decisao do dono: ele treina EA na DEMO.
-3. **Certificado de CA publica** - artefados 1.2.4 tem certificado autoassinado.
-   Custo ~$200-400/ano.
-
-### Pendente de EXECUCAO (exige o app no ar)
-
-4. **Reanexar o EA no grafico** - o `.ex5` do terminal ja tem o cooldown de
-   margem, mas compilar NAO reanexa. O EA rodando continua sendo o antigo.
-   **Este e o que destrava os dois proximos.**
-5. **Forward test novo** - o anterior reprovou por margem. Causa raiz medida:
-   4.165 de 4.246 `EXEC_NO_MARGIN`, concentrados entre **03h e 05h** (77%),
-   com 3 dias de pico (938 / 801 / 1.452 / 918). Nao sao "3,4 erros por ciclo".
-   A trava de margem JA EXISTIA e funcionava; o defeito era insistir depois de
-   recusado. Corrigido com cooldown por simbolo, backoff 60 s -> 1 h
-   (reducao medida de 3.191x). **Falta medir de novo.**
-6. **Endurance 24h/72h/7d** - `scripts/endurance_test.py` existe, nao executado.
-   Depende de 4 e 5.
-7. **Teste em aparelho fisico Android** - nao ha aparelho.
-
-### Pendente de TERCEIROS (nao ha o que fazer no codigo)
-
-8. **6 vulnerabilidades `high` no backend, sem patch upstream.**
-   Cadeia: `workflow -> @workflow/nest -> @swc/cli -> @xhmikosr/bin-wrapper
--> @xhmikosr/downloader -> got -> cacheable-request -> http-cache-semantics`.
-
-   Medido em 04/10/2026:
-   - `npm audit fix --dry-run` -> **nao altera nada**, as 6 continuam
-   - `npm view http-cache-semantics version` -> `4.2.0`, que **e** a instalada
-
-   O advisory (GHSA-ch52-4w7c-c8xp) diz `Patched versions: None`. **Nao existe
-   versao corrigida.** O job `Dependency Audit` roda `npm audit --audit-level=high`
-   e falha ate a Vercel publicar.
-
-   A cadeia esta em `workflow`, importado so por `backend/workflows/index.mjs`
-   (rotas da Vercel). O app desktop roda `backend/server-desktop.cjs`, que e
-   express puro e nao toca essa cadeia.
-
-9. **Super-Linter `quality` - 30 linters, 2 causas distintas.**
-   - **11 linters do Prettier** estao desligados no workflow (`YAML_PRETTIER:
-false` e companhia) desde um ciclo anterior, com o comentario de que
-     religar so para pintar o CI seria esconder defeito. A configuracao
-     `.prettierrc.json` + `.prettierignore` **agora existe**, entao o caminho
-     para religar esta aberto - e e decisao do dono.
-   - **19 outros** (`PYTHON_RUFF`, `PYTHON_MYPY`, `GITLEAKS`, `TRIVY`,
-     `CHECKOV`, `SQLFLUFF`...) rodam com defaults, sem config no repo.
-     O projeto tem `.pylintrc` e `.gitleaks.toml`, e nao tem `ruff.toml`,
-     `setup.cfg`, `.flake8`, `mypy.ini` nem `.editorconfig`.
-
-### Regra de limpeza
+A etapa importa. Com o app no ar, a porta 9001 **deve** estar ocupada:
+`preflight.py` usa `esperar_livre=etapa != "app-rodando"`. Rodar a etapa errada
+acusa falha onde o sistema esta correto.
 
 Antes de `git status` travar: `.\scripts\limpeza_segura.ps1 -Apply -DebugCache`.
-A ACL do `target\debug` se corrompe a cada build; o script ja corrige.
+Nao apagar nada com build ou teste no ar.
 
-Nao apagar nada com build ou teste no ar. Ja custou um ciclo: remover a pasta
-do `--basetemp` com o `pytest` rodando produziu 6 `ERROR` que nao eram falha de
-codigo.
+---
+
+## 9. Formatação de número é configuração, não enfeite
+
+Toda preferência precisa de um **consumidor real**. Um controle que nada lê é
+pior que a ausência dele: o usuário acredita que está protegido.
+
+Ao remover um controle, **meça o uso antes** e registre no código o que foi
+removido e por quê. Um controle que volta sem consumidor volta como defeito.
+
+**Casas decimais não é preferência global.** Preço, volume, percentual e
+moeda têm precisões diferentes, e a conta real tem contratos que exigem casas
+distintas em Forex e em cripto. A ficha do símbolo que a corretora entrega é a
+fonte; uma preferência global é atalho.
+
+---
+
+## 10. Camadas de dado que não podem ser misturadas
+
+**Operação** é compra ou venda: tem símbolo, volume e preço. **Movimentação de
+saldo** é depósito, saque, crédito, bônus ou comissão: não tem símbolo e não
+tem volume.
+
+O MT5 grava as duas como **deal**, no mesmo histórico. Reduzir o tipo do deal
+a dois estados (`BUY` e "todo o resto é SELL") faz um depósito aparecer como
+venda, e o resumo de performance somar dinheiro que **entrou** como se fosse
+**lucro**.
+
+Consequência direta: acerto, fator de lucro e resultado do período medem **só
+operação**. Entrada e saída de saldo têm nome, cartão e coluna próprios.
+
+Ao tocar em histórico, meça com a **conta real**: `history_deals_get` de
+vários anos, contando por tipo. Um `else` que engole um tipo de deal é
+invisível em teste sintético e evidente no dado real.
+
+---
+
+## 11. Trabalho em paralelo no mesmo repositório
+
+Quando mais de um agente compartilha o working tree:
+
+- **Não commite arquivo que o outro também alterou** sem separar por hunk.
+  `git apply --cached` com patch seletivo é o caminho seguro.
+- Antes de editar, releia o arquivo. Ele pode ter mudado desde a última
+  leitura.
+- Falha de teste em arquivo do outro agente **não é sua** — mas é preciso
+  **comprovar**: rode o arquivo dele isolado. Passando isolado e falhando junto,
+  é estado compartilhado, não interferência sua.
+- Registre em `Docs/` quais arquivos são de quem, com caminho e tamanho do
+  diff. Sem isso, o próximo ciclo não sabe o que pode tocar.
+
+---
+
+## 12. Regras operacionais
+
+- Não registrar token, senha, DSN, chave de API ou conteúdo de `.env` em
+  log, mensagem, commit ou resposta HTTP. Para verificar se existe, leia **o
+  nome da chave**, nunca o valor.
+- Não usar dado simulado como se fosse dado de mercado real. Backfill, cache e
+  payload mockado são rotulados.
+- Manter alias de usuário, requisição e intenção **idempotentes por
+  `request_id`**.
+- Não habilitar MCP opcional sem credencial, dependência verificada e teste de
+  conexão.
+- `Docs/version.json` é a fonte da versão. `sync_version.py --check` reprova
+  manifesto divergente, e `gateway_build` é derivado dele: frontend e core
+  comparam esse valor, e divergência derruba o bootstrap com tela branca.
+- O MCP de trading carrega `request_id` idempotente e `confirm` obrigatório em
+  toda escrita. **Não mexer nisso** sem teste próprio.
+
+---
+
+## 13. Entregável
+
+1. O que mudou, com **medida antes e depois**.
+2. O que **não** foi feito, e por quê.
+3. O que exige ação do dono, escrito como pergunta, não como suposição.
+4. Estado do app, medido: processos, portas, heartbeat da conta.
+
+**Nunca** declarar "pronto" sem os números. **Nunca** esconder falha de teste
+alheio em silêncio — nomeie o arquivo e o dono.
+
+
