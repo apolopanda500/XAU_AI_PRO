@@ -1,7 +1,17 @@
-"""Catalogo dinamico de ativos fornecidos pelo terminal MT5."""
+"""Catalogo dinamico de ativos fornecidos pelo terminal MT5.
+
+A CLASSA de cada ativo vem do `path` que a CORRETORA publica
+(`Derivatives\Spot Metals\GOLD`, `Stocks\EU\...`). Nada aqui presume par,
+mercado ou classe: a lista e da XM, do MEXC ou de quem mais for.
+
+Medido em 05/10/2026 na conta real 391773676 (XMGlobal-MT5 14): 1639 ativos,
+1639 com `path` preenchido. Antes a classificacao procurava palavra solta no
+nome, e `SOL` casava dentro de "Solvar".
+"""
 from __future__ import annotations
 
 import math
+import re
 
 
 def _value(item, name: str, default=None):
@@ -24,21 +34,100 @@ def _integer(value):
     return None if number is None else int(number)
 
 
+#: A CLASSIFICACAO VEM DA CORRETORA, NAO DE PALAVRA NO NOME (05/10/2026)
+#:
+#: MEDIDO na conta real 391773676 (XMGlobal-MT5 14, 1639 ativos). O MT5
+#: preenche `path` com a HIERARQUIA da corretora, e ela esta correta:
+#:
+#:   GOLD               -> Derivatives\Spot Metals\GOLD
+#:   EURUSD             -> Forex\Standard\Majors\EURUSD
+#:   BTCUSD             -> Cryptocurrencies\Standard\BTCUSD
+#:   AalbertsIndustries -> Stocks\EU\Netherlands\AalbertsIndustries
+#:   AUS200Cash         -> Derivatives\Cash\Cash Indices\AUS200Cash
+#:
+#: A versao anterior procurava PALAVRAS SOLTAS em `f"{name} {path} ..."`:
+#: `any(token in text for token in ("BTC","ETH","SOL","XRP"))`. Sem fronteira
+#: de palavra, `SOL` casa dentro de "Solvar" e `XRP` dentro de "XRPetersen" —
+#: acoes da bolsa classificadas como cripto. Medido: 106 "cripto" na conta,
+#: sendo a maioria acoes europeias.
+#:
+#: POR QUE A CORRETORA E A FONTE
+#: ------------------------------
+#: A regra do projeto e "nenhum simbolo pode ser presumido", e a lista fixa
+#: de 17 ativos em `asset_classes.py` era exatamente isso: uma copia
+#: desatualizada do que a corretora tem. A conta real tem 1639.
+#:
+#: `path` nao e um palpite nosso — e o catalogo da propria corretora, que e a
+#: unica que sabe o que ela passou a oferecer. E a lista e do OPERADOR, nao
+#: nossa: o `path` muda conforme a XM acrescenta ou remove um produto.
+#:
+#: COBERTURA MEDIDA: 1639 de 1639 ativos com `path` preenchido, zero sem
+#: classificacao. O fallback por palavra continua existindo para corretora
+#: que NAO preencher o campo — e ele e marcado como palpite, nao como fato.
+_CAMINHO_PARA_CLASSE: tuple[tuple[tuple[str, ...], str], ...] = (
+    # Ordem importa: "Thematic Indices" contem "Indices", e "Turbo Stocks"
+    # contem "Stocks". A raiz e comparada inteira, sem substring.
+    (("Cryptocurrencies",), "crypto"),
+    (("Forex",), "forex"),
+    (("Thematic Indices",), "index"),
+    (("ETF Derivatives",), "index"),
+    (("Turbo Stocks",), "equity"),
+    (("Stocks",), "equity"),
+    (("Derivatives",), "cfd"),
+)
+
+#: Quando o `path` NAO vem (corretora que nao preenche), cai para palavras
+#: SOLTAS — com fronteira de palavra, o defeito medido acima nao se repete.
+#: `SOL` casa em "Sol/USDT" e em "SOL", e nao dentro de "Solvar".
+_PALAVRAS_FALLBACK: tuple[tuple[tuple[str, ...], str], ...] = (
+    (("CRYPTO", "CRYPTOCURRENCIES", "BITCOIN", "ETHEREUM"), "crypto"),
+    (("FOREX", "CURRENCY", "FX"), "forex"),
+    (("SPOT METALS", "PRECIOUS METAL", "METAL", "GOLD", "SILVER"), "metal"),
+    (("CASH INDICES", "INDEX", "INDICES"), "index"),
+    (("FUTURES", "FUTURE"), "future"),
+    (("STOCK", "STOCKS", "EQUITY", "SHARES"), "equity"),
+)
+
+
+def _por_palavra(texto: str) -> str | None:
+    """Casamento com FRONTEIRA de palavra, por regex `\\b`.
+
+    Sem fronteira, `SOL` casa dentro de "Solvar" — que foi o defeito medido.
+    Com fronteira, `SOL` casa em `SOL` e `SOL/USDT`, e nao em `Solvar`.
+    """
+    for palavras, classe in _PALAVRAS_FALLBACK:
+        for palavra in palavras:
+            if re.search(rf"\b{re.escape(palavra)}\b", texto):
+                return classe
+    return None
+
+
 def _asset_class(name: str, path: str, base: str, profit: str) -> str:
-    text = f"{name} {path} {base} {profit}".upper()
-    if any(token in text for token in ("CRYPTO", "BITCOIN", "ETHEREUM", "BTC", "ETH", "USDT", "USDC", "SOL", "XRP")):
-        return "crypto"
-    if any(token in text for token in ("FOREX", "FX", "CURRENCY")):
-        return "forex"
-    if any(token in text for token in ("STOCK", "EQUITY", "SHARES", "ACTIONS")):
-        return "equity"
-    if any(token in text for token in ("INDEX", "INDICES")):
-        return "index"
-    if any(token in text for token in ("FUTURE", "FUTURES")):
-        return "future"
-    if any(token in text for token in ("METAL", "GOLD", "SILVER")):
-        return "metal"
-    return "other"
+    """Classe do ativo, lida da HIERARQUIA que a corretora publica.
+
+    A raiz do `path` e comparada INTEIRA, nunca por substring: e o que
+    separa "Thematic Indices" de "Turbo Stocks" sem que uma casa na outra.
+
+    Quando o `path` nao vem, cai para palavras SOLTAS com fronteira — e o
+    resultado e um PALPITE, marcado como tal em `classificacao_fonte`.
+    """
+    raiz = path.strip().split("\\")[0].strip().lower() if path else ""
+    for raizes, classe in _CAMINHO_PARA_CLASSE:
+        if raiz in raizes:
+            # `Derivatives` cobre metais E oil; o segundo nivel desempata.
+            if classe == "cfd":
+                segundo = path.strip().split("\\")[1].strip().lower() if "\\" in path else ""
+                if "metal" in segundo:
+                    return "metal"
+                if "index" in segundo:
+                    return "index"
+                if "future" in segundo:
+                    return "future"
+                return "cfd"
+            return classe
+
+    texto = f"{name} {path} {base} {profit}".upper()
+    return _por_palavra(texto) or "other"
 
 
 def discover_assets(mt5, include_hidden: bool = True) -> list[dict]:
