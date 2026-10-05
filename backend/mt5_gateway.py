@@ -93,8 +93,62 @@ REAL_EMERGENCY_STOP = Path(os.getenv("XAU_REAL_EMERGENCY_FILE", str(Path(__file_
 COMMON_FILES = Path(os.getenv("XAU_MT5_COMMON_FILES", str(Path(os.environ.get("APPDATA", "")) / "MetaQuotes" / "Terminal" / "Common" / "Files")))
 CONFIG_FILE = Path(os.getenv("XAU_APP_CONFIG", str(Path(os.environ.get("APPDATA", "")) / "XAU_AI_PRO" / "config.json")))
 AUDIT_FILE = Path(os.getenv("XAU_AUDIT_FILE", str(Path(os.environ.get("APPDATA", "")) / "XAU_AI_PRO" / "audit.jsonl")))
+# =============================================================================
+# TOKEN: AMBIENTE PRIMEIRO, `.env` DEPOIS
+# =============================================================================
+# POR QUE ISTO EXISTE (medido em 05/10/2026)
+# ==========================================
+# O token vinha SO de `os.getenv`. Subir o gateway pela linha de comando
+# (`python -m backend.fastapi_gateway`) dava `API_TOKEN = ""`, e o gateway
+# ficava fail-closed: TODO request recebia 401, inclusive com o token CORRETO.
+# Quem carrega o `.env` e o Tauri (`main.rs:628`, `.env("XAU_GATEWAY_TOKEN",
+# token)`), entao o gateway so tinha token quando lancado pelo app.
+#
+# O EA precisa do MESMO token que o app injeta, para que o `WebRequest` dele
+# seja aceito. Com o token so no ambiente do Tauri, o operador teria que
+# descobrir qual era — e o valor muda por sessao.
+#
+# A ORDEM IMPORTA: o ambiente vence o `.env`. O Tauri injeta o token da
+# sessao, e ele tem de prevalecer sobre o arquivo — senao uma sessao nova
+# ficaria com o token do arquivo enquanto o app usa outro, e a UI perderia o
+# acesso ao proprio backend.
+#
+# SEM `python-dotenv`: o `.env` deste projeto tem `FIGMA_TOKEN`,
+# `XAU_GATEWAY_TOKEN` e credenciais de exchange. O leitor e minimo de proposito
+# (ignora comentario, apara espacos, nao sobrescreve o que ja existe), e nao
+# importa o pacote extra.
+
+def _token_do_ambiente_ou_dotenv(nome: str) -> str:
+    """`nome` do ambiente; se faltar, do `.env` da raiz do repo."""
+    do_ambiente = os.getenv(nome, "").strip()
+    if do_ambiente:
+        return do_ambiente
+
+    try:
+        raiz = Path(__file__).resolve().parent.parent
+        arq = raiz / ".env"
+        if not arq.is_file():
+            return ""
+        for linha in arq.read_text(encoding="utf-8", errors="replace").splitlines():
+            limpa = linha.strip()
+            if not limpa or limpa.startswith("#") or "=" not in limpa:
+                continue
+            chave, valor = limpa.split("=", 1)
+            if chave.strip() != nome:
+                continue
+            valor = valor.strip().strip('"').strip("'")
+            if valor:
+                return valor
+    except (OSError, ValueError):
+        # Sem `.env` legivel, o token fica vazio e o gateway segue fail-closed.
+        # Isso e o comportamento correto: sem token, ninguem autentica; com token
+        # pela metade, alguem autentica errado.
+        return ""
+    return ""
+
+
 # Segurança de exposição: token opcional e rate limit (pré-requisito p/ acesso remoto/Android).
-API_TOKEN = os.getenv("XAU_GATEWAY_TOKEN", "").strip()
+API_TOKEN = _token_do_ambiente_ou_dotenv("XAU_GATEWAY_TOKEN")
 #: Motivos de `_autorizado` que sao FALHA DE AUTENTICACAO (HTTP 401), e nao
 #: excesso de cota (429). "sem token configurado" entrou na lista quando o
 #: gateway passou a ser fail-closed; sem isso, a falta de token caia no ramo

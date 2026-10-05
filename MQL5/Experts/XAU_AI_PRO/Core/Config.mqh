@@ -33,9 +33,20 @@ input string AIGatewayToken     = "";
 // a leitura de latencia: mais rapido e consumo sem ganho, mais lento e o EA
 // age sobre previsao velha.
 input int    AIPollSeconds      = 15;
-// Tempo maximo de espera da resposta HTTP. Acima disso o EA trava esperando e
-// perde ticks — e perder tick perto de um nivel e pior do que previsao velha.
-input int    AIRequestTimeoutMs = 5000;
+// Tempo maximo de espera da resposta HTTP.
+//
+// MEDIDO em 05/10/2026, nos 25 modelos validados pela rota real:
+//   primeiro acesso ao par   2096 ms   (carrega o `.pkl` do disco)
+//   acesso seguinte          144 ms   (o `_CACHE` do backend segura)
+//   pior caso no lote        450 ms   (apos o cache aquecer)
+//
+// O limite e 15 s, e nao 5: em disco frio o carregamento do artefato passa de
+// 2 s, e um timeout curto faria o EA cair no fallback de arquivo — que tambem
+// nao existe — justamente na primeira consulta, que e a que importa.
+//
+// NINGUM TIMEOUT PODE SER MENOR QUE O CUSTO REAL. Cortar o tempo para "ir
+// mais rapido" troca um sinal atrasado por um sinal ausente.
+input int    AIRequestTimeoutMs = 15000;
 
 //==================================================
 // RISCO
@@ -184,6 +195,29 @@ input int    NewsMinutesAfter      = 30;
 input double MinAIConfidence    = 50.0;
 
 //==================================================
+// IA - AUTORIDADE DE SINAL (05/10/2026)
+//==================================================
+// MEDIDO em 05/10/2026: o `AIEngine` lia `AI_BuyProbability` e
+// `AI_SellProbability`, que o backend NAO publica — a rota
+// `/api/ai/predict` devolve `prob_buy`/`prob_sell` (0.0 no payload
+// canonico) e, sobretudo, um `signal` TEXTUAL ("BUY", "SELL",
+// "NEUTRAL", "STRONG_BUY"). O `AI_Signal` nunca era lido para decidir.
+//
+// Resultado: a IA era so veto e redutor de lote, e o sinal de compra e
+// venda vinha do tecnico (EMA+RSI). Ligando isto, a IA passa a DECIDIR —
+// que e o que o dono pediu ("a IA pode fazer tudo").
+//
+// false (padrao) = comportamento anterior: IA veta, tecnico decide. È a
+// opcao segura e a que estava valendo antes desta mudanca.
+input bool   AIHasSignalAuthority = false;
+
+// Minimo de score para a IA ASSUMIR a decisao, separado do veto.
+// `MinAIConfidence` e o piso do veto; este e o piso para mandar.
+// 75 = o mesmo valor que `GetCombinedSignal` ja usava para dar autoridade
+// a IA sobre o tecnico — o numero nao e novo, so passa a ter nome.
+input double AIAuthorityMinScore  = 75.0;
+
+//==================================================
 // IA - JSON (v1.2.0)
 //==================================================
 // RequireAIJSON=false (padrao): o arquivo
@@ -193,7 +227,26 @@ input double MinAIConfidence    = 50.0;
 // nao roda dentro do Strategy Tester.
 // RequireAIJSON=true: exige o JSON do pipeline Python
 // para liberar o simbolo (modo producao estrito).
+//
+// MEDIDO 05/10/2026: com `false`, o EA opera MESMO SEM IA — que e o
+// oposto de "operar guiado por IA". Quem quer a IA no comando liga isto.
 input bool   RequireAIJSON      = false;
+
+//==================================================
+// RISCO - STOP LOSS OBRIGATORIO (05/10/2026)
+//==================================================
+// MEDIDO na conta real 391773676: uma posicao aberta no MT5 com
+// `sl = 0.0` e TP 86.584,30. Sem protecao, uma queda de 2% no BTCUSD
+// levava o equity de 11,63 para -5,65 — STOP OUT.
+//
+// O backend ja recusava ("Stop Loss calculou zero", `auto_engine.py`),
+// mas o EA nao: `ExecutionEngine.mqh` calculava o SL e, se o resultado
+// fosse 0, seguia com a ordem. Este input fecha essa diferenca.
+//
+// true = recusa ordem sem SL. Nao existe caso em que desligar seja
+// seguro com dinheiro real; existe para backtest, onde o SL as vezes e
+// calculado depois.
+input bool   RequireStopLoss     = true;
 
 //==================================================
 // IA - STALENESS (ETAPA 15.3)

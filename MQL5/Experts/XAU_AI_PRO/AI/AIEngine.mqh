@@ -200,6 +200,19 @@ double GetAILotMultiplier(double confidence)
 // AI SIGNAL
 //==================================================
 
+//==================================================
+// SINAL DA IA A PARTIR DO `signal` TEXTUAL (05/10/2026)
+//==================================================
+// MEDIDO: o backend devolve `signal` ("BUY", "SELL", "NEUTRAL",
+// "STRONG_BUY"), e `AI_BuyProbability`/`AI_SellProbability` chegam 0.0
+// porque o payload canonico usa `prob_buy`/`prob_sell`. Ler as
+// probabilidades dava 0 contra 0, a diferenca de 10 pontos nunca era
+// atingida, e `GetAIEngineSignal` devolvia SEMPRE 0 — a IA nao decidia
+// nada, so vetava.
+//
+// A funcao abaixo le o texto, que e o que o backend realmente publica.
+// `AI_Score<MinAIConfidence` continua barrando: e o mesmo piso do veto,
+// e um score alto com sinal BUY e exatamente o caso que deve operar.
 int GetAIEngineSignal(string symbol="")
 {
    if(symbol=="")
@@ -211,6 +224,25 @@ int GetAIEngineSignal(string symbol="")
    if(AI_Score<MinAIConfidence)
       return 0;
 
+   // O TEXTO PRIMEIRO, e so depois as probabilidades.
+   //
+   // "STRONG_BUY"/"STRONG_SELL" sao os sinais de maior conviccao que o
+   // backend emite, e o `AIBuyAllowed`/`AISellAllowed` ja os tratavam
+   // (AIConnector.mqh). Aqui o mesmo criterio, no mesmo lugar da decisao.
+   if(AI_Signal=="STRONG_BUY")
+      return 1;
+
+   if(AI_Signal=="STRONG_SELL")
+      return -1;
+
+   if(AI_Signal=="BUY" && AI_BuyProbability>AI_SellProbability)
+      return 1;
+
+   if(AI_Signal=="SELL" && AI_SellProbability>AI_BuyProbability)
+      return -1;
+
+   // Fallback para as probabilidades: vale quando o sinal vier de um
+   // pipeline antigo, que mandava so os numeros.
    if(AI_BuyProbability>AI_SellProbability+10)
       return 1;
 
@@ -231,6 +263,27 @@ int GetCombinedSignal(string symbol="")
 
    int tech=GetSignal(symbol);
    int ai=GetAIEngineSignal(symbol);
+
+   // IA COM AUTORIDADE (05/10/2026)
+   // =================================
+   // Quando `AIHasSignalAuthority` esta ligado, a IA DECIDE — e o que o dono
+   // pediu ("a IA pode fazer tudo, operar so quando eu decidir quem opera").
+   // O sinal tecnico vira APOIO, e nao dono da decisao.
+   //
+   // O piso e `AIAuthorityMinScore` e nao `MinAIConfidence`: os dois medem
+   // coisas diferentes. O veto e "esta IA ta confiavel?"; assumir a decisao e
+   // "esta IA ta confiavel O BASTANTE para falar por mim?". Num numero so,
+   // o operador nao consegue explicar por que a ordem saiu.
+   if(AIHasSignalAuthority)
+     {
+      // Sem sinal da IA, NAO HAI FALLBACK TECNICO: e a diferenca entre
+      // "operar guiado por IA" e "operar por tecnico com uma IA olhando".
+      // Com a autoridade ligada e a IA calada, o certo e NAO operar.
+      if(ai!=0)
+         return ai;
+
+      return 0;
+     }
 
    if(tech==ai)
       return tech;

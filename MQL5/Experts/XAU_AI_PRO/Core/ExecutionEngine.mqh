@@ -175,6 +175,29 @@ bool ExecuteTrade(string symbol,int signal)
       return false;
    }
 
+   //==================================================
+   // STOP LOSS OBRIGATORIO (05/10/2026)
+   //==================================================
+   // MEDIDO na conta real 391773676: posicao aberta no MT5 com `sl = 0.0`
+   // e TP 86.584,30. Sem protecao, uma queda de 2% no BTCUSD levava o
+   // equity de 11,63 para -5,65 — STOP OUT, nao apenas perda.
+   //
+   // As linhas acima so calculam o SL quando `StopLossPoints > 0`. Com zero,
+   // `req.sl` fica 0.0 e a ordem SAI MESMO ASSIM. O backend ja recusava
+   // ("Stop Loss calculou zero", `auto_engine.py`); o EA nao recusava.
+   // Essa era a diferenca entre os dois caminhos de ordem.
+   //
+   // A ordem do teste importa: `req.sl <= 0` cobre os dois casos, o SL
+   // desligado E o SL calculado em zero por falta de espaco de preco.
+   if(RequireStopLoss && req.sl <= 0.0)
+     {
+      Print("EXECUTION: BLOQUEADA | ", symbol,
+            " | stop loss obrigatorio e o SL calculado e ",
+            DoubleToString(req.sl, (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS)),
+            " | ative StopLossPoints>0 ou desmarque RequireStopLoss");
+      return false;
+     }
+
    if(req.price <= 0.0)
    {
       Print("EXECUTION: PRECO INVALIDO | ", symbol);

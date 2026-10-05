@@ -89,8 +89,13 @@ def test_rota_real_por_fastapi_responde_403(monkeypatch):
 
     import backend.fastapi_gateway as fgw
 
+    # Fail-closed: com token configurado (vem do `.env` desde 05/10/2026),
+    # sem Bearer e 401. O teste mira o 403 da regra de negocio, entao
+    # autentica com o token do modulo.
+    monkeypatch.setattr(fgw, "API_TOKEN", "token-de-teste")
     cliente = TestClient(fgw.app)
-    resposta = cliente.post("/api/real/order", json=_pedido())
+    resposta = cliente.post("/api/real/order", json=_pedido(),
+                            headers={"Authorization": "Bearer token-de-teste"})
     assert resposta.status_code == 403
     corpo = resposta.json()
     assert corpo["ok"] is False
@@ -104,8 +109,10 @@ def test_solicitacao_real_e_aprovada(monkeypatch):
 
     import backend.fastapi_gateway as fgw
 
+    monkeypatch.setattr(fgw, "API_TOKEN", "token-de-teste")
     cliente = TestClient(fgw.app)
-    resposta = cliente.post("/api/real/request", json=_pedido(broker="mt5", account_id="mt5:active"))
+    resposta = cliente.post("/api/real/request", json=_pedido(broker="mt5", account_id="mt5:active"),
+                            headers={"Authorization": "Bearer token-de-teste"})
     assert resposta.status_code in (200, 422)
     if resposta.status_code == 200:
         corpo = resposta.json()

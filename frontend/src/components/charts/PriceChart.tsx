@@ -89,6 +89,8 @@ export default function PriceChart({
   const seriesRef = useRef<ISeriesApi<'Candlestick'>>(null);
   const linhasRef = useRef<Array<ReturnType<ISeriesApi<'Candlestick'>['createPriceLine']>>>([]);
   const emaRef = useRef<Array<ISeriesApi<'Line'>>>([]);
+  const volumeRef = useRef<ISeriesApi<'Histogram'> | null>(null);
+  const legendaRef = useRef<HTMLDivElement>(null);
   const [chartReady, setChartReady] = useState(false);
   const [internalTimeframe, setInternalTimeframe] = useState<ChartTimeframe>('M5');
   const [loadedCandles, setLoadedCandles] = useState<MarketCandle[]>([]);
@@ -104,27 +106,62 @@ export default function PriceChart({
 
   useEffect(() => {
     if (!containerRef.current) return undefined;
+    // Padrao XM: fundo do tema, grade quase invisivel, sem borda gritando.
+    // Leve = pouca tinta, so preco. Candles + volume embaixo, legenda OHLC
+    // no canto — o resto some.
     const chart = createChart(containerRef.current, {
       height,
       layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: '#8b93a7' },
       grid: {
-        vertLines: { color: 'rgba(139,147,167,.08)' },
-        horzLines: { color: 'rgba(139,147,167,.08)' },
+        vertLines: { visible: false },
+        horzLines: { color: 'rgba(139,147,167,.06)' },
       },
-      timeScale: { timeVisible: true, secondsVisible: false },
-      rightPriceScale: { borderColor: 'rgba(139,147,167,.2)' },
-      crosshair: { mode: CrosshairMode.Magnet },
+      timeScale: { timeVisible: true, secondsVisible: false, borderVisible: false },
+      rightPriceScale: { borderVisible: false },
+      crosshair: {
+        mode: CrosshairMode.Magnet,
+        vertLine: { color: 'rgba(139,147,167,.4)', labelBackgroundColor: '#4f7cff' },
+        horzLine: { color: 'rgba(139,147,167,.4)', labelBackgroundColor: '#4f7cff' },
+      },
     });
     const series = chart.addCandlestickSeries({
       upColor: '#2ecc71',
       downColor: '#e74c3c',
-      borderUpColor: '#2ecc71',
-      borderDownColor: '#e74c3c',
+      borderVisible: false,
       wickUpColor: '#2ecc71',
       wickDownColor: '#e74c3c',
     });
+    const volume = chart.addHistogramSeries({
+      priceFormat: { type: 'volume' },
+      priceScaleId: 'vol',
+    });
+    chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } });
     chartRef.current = chart;
     seriesRef.current = series;
+    volumeRef.current = volume;
+    // Legenda OHLC segue o crosshair (padrao das plataformas): atualiza o
+    // DOM direto, sem setState — 60 movimentos por segundo sem re-render.
+    const legenda = legendaRef.current;
+    const aoMirar = (param: { time?: unknown; seriesData?: Map<unknown, unknown> }) => {
+      if (!legenda) return;
+      const ponto = param.seriesData?.get(series) as
+        | { open?: number; high?: number; low?: number; close?: number }
+        | undefined;
+      if (!ponto || typeof ponto.open !== 'number') {
+        legenda.textContent = legenda.dataset.base ?? '';
+        return;
+      }
+      const cor = ponto.close >= ponto.open ? '#2ecc71' : '#e74c3c';
+      legenda.innerHTML = '';
+      const etiqueta = (t: string, v: number) => {
+        const b = document.createElement('b');
+        b.style.color = cor;
+        b.textContent = `${t} ${v}`;
+        return b;
+      };
+      legenda.append(`O `, etiqueta('', ponto.open), ` H `, etiqueta('', ponto.high), ` L `, etiqueta('', ponto.low), ` C `, etiqueta('', ponto.close));
+    };
+    chart.subscribeCrosshairMove(aoMirar);
     setChartReady(true);
     const observer =
       typeof ResizeObserver !== 'undefined'
@@ -135,9 +172,11 @@ export default function PriceChart({
     observer?.observe(containerRef.current);
     return () => {
       observer?.disconnect();
+      chart.unsubscribeCrosshairMove(aoMirar);
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
+      volumeRef.current = null;
     };
   }, [height]);
 
@@ -191,6 +230,23 @@ export default function PriceChart({
       close: candle.close,
     }));
     series.setData(data);
+    // Volume embaixo, na cor do candle (padrao das plataformas).
+    const vol = volumeRef.current;
+    if (vol) {
+      vol.setData(
+        displayCandles.map((candle) => ({
+          time: candle.time as UTCTimestamp,
+          value: typeof candle.volume === 'number' ? candle.volume : 0,
+          color: candle.close >= candle.open ? 'rgba(46,204,113,.5)' : 'rgba(231,76,60,.5)',
+        })),
+      );
+    }
+    // Base da legenda: ultimo candle (o crosshair sobrescreve ao mirar).
+    const ultimo = displayCandles[displayCandles.length - 1];
+    if (legendaRef.current && ultimo) {
+      legendaRef.current.dataset.base = `O ${ultimo.open} H ${ultimo.high} L ${ultimo.low} C ${ultimo.close}`;
+      if (!legendaRef.current.textContent) legendaRef.current.textContent = legendaRef.current.dataset.base;
+    }
     // Sinais do modelo sobre as barras. So BUY/SELL entram; NEUTRAL e
     // recusa nao marcam o grafico (marcador sem decisao e ruido).
     const times = new Set(data.map((d) => d.time));
@@ -423,6 +479,7 @@ export default function PriceChart({
         role="img"
         tabIndex={0}
       />
+      <div ref={legendaRef} className="muted mono" aria-hidden="true" style={{ fontSize: 12 }} />
       {displayCandles.length > 0 && (
         <details className="market-chart-data">
           <summary>Ver dados em tabela</summary>

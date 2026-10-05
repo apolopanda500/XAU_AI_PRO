@@ -143,7 +143,14 @@ Alteração em adaptador de execução: rodar `pytest -q tests/test_execution_ad
 
 Alteração em EA: recompilar no MetaEditor64 antes de considerar pronta a mudança.
 
-## Pendencias atuais (verificado em 04/10/2026)
+## Pendencias atuais (verificado em 04/10/2026, revalidado em 05/10/2026)
+
+Revalidacao 05/10: suite Python **1030 passed, 0 failed**; `Core/Config.mqh`
+(timeout 5000 -> 15000) declarado em `AUTORIZACOES_MQL5` e compilado
+(`test_mql5_compila.py` verde); 6 commits de outra sessao integrados
+(alias ouro na leitura, EA via WebRequest, MULTI alcancaveis, ponto da XM,
+13 limites no painel, traducao do pedido); 3 testes de auth ajustados ao
+fail-closed com `.env` (mandam Bearer, miram o codigo da regra).
 
 O estado abaixo foi medido por comando nesta sessao, nao herdado de
 relatorio anterior. Onde a leitura antiga estava errada, esta marcado.

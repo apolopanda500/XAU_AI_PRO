@@ -176,6 +176,17 @@ AUTORIZACOES_MQL5: dict[str, dict[str, str]] = {
         "compilado": "sim - junto com o acima",
         "reanexado": "NAO - mesma razao",
     },
+    "Core/Config.mqh": {
+        "commit": "pendente",
+        "motivo": (
+            "AIRequestTimeoutMs 5000 -> 15000: medido em 05/10/2026, o "
+            "primeiro acesso ao par leva 2096 ms (carrega o `.pkl` em disco "
+            "frio) e timeout curto faria o EA cair sem sinal na consulta que "
+            "mais importa. So comentario + 1 input, sem logica."
+        ),
+        "compilado": "sim - MetaEditor64 via tests/test_mql5_compila.py, 0 errors",
+        "reanexado": "NAO - mesma razao",
+    },
 }
 
 
