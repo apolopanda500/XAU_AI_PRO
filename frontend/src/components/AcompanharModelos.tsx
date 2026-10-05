@@ -188,17 +188,17 @@ export default function AcompanharModelos() {
     }
   };
   return (
-    <section className="card compact-card" aria-label="Acompanhar modelos">
+    <section className="card robo-grafico" aria-label="Gráfico operacional ao vivo">
       <div className="section-head">
         <div>
-          <h2>Acompanhar modelos</h2>
+          <h2>Gráfico ao vivo</h2>
           <span className="muted">
             {simbolo} · {timeframe} · {broker.toUpperCase()}
             {desatualizado ? ` · desatualizado há ${idadeSeg}s` : ' · ao vivo'}
           </span>
         </div>
         <span className={`chip ${desatualizado ? 'warn' : 'ok'}`}>
-          {sinais.length ? `${sinais.length} sinais` : 'aguardando sinal'}
+          {sinais.length ? `${sinais.length} sinais no gráfico` : 'aguardando sinal'}
         </span>
       </div>
       <PriceChart
@@ -227,41 +227,21 @@ export default function AcompanharModelos() {
         </label>
         <span className="muted">usa LOTE/SL/TP do motor · com confirmação</span>
       </div>
-      <div className="table-scroll">
-        <table className="tbl compact-table dense-grid">
-          <thead>
-            <tr>
-              <th>Hora</th>
-              <th>Sinal</th>
-              <th className="num">Confiança</th>
-              <th className="num">Preço</th>
-              <th>Modelo</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sinais.slice(0, 8).map((s, i) => (
-              <tr key={`${s.time}-${i}`}>
-                <td className="mono">{new Date(s.time * 1000).toLocaleTimeString('pt-BR')}</td>
-                <td>
-                  <span className={`chip ${s.signal === 'BUY' ? 'ok' : s.signal === 'SELL' ? 'warn' : ''}`}>
-                    {s.signal}
-                  </span>
-                </td>
-                <td className="num">{s.confidence ?? '--'}%</td>
-                <td className="num">{s.price ?? '--'}</td>
-                <td className="muted">{s.model || s.motivo || '--'}</td>
-              </tr>
-            ))}
-            {!sinais.length && (
-              <tr>
-                <td colSpan={5} className="mt-empty">
-                  Nenhum sinal ainda — a primeira leitura chega em segundos.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      {/*
+        A TABELA DE SINAIS FOI REMOVIDA.
+        ======================================
+        O dono: "nada de prever tabela de previsao — isso nao ajuda em nada, o
+        que importa e operar, ordens ao vivo, grafico operacional".
+
+        Os sinais NAO sumiram: eles continuam desenhados como MARCADORES no
+        candle (BUY verde abaixo do preco, SELL vermelho acima), que e onde o
+        operador olha o preco de qualquer forma. A tabela repetia os mesmos
+        numeros em texto — hora, sinal, confianca, preco, modelo — num bloco que
+        ocupava a tela abaixo dos botoes de operar.
+
+        Um dado mostrado em dois lugares faz o operador desconfiar dos dois.
+        Agora o sinal existe em um lugar so, e a tela inteira e para operar.
+      */}
     </section>
   );
 }

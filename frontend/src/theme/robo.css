@@ -1,0 +1,291 @@
+/* ===========================================================================
+   ATIVO E MODELO/PERIODO
+   ===========================================================================
+   Uma linha, dois seletores. O bloco e pequeno de proposito: ele responde a
+   pergunta "qual ativo e qual periodo?" e nao compete com o grafico.
+
+   Sem estas regras o bloco saia SEM ESTILO — os dois `<select>` empilham em
+   largura cheia e o operador perde a leitura de par e periodo em bloco. Foi o
+   que aconteceu com a `mesa-` quando o componente que importava a folha foi
+   apagado, e e o defeito que `RobotTabs.test.tsx` trava.
+   =========================================================================== */
+.robo-par-linha {
+  display: grid;
+  /* O ativo estreita, o modelo larga: o rotulo do modelo e o mais longo
+     ("H4 · edge +12,6% · acerto 58,3%") e nao pode ser cortado. */
+  grid-template-columns: minmax(140px, 0.8fr) minmax(0, 2fr);
+  gap: 10px;
+  align-items: end;
+}
+
+.robo-par-linha .field {
+  margin-bottom: 0;
+  min-width: 0;
+}
+
+/*
+  Os dois seletores nao precisam de largura propria — herdam de `.field`. Estas
+  regras existem para o contrato ficar EXPLICITO e para o teste de CSS poder
+  conferir: um bloco sem nenhuma regra propria e um bloco cuja regra sumiu por
+  um merge de estilos ficam IGUAIS na tela, e o operador ve um campo esticado
+  sem saber por que.
+*/
+.robo-par-ativo {
+  grid-column: 1;
+}
+
+.robo-par-modelo {
+  grid-column: 2;
+}
+
+@media (max-width: 900px) {
+  .robo-par-linha {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .robo-par-ativo,
+  .robo-par-modelo {
+    grid-column: 1;
+  }
+}
+
+/* ===========================================================================
+   ABAS ROBÔ — folha da página (05/10/2026)
+   ===========================================================================
+   RECONSTRUÍDA DO ZERO. Não há nenhuma regra `mesa-` aqui, e `mesa-xm.css`
+   não é importada por ninguém.
+
+   POR QUE UMA FOLHA NOVA E NÃO APROVEITAR A ANTIGA
+   ===================================================
+   A folha antiga se chamava "mesa" porque a mesa era a tela. Tirá-la da tela não
+   muda o nome do CSS — e manter o prefixo seria deixar o nome de uma coisa que
+   o dono mandou remover escrito na origem do estilo de todas as outras.
+
+   O QUE A FOLHA FAZ, E POR QUE CADA REGRA
+   =======================================
+   1. A página é uma COLUNA com `gap`. Cada bloco é um filho direto. É isso que
+      impede encavalitar.
+   2. O ticket de comandos é uma FAIXA: lado / lote / proteção / presets /
+      botão, na ordem em que se opera. No MT5 e na XM os campos e o botão ficam
+      na mesma linha, e é por isso que quem opera não precisa subir e descer a
+      tela — o vaivem é onde a proteção sai no lugar errado.
+   3. Nada de largura fixa em pixel nas colunas: o operador redimensiona a
+      janela. Quem quebra em janela estreita aqui é `minmax(0, 1fr)` no lugar
+      certo.
+   4. A barra de status é global (`status-bar.css`); esta folha não a redefine.
+
+   Reduced motion
+   ==============
+   O bloco único fica em `fluidness.css`, carregado depois de todos os temas.
+   Aqui não há `prefers-reduced-motion` repetido: regra duplicada é regra que
+   alguém vai editar sem ver a outra.
+   =========================================================================== */
+
+/* ---------- A página ---------- */
+.robo {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 100%;
+}
+
+/* Cada bloco é filho direto da coluna. `min-width: 0` deixa os blocos
+   encolherem dentro da coluna em vez de estourar a largura. */
+.robo > * {
+  min-width: 0;
+}
+
+/* ---------- 1. Cabeçalho ---------- */
+.robo-cabecalho {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 2px 2px 0;
+}
+
+.robo-cabecalho h1 {
+  margin: 0 0 2px;
+  font-size: 22px;
+  line-height: 1.1;
+  letter-spacing: 0.02em;
+}
+
+/* ---------- 2. Operação automática ---------- */
+.robo-comandos {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* O TICKET: uma faixa só.
+   ---------------------
+   `grid-template-columns` com dois `auto` e um `1fr` deixa o botão ocupar
+   o resto da linha. Em janela estreita, o `grid` colapsa para uma coluna
+   pelo `media query` do fim — o botão desce inteiro, nunca fica espremido
+   entre dois campos. */
+.robo-ticket {
+  display: grid;
+  grid-template-columns: auto minmax(96px, 0.5fr) minmax(0, 1.35fr) auto auto;
+  grid-template-areas:
+    'lote volume protecao presets enviar'
+    'preco preco protecao presets enviar';
+  gap: 8px 10px;
+  align-items: end;
+}
+
+.robo-ticket-lote {
+  grid-area: lote;
+}
+
+.robo-ticket-volume {
+  grid-area: volume;
+}
+
+/* SL e TP juntos: é uma decisão só. Separados por outros campos, o operador
+   ajusta um e esquece o outro. */
+.robo-ticket-protecao {
+  grid-area: protecao;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.robo-ticket-presets {
+  grid-area: presets;
+  flex-wrap: wrap;
+}
+
+.robo-ticket-preco {
+  grid-area: preco;
+  font-family: var(--mono, ui-monospace, Consolas, monospace);
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  align-self: center;
+}
+
+.robo-ticket-enviar {
+  grid-area: enviar;
+  min-height: 44px;
+  min-width: 148px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+/* O botão AUTO não promete compra nem venda: o lado é do MODELO. A cor
+   significa LIGADO/DESLIGADO, e é isso que o texto diz. */
+.robo-ticket-enviar.is-off {
+  border-color: var(--primary, #00c6fb);
+  color: var(--primary, #00c6fb);
+  background: color-mix(in srgb, var(--primary, #00c6fb) 12%, transparent);
+}
+
+.robo-ticket-enviar.is-on {
+  border-color: var(--ok, #34d399);
+  color: #06210f;
+  background: var(--ok, #34d399);
+}
+
+/* ---------- Presets SL:TP ---------- */
+.robo-presets {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.robo-presets-passo {
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted, #8a94a6);
+  white-space: nowrap;
+  margin-right: 2px;
+}
+
+/* ---------- 3. Gráfico ao vivo ---------- */
+/* O gráfico é o bloco mais alto da página: é o que o operador olha. */
+.robo-grafico {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* A tabela de sinais do modelo fica recolhida por padrão: são 8 linhas de
+   histórico, e o operador precisa do gráfico primeiro. O `<details>` é do
+   componente; aqui é o espaço que ele ocupa. */
+.robo-sinais {
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+/* ---------- 4. MiniTerminal ao vivo ---------- */
+.robo-terminal {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ---------- Estados ---------- */
+.robo-vazio {
+  padding: 18px 12px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted, #8a94a6);
+}
+
+.robo-observacao {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--muted, #8a94a6);
+}
+
+/* ---------- Janela estreita ----------
+   O ticket vira uma coluna na ordem da leitura. O botão desce por último e
+   ocupa a largura toda — é o elemento que não pode ficar estreito, porque é
+   onde o clique errado custa dinheiro. */
+@media (max-width: 860px) {
+  .robo-ticket {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas:
+      'preco protecao'
+      'lote volume'
+      'presets presets'
+      'enviar enviar';
+  }
+
+  .robo-ticket-protecao {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .robo-ticket-enviar {
+    min-width: 0;
+    width: 100%;
+  }
+}
+
+@media (max-width: 520px) {
+  .robo-ticket {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'preco'
+      'lote'
+      'volume'
+      'protecao'
+      'presets'
+      'enviar';
+  }
+
+  .robo-ticket-protecao {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .robo-cabecalho h1 {
+    font-size: 19px;
+  }
+}

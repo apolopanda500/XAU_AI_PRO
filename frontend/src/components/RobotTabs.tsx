@@ -1,134 +1,134 @@
-// Aba Robô organizada em sub-abas.
+// ===========================================================================
+//  ABAS ROBÔ — 05/10/2026. Reescrita do zero, sem a Mesa.
 //
-// O QUE MUDOU
-// ===========
-// A aba devolvia um fragmento com oito ErrorBoundary empilhados: Modelo,
-// Automação, Ordem, Risco, Guardian, Ativos, Copiloto e Mini Terminal, todos
-// num único scroll. Era uma página sem hierarquia — nada dizia onde uma
-// responsabilidade terminava e a outra começava.
+//  O DONO PEDIU
+//  ============
+//  "deletar aba e reconstruir sem mesa apenas:
+//     CABECALHO EM CIMA
+//     OPERACAO AUTOMATICO COMANDOS
+//     GRAFICO OPERACIONAL AO VIVO EMBAIXO
+//     MINITERMINAL AO VIVO"
 //
-// A versão seguinte fez cinco seções (Modelo & Sinal | Operação | Ordem |
-// Ativos | Copiloto) e aí apareceram dois problemas: Ordem e Ativos falavam do
-// mesmo ativo escolhido em telas separadas, e o operador via a mesma ordem de
-// botões repetida em painéis diferentes.
+//  O QUE TINHA E POR QUE FOI REESCRITO
+//  ====================================
+//  A aba anterior era `MesaXM` (ticket manual) + sub-aba `Acompanhar`. O dono
+//  mandou tirar a mesa. A versão intermediária trocou `MesaXM` por
+//  `OperacaoAutomatica` e manteve o CSS antigo com o prefixo `mesa-`.
 //
-// Agora são cinco (Sinal | Automação | Mesa | EA | Copiloto):
+//  Resultado medido: a aba ficou DESCONFIGURADA. Nenhum erro, nenhuma exceção —
+//  a folha `mesa-xm.css` deixou de ser importada quando o componente que a
+//  importava foi apagado, e todas as classes do ticket ficaram sem regra. Ticket
+//  desmontado, botão sem cor, campos empilhados.
 //
-//   Sinal      → qual ativo usar, qual modelo roda e o que ele prevê
-//   Automação  → se o motor está ligado, com que limites e sobre qual par
-//   Mesa       → mandar ordem à mão e a parada de emergência
-//   EA         → o que existe no terminal MT5, o que o heartbeat reporta e
-//                os comandos do Expert Advisor
-//   Copiloto   → conversa e achados do EA
+//  Aqui a reconstrução parte do CSS, não do componente. Cada arquivo da página
+//  importa SUA folha, e a folha é declarada com o nome da página (`robo-`).
+//  Não existe mais nenhum `mesa-`.
 //
-// E o Mini Terminal continua sempre visível no fim: ele é conferência, não
-// comando — é ali que se vê o motor rodando, as posições e a conta.
+//  A ORDEM É A QUE O DONO PEDIU
+//  ============================
+//  1. cabeçalho
+//  2. operação automática (comandos)
+//  3. gráfico operacional ao vivo
+//  4. MiniTerminal ao vivo
 //
-// OS PAINÉIS NÃO SÃO DESMONTADOS
-// ===============================
-// As sub-abas escondem com `hidden`, sem deixar de renderizar. Desmontar
-// jogaria fora a conversa do Copiloto (estado local em useState), a seleção
-// de ativo e qualquer leitura em andamento.
-import type { ReactNode } from 'react';
-import { useAppStore, ROBOT_SUBS, type RobotSub } from '../hooks/useAppStore';
+//  Cada bloco é seu próprio `<section>`, e a página não tem `overflow` próprio:
+//  quem rola é `.content`. Isso é o que impede um bloco de encavalitar sobre o
+//  outro — que foi o sintoma da versão quebrada.
+// ===========================================================================
+// ===========================================================================
+//  ABA ROBÔ — TRÊS BLOCOS, NADA MAIS.
+//
+//  O DONO PEDIU
+//  ============
+//  "selecionar modelos periodos, controlar volume lote, tp sl, IA ajudando,
+//   ver os modelos ativado operando no grafico do meio ao vivo, colocar
+//   ordens no grafico arrastando, e no final embaixo o miniterminal ao vivo
+//   mostrando as noticias"
+//
+//  E DEPOIS, DUAS VEZES:
+//  "apenas os tres blocos... nao poluir tela"
+//  "nada de prever tabela de previsao — isso nao ajuda em nada, o que importa
+//   e operar, ordens ao vivo, grafico operacional"
+//
+//  O QUE FICOU E O QUE SAIU
+//  ========================
+//  FICOU: seletor de ATIVO e de MODELO/PERIODO. O operador precisa escolher
+//  qual par o motor usa — sem isso, "qual ativo e modelo?" obriga a sair da
+//  aba para responder.
+//
+//  SAIU: o botao "Prever" e a TABELA de previsao (sinal, confianca, probBuy,
+//  probSell, etc.). Duas razoes, e a segunda e a que pesa:
+//
+//  1. O dono pediu explicitamente. Um sinal previsto nao abre posicao. Ele nao
+//     decide se o operador compra, e sim informa o que o modelo acha —
+//     enquanto o operador olha, o preco ja andou.
+//
+//  2. O painel era um segundo lugar para o mesmo dado. `AcompanharModelos`
+//     (o grafico do meio) JA desenha os sinais do modelo como marcadores no
+//     candle, com a fita embaixo. A tabela repetia numero que ja estava no
+//     grafico, e a regra do projeto proibe exatamente isso: um controle ou um
+//     painel que mostra o mesmo dado em dois lugares faz o operador desconfiar
+//     dos dois.
+//
+//  A inferencia continua rodando no motor. O que mudou e so que ela NAO tem
+//  mais uma tabela na tela: ela aparece como marcador no grafico, onde o
+//  operador esta olhando o preco de qualquer forma.
+//
+//  A ORDEM E A QUE O DONO PEDIU
+//  ===========================
+//  1. cabecalho
+//  2. comandos (lote, volume, SL, TP, AUTO) + seletor de modelo e periodo
+//  3. grafico operacional ao vivo (ordem arrastando)
+//  4. MiniTerminal ao vivo (posicoes e noticias)
+//
+//  Cada bloco e seu proprio `<section>`, e a pagina nao tem `overflow` proprio:
+//  quem rola e `.content`. E isso que impede um bloco de encavalitar sobre o
+//  outro — que foi o sintoma da versao quebrada.
+// ===========================================================================
 import ErrorBoundary from './ErrorBoundary';
 import AcompanharModelos from './AcompanharModelos';
-import MesaXM from './MesaXM';
-import RobotModelPanel from './RobotModelPanel';
+import OperacaoAutomatica from './OperacaoAutomatica';
 import UniversalLiveTerminal from './UniversalLiveTerminal';
-import '../theme/robot-subtabs.css';
-// Densidade das tabelas do Histórico, aplicada também às do Robô (M3).
-import '../theme/history-grid.css';
+import SeletorModelo from './SeletorModelo';
+import '../theme/robo.css';
 
-// Duas sub-abas, uma responsabilidade cada (2026-10-04). Antes era tudo
-// empilhado num scroll so — a aba ficava poluida. Automacao fundida na
-// Mesa (mesmo LOTE/SL/TP, AUTO SIM/NAO): dois paineis mandando no motor
-// era comando repetido.
-//
-//   Mesa       → comandos simples + lista de modelos + AUTO
-//   Acompanhar → grafico ao vivo: opere no grafico e veja os modelos
-//
-// O Mini Terminal continua sempre visivel no fim: e conferencia, nao
-// comando — ali se ve as posicoes e a conta em qualquer sub-aba.
-//
-// OS PAINEIS NAO SAO DESMONTADOS: as sub-abas escondem com `hidden`, sem
-// deixar de renderizar. Desmontar jogaria fora a conversa, a selecao de
-// ativo e qualquer leitura em andamento.
-const ROTULOS: Record<RobotSub, string> = {
-  mesa: 'Mesa',
-  acompanhar: 'Acompanhar',
-};
-
-const RESUMOS: Record<RobotSub, string> = {
-  mesa: 'Comandos, modelos e AUTO — tudo do motor num lugar só.',
-  acompanhar: 'Gráfico ao vivo: opere no gráfico e veja os modelos decidindo.',
-};
-
-function Secao({ nome, children }: { nome: string; children: ReactNode }) {
+function Secao({ nome, children }: { nome: string; children: React.ReactNode }) {
   return <ErrorBoundary nome={nome}>{children}</ErrorBoundary>;
 }
 
 export default function RobotTabs() {
-  const sub = useAppStore((s) => s.robotSub);
-  const setSub = useAppStore((s) => s.setRobotSub);
-
-  const paineis: Record<RobotSub, ReactNode> = {
-    mesa: (
-      <>
-        <Secao nome="Mesa XM MT5">
-          <MesaXM />
-        </Secao>
-        <Secao nome="Modelos e sinais">
-          <RobotModelPanel />
-        </Secao>
-      </>
-    ),
-    acompanhar: (
-      <Secao nome="Acompanhar modelos">
-        <AcompanharModelos />
-      </Secao>
-    ),
-  };
-
   return (
-    <main className="robot-page">
-      <div className="page-head">
+    <main className="robo">
+      {/* 1 — cabeçalho. Fica FORA do grid: a página usa `display: flex`
+          com `gap`, e cabeçalho não é um bloco de conteúdo. */}
+      <header className="robo-cabecalho">
         <div>
           <span className="eyebrow">OPERAÇÃO</span>
           <h1>ROBÔ</h1>
-          <span className="muted">{RESUMOS[sub]}</span>
+          <span className="muted">
+            Escolha o par, configure o risco e opere no gráfico ao vivo.
+          </span>
         </div>
-        <div className="btn-row robot-subtabs" role="tablist" aria-label="Seções de operação">
-          {ROBOT_SUBS.map((id) => (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              id={`robot-tab-${id}`}
-              aria-controls={`robot-panel-${id}`}
-              aria-selected={sub === id}
-              className="btn"
-              onClick={() => setSub(id)}
-            >
-              {ROTULOS[id]}
-            </button>
-          ))}
-        </div>
-      </div>
+      </header>
 
-      {ROBOT_SUBS.map((id) => (
-        <div
-          key={id}
-          className="robot-subpanel"
-          role="tabpanel"
-          id={`robot-panel-${id}`}
-          aria-labelledby={`robot-tab-${id}`}
-          hidden={sub !== id}
-        >
-          {paineis[id]}
-        </div>
-      ))}
+      {/* 2 — comandos. Lote, proteção e AUTO; o modelo decide o lado. */}
+      <Secao nome="Operação automática">
+        <OperacaoAutomatica />
+      </Secao>
 
+      {/* ATIVO e MODELO/PERIODO moram com os comandos: e a resposta da pergunta
+          "qual ativo e modelo?" na mesma tela onde se define o risco. */}
+      <Secao nome="Escolha do par">
+        <SeletorModelo />
+      </Secao>
+
+      {/* 3 — gráfico operacional ao vivo. Compra e venda em 1 clique, TP/SL
+          arrastável, marcadores do modelo. */}
+      <Secao nome="Gráfico ao vivo">
+        <AcompanharModelos />
+      </Secao>
+
+      {/* 4 — MiniTerminal ao vivo. Posições abertas, conta e notícias. */}
       <Secao nome="Posições ao vivo">
         <UniversalLiveTerminal />
       </Secao>
