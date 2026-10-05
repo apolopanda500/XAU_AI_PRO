@@ -53,8 +53,8 @@ export type ThemeName =
 // O tipo continua com um unico valor porque o `localStorage` de quem usou as
 // versoes antigas ainda guarda 'sinal'/'ea'; `LEGADO_ROBOT_SUB` mapeia tudo
 // para 'operar', entao ninguem fica preso numa aba que nao existe mais.
-export type RobotSub = 'operar';
-export const ROBOT_SUBS: RobotSub[] = ['operar'];
+export type RobotSub = 'mesa' | 'acompanhar';
+export const ROBOT_SUBS: RobotSub[] = ['mesa', 'acompanhar'];
 
 // Nomes antigos persistidos no localStorage de quem usou as versoes de quatro
 // e cinco sub-abas. TODOS caem em 'operar', que e a unica aba que existe
@@ -62,17 +62,19 @@ export const ROBOT_SUBS: RobotSub[] = ['operar'];
 // `robotSub` que nao e mais valido e a tela apareceria vazia.
 // Exportado porque o teste de RobotTabs fixa a correspondencia.
 export const LEGADO_ROBOT_SUB: Record<string, RobotSub> = {
-  modelo: 'operar',
-  ativos: 'operar',
-  sinal: 'operar',
-  ea: 'operar',
-  copiloto: 'operar',
-  operacao: 'operar',
-  ordem: 'operar',
-  automacao: 'operar',
-  mesa: 'operar',
-  risco: 'operar',
-  guardian: 'operar',
+  modelo: 'mesa',
+  ativos: 'mesa',
+  sinal: 'acompanhar',
+  ea: 'mesa',
+  copiloto: 'acompanhar',
+  operacao: 'mesa',
+  operar: 'mesa',
+  ordem: 'mesa',
+  automacao: 'mesa',
+  auto: 'mesa',
+  mesa: 'mesa',
+  risco: 'mesa',
+  guardian: 'mesa',
 };
 
 export interface Quote {
@@ -283,8 +285,8 @@ export const useAppStore = create<AppState>()(
       // O produto é universal; XAUUSD é apenas uma opção do catálogo.
       selectedSymbol: '',
       setSelectedSymbol: (symbol) => set({ selectedSymbol: symbol }),
-      // A aba ROBÔ tem uma unica sub-aba, então o store sempre abre nela.
-      robotSub: 'operar',
+      // A aba ROBO abre na Mesa; as sub-abas dividem o espaco.
+      robotSub: 'mesa',
       setRobotSub: (sub) => set({ robotSub: sub }),
       marketWatchlist: [],
       setMarketWatchlist: (symbols) => set({ marketWatchlist: normalizeSymbols(symbols) }),
@@ -350,7 +352,7 @@ export const useAppStore = create<AppState>()(
             const salvo = String(p.robotSub ?? '');
             const legado = LEGADO_ROBOT_SUB[salvo] as RobotSub | undefined;
             if (legado) return legado;
-            return ROBOT_SUBS.includes(salvo as RobotSub) ? (salvo as RobotSub) : 'operar';
+            return ROBOT_SUBS.includes(salvo as RobotSub) ? (salvo as RobotSub) : 'mesa';
           })(),
         } as AppState;
       },

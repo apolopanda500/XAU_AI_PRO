@@ -578,9 +578,15 @@ bool FetchPredictionFromGateway(
       url = url + "?symbol=" + symbol + "&timeframe=" + timeframe;
 
    char post[], result[];
+
+   // O MIDDLEWARE DO GATEWAY LE SO `Authorization: Bearer` (medido em
+   // `fastapi_gateway.py`, linha 103: `auth != f"Bearer {API_TOKEN}"`).
+   // Enviar `X-Gateway-Token` — como eu fiz na primeira versao — produz
+   // "token invalido" com HTTP 401 mesmo com o token CORRETO no input. E a
+   // quarta vez que os dois lados falam cabecalhos diferentes pelo mesmo nome.
    string headers = "Content-Type: application/json\r\n";
    if(StringLen(AIGatewayToken) > 0)
-      headers = headers + "X-Gateway-Token: " + AIGatewayToken + "\r\n";
+      headers = headers + "Authorization: Bearer " + AIGatewayToken + "\r\n";
 
    string payload = "{}";
    StringToCharArray(payload, post, 0, StringLen(payload), CP_UTF8);

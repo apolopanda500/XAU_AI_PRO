@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """Gateway FastAPI - substituto moderno do mt5_gateway.py.
 
 Reusa os 36 helpers puros de mt5_gateway e expõe os mesmos
@@ -286,8 +286,24 @@ def _ai_predict_sync(symbol: str, timeframe: str) -> dict:  # type: ignore[no-un
     import pandas as pd
 
     from backend.mt5_gateway import _mt5_candles
+    from backend.symbol_aliases import para_corretora
 
-    candles = _mt5_candles(symbol, timeframe, 600)
+    # O NOME DO MODELO E O NOME DA CORRETORA NAO SAO O MESMO (medido 05/10/2026).
+    # A XM tem `GOLD`; o modelo foi treinado como `XAUUSD`. Sem traduzir, a
+    # rota pedia `XAUUSD` ao MT5 e recebia "no_candles_for_symbol" — recusa
+    # correta, com o motivo ERRADO: o operador culparia a corretora ou o
+    # modelo, e nenhum dos dois estava quebrado.
+    #
+    # `para_corretora` existe justamente para isto (o arquivo
+    # `symbol_aliases.json` tem `{"mt5": {"XAUUSD": "GOLD"}}`).
+    #
+    # A DIRECAO IMPORTA, e eu errei a primeira vez: usei `para_modelo`, que faz
+    # o caminho inverso (`GOLD` -> `XAUUSD`), e continuei pedindo `XAUUSD` ao
+    # MT5. `para_modelo` e o que o CAMINHO DE ORDEM usa quando recebe o nome da
+    # CORRETORA de volta — nao o que a leitura de candles precisa.
+    simbolo_corretora = para_corretora("mt5", symbol)
+
+    candles = _mt5_candles(simbolo_corretora, timeframe, 600)
     if candles is None:
         return {
             "ok": False,
@@ -304,10 +320,17 @@ def _ai_predict_sync(symbol: str, timeframe: str) -> dict:  # type: ignore[no-un
     linhas = candles.get("candles") if isinstance(candles, dict) else candles
     if not linhas:
         motivo = candles.get("reason_code") or candles.get("error") if isinstance(candles, dict) else None
+        # O motivo cita o nome que foi CONSULTADO e o que foi pedido. Sem os
+        # dois, o operador veria "MT5 nao devolveu candles para XAUUSD" e
+        # procuraria um simbolo que a XM nunca teve.
+        consultou = f" (na XM: {simbolo_corretora})" if simbolo_corretora != symbol else ""
         return {
             "ok": False,
             "available": False,
-            "reason": f"MT5 nao devolveu candles para {symbol} {timeframe}" + (f" ({motivo})" if motivo else ""),
+            "reason": (
+                f"MT5 nao devolveu candles para {symbol} {timeframe}{consultou}"
+                + (f" ({motivo})" if motivo else "")
+            ),
             "symbol": symbol,
             "timeframe": timeframe,
         }
@@ -1552,3 +1575,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

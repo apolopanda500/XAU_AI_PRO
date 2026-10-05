@@ -77,7 +77,9 @@ describe('MesaXM', () => {
     fireEvent.change(screen.getByLabelText('Stop loss'), { target: { value: '4150' } });
     fireEvent.change(screen.getByLabelText('Take profit'), { target: { value: '4130' } });
     fireEvent.click(container.querySelector('.mesa-enviar') as HTMLButtonElement);
-    await waitFor(() => expect(chamadas.some((c) => c.url.includes('/api/trade/order'))).toBe(true));
+    await waitFor(() =>
+      expect(chamadas.some((c) => c.url.includes('/api/trade/order'))).toBe(true),
+    );
     const ordem = chamadas.find((c) => c.url.includes('/api/trade/order'))!;
     expect(ordem.body.side).toBe('SELL');
   });
@@ -92,14 +94,13 @@ describe('MesaXM', () => {
     // magico que ele nao escolheu.
     const { container } = renderMesa();
     await screen.findByText(/GOLD/);
-    const passo = 4140.6 * 0.001; // 0,1% do preco
-    const esperadoSl = Number((passo * 1).toPrecision(6));
-    const esperadoTp = Number((passo * 3).toPrecision(6));
+    // Passo com escala do ativo: 0,1% de 4140,6 = 4,1406, arredondado na
+    // escala de 0,01 -> 4,14. O preset 1:3 preenche SL 4,14 e TP 12,42.
     fireEvent.click(screen.getByRole('button', { name: '1:3' }));
     await waitFor(() => {
-      expect((screen.getByLabelText('Stop loss') as HTMLInputElement).value).toBe(String(esperadoSl));
+      expect((screen.getByLabelText('Stop loss') as HTMLInputElement).value).toBe('4.14');
     });
-    expect((screen.getByLabelText('Take profit') as HTMLInputElement).value).toBe(String(esperadoTp));
+    expect((screen.getByLabelText('Take profit') as HTMLInputElement).value).toBe('12.42');
     // E o botao nao trava os campos: o operador ainda ajusta.
     const sl = screen.getByLabelText('Stop loss') as HTMLInputElement;
     expect(sl.readOnly).toBe(false);
@@ -138,5 +139,27 @@ describe('MesaXM', () => {
     expect(enviar().className).toContain('is-buy');
     fireEvent.click(screen.getByRole('button', { name: 'Vender' }));
     expect(enviar().className).toContain('is-sell');
+  });
+
+  it('AUTO SIM aplica lote/sl/tp e liga; AUTO ligado desliga', async () => {
+    // Automacao fundida na Mesa: o mesmo LOTE/SL/TP do ticket vira config
+    // do motor. Sem preencher, o botao diz o que falta em vez de falhar mudo.
+    renderMesa();
+    await screen.findByText(/GOLD/);
+    const auto = screen.getByRole('switch', { name: 'Operação automática' });
+    expect(auto.textContent).toContain('NÃO');
+    fireEvent.click(auto);
+    await waitFor(() => expect(screen.getByText(/Preencha LOTE, SL e TP/)).toBeTruthy());
+    fireEvent.change(screen.getByLabelText('Quantidade em lotes'), { target: { value: '0.01' } });
+    fireEvent.change(screen.getByLabelText('Stop loss'), { target: { value: '4130' } });
+    fireEvent.change(screen.getByLabelText('Take profit'), { target: { value: '4150' } });
+    fireEvent.click(auto);
+    await waitFor(() => expect(chamadas.some((c) => c.url.includes('/api/auto/config'))).toBe(true));
+    await waitFor(() => expect(chamadas.some((c) => c.url.includes('/api/auto/start'))).toBe(true));
+    const cfg = chamadas.find((c) => c.url.includes('/api/auto/config'))!;
+    expect(cfg.body.lote).toBe(0.01);
+    expect(cfg.body.sl_preco).toBe(4130);
+    expect(cfg.body.tp_preco).toBe(4150);
+    expect(cfg.body.simbolo).toBe('GOLD');
   });
 });

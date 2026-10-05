@@ -165,6 +165,69 @@ export default function MesaXM() {
     return { sl: slN, tp: tpN, modo: 'invalido' as const };
   }, [sl, tp, preco, lado]);
 
+  // AUTO fundido na Mesa (sem duplicar comandos): o mesmo LOTE/SL/TP do
+  // ticket vira config do motor. SIM aplica e liga; NAO para. O painel de
+  // automacao separado saiu da aba — dois lugares mandando no motor era a
+  // duplicacao que poluía a tela.
+  const autoAtivo = Boolean(auto?.ativo);
+  const alternarAuto = async () => {
+    if (ocupado) return;
+    if (autoAtivo) {
+      setOcupado(true);
+      try {
+        const r = await fetch(`${apiBase()}/api/auto/stop`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}',
+          signal: AbortSignal.timeout(10000),
+        });
+        const d = (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+        setStatus(r.ok && d.ok !== false ? 'Motor parado.' : String(d.error ?? `HTTP ${r.status}`));
+        notify(r.ok && d.ok !== false ? 'Motor parado' : 'Não parou', r.ok && d.ok !== false ? 'Automático desligado.' : String(d.error ?? ''));
+      } catch (e) {
+        setStatus(`Gateway indisponível: ${e instanceof Error ? e.message : 'erro'}`);
+      } finally {
+        setOcupado(false);
+      }
+      return;
+    }
+    const loteN = num(lote);
+    const slN = num(sl);
+    const tpN = num(tp);
+    if (!(loteN > 0) || !(slN > 0) || !(tpN > 0)) {
+      setStatus('Preencha LOTE, SL e TP para ligar o AUTO.');
+      return;
+    }
+    setOcupado(true);
+    try {
+      const cfg = await fetch(`${apiBase()}/api/auto/config`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lote: loteN, sl_preco: slN, tp_preco: tpN, simbolo, timeframe, broker, market }),
+        signal: AbortSignal.timeout(10000),
+      });
+      const dCfg = (await cfg.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      if (!cfg.ok || dCfg.ok === false) {
+        setStatus(String(dCfg.error ?? `HTTP ${cfg.status}`));
+        notify('Configuração recusada', String(dCfg.error ?? ''));
+        return;
+      }
+      const ini = await fetch(`${apiBase()}/api/auto/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+        signal: AbortSignal.timeout(10000),
+      });
+      const dIni = (await ini.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      setStatus(ini.ok && dIni.ok !== false ? 'Motor ligado.' : `Configurado, mas não ligou: ${dIni.error ?? ''}`);
+      notify(ini.ok && dIni.ok !== false ? 'Motor ligado' : 'Não ligou', ini.ok && dIni.ok !== false ? `Operando ${simbolo}.` : String(dIni.error ?? ''));
+    } catch (e) {
+      setStatus(`Gateway indisponível: ${e instanceof Error ? e.message : 'erro'}`);
+    } finally {
+      setOcupado(false);
+    }
+  };
+
   const enviar = async () => {
     if (ocupado || !simbolo) return;
     if (!soMT5) {
@@ -232,6 +295,18 @@ export default function MesaXM() {
           </span>
         </div>
         <div className="btn-row">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={autoAtivo}
+            aria-label="Operação automática"
+            className={`btn sm ${autoAtivo ? 'success' : 'ghost'}`}
+            onClick={() => void alternarAuto()}
+            disabled={ocupado}
+            title={autoAtivo ? 'Desligar o motor' : 'Aplicar LOTE/SL/TP e ligar o motor'}
+          >
+            AUTO {autoAtivo ? 'SIM' : 'NÃO'}
+          </button>
           <span
             className={`chip ${wsConnected ? 'ok' : 'warn'}`}
             title="Auto-reconexão: o app cai e volta sozinho"
@@ -299,6 +374,25 @@ export default function MesaXM() {
           </label>
         </div>
 
+        {/* PRESETS SL:TP — preenchem, nao travam. O passo sai da escala do
+            preco (0,1%): igual para ouro e forex, sem numero fixo. */}
+        <div className="btn-row mesa-presets" role="group" aria-label="Presets de distância SL TP">
+          <span className="muted mesa-presets-passo" title="Passo da distância: 0,1% do preço ao vivo">
+            passo {passo > 0 ? passo : '--'}
+          </span>
+          {PRESETS.map((p) => (
+            <button
+              key={p.nome}
+              type="button"
+              className="btn sm ghost"
+              onClick={() => aplicarPreset(p)}
+              title={`SL ${p.risco}x passo · TP ${p.alvo}x passo`}
+            >
+              {p.nome}
+            </button>
+          ))}
+        </div>
+
         {/* O botao repete o LADO na cor. O clique final nao pode exigir que o
             operador releia o campo de cima para saber se esta comprando ou
             vendendo — e no clique final que apressado ele erra. */}
@@ -316,6 +410,14 @@ export default function MesaXM() {
       <div className="mesa-ticket-preco" role="status" aria-live="polite">
         {preco != null ? preco : '--'}
       </div>
+
+      {/* RETORNO — sem esta linha, recusa vira silencio: o operador clica e
+          nada acontece. Toda resposta do gateway aparece aqui. */}
+      {status && (
+        <p className="hint" role="status">
+          {status}
+        </p>
+      )}
 
       <LatenciaBar />
     </section>

@@ -32,21 +32,36 @@
 import type { ReactNode } from 'react';
 import { useAppStore, ROBOT_SUBS, type RobotSub } from '../hooks/useAppStore';
 import ErrorBoundary from './ErrorBoundary';
-import AutoEnginePanel from './AutoEnginePanel';
 import AcompanharModelos from './AcompanharModelos';
 import MesaXM from './MesaXM';
-import RiskTab from './tabs/RiskTab';
+import RobotModelPanel from './RobotModelPanel';
 import UniversalLiveTerminal from './UniversalLiveTerminal';
 import '../theme/robot-subtabs.css';
 // Densidade das tabelas do Histórico, aplicada também às do Robô (M3).
 import '../theme/history-grid.css';
 
+// Duas sub-abas, uma responsabilidade cada (2026-10-04). Antes era tudo
+// empilhado num scroll so — a aba ficava poluida. Automacao fundida na
+// Mesa (mesmo LOTE/SL/TP, AUTO SIM/NAO): dois paineis mandando no motor
+// era comando repetido.
+//
+//   Mesa       → comandos simples + lista de modelos + AUTO
+//   Acompanhar → grafico ao vivo: opere no grafico e veja os modelos
+//
+// O Mini Terminal continua sempre visivel no fim: e conferencia, nao
+// comando — ali se ve as posicoes e a conta em qualquer sub-aba.
+//
+// OS PAINEIS NAO SAO DESMONTADOS: as sub-abas escondem com `hidden`, sem
+// deixar de renderizar. Desmontar jogaria fora a conversa, a selecao de
+// ativo e qualquer leitura em andamento.
 const ROTULOS: Record<RobotSub, string> = {
-  operar: 'Operar',
+  mesa: 'Mesa',
+  acompanhar: 'Acompanhar',
 };
 
 const RESUMOS: Record<RobotSub, string> = {
-  operar: 'Operação automática, terminal e posições abertas — só o que o operador precisa ver.',
+  mesa: 'Comandos, modelos e AUTO — tudo do motor num lugar só.',
+  acompanhar: 'Gráfico ao vivo: opere no gráfico e veja os modelos decidindo.',
 };
 
 function Secao({ nome, children }: { nome: string; children: ReactNode }) {
@@ -57,44 +72,21 @@ export default function RobotTabs() {
   const sub = useAppStore((s) => s.robotSub);
   const setSub = useAppStore((s) => s.setRobotSub);
 
-  // ORDEM DA MESA, E O QUE FICOU (2026-09-30)
-  // ==============================================
-  // O dono pediu: *"operacao automatica, terminal, posicoes abertas so isso
-  // mais bem configurado e com botoes melhorados"*.
-  //
-  // Antes eram quatro blocos, nesta ordem:
-  //   1. automatico  — AutoEnginePanel
-  //   2. posicoes    — UniversalLiveTerminal
-  //   3. ordem manual — OrderPanel
-  //   4. guardian    — GuardianManager
-  //
-  // Saem (3) e (4):
-  //   - **Ordem manual**: tinha o seletor de corretora/mercado DUPLICADO (o
-  //     `OrderPanel` mantem o proprio `Broker` e `MERCADOS`), o que fazia a
-  //     tela afirmar uma corretora e o motor operar outra. Era a origem de
-  //     "escolhi Binance e a ordem foi para o MT5".
-  //   - **Guardian**: protecao e trailing ficam legiveis no terminal ao vivo e
-  //     no EA; dentro do Robô eram um bloco de configuracao que o operador
-  //     rarely revisava e que competia visually com o motor.
-  //
-  // Ficam (1) e (2), que sao as duas leituras que o operador precisa
-  // continuamente: o que o motor esta fazendo e o que esta aberto agora.
   const paineis: Record<RobotSub, ReactNode> = {
-    operar: (
+    mesa: (
       <>
         <Secao nome="Mesa XM MT5">
           <MesaXM />
         </Secao>
-        <Secao nome="Operação automática">
-          <AutoEnginePanel />
-        </Secao>
-        <Secao nome="Acompanhar modelos">
-          <AcompanharModelos />
-        </Secao>
-        <Secao nome="Posições ao vivo">
-          <UniversalLiveTerminal />
+        <Secao nome="Modelos e sinais">
+          <RobotModelPanel />
         </Secao>
       </>
+    ),
+    acompanhar: (
+      <Secao nome="Acompanhar modelos">
+        <AcompanharModelos />
+      </Secao>
     ),
   };
 
@@ -136,6 +128,10 @@ export default function RobotTabs() {
           {paineis[id]}
         </div>
       ))}
+
+      <Secao nome="Posições ao vivo">
+        <UniversalLiveTerminal />
+      </Secao>
     </main>
   );
 }
