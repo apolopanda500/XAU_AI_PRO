@@ -13,6 +13,8 @@ import {
   resumir,
   deduplicar,
   dealChave,
+  ehMovimentacao,
+  rotuloMovimentacao,
   type Deal,
 } from './historico';
 
@@ -73,6 +75,69 @@ describe('dealDate', () => {
 
   it('devolve vazio sem data', () => {
     expect(dealDate(deal({}))).toBe('');
+  });
+});
+
+describe('movimentacoes de saldo (deposito, saque, credito)', () => {
+  // POOL REAL da conta 391773676 (XMGlobal-MT5 14), medida em 05/10/2026 com
+  // `history_deals_get` de 10 anos. Tres das cinco linhas NAO eram operacao:
+  // eram movimentacao de saldo, e apareciam como "SELL" porque o gateway so
+  // distinguia BUY de "tudo o mais".
+  const POOL_REAL: Deal[] = [
+    deal({ id: '260002616', categoria: 'operacao', symbol: 'BTCUSD', type: 'SELL', realizedPnl: 2.01 }),
+    deal({ id: '260002615', categoria: 'movimentacao', type: 'CREDIT', movimentacao: 'Credito', realizedPnl: 5.62 }),
+    deal({ id: '260002613', categoria: 'movimentacao', type: 'BALANCE', movimentacao: 'Deposito', realizedPnl: 5.52 }),
+    deal({ id: '260002614', categoria: 'movimentacao', type: 'BALANCE', movimentacao: 'Deposito', realizedPnl: 0.1 }),
+  ];
+
+  it('reconhece movimentacao pelo campo que o backend enviou', () => {
+    expect(ehMovimentacao(POOL_REAL[1])).toBe(true);
+    expect(ehMovimentacao(POOL_REAL[0])).toBe(false);
+  });
+
+  it('classifica pelo rascunho quando o gateway nao manda `categoria`', () => {
+    // Gateway velho ou exchange sem o campo: um deal sem simbolo e sem volume
+    // nao e operacao. Sem este fallback, tudo viraria operacao de novo.
+    expect(ehMovimentacao({ id: 'x', symbol: '', volume: 0, profit: 5.62 })).toBe(true);
+    expect(ehMovimentacao({ id: 'y', symbol: 'BTCUSD', volume: 0.01, price: 86000 })).toBe(false);
+  });
+
+  it('NAO soma deposito nem credito no resultado do trading', () => {
+    // Este e o defeito: 5,62 + 5,52 + 0,10 = 11,24 de dinheiro que ENTROU na
+    // conta estava sendo lido como lucro. O resultado de trading e 2,01.
+    const r = resumir(POOL_REAL);
+    expect(r.total).toBeCloseTo(2.01, 6);
+    expect(r.qty).toBe(1);
+    expect(r.wins).toBe(1);
+    expect(r.losses).toBe(0);
+    expect(r.winRate).toBeCloseTo(100, 6);
+  });
+
+  it('contabiliza entrada e saida de saldo em numeros proprios', () => {
+    const r = resumir([
+      ...POOL_REAL,
+      deal({ id: '260002999', categoria: 'movimentacao', movimentacao: 'Saque', realizedPnl: -2.0 }),
+    ]);
+    expect(r.movQtd).toBe(4);
+    expect(r.movEntradas).toBeCloseTo(11.24, 6);
+    expect(r.movSaidas).toBeCloseTo(2.0, 6);
+  });
+
+  it('saque NAO vira perda de trading', () => {
+    // Um saque de 100 e dinheiro que saiu, nao uma operacao que perdeu 100.
+    // Sem separacao, o win-rate e o profit factor mediam a carteira errada.
+    const r = resumir([
+      deal({ id: 'a', categoria: 'operacao', symbol: 'BTCUSD', realizedPnl: 50 }),
+      deal({ id: 'b', categoria: 'movimentacao', movimentacao: 'Saque', realizedPnl: -100 }),
+    ]);
+    expect(r.losses).toBe(0);
+    expect(r.profitFactor).toBe(Infinity);
+    expect(r.total).toBeCloseTo(50, 6);
+  });
+
+  it('devolve o rotulo legivel da movimentacao', () => {
+    expect(rotuloMovimentacao(POOL_REAL[2])).toBe('Deposito');
+    expect(rotuloMovimentacao(POOL_REAL[0])).toBe('');
   });
 });
 

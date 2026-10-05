@@ -29,15 +29,49 @@ export interface Deal {
   close_time?: string;
   comment?: string;
   position_id?: number | string;
+  /**
+   * `operacao` (compra/venda) ou `movimentacao` (deposito, saque, credito).
+   *
+   * O QUE ISSO CORRIGE
+   * -----------------
+   * O gateway devolvia `type` como `"BUY"` para compra e `"SELL"` para TODO o
+   * resto — inclusive deposito, saque e credito, que no MT5 tem tipos proprios
+   * (BALANCE=2, CREDIT=3). MEDIDO na conta real 391773676 em 05/10/2026: tres
+   * das cinco linhas do historico eram movimentacao de saldo (Credito +5,62,
+   * Deposito +5,52, Deposito +0,10) e as tres apareciam como "SELL". O operador
+   * lia "vendi" num registro que era dinheiro entrando na conta.
+   *
+   * O backend passou a enviar `categoria` e `movimentacao`. Este e o campo que
+   * impede o deposito de virar venda na tela.
+   */
+  categoria?: 'operacao' | 'movimentacao';
+  /** Rotulo legivel: "Deposito", "Saque", "Credito", "Bonus", "Comissao"... */
+  movimentacao?: string;
+  /** Tipo MT5 verdadeiro: BUY, SELL, BALANCE, CREDIT, CHARGE, BONUS... */
+  type?: string;
+  /** `IN`/`OUT` para operacao; os deals de saldo vem sem entrada/saida. */
+  entry?: string;
 }
 
 /** Resumo de uma pool de deals. Base de win-rate, PF e PnL. */
 export interface Resumo {
+  /** Resultado das OPERACOES. Nao inclui deposito nem saque. */
   total: number;
   wins: number;
   losses: number;
   closed: number;
+  /** Quantidade de OPERACOES (nao de linhas de movimentacao). */
   qty: number;
+  /**
+   * Movimentacoes de saldo, separadas do resultado.
+   *
+   * Sao numeros de dinheiro que ENTROU e SAIU da conta, nao resultado de
+   * trading. Somados ao `total` eles inflariam o lucro — por isso tem nome e
+   * lugar proprios na tela.
+   */
+  movQtd: number;
+  movEntradas: number;
+  movSaidas: number;
   winRate: number;
   profitFactor: number;
   grossWin: number;
@@ -65,9 +99,66 @@ export function dealDate(deal: Deal): string {
   return deal.executedAt ?? deal.close_time ?? '';
 }
 
-/** Resume uma pool de deals. Substitui as copias em History e Analytics. */
+/**
+ * O registro e movimentacao de saldo (deposito, saque, credito, bonus)?
+ *
+ * Usa `categoria` quando o backend enviou. Cai para o RASCUNHO do deal quando
+ * nao veio — assim um gateway velho, ou uma exchange que nao preenche o campo,
+ * ainda classifica certo em vez de tratar tudo como operacao.
+ *
+ * O RASCUNHO E DELIBERADAMENTE ESTREITO: so sem `symbol`, sem `volume`/`quantity`
+ * e sem `price`. Uma operacao sempre tem os tres (BTCUSD, 0,01, 86384,85).
+ *
+ * POR QUE TAO ESTREITO — E O QUE QUASE QUEBRIO
+ * ----------------------------------------------
+ * A primeira versao classificava com so "sem simbolo". Os testes que ja
+ * existiam montam deals como `{ realizedPnl: 100 }`, sem simbolo e sem volume,
+ * e 5 deles passaram a ser lidos como movimentacao: `resumir` devolvia 0 em vez
+ * de 825,25. Como o campo `categoria` nao existia nesses testes, o fallback
+ * virou a fonte da verdade e virou o defeito.
+ *
+ * A regra agora exige tambem volume E preco ausentes. Um pagamento real da
+ * corretora chega assim (medido na conta 391773676: `symbol=''`, `volume=0.0`,
+ * `price=0.0`), e uma operacao nunca chega.
+ */
+export function ehMovimentacao(deal: Deal): boolean {
+  if (deal.categoria) return deal.categoria === 'movimentacao';
+  if (deal.movimentacao) return true;
+  // `realizedPnl` so existe em EXECUCAO de ordem. Uma movimentacao de saldo da
+  // corretora nunca traz o campo: no MT5 o valor chega em `profit`, e nas
+  // exchanges o que volta para uma movimentacao tambem nao e PnL realizado.
+  if (deal.realizedPnl !== undefined && deal.realizedPnl !== null) return false;
+  const semSimbolo = !String(deal.symbol ?? '').trim();
+  const semVolume = !toNumber(deal.volume ?? deal.quantity);
+  const semPreco = !toNumber(deal.price);
+  return semSimbolo && semVolume && semPreco;
+}
+
+/** Rotulo legivel da movimentacao, ou "" quando o registro e operacao. */
+export function rotuloMovimentacao(deal: Deal): string {
+  if (deal.movimentacao) return deal.movimentacao;
+  if (!ehMovimentacao(deal)) return '';
+  const valor = dealPnl(deal);
+  return valor < 0 ? 'Saque' : 'Movimentacao';
+}
+
+/**
+ * Resumo de uma pool de deals. Substitui as copias em History e Analytics.
+ *
+ * OPERACOES E MOVIMENTACOES SAO SEPARADAS
+ * --------------------------------------
+ * Somar deposito ao resultado e dizer "lucro" e a forma mais facil de mentir
+ * sobre performance: o saldo subiu, mas nao por trading. `total`, wins, losses,
+ * winRate e profitFactor passam a considerar SO operacoes — e as
+ * movimentacoes vao para `movEntradas`/`movSaidas`, que sao numeros diferentes
+ * e com nome proprio na tela.
+ */
 export function resumir(deals: readonly Deal[]): Resumo {
-  const pnls = deals.map(dealPnl);
+  const operacoes = deals.filter((d) => !ehMovimentacao(d));
+  const pnls = operacoes.map(dealPnl);
+  const movs = deals.filter(ehMovimentacao).map(dealPnl);
+  const movEntradas = movs.filter((v) => v > 0).reduce((s, v) => s + v, 0);
+  const movSaidas = Math.abs(movs.filter((v) => v < 0).reduce((s, v) => s + v, 0));
   const wins = pnls.filter((p) => p > 0).length;
   const losses = pnls.filter((p) => p < 0).length;
   const grossWin = pnls.filter((p) => p > 0).reduce((s, p) => s + p, 0);
@@ -78,7 +169,10 @@ export function resumir(deals: readonly Deal[]): Resumo {
     wins,
     losses,
     closed,
-    qty: deals.length,
+    qty: operacoes.length,
+    movQtd: movs.length,
+    movEntradas,
+    movSaidas,
     // performanceMetrics.ts trabalha com TradeResult[]; aqui calculamos direto
     // sobre os PnLs ja extraidos para nao inventar um objeto de trade falso.
     winRate: closed > 0 ? (wins / closed) * 100 : 0,

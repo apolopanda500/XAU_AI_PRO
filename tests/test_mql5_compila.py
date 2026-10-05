@@ -160,21 +160,3 @@ def test_log_da_compilacao_e_interpretavel():
     assert n_err == 0, f"a propria linha Result reporta {n_err} erro(s)"
     # Nao se fixa um teto de warnings aqui: escolher quais avisos importam e
     # discussao de estilo. O que nao pode e `errors != 0`.
-    """Compila o EA e devolve `(codigo_de_saida, log)`."""
-    with tempfile.TemporaryDirectory(prefix="xau_mql5_compile_") as tmp:
-        log = Path(tmp) / "compile.log"
-        concluida = subprocess.run(
-            [str(exe), f"/compile:{EA}", f"/log:{log}"],
-            capture_output=True,
-            text=True,
-            timeout=600,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        )
-        conteudo = ""
-        if log.is_file():
-            # O log e gravado em UTF-16 pelo MetaEditor; se vier vazio,
-            # tenta-se UTF-8 antes de concluir que nao houve log.
-            conteudo = log.read_text(encoding="utf-16", errors="replace")
-            if not conteudo.strip():
-                conteudo = log.read_text(encoding="utf-8", errors="replace")
-        return concluida.returncode, conteudo
