@@ -158,9 +158,47 @@ input double ATRMultiplier      = 1.2;
 //==================================================
 // PARCIAL
 //==================================================
+// `PartialTrigger` esta em PONTOS do input original. MEDIDO 05/10/2026: 150
+// pontos e 0,17% no BTCUSD (86.439) e 1,5% no EURUSD (1,125) — a mesma
+// configuracao e uma distancia智能 em um ativo e colada em outro. E a mesma
+// armadilha do `XAUUSD`/`GOLD`: o numero e o mesmo, o significado nao.
+//
+// `PartialTriggerInATR=true` passa a medir em MULTIPLOS DE ATR, que e a
+// unica escala que significa a mesma coisa em metais, forex e cripto.
+// `false` mantem o comportamento antigo em pontos.
 input bool   EnablePartialClose = true;
 input int    PartialTrigger     = 150;
 input double PartialPercent     = 30.0;
+input bool   PartialTriggerInATR = true;
+// Quando `PartialTriggerInATR`, este e o multiplicador de ATR que substitui
+// `PartialTrigger`. 1,0 = fecha a parte quando o preco percorre 1 ATR a
+// favor. Medido: em BTCUSD (ATR ~2.500) isso e 1 ATR; em EURUSD (ATR ~0,006)
+// e 0,006 — a mesma leitura de volatilidade, nao a mesma distancia bruta.
+input double PartialTriggerATRMult = 1.0;
+
+//==================================================
+// TP QUE SO APROXIMA (05/10/2026)
+//==================================================
+// MEDIDO: o SL se movia (`TrailingStopATR`), o parcial fechava
+// (`PartialClose`), mas o TP NUNCA se mexia. O alvo ficava no numero original
+// enquanto o preco ia e voltava — e o "quase la e voltou" que o operador
+//relsse ao vivo na conta real.
+//
+// POR QUE SO APROXIMA, E NAO PERSEGUE
+// ------------------------------------
+// Se o TP perseguisse o preco como o SL, uma oscilacao contra moveria os DOIS
+// para baixo, e o alvo que estava quase alcancado se afastaria junto. Com
+// `ApproximatesOnly`, o TP so chega mais perto: um degrau que ja foi
+// alcancado nunca recua. O preco pode ter recuperado, mas o alvo continua
+// valendo — e um alvo que recua deixa de ser alvo.
+input bool   EnableDynamicTP     = true;
+// Multiplos de ATR que o TP avanca a cada vez. 0,5 = passos curtos e
+// frequentes (mais modificacoes); 2,0 = passos largos e raros.
+input double TPAproxStepATRMult  = 1.0;
+// Fração do caminho ate o TP original que o TP pode ter andado. 1.0 = pode
+// chegar no alvo original. Abaixo disso, para antes — util quando o alvo
+// original era longe demais.
+input double TPAproxMaxFraction  = 1.0;
 
 //==================================================
 // FILTROS
