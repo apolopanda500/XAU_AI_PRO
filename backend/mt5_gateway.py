@@ -1526,6 +1526,88 @@ def _symbols() -> dict:
 
 
 
+# ============================================================
+# MOVIMENTACOES DE SALDO (deposito, saque, credito, bonus)
+# ============================================================
+# POR QUE ISTO EXISTE
+# ------------------
+# A linha `type` abaixo era um ternario de dois estados:
+#
+#     "type": "BUY" if deal_type == DEAL_TYPE_BUY else "SELL",
+#
+# O MT5 tem DEZ tipos de deal (medido no pacote 5.x desta maquina):
+# 0 BUY, 1 SELL, 2 BALANCE, 3 CREDIT, 4 CHARGE, 5 CORRECTION,
+# 6 BONUS, 7 COMMISSION, 8 e 9 comissao diaria/agente.
+#
+# Entao `type` nao era rotulo de operacao: era "SELL" para TUDO que nao fosse
+# compra. Um DEPOSITO de USD 5,62 chegava ao frontend como uma VENDA de 5,62
+# sem simbolo, e o operador lia "vendi ouro" num registro que era credito.
+#
+# MEDIDO NA CONTA REAL 391773676 (XMGlobal-MT5 14), 05/10/2026, com
+# `history_deals_get` de 10 anos:
+#
+#     type=0 BUY     -> 1
+#     type=1 SELL    -> 1
+#     type=2 BALANCE -> 2   CD-AST-PIC 265376085 (+5,52)
+#                               EXP05-AST-PIC 265376085 (+0,10)
+#     type=3 CREDIT  -> 1   Credit-In-100%-$100-NewClients (+5,62)
+#
+# Tres das CINCO linhas do historico da conta nao eram operacao: eram
+# movimentacao de saldo. As tres apareciam como "SELL".
+#
+# O SENTIDO (entrada ou saida) NAO vem do tipo: `DEAL_TYPE_BALANCE` (2) cobre
+# deposito E saque; e `DEAL_TYPE_CREDIT` (3) e credito de entrada. O que separa
+# entrada de saida e o VALOR em `profit`.
+#
+# ESTA LEITURA E SOMENTE LEITURA. Nada aqui movimenta dinheiro: saque e
+# transferencia seguem desligados em todo o codigo (ver AGENTS.md).
+
+#: Tipo MT5 -> nome verdadeiro. Medido no MetaTrader5 5.x desta maquina.
+_TIPOS_DEAL: dict[int, str] = {
+    0: "BUY",
+    1: "SELL",
+    2: "BALANCE",
+    3: "CREDIT",
+    4: "CHARGE",
+    5: "CORRECTION",
+    6: "BONUS",
+    7: "COMMISSION",
+    8: "COMMISSION_DAILY",
+    9: "COMMISSION_AGENT",
+}
+
+
+def _tipo_deal(deal: object) -> int:
+    """`deal.type` como inteiro; -1 quando ausente ou invalido."""
+    try:
+        return int(getattr(deal, "type"))  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return -1
+
+
+def _movimentacao_de(deal: object) -> str:
+    """Rotulo da movimentacao de saldo, ou "" quando o deal e operacao."""
+    tipo = _tipo_deal(deal)
+    if tipo in (0, 1):
+        return ""
+    valor = optional_number(getattr(deal, "profit", None))
+    if valor is None:
+        valor = 0.0
+    if tipo == 2:
+        return "Deposito" if valor >= 0 else "Saque"
+    if tipo == 3:
+        return "Credito" if valor >= 0 else "Estorno de credito"
+    if tipo == 4:
+        return "Cobranca" if valor >= 0 else "Devolucao"
+    if tipo == 6:
+        return "Bonus"
+    if tipo == 5:
+        return "Correcao" if valor >= 0 else "Ajuste"
+    if tipo in (7, 8, 9):
+        return "Comissao"
+    return _TIPOS_DEAL.get(tipo, f"TIPO_{tipo}")
+
+
 def _history(days: int = 30, symbol: str = "") -> dict:
     mt5 = _mt5()
     days = max(1, min(int(days), 3650))
@@ -1534,15 +1616,21 @@ def _history(days: int = 30, symbol: str = "") -> dict:
     deals = mt5.history_deals_get(start, end, group=f"*{symbol}*") if symbol else mt5.history_deals_get(start, end)
     rows = []
     for deal in deals or []:
-        deal_type = getattr(deal, "type", None)
+        tipo = _tipo_deal(deal)
+        movimentacao = _movimentacao_de(deal)
         entry = getattr(deal, "entry", None)
-        deal_time = optional_number(getattr(deal, "time", None), integer=True)
         rows.append({
             "ticket": optional_number(getattr(deal, "ticket", None), integer=True),
             "order": optional_number(getattr(deal, "order", None), integer=True),
             "position_id": optional_number(getattr(deal, "position_id", None), integer=True),
             "symbol": getattr(deal, "symbol", None),
-            "type": "BUY" if deal_type == getattr(mt5, "DEAL_TYPE_BUY", 0) else "SELL",
+            # O nome VERDADEIRO do tipo. Antes era "BUY"/"SELL" para tudo.
+            "type": _TIPOS_DEAL.get(tipo, f"TIPO_{tipo}"),
+            # `categoria` e o que separa operacao de movimentacao no frontend:
+            # e o campo que impede um deposito de aparecer como uma venda.
+            "categoria": "movimentacao" if movimentacao else "operacao",
+            "movimentacao": movimentacao,
+            "comment": getattr(deal, "comment", None),
             "entry": "IN" if entry == getattr(mt5, "DEAL_ENTRY_IN", 0) else "OUT" if entry == getattr(mt5, "DEAL_ENTRY_OUT", 1) else entry,
             "volume": optional_number(getattr(deal, "volume", None)),
             "price": optional_number(getattr(deal, "price", None)),
@@ -1551,7 +1639,7 @@ def _history(days: int = 30, symbol: str = "") -> dict:
             "swap": optional_number(getattr(deal, "swap", None)),
             "fee": optional_number(getattr(deal, "fee", None)),
             "magic": optional_number(getattr(deal, "magic", None), integer=True),
-            "time": timestamp_iso(deal_time),
+            "time": timestamp_iso(optional_number(getattr(deal, "time", None), integer=True)),
         })
     rows.sort(key=lambda row: row.get("time") or "", reverse=True)
     return {"deals": rows, "count": len(rows), "days": days, "source": "mt5_gateway"}
