@@ -294,19 +294,71 @@ rodou (923 operações, PF 0,48) — **e os dois medidos em código antigo**.
 
 ## 3. O QUE FALTA, NESTA ORDEM
 
-1. **GOLD / XAUUSD — confirmar o que a XM publica.** Os modelos existem: 36
-   `.meta.json`, incluindo `XAUUSD_H1/H4/M15/M5` e `MULTI_METALS`. O EA roda
-   **GOLD,M5** no tester. **Falta confirmar se o catálogo da XM publica
-   `XAUUSD` ou só `GOLD`**: se publicar só `GOLD`, `fichaDoAtivo(catalogo,
-   'XAUUSD')` devolve `null`, `mercadoDoAtivo` devolve `null`, e o gráfico fica
-   vazio **pela regra que acabei de escrever** — o mesmo bug do BTCUSD, agora
-   no metal.
-2. **Validar antes do build** (esta sessão): pytest, vitest, tsc, preflight.
-3. **Build novo** com §1.6 e §1.7.
-4. **Conferir na tela**: gráfico com candles, SL e TP lado a lado, requisito de
-   margem, pontas arrastáveis, paleta, `Ctrl + Z`.
-5. **Indicadores com busca** — `rsi` → 3 resultados, como a XM. Hoje são três
+1. **Build novo** com §1.6, §1.7 e §3.1.
+2. **Conferir na tela**: gráfico com candles, **o ouro pelo nome `GOLD`**,
+   SL e TP lado a lado, requisito de margem, pontas arrastáveis, paleta,
+   `Ctrl + Z`.
+3. **Indicadores com busca** — `rsi` → 3 resultados, como a XM. Hoje são três
    botões fixos.
+
+### 3.1 O OURO: `GOLD` NA CORRETORA, `XAUUSD` NO MODELO — CORRIGIDO
+
+MEDIDO na conta 391773676, com `discover_assets`:
+
+| | existe | `path` |
+|---|---|---|
+| **`GOLD`** | **sim** | `Derivatives\Spot Metals\GOLD` · `contract_size = 100` |
+| `XAUUSD` | **NÃO** | `symbol_info("XAUUSD")` → `None` |
+| `XAUJPY` · `XAUEUR` · `XAUCNH` | sim | `Derivatives\Spot Metals` |
+| `BTCUSD` | sim | `Cryptocurrencies\Standard` |
+
+1.639 linhas de catálogo, **zero** `XAUUSD`. E os artefatos do app são
+`XAUUSD_H1/H4/M15/M5`.
+
+**O alias já existia** — `%APPDATA%\XAU_AI_PRO\symbol_aliases.json` tem
+`{"mt5": {"XAUUSD": "GOLD"}}`, e o módulo `backend/symbol_aliases.py` o aplica
+em **candles, cotação, ordem e inferência**. O que não existia era o sentido
+**na tela**.
+
+**A costura, e o AGENTS.md 5 de novo:**
+
+```
+fichaDoAtivo(catalogo, 'XAUUSD')  →  null     (o catálogo só tem 'GOLD')
+mercadoDoAtivo(null)              →  null
+configurado                       →  false    →  gráfico não carrega
+```
+
+E a ficha ausente leva **três decisões** junto: `assetClass` (mercado),
+`contract_size` (dinheiro vira preço) e `volume_min/max/step` (faixa). O painel
+dizia *"depende do contrato"* para um ativo que a corretora já publicara.
+
+**Corrigido nos dois lados:**
+
+- **Produtor** (`asset_registry.py`): cada linha ganha `model_symbol` e
+  `has_model`, calculados por `para_modelo` — o mapa do operador, nunca um nome
+  no código (AGENTS.md §3).
+- **Consumidor** (`volumeUnidade.ts`): `fichaDoAtivo` busca por `symbol` e, se
+  não achar, por `modelSymbol`. **A ordem importa:** com `modelSymbol` primeiro,
+  um ativo receberia a ficha de outro, e em forex isso é 100.000× o preço.
+
+**`null` continua sendo `null`.** Se `modelSymbol` ausente caísse no próprio
+`symbol`, os 1.639 pares do catálogo declariam ter modelo — e existem 36
+`.meta.json`.
+
+Testes: `test_nome_do_modelo_no_catalogo.py` (7, Python),
+`fichaPorNomeDoModelo.test.ts` (10, frontend).
+
+### 3.2 UMA TRAVA QUE PROÍBIA DOCUMENTAR
+
+O teste *"o mapa é config e o código não tem nome"* varria o arquivo inteiro e
+**reprovou no texto que documenta a medição**. É o AGENTS.md §4e: trava textual
+que proíbe documentar é o defeito, não a proteção.
+
+Corrigido com `_sem_docstrings_e_comentarios`, que usa `tokenize` — um `#`
+dentro de string (URL, caminho) não é comentário, e um regex apagaria a linha
+inteira junto com o código dela.
+
+**A regra escrita no AGENTS.md §3 foi mantida; o que mudou foi o teste.**
 
 ### 3.1 NÃO RODAR BACKTEST AGORA
 

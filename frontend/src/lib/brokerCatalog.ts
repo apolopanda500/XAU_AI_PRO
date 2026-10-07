@@ -102,6 +102,23 @@ export interface AssetRow {
    * `null` = a corretora nao devolveu. NUNCA vira um valor adivinhado pelo nome.
    */
   assetClass?: string | null;
+  /**
+   * O NOME COM QUE O MODELO FOI TREINADO, quando existe (07/10/2026).
+   *
+   * MEDIDO na conta 391773676 (XMGlobal-MT5 14): o catalogo publica `GOLD`,
+   * com `path = Derivatives\Spot Metals\GOLD` e `contract_size = 100`.
+   * `XAUUSD` NAO EXISTE no terminal XM. E os `.meta.json` do app se chamam
+   * `XAUUSD_H1/H4/M15/M5`.
+   *
+   * Entao `symbol` e `modelSymbol` sao o MESMO metal com nomes diferentes: um
+   * e o que a corretora entende, o outro e o que o `.pkl` procura no disco. O
+   * campo existe para a tela casar os dois sem duplicar o mapa do operador em
+   * dois lugares.
+   *
+   * `null` = nenhum modelo treinado com este nome. NUNCA o proprio `symbol`:
+   * isso seria dizer que todo par tem modelo, e a lista de modelos mentiria.
+   */
+  modelSymbol?: string | null;
 }
 
 /** Extrai o catálogo real devolvido por /api/universal/assets. */
@@ -130,6 +147,7 @@ export function parseAssetCatalog(payload: unknown): AssetRow[] {
       swapLong: typeof row.swap_long === 'number' ? row.swap_long : null,
       swapShort: typeof row.swap_short === 'number' ? row.swap_short : null,
       assetClass: typeof row.asset_class === 'string' && row.asset_class ? row.asset_class : null,
+      modelSymbol: typeof row.model_symbol === 'string' && row.model_symbol ? row.model_symbol : null,
     });
   }
   return rows;

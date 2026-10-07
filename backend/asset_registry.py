@@ -1,4 +1,4 @@
-"""Catalogo dinamico de ativos fornecidos pelo terminal MT5.
+r"""Catalogo dinamico de ativos fornecidos pelo terminal MT5.
 
 A CLASSA de cada ativo vem do `path` que a CORRETORA publica
 (`Derivatives\Spot Metals\GOLD`, `Stocks\EU\...`). Nada aqui presume par,
@@ -130,6 +130,48 @@ def _asset_class(name: str, path: str, base: str, profit: str) -> str:
     return _por_palavra(texto) or "other"
 
 
+def _nome_do_modelo(symbol: str) -> str | None:
+    r"""O nome com que o MODELO foi treinado, ou `None` se nao ha.
+
+    MEDIDO na conta 391773676 (XMGlobal-MT5 14), com `discover_assets`:
+
+        linha `GOLD`, com `path` sob `Derivatives\Spot Metals\GOLD`
+        nenhuma linha `XAUUSD` — `symbol_info("XAUUSD")` devolve `None`
+
+    E os artefatos do app se chamam `XAUUSD_H1`, `XAUUSD_H4`, `XAUUSD_M15` e
+    `XAUUSD_M5`. Sao o mesmo metal com dois nomes, em dois lugares — e a tela
+    precisa saber que sao o mesmo, senao a ficha do ouro vem vazia e o painel
+    diz "depende do contrato" para um ativo que a corretora JA PUBLICOU.
+
+    A traducao e o MAPA DO OPERADOR (`symbol_aliases.json`), nunca um nome
+    escrito aqui: o AGENTS.md 3 proibe nome de ativo no codigo, e um nome fixo
+    aqui continuaria funcionando depois de o operador trocar o mapa — que e o
+    defeito que a regra previne.
+
+    `None` quando nao ha mapeamento. E ausencia medida: "nenhum modelo
+    treinado com este nome". NUNCA o proprio `symbol`, ou todos os pares do
+    catalogo declarariam ter modelo.
+    """
+    try:
+        from backend.symbol_aliases import para_modelo
+    except Exception:
+        return None
+    try:
+        nome = para_modelo("mt5", symbol)
+    except Exception:
+        return None
+    if not nome:
+        return None
+    pedido = str(nome).strip().upper()
+    if pedido == str(symbol).strip().upper():
+        # `para_modelo` devolve o proprio simbolo quando NAO ha mapeamento.
+        # Devolver isso aqui seria "todo par tem modelo", e a lista de modelos
+        # passaria a anunciar os 1.639 pares do catalogo quando existem 36
+        # artefatos `.meta.json` no disco.
+        return None
+    return pedido
+
+
 def discover_assets(mt5, include_hidden: bool = True) -> list[dict]:
     rows = []
     symbols = mt5.symbols_get()
@@ -146,8 +188,13 @@ def discover_assets(mt5, include_hidden: bool = True) -> list[dict]:
         path = str(_value(item, "path", "") or "")
         base = str(_value(item, "currency_base", "") or "")
         profit = str(_value(item, "currency_profit", "") or "")
+        nome_modelo = _nome_do_modelo(symbol)
         rows.append({
             "symbol": symbol,
+            # O NOME COM QUE O MODELO FOI TREINADO. `None` = nenhum modelo
+            # com este nome — ver `_nome_do_modelo`.
+            "model_symbol": nome_modelo,
+            "has_model": nome_modelo is not None,
             "description": _value(item, "description", None),
             "path": path or None,
             "visible": visible,

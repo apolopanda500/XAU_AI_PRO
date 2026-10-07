@@ -652,8 +652,29 @@ def _assets_from_raw(broker: str, market: str, raw: object, endpoint: str = "exc
             restrictions.append("close_only")
         availability = "unavailable" if enabled is False else "unverified" if enabled is None else "restricted" if restrictions else "available"
         capability_status = "unsupported" if availability == "unavailable" else "unverified" if availability == "unverified" else "available"
+        # ------------------------------------------------------------------
+        # `model_symbol`: O NOME QUE O MODELO USA (07/10/2026)
+        # ---------------------------------------------------------------
+        # MEDIDO na conta 391773676 (XMGlobal-MT5 14): o catalogo publica o
+        # ouro com um nome, e `XAUUSD` NAO EXISTE no terminal XM
+        # (`symbol_info("XAUUSD")` devolve `None`). Os artefatos do app se
+        # chamam `XAUUSD_H1/H4/M15/M5`. Entao o par escolhido na tela e o par
+        # do modelo NAO se encontram em lugar nenhum, e o frontend nao tinha
+        # como saber que sao o mesmo metal.
+        #
+        # O campo ja vem pronto de `discover_assets`, que tem a ficha e o mapa.
+        # Recalcular aqui duplicaria a traducao em dois lugares do backend — e
+        # dois lugares que divergem e o AGENTS.md 5.
+        #
+        # `para_corretora` (o outro sentido) e o que esta rota e as de leitura
+        # usam, e o que o caminho de ordem usa para enviar. Aqui quem pergunta
+        # e a TELA, e ela precisa do nome com que o `.meta.json` foi gravado.
+        nome_modelo = first_value(row, "model_symbol", "modelSymbol")
         assets.append({
             "symbol": str(symbol).upper(),
+            # `None` nao e "mesmo simbolo": e "nenhum modelo com este nome".
+            "model_symbol": str(nome_modelo).upper() if nome_modelo else None,
+            "has_model": bool(nome_modelo),
             "display_name": first_value(row, "display_name", "displayName", "description", "baseAsset", "base_ccy", "name"),
             "base_asset": first_value(row, "baseAsset", "base", "base_ccy", "baseCcy"),
             "quote_asset": first_value(row, "quoteAsset", "quote", "quote_ccy", "quoteCcy", "settleCurrency"),

@@ -22,11 +22,38 @@ export function unidadeDeVolume(assetClass: string | null | undefined): string |
   return 'Lote(s)';
 }
 
-/** Ficha do ativo escolhida, pelo simbolo exato do catalogo. */
+/*
+  A FICHA DO ATIVO, e o segundo nome (07/10/2026)
+  ==============================================
+  MEDIDO na conta 391773676 (XMGlobal-MT5 14):
+
+      catalogo da XM   GOLD   path=Derivatives\Spot Metals\GOLD  contract_size=100
+      XAUUSD no XM     NAO EXISTE   (symbol_info("XAUUSD") -> None)
+      .meta.json       XAUUSD_H1 / _H4 / _M15 / _M5
+      .ex5 no tester   roda GOLD,M5
+
+  Ou seja: o MESMO metal com tres nomes em tres lugares, e o primeiro `find`
+  casava so com um deles. Com `simbolo = 'XAUUSD'` a ficha vinha `null` — sem
+  `assetClass`, sem `contractSize`, sem `volumeMin` — e o painel dizia
+  "depende do contrato" para um ativo que a corretora JA TINHA PUBLICADO.
+
+  A segunda busca e por `modelSymbol`, o campo que o PRODUTOR preenche com
+  `para_modelo` (o mapa do operador vive no gateway; duplica-lo aqui seria
+  dois lugares que divergem — o AGENTS.md 5, que ja custou uma sessao).
+
+  A ordem importa e e medida: primeiro `symbol` (o nome da corretora, exato),
+  depois `modelSymbol`. Se o `symbol` casasse, a ficha seria a do par escolhido
+  — e um `modelSymbol` que casasse primeiro trocaria a ficha por outro ativo
+  quando dois、金属 compartilhassem nome de modelo.
+
+  `null` continua sendo `null`: sem ficha, sem classe, e a tela avisa.
+*/
 export function fichaDoAtivo(catalogo: AssetRow[], simbolo: string): AssetRow | null {
   const alvo = String(simbolo || '').toUpperCase();
   if (!alvo) return null;
-  return catalogo.find((a) => a.symbol.toUpperCase() === alvo) ?? null;
+  const exata = catalogo.find((a) => a.symbol.toUpperCase() === alvo);
+  if (exata) return exata;
+  return catalogo.find((a) => (a.modelSymbol ?? '').toUpperCase() === alvo) ?? null;
 }
 
 /*
