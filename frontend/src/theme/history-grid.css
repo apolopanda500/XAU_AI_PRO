@@ -1,8 +1,18 @@
-/* Tabela do Histórico: densa, alinhada e com numeracao tabular.
-   O `.tbl` global usa celulas de 40px e fonte herdada; numa lista de hundreds
-   de operacoes isso vira uma lista rolagem infinita sem leitura util. Aqui a
-   linha cai para 30px, numeros ficam em coluna tabular e as datas ganham
-   largura fixa para nao dançar a cada linha.
+﻿/* ==========================================================================
+   HISTÓRICO ESTILO MT5 (05/10/2026)
+   ==========================================================================
+   O dono pediu "aba historico estilo MT5". O que mudou, medido:
+
+   - LINHA: 30px → 22px. A linha do MT5 é densa de propósito: o histórico de
+     um ano tem centenas de operações, e a lista rolável infiniteita não serve
+     para conferir nada.
+   - CARD → PLANO: a tabela não fica mais dentro de um cartão com borda e
+     raio. No MT5 o histórico é uma área plana com borda, e cartão em volta de
+     tabela é o que fazia a aba parecer uma pilha de caixas.
+   - DATA → FAIXA DE DIA: uma faixa atravessando a tabela, e a linha mostra só
+     a HORA. A data repetida em cada linha custava 70px por operação.
+   - COLUNAS S/L e T/P: o MT5 tem, e o operador confere se o stop pedido foi o
+     stop registrado.
 
    `.dense-grid` e a MESMA regra com outro nome: as tabelas do Robô (ativos e
    motor de operação) usam as mesmas medidas, para a tela nao trocar de
@@ -13,16 +23,33 @@
 .dense-grid th,
 .history-grid td,
 .dense-grid td {
-  padding: 5px 10px;
-  font-size: 12.5px;
-  line-height: 1.45;
+  padding: 2px 10px;
+  font-size: 12px;
+  line-height: 1.55;
   vertical-align: middle;
   white-space: nowrap;
 }
 
+/* TABELA PLANA — sem cartão. `border-collapse` para as linhas se juntarem numa
+   linha contínua, que é como o MT5 desenha. */
+.hist-flat {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 3px);
+  overflow: auto;
+  /* Sem `max-height`: as duas tabelas rolam na página. Um `overflow: auto`
+     aninhado cria dois scrollbars para o mesmo conteúdo, e o operador rola a
+     lista de fora sem ver a tabela de baixo mudar. */
+  background: var(--surface, #0f172a);
+}
+
+.history-grid {
+  width: 100%;
+  border-collapse: collapse;
+}
+
 .history-grid thead th,
 .dense-grid thead th {
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -30,8 +57,44 @@
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: 2;
   background: var(--surface, #0f172a);
+}
+
+/* ---------- A FAIXA DE DIA ----------
+   A peça que faz a aba parecer MT5. `position: sticky` com `top` igual à
+   altura do cabeçalho: ao rolar, a faixa do dia gruda logo abaixo do
+   cabeçalho da coluna, que é onde o operador espera encontrá-la. */
+.history-grid .hist-dia-faixa th {
+  position: sticky;
+  top: 24px;
+  z-index: 1;
+  padding: 3px 10px;
+  text-align: left;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text, #e6edf6);
+  background: color-mix(in srgb, var(--primary) 12%, var(--surface, #0f172a));
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+/* Quantas operações naquele dia: a pergunta que o operador faz primeiro. */
+.history-grid .hist-dia-qtd {
+  float: right;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--muted);
+}
+
+.history-grid .hist-vazio {
+  padding: 14px 10px;
+  text-align: center;
+  color: var(--muted);
+  white-space: normal;
 }
 
 .history-grid .num,
@@ -48,9 +111,13 @@
 .history-grid .history-when {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--muted);
   letter-spacing: 0;
+}
+
+.history-deals tbody tr.history-row-movimentacao {
+  background: color-mix(in srgb, var(--primary) 5%, transparent);
 }
 
 .history-deals tbody tr:hover {
@@ -65,14 +132,16 @@
   box-shadow: inset 2px 0 0 var(--danger);
 }
 
-.history-deals tbody td strong {
-  font-size: 12.5px;
-  letter-spacing: 0;
+/* Movimentação de saldo não é operação nem erro: a tarja é a cor da tabela, e
+   não verde nem vermelho. Verde diria "lucro" num depósito; vermelho diria
+   "perda" num crédito da corretora. */
+.history-deals tbody tr.history-row-movimentacao td:first-child {
+  box-shadow: inset 2px 0 0 var(--muted);
 }
 
-.history-table-card {
-  max-height: 62vh;
-  overflow: auto;
+.history-deals tbody td strong {
+  font-size: 12px;
+  letter-spacing: 0;
 }
 
 /* Sem selecao: antes clicar numa linha marcava um subconjunto e mudava tres
@@ -81,16 +150,83 @@
   cursor: default;
 }
 
-.acum-table-card h2 {
-  font-size: 13px;
+/* O comentario da corretora. Apagado porque e referencia para bater o
+   registro com o MT5, nao a leitura principal — e truncado porque o texto e
+   livre ("Credit-In-100%-$100-NewClients") e nao cabe sem roubar a coluna do
+   Lucro. O `title` da linha tem o valor inteiro. */
+.history-grid .hist-comentario {
+  max-width: 230px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11.5px;
+}
+
+/* A FORMA do deposito ou do saque (PIX, Cartao, Transferencia...).
+   MEDIDO: o deal de movimentacao nao tem campo de metodo — o que existe e o
+   `comment` em texto livre, e a forma e lida dele por `formaMovimentacao`.
+   Sem caixa e sem cor: e um dado lido, nao um rotulo de estado que o operador
+   escolhe, e campo com borda aqui sugeriria que fosse clicavel. */
+.hist-forma {
+  display: inline-block;
+  margin-right: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text, #e6edf6);
+}
+
+/* Forma nao identificada: apagada. Nao e erro — e ausencia de informacao, e o
+   `title` diz que a corretora nao informou. Mostrar em cor de aviso
+   transformaria uma movimentacao comum e bem-sucedida num alerta falso. */
+.hist-forma.vazia {
+  color: var(--muted);
+  font-style: italic;
+  font-weight: 400;
+}
+
+/* ---------- A LINHA DE RESUMO ----------
+   A peca que replica o rodape do MT5:
+   `Lucro: 2,01  Credito: 5,62  Recarregar: 5,62  Retirada: 0,00  Saldo: 13,25`
+
+   `tfoot`, nao um cartao acima da tabela: no MT5 a linha fica grudada na
+   tabela, e um cartao separado seria um segundo lugar para o mesmo numero. */
+.history-grid tfoot.hist-resumo td {
+  padding: 7px 10px;
+  border-top: 2px solid var(--border);
+  background: color-mix(in srgb, var(--primary) 7%, var(--surface, #0f172a));
+}
+
+.hist-resumo-grade {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 22px;
+}
+
+/* Rotulo e valor lado a lado, como no MT5: `Lucro: 2,01`. O rotulo e apagado
+   porque o numero e a leitura — mas nunca some. */
+.history-grid .hist-resumo-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.history-grid .hist-resumo-rotulo {
+  font-size: 10px;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--muted);
-  margin: 0 0 6px;
+}
+
+.history-grid .hist-resumo-item strong {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: var(--text, #e6edf6);
 }
 
 .csv-note {
   font-size: 11.5px;
   color: var(--muted);
-  margin: 6px 0 0;
+  margin: 6px 2px 0;
 }

@@ -80,6 +80,15 @@ a = Analysis(
         # responde 404 na rota — e o teste `test_nenhum_modulo_do_backend_fica_
         # de_fora_do_bundle` reprova, que e exatamente para onde isto aponta.
         'backend.latencia',
+        # CALENDARIO ECONOMICO (2026-10-05)
+        #
+        # `economic_calendar_publica` e importado DENTRO de `_economic_calendar`,
+        # e `planos.economic_calendar` dentro do mesmo trecho. O analisador nao
+        # enxerga import feito dentro de funcao, entao sem esta linha o gateway
+        # congelado sobe normal e a rota `/api/economic/calendar` responde
+        # "agenda indisponivel" — sem excecao, sem log, so a tela vazia.
+        'backend.economic_calendar_publica',
+        'backend.planos.economic_calendar',
         # METAS E TRAVAS DO VIP (2026-10-02)
         #
         # Estes dois NAO entram sozinhos pelo mesmo motivo acima: o
@@ -136,6 +145,20 @@ a = Analysis(
         # de exchange e a pedir `XAUUSD` a XM que so tem `GOLD`.
         'backend.symbols',
         'backend.symbol_aliases',
+        # `mercado_publico` entra pelo mesmo motivo de `latencia`: a rota
+        # `/api/publico/ohlc` e o fallback de `_universal_candles` importam
+        # DENTRO da funcao. Sem esta linha, o app INSTALADO levanta
+        # ModuleNotFoundError no primeiro candle ausente — e o sintoma e o
+        # grafico voltar a aparecer PRETO, que e exatamente o defeito que o
+        # modulo veio resolver.
+        'backend.mercado_publico',
+
+    # `alvo_risco` e o SL/TP em DINHEIRO que o motor usa para derivar o nivel de
+    # preco (05/10/2026). Entra pelo mesmo motivo: e importado dentro de
+    # `auto_engine`, que o PyInstaller nao segue em analise estatica.
+    # Sem ele no pacote, o caminho de dinheiro cai em ImportError na hora da
+    # ordem — e o motor so descobre isso com o operador esperando.
+    'backend.alvo_risco',
         'backend.watchdog',
         'backend.guardian_engine',
         'backend.persistent_queue',

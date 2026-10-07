@@ -285,6 +285,47 @@
   background: color-mix(in srgb, var(--panel2) 48%, transparent);
 }
 
+/*
+  PAINEL DE INDICADOR (05/10/2026)
+  ================================
+  MEDIDO: lightweight-charts 4.2.3 nao tem pane, entao RSI e MACD ficam em
+  canvas PROPRIOS abaixo do preco, com o mesmo desenho do MT5. Por isso o bloco
+  tem borda e fundo proprios: e um segundo grafico, nao uma legenda.
+
+  A borda de cima e mais fraca que a do preco porque e continuacao dele, e o
+  operador precisa ler "mesmo grafico" antes de ler "outro indicador".
+*/
+.market-subchart {
+  margin-top: 6px;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--panel2) 30%, transparent);
+  overflow: hidden;
+}
+
+.market-subchart-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 5px 8px 3px;
+  font-size: 11px;
+}
+
+.market-subchart-canvas {
+  width: 100%;
+}
+
+/*
+  Sem candles suficientes o painel diz QUANTOS faltam, em vez de mostrar eixo
+  vazio: eixo vazio parece "o indicador nao achou nada", quando o fato e que
+  ainda nao ha history para calcular.
+*/
+.market-subchart-vazio {
+  padding: 10px 8px 14px;
+  font-size: 11px;
+}
+
 .market-chart-data {
   margin-top: 10px;
   color: var(--muted);
@@ -497,4 +538,182 @@
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
   }
+}
+.market-chart-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 6px;
+  padding-top: 6px;
+  font-size: 11px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 45%, transparent);
+}
+
+.market-chart-foot-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/*
+  A ORDEM PELO GRAFICO (06/10/2026)
+  =================================
+  MEDIDO nas capturas da XM: cada linha de stop e de alvo tem um `x` do lado
+  do eixo de preco, e a linha e arrastavel.
+
+  O `x` e um `button` de verdade, no DOM, e nao texto desenhado no canvas do
+  lightweight-charts: o `title` da `createPriceLine` e texto e nao recebe clique.
+  Um `x` desenhado no canvas seria o botao que parece funcionar e nao funciona
+  — o mesmo defeito do botao EMA que o dono reportou.
+
+  O CONTAINER (`price-chart-overlay`) e `pointer-events: none` e o BOTAO e
+  `auto`. Sem essa separacao a camada invisivel capturaria o crosshair, o
+  arraste das linhas e o clique que arma a ordem.
+*/
+.market-chart-wrap {
+  position: relative;
+}
+
+.price-chart-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.price-chart-x {
+  position: absolute;
+  right: 4px;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  pointer-events: auto;
+  border-radius: 3px;
+  background: var(--panel, #12151c);
+  color: var(--text, #e6e9f0);
+  border: 1px solid currentColor;
+}
+
+.price-chart-x:hover {
+  background: var(--panel-2, #1a1f2b);
+}
+
+.price-chart-x:focus-visible {
+  outline: 2px solid var(--accent, #4f7cff);
+  outline-offset: 1px;
+}
+
+/*
+  A BARRA DE FERRAMENTAS (06/10/2026)
+  ================================
+  MEDIDO nas capturas da XM: a barra e uma fileira curta e densa, com botao
+  quadrado. Aqui fica com o mesmo peso visual, senao os botoes somem entre os
+  outros controles da pagina — e um controle que o operador nao ve e um
+  controle que nao existe.
+
+  `flex-wrap` porque em janela estreita a fileira quebra em vez de espremer o
+  grafico; o grafico e o que o operador precisa ver, e a barra cabe em duas.
+*/
+.price-chart-barra {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 6px 0 8px;
+}
+
+.price-chart-ferramenta {
+  min-width: 30px;
+  padding: 3px 7px;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.price-chart-conta {
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.price-chart-dica {
+  margin: 0 0 6px;
+  font-size: 11px;
+}
+
+/*
+  A CAMADA DOS DESENHOS.
+  ========================
+  `pointer-events: none` e OBRIGATORIO: um SVG por cima do grafico que captura
+  o ponteiro esconderia o crosshair, o arraste das linhas de ordem e o clique
+  que arma a ordem — os tres gestos que o operador precisa. E nao ha como
+  "corrigir" depois, porque o sintoma seria o grafico inteiro morto e nao um
+  desenho faltando.
+*/
+.price-chart-desenhos {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+
+/*
+  A BARRA DE ESTILO DO DESENHO ESCOLHIDO (06/10/2026)
+  ==================================================
+  MEDIDO nas capturas da XM (20:35, 20:36): a paleta e uma grade de quadrados
+  coloridos, a espessura em "1 px" a "4 px", o controle de opacidade mostra o
+  numero em %, e o cadeado alterna entre trancado e destrancado.
+*/
+.price-chart-estilo {
+  align-items: center;
+  gap: 3px;
+  padding: 3px 6px;
+  border: 1px solid var(--borda, rgba(139, 147, 167, .22));
+  border-radius: 6px;
+}
+
+.price-chart-cor {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid rgba(0, 0, 0, .45);
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+/*
+  A BORDA DO ATIVO E O CONTRATO DO GRUPO.
+
+  O botao de cor ativo precisa parecer o escolhido de relance: sem a borda, 16
+  quadrados de cor sao indistinguiveis e o operador mudaria de cor as vezes
+  ate acertar, achando que o controle nao responde.
+*/
+.price-chart-cor.ativo {
+  outline: 2px solid var(--texto, #e8ecf5);
+  outline-offset: 1px;
+}
+
+.price-chart-espessura {
+  min-width: 30px;
+  padding: 2px 5px;
+  font-size: 11px;
+}
+
+.price-chart-opacidade {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  margin-left: 4px;
+}
+
+.price-chart-opacidade input[type="range"] {
+  width: 74px;
 }

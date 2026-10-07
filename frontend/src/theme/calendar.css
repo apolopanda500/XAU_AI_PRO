@@ -97,9 +97,21 @@
 }
 
 /* Faixa de colunas: só as que têm dado. */
+/* As COLUNAS do MT5, na ordem do MT5:
+     Hora | Moeda | Evento | Importância | Anterior | Previsão | Real
+
+   O grid é declarado em `--cal-colunas` e compartilhado por `.cal-columns` e
+   `.cal-row`. Antes os dois declaravam o mesmo grid em lugares separados, e a
+   tabela saiu de seis para sete colunas: o cabeçalho mantinha seis e a linha
+   sete, o que alinhava cada número abaixo do cabeçalho errado — Previous em
+   cima de Actual. Declarar uma vez é a correção; dois grids é o defeito. */
+.calendar-tab {
+  --cal-colunas: 58px 68px minmax(0, 1fr) 84px 84px 84px 84px;
+}
+
 .cal-columns {
   display: grid;
-  grid-template-columns: 62px 22px minmax(0, 1fr) 92px 92px 92px;
+  grid-template-columns: var(--cal-colunas);
   gap: 8px;
   padding: 6px 12px;
   border-bottom: 1px solid var(--border);
@@ -111,88 +123,689 @@
   color: var(--muted);
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: 2;
 }
 
 .cal-columns .num {
   text-align: right;
 }
 
+.cal-columns .cal-col-import {
+  text-align: center;
+}
+
 .cal-body {
   flex: 1 1 auto;
   overflow-y: auto;
-  padding: 6px 12px 12px;
+  padding: 4px 12px 12px;
 }
 
-.cal-day {
-  margin: 0 0 6px;
-}
-
-/* Cabeçalho do dia: selo relativo (Hoje/Amanhã/Ontem), data e contagem.
-   Sticky no TOPO do corpo de rolagem (.cal-body) — os 30px de antes deixavam
-   uma faixa vazia entre o rótulo e o topo do container. */
-.cal-day-label {
+/* ---------- Navegação de semana ---------- */
+.cal-semana {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 6px 0;
-  color: var(--muted);
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.cal-semana-rotulo {
+  min-width: 132px;
+  text-align: center;
   font-size: 12px;
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.cal-sem-vazio {
+  font-size: 12px;
+}
+
+/* ---------- Abas de dia (padrão MT5) ---------- */
+.cal-dias {
+  display: flex;
+  gap: 4px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--border);
-  margin-bottom: 4px;
-  position: sticky;
-  top: 0;
-  background: var(--surface, #0f172a);
-  z-index: 1;
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
 
-.cal-day-badge {
-  flex: 0 0 auto;
-  padding: 1px 8px;
-  border-radius: 999px;
-  font-size: 10.5px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  border: 1px solid transparent;
+.cal-dia {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 96px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
 }
 
-.cal-day-badge.hoje {
-  background: color-mix(in srgb, var(--primary) 22%, transparent);
+.cal-dia:hover {
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+}
+
+.cal-dia:focus-visible {
+  outline: 1px solid var(--primary);
+  outline-offset: -1px;
+}
+
+.cal-dia.is-ativo {
+  background: color-mix(in srgb, var(--primary) 20%, transparent);
   border-color: var(--primary);
+}
+
+.cal-dia-relato {
+  font-size: 10px;
+  text-transform: capitalize;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.cal-dia.is-ativo .cal-dia-relato {
   color: var(--text);
 }
 
-.cal-day-badge.amanha,
-.cal-day-badge.ontem {
-  background: color-mix(in srgb, var(--muted) 16%, transparent);
-  border-color: var(--border);
-}
-
-.cal-day-data {
-  text-transform: capitalize;
-}
-
-.cal-day-count {
-  margin-left: auto;
-  font-weight: 500;
+.cal-dia-nome {
   font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* O ponto vermelho é o que faz o operador achar o dia do FOMC sem abrir as
+   sete abas. Fica no canto: no meio, competiria com o texto da data. */
+.cal-dia-alto {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--danger, #ef4444);
+}
+
+.cal-dia-cont {
+  font-size: 10px;
+  font-weight: 700;
   color: var(--muted);
+}
+
+/* ---------- Estrelas de importância ---------- */
+.cal-stars {
+  display: inline-flex;
+  gap: 1px;
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.cal-stars .off {
+  color: color-mix(in srgb, var(--muted) 40%, transparent);
+}
+
+.cal-stars-alto .on {
+  color: var(--danger, #ef4444);
+}
+
+.cal-stars-medio .on {
+  color: var(--warn, #ffb020);
+}
+
+.cal-stars-baixo .on {
+  color: var(--muted);
+}
+
+/* Valor Real é o número que decide a operação: recebe o destaque que o resto
+   da linha não tem. */
+.cal-real {
+  font-weight: 700;
+  color: var(--ok, #34d399);
+}
+
+.cal-col-import {
+  display: flex;
+  justify-content: center;
+}
+
+.cal-row-moeda {
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Evento estimado: o rótulo fica ao lado do título, não numa coluna. */
+.cal-row-tag {
+  margin-left: 6px;
+  padding: 0 5px;
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
+  border-radius: 3px;
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--warn, #ffb020);
+  vertical-align: middle;
+}
+
+/* ---------- Detalhe do evento ---------- */
+.cal-detalhe {
+  margin: 8px 12px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--primary);
+  border-radius: var(--radius-sm, 4px);
+  background: color-mix(in srgb, var(--primary) 6%, transparent);
+  font-size: 12px;
+}
+
+.cal-detalhe-topo {
+  display: grid;
+  /* A bandeira é um componente INTEIRO do cabeçalho: se ficasse no `gap`,
+     o título desceria meio pixel em relação à bandeira, que é o sintoma de
+     "não está alinhado" que o dono apontou. */
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.cal-detalhe-bandeira {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 30px;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text, #e6edf6);
+  background: color-mix(in srgb, var(--primary) 22%, transparent);
+  border: 1px solid color-mix(in srgb, var(--primary) 50%, transparent);
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.cal-detalhe-ident {
+  min-width: 0;
+}
+
+.cal-detalhe-ident strong {
+  display: block;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+/* O título em inglês, sempre visível e nunca escondido atrás de tooltip: o
+   operador que compara com o calendário da corretora precisa do nome exato. */
+.cal-detalhe-en {
+  display: block;
+  margin-top: 2px;
+  font-size: 10.5px;
+  color: var(--muted);
+}
+
+.cal-detalhe-fechar {
+  justify-self: end;
+  align-self: center;
+}
+
+/*
+  A GRADE DO DETALHE — duas colunas por linha, NÃO `auto-fit`.
+  ==========================================================
+  Com `repeat(auto-fit, minmax(150px, 1fr))` o número de colunas mudava com a
+  largura da janela, e cada célula ficava com a largura do PRÓPRIO conteúdo. O
+  "Anterior" de uma linha começava numa coordenada e o "Anterior" da linha de
+  baixo em outra: os números não alinhavam em coluna e a comparação entre
+  Anterior, Previsão e Real — que é a razão de o detalhe existir — ficava por
+  conta do olho.
+
+  Aqui são sempre 3 pares (rótulo/valor) por linha, com larguras fixas: o valor
+  começa sempre na mesma coordenada, em qualquer janela.
+*/
+.cal-detalhe-grade {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px 18px;
+  margin: 0;
+}
+
+.cal-detalhe-grade > div {
+  display: grid;
+  /* Rótulo com largura FIXA: é a coluna que garante o alinhamento do valor. */
+  grid-template-columns: 68px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.cal-detalhe-grade dt {
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  text-align: right;
+}
+
+.cal-detalhe-grade dd {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Em janela estreita a grade vira uma coluna só, mas o par continua alinhado
+   porque o RÓTULO tem largura fixa. */
+@media (max-width: 640px) {
+  .cal-detalhe-grade {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 420px) {
+  .cal-detalhe-grade {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* A descrição do evento: texto de terceiro, em bloco próprio e menor. */
+.cal-detalhe-nota {
+  margin: 10px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* A categoria na linha: "Juros", "Inflação" — busca visual antes do nome. */
+.cal-cat {
+  margin-right: 5px;
+  padding: 0 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted, #68778c);
+  vertical-align: 1px;
+}
+
+/* Evento sem tradução no dicionário: marca explícita. */
+.cal-row-en {
+  border-color: color-mix(in srgb, var(--text-muted, #68778c) 55%, transparent);
+  color: var(--text-muted, #68778c);
+}
+
+/* ---------- Aviso de fonte ---------- */
+/* ---------- Faixa de países com bandeira (05/10/2026) ----------
+   O dono pediu: "adicionar bandeiras dos paises ao lado de cada informacao
+   relevante ou no topo de cada pais".
+
+   A faixa é gerada do que EXISTE na semana, e a bandeira é a forma mais
+   rápida de ler país — o operador procura o FOMC pela bandeira dos EUA antes
+   de ler o nome.
+
+   A faixa e um `group`, não `tablist`: clicar filtra a lista, e não troca de
+   visão. Dizer "tab" para um filtro faz o leitor de tela anunciar que o
+   conteúdo mudou, que é mentira — a tabela continua a mesma, só com menos
+   linhas. */
+.cal-paises {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.cal-pais-chip {
+  gap: 5px;
+  padding: 3px 8px;
+}
+
+.cal-pais-chip.on {
+  background: color-mix(in srgb, var(--primary) 20%, transparent);
+  border-color: var(--primary);
+}
+
+/*
+  BANDEIRA QUADRADA, COM O PAIS AO LADO (05/10/2026)
+  ==================================================
+  O dono pediu: "as bandeiras colocar em formato quadrado no calendario... de
+  forma mais clara mostrando claramente cada bandeira e o pais".
+
+  POR QUE QUADRADA E NAO SO MAIOR
+  =============================
+  Medido no feed: 82 eventos, moedas como `AUD`, `CNY`, `JPY`, `EUR`, `NZD`,
+  `ALL`. A bandeira sozinha obriga o operador a saber o pais de memoria, e o
+  emoji de bandeira e pequeno demais para ler de relance em 12 numeros.
+
+  Quadrada com a sigla dentro e o nome do pais ao lado resolve as duas coisas:
+  o quadrado da aarea e a borda que separa um evento do proximo, e o nome
+  escrito elimina a adivinhacao. O codigo ISO continua ao lado para quem precisa
+  do par exato.
+*/
+/*
+  O QUADRADO DO PAIS — SIGLA, NAO BANDEIRA EMOJI (05/10/2026)
+  ===========================================================
+  MEDIDO, e nao deduzido: o Windows NAO desenha bandeira emoji. A Microsoft
+  removeu os emojis de bandeira do Segoe UI Emoji em 2017, e os pares de
+  indicador regional `U+1F1E6..U+1F1FF` sao desenhados como DUAS LETRAS.
+
+  O dado chegava certo — MEDIDO no produtor:
+      EUR -> 0x1F1EA 0x1F1FA   par correto
+      ALL -> 0x1F3F3            bandeira branca: "ALL" nao existe no catalogo
+      NZD -> 0x1F3F3 0x1F3FF   par correto
+
+  Na tela apareceu "EU EU": o primeiro "EU" era a bandeira desenhada como
+  letras, e o segundo era a sigla ao lado. **NENHUM conserto de codigo faz o
+  emoji aparecer no Windows** — o desenho nao existe na fonte do sistema.
+
+  E o detalhe que fecha a solucao: as DUAS referencias do dono NAO usam bandeira
+  emoji. A XM mostra o codigo da moeda; o MT5 mostra um icone pequeno. O pedido
+  de "bandeira em formato quadrado" e, na pratica, um quadrado com a sigla.
+
+  Por isso o quadrado carrega a sigla ISO em texto monoespacado: renderiza em
+  qualquer Windows, sem depender de fonte, e o nome do pais ao lado continua
+  sendo o que da o significado.
+*/
+.cal-bandeira {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 22px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text, #e6edf6);
+  background: color-mix(in srgb, var(--primary) 20%, transparent);
+  border: 1px solid color-mix(in srgb, var(--primary) 45%, transparent);
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+/* No topo do filtro: o maior, porque e onde se procura o pais. */
+.cal-pais-chip .cal-bandeira {
+  width: 32px;
+  height: 24px;
+  font-size: 11.5px;
+}
+
+/* No detalhe: maior ainda. */
+.cal-detalhe-bandeira {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  font-size: 24px;
+  line-height: 1;
+  font-variant-emoji: emoji;
+  filter: saturate(1.5) contrast(1.06);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  flex-shrink: 0;
+}
+
+/* ---------- O PAR: NOME DO PAIS, LEGIVEL ----------
+   O nome vem do `nomePais` que o hook ja traz. Sem ele, a bandeira e um
+   simbolo sem significado para quem nao conhece o pais. */
+.cal-pais-nome {
+  font-size: 12.5px;
+  color: var(--text, #e6edf6);
+  white-space: nowrap;
+}
+
+.cal-pais-sigla {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--muted);
+  letter-spacing: 0.03em;
+}
+
+.cal-row-pais {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.cal-row-pais .cal-pais-nome {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------- COLORIR ----------
+   O calendario era uma lista cinza com três estrelas. A cor agora diz o que o
+   operador precisa ver ANTES de ler: dia com evento de alto impacto, evento
+   de alto impacto, evento passado. */
+.cal-dia {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 3px);
+  background: transparent;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+/* Dia selecionado: a cor primária, e não só uma borda. */
+.cal-dia.is-ativo {
+  background: color-mix(in srgb, var(--primary) 18%, transparent);
+  border-color: var(--primary);
+}
+
+/* Dia que tem evento de ALTO impacto: fundo quente, para ser o primeiro que o
+   olho acha ao olhar a tira de dias. */
+.cal-dia.tem-alto {
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+  border-color: color-mix(in srgb, var(--warn) 45%, transparent);
+}
+
+.cal-dia.tem-alto.is-ativo {
+  background: color-mix(in srgb, var(--warn) 26%, transparent);
+  border-color: var(--warn);
+}
+
+/* O dia de hoje: a borda cheia. Um dia comum não pode competir com isso. */
+.cal-dia.is-hoje {
+  border-color: color-mix(in srgb, var(--primary) 70%, transparent);
+  border-style: solid;
+  border-width: 1px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 30%, transparent);
+}
+
+/* ---------- A LINHA DO EVENTO ----------
+   `passado` fica esmaecido, e o evento de alto impacto ganha a faixa da
+   esquerda na cor do aviso. Sem isso, a coluna de estrelas é a única pista e
+   ela fica no meio de uma linha cinza. */
+.cal-row.passado {
+  opacity: 0.55;
+}
+
+.cal-row.alto {
+  box-shadow: inset 3px 0 0 var(--warn, #ffb020);
+}
+
+.cal-row.medio {
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--primary) 45%, transparent);
+}
+
+.cal-row:hover {
+  background: color-mix(in srgb, var(--primary) 9%, transparent);
+}
+
+.cal-row.is-aberto {
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+}
+
+/* As estrelas ganham o tamanho do texto da linha: 9px era ilegível. */
+.cal-col-import .cal-estrela,
+.cal-estrela {
+  font-size: 13px;
+  letter-spacing: 1px;
+  line-height: 1;
+}
+
+.cal-cat {
+  background: color-mix(in srgb, var(--primary) 22%, transparent);
+  color: var(--text, #e6edf6);
+}
+
+.cal-pais-num {
+  background: color-mix(in srgb, var(--primary) 30%, transparent);
+}
+
+.cal-pais-moeda {
+  font-family: var(--mono, ui-monospace, Consolas, monospace);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+/* A contagem é o que diz se vale clicar. */
+.cal-pais-num {
+  min-width: 1.5em;
+  text-align: center;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.cal-pais-chip.on .cal-pais-num {
+  background: color-mix(in srgb, var(--primary) 35%, transparent);
+  color: var(--text);
+}
+
+/* Na linha da tabela a bandeira aparece duas vezes: na coluna da moeda e ao
+   lado do título. É redundante de propósito — a coluna é estreita e some em
+   tela estreita, e o título é o que se lê. */
+.cal-row-bandeira {
+  margin-right: 6px;
+  vertical-align: -2px;
+}
+
+.cal-row-moeda {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ---------- A TABELA UM POUCO MAIOR ----------
+   O dono pediu: "se for melhor aumentar todo tamanho da tabela do calendário,
+   letras e números só um pouquinho".
+
+   Um passo só, e deliberado: 12px → 12.8px na linha, 11px → 11.6px no
+   cabeçalho. "Só um pouquinho" é o pedido — subir mais faria a tabela de sete
+   colunas passar da largura útil e criar rolagem horizontal, que é exatamente o
+   defeito que a coluna estreita de importação já causa. */
+.cal-columns,
+.cal-row {
+  font-size: 13.4px;
+}
+
+.cal-columns {
+  font-size: 12px;
+}
+
+/* A linha ganha 1px de altura: 5px → 6px. A soma de padding é o que segura a
+   bandeira de 17px sem a linha parecer rachada. */
+.cal-row {
+  padding: 6px;
+}
+
+.cal-row-time {
+  font-size: 13.4px;
+}
+
+/*
+  CELULA VAZIA DE VALOR (05/10/2026)
+  ==================================
+  Substitui o `--`. MEDIDO: 111 eventos no total — 82 do feed publico e 29
+  ESTIMADOS. Os estimados nao tem valor publicado por definicao, e so a coluna
+  Real fica vazia no feed enquanto o evento nao foi divulgado. Tres ausencias
+  diferentes caiam no mesmo `--`.
+
+  A celula fica VAZIA, com o motivo no `title`. Vazio e o desenho correto para
+  "nao ha numero": e o que o MT5 e a XM fazem, e nenhum dos dois escreve um
+  trace em celula numerica.
+
+  O espaco continua com tamanho (`inline-block` + largura), para as colunas
+  continuarem alinhadas: celula vazia sem largura desalinha a coluna e empurra
+  os numeros das linhas de baixo.
+*/
+.cal-sem-valor {
+  display: inline-block;
+  min-width: 22px;
+  height: 1em;
+  vertical-align: middle;
+}
+
+.cal-fonte {
+  margin: 0;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.cal-fonte-estimada {
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+  color: var(--warn, #ffb020);
 }
 
 .cal-row {
   display: grid;
-  grid-template-columns: 62px 22px minmax(0, 1fr) 92px 92px 92px;
+  grid-template-columns: var(--cal-colunas);
   gap: 8px;
   align-items: center;
-  padding: 4px 6px;
+  width: 100%;
+  padding: 5px 6px;
+  border: 0;
   border-radius: var(--radius-sm, 4px);
-  font-size: 12.5px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
 .cal-row:hover {
-  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  background: color-mix(in srgb, var(--primary) 9%, transparent);
+}
+
+.cal-row:focus-visible {
+  outline: 1px solid var(--primary);
+  outline-offset: -1px;
+}
+
+.cal-row.is-aberto {
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+}
+
+/* ---------- COLORIR POR IMPACTO (05/10/2026) ----------
+   O dono pediu "colorir". A cor aqui diz o que o operador precisa ver ANTES de
+   ler: a faixa da esquerda é o impacto, e é a leitura mais rápida da linha
+   inteira. Sem ela, a pista era a coluna de estrelas no meio de uma linha
+   cinza. */
+.cal-row.alto {
+  box-shadow: inset 3px 0 0 var(--warn, #ffb020);
+}
+
+.cal-row.medio {
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--primary) 45%, transparent);
 }
 
 /* Evento já divulgado: leitura periférica, sem sumir da tabela. */
@@ -210,12 +823,6 @@
   color: var(--muted);
   font-size: 12px;
   text-align: right;
-}
-
-.cal-row-flag {
-  font-size: 14px;
-  text-align: center;
-  line-height: 1;
 }
 
 .cal-row-title {

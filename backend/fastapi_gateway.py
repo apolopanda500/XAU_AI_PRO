@@ -1000,7 +1000,7 @@ async def telemetry_history_route(limit: int = 120) -> dict:
 async def risk_state_route() -> JSONResponse:
     """Estado de risco real do dia (perda diaria, exposicao, posicoes, limites).
 
-    Fonte: MT5 (deals do dia + posicoes abertas). Usado pelo RiskTab e como
+    Fonte: MT5 (deals do dia + posicoes abertas). Usado pela aba de risco e como
     evidencia de que o risk_gate esta recebendo dado real, nao zero fixo.
     """
     try:
@@ -1473,6 +1473,24 @@ async def create_connection(payload: dict) -> JSONResponse:
         return _send({"ok": False, "error": str(exc), "credentials_exposed": False}, 422)
     except Exception:
         return _send({"ok": False, "error": "Falha ao salvar conexao.",
+                      "credentials_exposed": False}, 503)
+
+
+@app.put("/api/connections/{connection_id}")
+async def update_connection(connection_id: str, payload: dict) -> JSONResponse:
+    """Troca a credencial sem excluir e recriar a conexao."""
+    connection_id = unquote(connection_id)
+    payload = {**payload, "id": payload.get("id") or connection_id}
+    try:
+        result = gw.connection_service.update(payload)
+        connection = next((x for x in gw.list_connections() if x["id"] == connection_id), None)
+        return _send({**result, "connection": connection})
+    except LookupError as exc:
+        return _send({"ok": False, "error": str(exc), "credentials_exposed": False}, 404)
+    except ValueError as exc:
+        return _send({"ok": False, "error": str(exc), "credentials_exposed": False}, 422)
+    except Exception:
+        return _send({"ok": False, "error": "Falha ao atualizar conexao.",
                       "credentials_exposed": False}, 503)
 
 

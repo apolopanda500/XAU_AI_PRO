@@ -90,6 +90,18 @@ export interface AssetRow {
   spreadPoints?: number | null;
   swapLong?: number | null;
   swapShort?: number | null;
+  /**
+   * Classe do ativo, como a CORRETORA publicou (`asset_class` em
+   * `asset_registry.discover_assets`).
+   *
+   * MEDIDO (05/10/2026): e o campo que decide a UNIDADE do volume. Na XM,
+   * Bolivar (forex) escreve "0,01 Lote(s)" e BTCUSD (crypto) escreve
+   * "0,01 Token(s)". Sem este campo no catalogo, a tela so pode escrever
+   * "Lote" para qualquer ativo - e isso e presumir classe, que a regra proibe.
+   *
+   * `null` = a corretora nao devolveu. NUNCA vira um valor adivinhado pelo nome.
+   */
+  assetClass?: string | null;
 }
 
 /** Extrai o catálogo real devolvido por /api/universal/assets. */
@@ -117,6 +129,7 @@ export function parseAssetCatalog(payload: unknown): AssetRow[] {
       spreadPoints: typeof row.spread_points === 'number' ? row.spread_points : null,
       swapLong: typeof row.swap_long === 'number' ? row.swap_long : null,
       swapShort: typeof row.swap_short === 'number' ? row.swap_short : null,
+      assetClass: typeof row.asset_class === 'string' && row.asset_class ? row.asset_class : null,
     });
   }
   return rows;

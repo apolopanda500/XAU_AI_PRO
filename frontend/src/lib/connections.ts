@@ -60,6 +60,13 @@ export type Connection = {
   market: string;
   configured?: boolean;
   active?: boolean;
+  /**
+   * De onde vem a credencial: `api_key` ou `session`.
+   *
+   * A tela usa isto para nao pedir API key a uma conexao que nao tem — e o
+   * backend que decide, pelo que foi gravado, e nao a tela supondo.
+   */
+  credential_source?: 'api_key' | 'session';
 };
 export type TerminalAccount = { login: number; server: string; name?: string };
 
@@ -145,6 +152,51 @@ export async function saveExchange(
     ...(precisaCredencial ? { api_key: key.trim(), api_secret: secret.trim() } : {}),
     ...(exigePassphrase(broker) ? { api_passphrase: passphrase.trim() } : {}),
   });
+  return id;
+}
+
+/**
+ * Troca a credencial de uma conexao que JA EXISTE.
+ *
+ * POR QUE ISTO EXISTE (05/10/2026)
+ * ================================
+ * A tela so sabia CRIAR conexao. Editar significava: excluir a conexao e
+ * cadastrar outra com o mesmo nome — dois cliques, e no meio a conta fica
+ * sem credencial. Se o cadastro novo falhasse (passphrase errada, mercado
+ * trocado), o operador ficava com a conexao excluida e sem chave.
+ *
+ * E o efeito colateral pior: o campo de chave ficava vazio depois de salvar
+ * (a tela limpava `key`, `secret` e `passphrase`), e nao havia como recuperar
+ * nem reaproveitar. A leitura da conexao nunca traz a chave de volta — e
+ * correto, nao vaza segredo — mas tambem nao havia como MODIFICAR.
+ *
+ * Aqui o backend recebe `PUT` com a mesma validacao do `POST`: campos de
+ * credencial em branco significam "mantem o que ja esta gravado". O cliente
+ * nunca precisa descobrir a chave atual para poder trocar outra.
+ */
+export async function updateConnectionCredentials(
+  broker: Broker,
+  market: string,
+  name: string,
+  chave: { key?: string; secret?: string; passphrase?: string } = {},
+): Promise<string> {
+  if (!marketsFor(broker).includes(market))
+    throw new Error('Mercado incompatível com a corretora.');
+  if (!name.trim()) throw new Error('Dê um nome à conexão.');
+  const id = `${broker}:${market}:${name.trim()}`;
+  const payload: Record<string, string> = { id, broker, market };
+  // So envia o que foi digitado agora. Ausencia de campo = manter.
+  if (chave.key?.trim()) payload.api_key = chave.key.trim();
+  if (chave.secret?.trim()) payload.api_secret = chave.secret.trim();
+  if (chave.passphrase?.trim()) payload.api_passphrase = chave.passphrase.trim();
+  if (!isExchange(broker)) {
+    // Corretora de sessao nao tem chave para trocar; so o rotulo e o mercado
+    // mudam. Enviar segredo vazio seria gravar mentira no DPAPI.
+    delete payload.api_key;
+    delete payload.api_secret;
+    delete payload.api_passphrase;
+  }
+  await requestConnection(`/api/connections/${encodeURIComponent(id)}`, 'PUT', payload);
   return id;
 }
 

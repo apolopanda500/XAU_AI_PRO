@@ -76,6 +76,64 @@ def _normaliza_market(market: str) -> str:
 
 def save(payload: dict) -> dict:
     """Cadastra uma conexao. Nao envia ordem, so grava."""
+    return _gravar(payload, criar=True)
+
+
+def update(payload: dict) -> dict:
+    """Troca a credencial de uma conexao que JA EXISTE. Nao envia ordem.
+
+    POR QUE ISTO EXISTE (05/10/2026)
+    ===============================
+    A tela so sabia CRIAR conexao. Trocar a chave significava: excluir a
+    conexao e cadastrar outra com o mesmo nome. No meio disso a conta fica
+    sem credencial, e se o cadastro novo falhasse (passphrase errada, mercado
+    diferente) o cliente ficava com a conexao excluida e sem chave nenhuma.
+
+    Aqui o mesmo `id` e reescrito, entao nunca existe um instante sem
+    credencial gravada.
+
+    CORRETORA E MERCADO VEM DO REGISTRO
+    ====================================
+    O `id` e `broker:market:nome`, e o proprio registro gravado tem
+    `broker` e `market`. Na edicao eles NAO vem do corpo da requisicao: um
+    corpo incompleto faria o update recusar com "escolha a corretora", que e
+    uma pergunta que o cliente nao pode responder — ele esta trocando a
+    CHAVE, nao escolhendo corretora.
+
+    Se o corpo trouxer `market` diferente do gravado, a troca e de mercado e
+    nao de credencial, e a conexao nao existia com essa combinacao: recusa.
+    A troca de mercado fica com o cadastro, que ja aceita reescrever o
+    registro.
+
+    CAMPO EM BRANCO = MANTER
+    ==========================
+    Ler de volta a chave para trocar outra exigiria devolver o segredo pela
+    API — o que a listagem nunca faz, e com razao. Entao campo ausente ou em
+    branco significa "mantem o que ja esta gravado". A consequence importante:
+    `api_key` sozinho troca so a chave, e `api_secret` sozinho troca so o
+    secret. Trocar os dois e o caminho normal.
+    """
+    if not isinstance(payload, dict):
+        raise ValueError("Informe um objeto de conexao.")
+    nome = str(payload.get("id", "")).strip()
+    if not nome:
+        raise ValueError("Informe a conexao a atualizar.")
+    gravada = next((item for item in store.list_connections() if item["id"] == nome), None)
+    if gravada is None:
+        raise LookupError("Conexao nao encontrada.")
+    mercado_pedido = str(payload.get("market", "")).strip()
+    if mercado_pedido and _normaliza_market(mercado_pedido) != gravada["market"]:
+        raise ValueError(
+            "O mercado de uma conexao existente nao muda na troca de chave. "
+            "Exclua a conexao e cadastre outra com o mercado desejado."
+        )
+    return _gravar(
+        {**payload, "broker": gravada["broker"], "market": gravada["market"]},
+        criar=False,
+    )
+
+
+def _gravar(payload: dict, *, criar: bool) -> dict:
     if not isinstance(payload, dict):
         raise ValueError("Informe um objeto de conexao.")
     from backend.broker_registry import get_broker
@@ -109,13 +167,28 @@ def save(payload: dict) -> dict:
             "validated": False,
             "credential_source": "session",
             "label": definicao.label,
+            "updated": criar,
         }
 
-    key = str(payload.get("api_key", "")).strip()
-    secret = str(payload.get("api_secret", "")).strip()
+    key = str(payload.get("api_key", "") or "").strip()
+    secret = str(payload.get("api_secret", "") or "").strip()
+    passphrase = str(payload.get("api_passphrase", "") or "").strip()
+
+    if not criar:
+        # Sem o que gravar, o PUT e um no-op. Responder 200 aqui seria dizer
+        # "atualizado" sem ter atualizado nada.
+        if not any((key, secret, passphrase)):
+            raise ValueError("Informe a nova credencial. Campo em branco mantem a atual.")
+        # Na edicao, o que falta no payload vem do DPAPI. Um PUT so com `api_key`
+        # troca a chave e preserva o secret — e o que permite rotacionar sem
+        # digitar tudo de novo.
+        chave_antiga, secret_antigo, passphrase_antiga = _credencial_atual(nome)
+        key = key or chave_antiga
+        secret = secret or secret_antigo
+        passphrase = passphrase or passphrase_antiga
+
     if not key or not secret:
         raise ValueError(f"{definicao.label}: informe API key e secret.")
-    passphrase = str(payload.get("api_passphrase", "") or "").strip()
     if broker in EXIGE_PASSPHRASE and not passphrase:
         raise ValueError(f"{definicao.label} exige a passphrase criada junto com a API key.")
 
@@ -125,7 +198,21 @@ def save(payload: dict) -> dict:
         "validated": False,
         "credential_source": "api_key",
         "label": definicao.label,
+        "updated": not criar,
     }
+
+
+def _credencial_atual(connection_id: str) -> tuple[str, str, str]:
+    """Credencial ja gravada, para completar o que o PUT nao trouxe.
+
+    Falha aqui devolve vazio — e a troca vai recusar com "informe API key e
+    secret", que e a resposta honesta. Engolir KeyError e gravar vazio por
+    cima da credencial existente deixaria o cliente sem chave e sem aviso.
+    """
+    try:
+        return store.load_connection_credentials_full(connection_id)
+    except (LookupError, OSError, ValueError):
+        return "", "", ""
 
 
 def action(connection_id: str, command: str) -> dict:

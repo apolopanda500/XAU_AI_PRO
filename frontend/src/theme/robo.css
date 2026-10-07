@@ -95,24 +95,12 @@
   min-width: 0;
 }
 
-/* ---------- 1. Cabeçalho ---------- */
-.robo-cabecalho {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  padding: 2px 2px 0;
-}
-
-.robo-cabecalho h1 {
-  margin: 0 0 2px;
-  font-size: 22px;
-  line-height: 1.1;
-  letter-spacing: 0.02em;
-}
-
-/* ---------- 2. Operação automática ---------- */
+/* ---------- 1. Operação automática ----------
+   O bloco "1. Cabeçalho" (`.robo-cabecalho`) SAIU junto com o `<header>` da
+   pagina, a pedido do dono em 06/10/2026: a barra lateral ja escreve `ROBÔ` em
+   todas as paginas, e o cabecalho repetia o titulo. A regra NAO ficou: CSS de
+   elemento que nao existe e lixo que engana quem for mexer depois — e o teste
+   `robo.css` reprova se `.robo-cabecalho` voltar a aparecer aqui. */
 .robo-comandos {
   display: flex;
   flex-direction: column;
@@ -189,6 +177,32 @@
   border-color: var(--ok, #34d399);
   color: #06210f;
   background: var(--ok, #34d399);
+}
+
+/*
+  O BOTAO AUTO NO TOPO (06/10/2026)
+  =================================
+  Subiu do rodape do ticket para o `section-head`, ao lado do titulo
+  `Operação automatica`. MEDIDO na captura: no rodape ele ficava depois de
+  `passo`, dos presets e dos campos, a ultima coisa antes de rolar.
+
+  `grid-area: enviar` e do GRID do ticket. No topo nao ha grid, e sem esta
+  regra o botao herdaria `min-height: 44px` e `min-width: 148px` de quando era
+  um bloco do rodape — e voltaria a ser o maior elemento da fileira, que e
+  parte do que escondia o controle. Aqui ele e um comando entre outros.
+
+  `margin-inline-start: auto` e o que COLA o botao na direita da fileira,
+  deixando titulo e indicadores a esquerda.
+*/
+.robo-auto-topo {
+  grid-area: auto;
+  margin-inline-start: auto;
+  min-height: 28px;
+  min-width: 0;
+  padding: 4px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
 /* ---------- Presets SL:TP ---------- */
@@ -281,11 +295,188 @@
       'enviar';
   }
 
-  .robo-ticket-protecao {
+.robo-ticket-protecao {
     grid-template-columns: minmax(0, 1fr);
   }
+}
 
-  .robo-cabecalho h1 {
-    font-size: 19px;
-  }
+/* ==========================================================================
+   A LISTA DE MODELOS TREINADOS (05/10/2026)
+   ==========================================================================
+   MEDIDO: 39 modelos, 28 publicaveis. A tabela e a resposta a "com que modelo
+   eu estou operando?", e por isso mostra acerto, edge, F1 e amostras de teste:
+   o numero do TREINO, nao previsao.
+
+   O reprovado FICA, esmaecido, com o motivo no `title`. Esconder o M5 faria o
+   operador achar que o app nao tem M5.
+   ========================================================================== */
+.robo-modelos {
+  margin-top: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 3px);
+  background: var(--surface, #0f172a);
+}
+
+.robo-modelos-cabeca {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.robo-modelos-titulo {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.robo-modelos-lista {
+  max-height: 240px;
+  overflow: auto;
+}
+
+.robo-modelos-tabela {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.robo-modelos-tabela th,
+.robo-modelos-tabela td {
+  padding: 3px 8px;
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.robo-modelos-tabela th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface, #0f172a);
+  font-size: 9.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.robo-modelos-tabela .num {
+  text-align: right;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.robo-modelos-tabela code {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* A linha e clicavel porque ESCOLHER o modelo e o que a tabela faz. */
+.robo-modelo {
+  cursor: pointer;
+}
+
+.robo-modelo:hover {
+  background: color-mix(in srgb, var(--primary) 9%, transparent);
+}
+
+/* O modelo que esta no motor agora: e a linha que o operador procura. */
+.robo-modelo.em-uso {
+  background: color-mix(in srgb, var(--primary) 15%, transparent);
+  box-shadow: inset 2px 0 0 var(--primary, #00c6fb);
+}
+
+/* Reprovado: esmaecido, mas PRESENTE. Some da lista, ele vira misterio. */
+.robo-modelo.reprovado {
+  opacity: 0.45;
+}
+
+/* ---------- Limites de risco ---------- */
+.robo-limites {
+  margin-top: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 3px);
+  background: var(--surface, #0f172a);
+}
+
+.robo-limites > summary {
+  padding: 5px 10px;
+  cursor: pointer;
+  font-size: 11.5px;
+  font-weight: 600;
+  list-style: none;
+}
+
+.robo-limites > summary::-webkit-details-marker {
+  display: none;
+}
+
+.robo-limites > summary::before {
+  content: '\25B8 ';
+  color: var(--muted);
+}
+
+.robo-limites[open] > summary::before {
+  content: '\25BE ';
+}
+
+.robo-limites-grade {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 6px 12px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border);
+}
+
+.robo-limites-grade .field {
+  margin-bottom: 0;
+}
+
+.robo-limites-grade .field > span {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.robo-limites .hint {
+  padding: 0 10px 8px;
+  margin: 0;
+  font-size: 11px;
+}
+/*
+  SL/TP POR DINHEIRO (05/10/2026)
+  =============================
+  As abas `Preco` / `Quantidade` sao as mesmas da XM, e os nivel derivados vao
+  em MONO para o operador comparar digito a digito com o preco.
+
+  Os dois niveis (acima e abaixo) ficam na MESMA linha porque este painel nao
+  sabe o lado da operacao: a direcao e do modelo. Empilhar em dois blocos
+  esconderia que sao duas hipoteses do mesmo valor, e nao duas ordens.
+*/
+.robo-ticket-modo {
+  display: inline-flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.robo-ticket-dinheiro {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  border-radius: var(--radius-sm, 4px);
+  background: color-mix(in srgb, var(--panel2) 34%, transparent);
+}
+
+.robo-ticket-niveis {
+  display: flex;
+  flex: 1 1 100%;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
 }

@@ -232,8 +232,32 @@ export function useInferenciaIA(timeframe: string, enabled: boolean) {
   const [disponivel, setDisponivel] = useState(false);
   const setAiStatus = useAppStore((s) => s.setAiStatus);
 
+  /*
+    O INTERRUPTOR `enabled` NAO ERA USADO (05/10/2026).
+
+    O parâmetro existia na assinatura e não aparecia no corpo: o hook inferia
+    sempre e escrevia `aiStatus` sempre. Como nenhum componente o chamava com
+    ligado, o cabeçalho ficava em "AI: Inativo" — o valor inicial do store —
+    mesmo com a IA inteira implementada no EA (`AIConnector`, `AIEngine`,
+    `ModelGovernance`).
+
+    Aqui ele passa a valer, e desligado não escreve NADA: deixar o estado
+    intacto é o que permite ao operador ver o último sinal real depois de
+    pausar, em vez de ver a tela zerar.
+  */
+  const ligar = enabled;
+
   const inferir = useCallback(
     async (symbol: string, signal?: AbortSignal): Promise<ResultadoInferencia> => {
+      if (!ligar) {
+        const parado = {
+          disponivel: false,
+          sinal: null,
+          motivo: 'IA desligada pelo operador',
+        } as unknown as ResultadoInferencia;
+        setMotivo(parado.motivo);
+        return parado;
+      }
       setCarregando(true);
       const r = await pedirPrevisao(symbol, timeframe, signal);
       setCarregando(false);
@@ -253,8 +277,22 @@ export function useInferenciaIA(timeframe: string, enabled: boolean) {
       }
       return r;
     },
-    [timeframe, setAiStatus],
+    [timeframe, ligar, setAiStatus],
   );
 
-  return { sinal, carregando, motivo, disponivel, inferir };
+  /*
+    O ESTADO DA IA NO CABEÇALHO, com um interruptor que o operador controla.
+
+    Antes o texto vinha do último `inferir()` — e como ninguém chamava, ficava
+    em "Inativo" para sempre. Agora o texto segue o interruptor, e o status só
+    é escrito quando a IA está ligada.
+  */
+  const ativar = useCallback(
+    (ligado: boolean) => {
+      setAiStatus(ligado ? 'Ativa' : 'Inativa');
+    },
+    [setAiStatus],
+  );
+
+  return { sinal, carregando, motivo, disponivel, inferir, ativar };
 }

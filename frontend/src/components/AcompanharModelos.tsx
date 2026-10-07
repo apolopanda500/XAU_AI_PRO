@@ -1,12 +1,16 @@
 import { useMemo } from 'react';
 import { apiBase } from '../lib/api';
 import { useAutoState, usePositions } from '../hooks/queries';
+import { useAppStore } from '../hooks/useAppStore';
 import { useSinaisModelo } from '../hooks/useSinaisModelo';
 import { getCandles, type MarketCandle } from '../lib/marketApi';
 import { notify } from '../lib/notify';
 import { requestId } from '../lib/format';
 import { useEffect, useState } from 'react';
 import PriceChart from './charts/PriceChart';
+import { nivelDoValor, linhasDaOrdem, rotuloDoBotao } from '../lib/ordemGrafico';
+import { fichaDoAtivo, faixaDoAtivo, unidadeDeVolume, rotuloQuantidade } from '../lib/volumeUnidade';
+import { useCatalogoAtivos } from '../hooks/useCatalogoAtivos';
 
 // Acompanhar os modelos operando, ao vivo e com seguranca.
 //
@@ -26,19 +30,212 @@ import PriceChart from './charts/PriceChart';
 export default function AcompanharModelos() {
   const autoQ = useAutoState();
   const auto = autoQ.data;
-  const broker = String(auto?.broker ?? '').toLowerCase();
+  const parDaTela = useAppStore((s) => s.selectedSymbol);
+  /*
+    O MESMO PAR, PELOS MESMOTRÔS MOTIVOS DO PAINEL (06/10/2026)
+    ============================================================
+    MEDIDO no app instalado: a aba mostrava um cartao morto com o titulo
+    "Acompanhar modelos" e a frase "Configure o par no motor para ver os sinais
+    no grafico" — enquanto a barra inferior, na MESMA tela, ja mostrava `BTCUSD`
+    escolhido e o grafico de `OperacaoAutomatica` tinha o par resolvido.
+
+    Este componente lia SO `auto.simbolo`. `OperacaoAutomatica` (linha 179) ja
+    resolvia `auto.simbolo || parEscolhido` desde 05/10/2026, porque o motor
+    comeca SEM par e so recebe um quando alguem configura. Resultado: dois
+    componentes, o mesmo dado, uma versao com reserva e outra sem — e o sintoma
+    caia no componente que NAO tinha reserva, com uma mensagem que mandava o
+    operador configurar algo que ele ja tinha configurado.
+
+    E o AGENTS.md 5: o defeito e do lado que LE o nome diferente, e o relato
+    apontava para o servidor.
+
+    O que entra no `configurado` agora: `timeframe` e `market` sao os unicos que
+    continuam sendo exigidos, porque sao o que a consulta precisa. Sem timeframe
+    nao ha candles para ler, e sem par nao ha grafico — nesses dois casos a tela
+    diz ONDE escolher, e nao promete sinal.
+  */
+  const broker = String(auto?.broker ?? 'mt5').toLowerCase();
   const market = String(auto?.market ?? '').toLowerCase();
-  const simbolo = String(auto?.simbolo ?? '').toUpperCase();
+  const simbolo = String(auto?.simbolo || parDaTela || '').toUpperCase();
   const timeframe = String(auto?.timeframe ?? '').toUpperCase();
   const configurado = Boolean(broker && market && simbolo && timeframe);
-  const limites = (auto?.limites ?? {}) as { lote?: number; sl_preco?: number; tp_preco?: number };
-  const pronto1Clique =
-    (limites.lote ?? 0) > 0 && (limites.sl_preco ?? 0) > 0 && (limites.tp_preco ?? 0) > 0;
 
+  /*
+    `pronto1Clique` E `limites` SAIRAM (06/10/2026)
+
+    Eles existiam SO para decidir se os botoes "1-clique" podiam enviar, e os
+    botoes sairam a pedido do dono. Deixar o calculo seria um controle sem
+    consumidor — o AGENTS.md 9: "um controle que nada lê é pior que a ausência
+    dele, porque o usuário acredita que está protegido".
+
+    Os limites continuam sendo lidos pelo MOTOR, na tela de operação automática.
+    Esta tela passou a mostrar o que o modelo decide e a permitir operar pelo
+    grafico.
+  */
   const positionsQ = usePositions();
   const posicoes = Array.isArray(positionsQ.data?.positions) ? positionsQ.data.positions : [];
   const [verEma, setVerEma] = useState(true);
-  const [ocupado, setOcupado] = useState(false);
+
+  /*
+    A FICHA DO ATIVO, e por que ela e obrigatoria
+    =============================================
+    O modo em DINHEIRO (padrao da XM) so existe com `contract_size`: sem ele nao
+    ha conversao entre dinheiro e preco, e o nivel sairia 100.000 vezes errado em
+    forex. `nivelDoValor` devolve `null` nesse caso — recusa, nunca estimativa
+    (AGENTS.md 3).
+
+    O CATALOGO vem de `useCatalogoAtivos`, o mesmo hook que `OperacaoAutomatica`
+    e `SeletorModelo` leem — e nao de um `getAssets` proprio deste componente.
+    MEDIDO ao escrever este codigo: `getAssets` normaliza o payload e devolve
+    `MarketAsset`, que NAO tem o campo `contract_size` (ver `marketApi.ts`),
+    enquanto `parseAssetCatalog` le o campo do payload CRU. Passar a resposta
+    normalizada para o parser dava `contractSize: null` sem erro nenhum: a tela
+    dizia "depende do contrato" para um ativo que a corretora ja tinha
+    publicado, e o painel ficava travado sem o operador ter feito nada de
+    errado. E a regra do AGENTS.md 5 pelo outro lado: o produtor e o consumidor
+    discordando do nome, e o sintoma cairia em quem WRITOU a tela.
+
+    `null` e a resposta correta quando a corretora nao devolveu. Nao ha default.
+  */
+  const catalogo = useCatalogoAtivos(
+    (broker || 'mt5') as Parameters<typeof useCatalogoAtivos>[0],
+    market,
+  );
+  const ficha = useMemo(() => fichaDoAtivo(catalogo, simbolo), [catalogo, simbolo]);
+
+  /*
+    A ORDEM ARMADA (06/10/2026)
+    ==========================
+    MEDIDO nas capturas da XM: o clique ARMA, o painel mostra tudo, e o botao
+    `Colocar ordem a <preco>` envia. O estado vive aqui, no pai, porque e o pai
+    que tem a ficha do ativo e quem envia — o grafico so devolve o preco.
+
+    `preco` e o que o operador CLIQUEU, e nao o ultimo fechamento. Um clique no
+    meio do candle e um preco escolhido: e o que substitui a ordem a mercado do
+    motor, que era o defeito do 1-clique removido.
+
+    `papelApagado` guarda o `x`: apagado o stop, a linha some e o painel diz que
+    falta stop. `null` e ausencia de linha, e o motivo da recusa — nao um preco
+    zero, que o gateway rejeitaria com outra mensagem e outra camada de causa.
+  */
+  const [precoArmado, setPrecoArmado] = useState<number | null>(null);
+  const [volumeArmado, setVolumeArmado] = useState('0.01');
+  const [riscoArmado, setRiscoArmado] = useState('2.00');
+  const [alvoArmado, setAlvoArmado] = useState('2.00');
+  const [enviando, setEnviando] = useState(false);
+  const [erroEnvio, setErroEnvio] = useState('');
+
+  const faixa = faixaDoAtivo(ficha);
+  const unidade = unidadeDeVolume(ficha?.assetClass);
+  const contrato = ficha?.contractSize;
+  const contratoOk = typeof contrato === 'number' && Number.isFinite(contrato) && contrato > 0;
+
+  const volumeNum = Number(volumeArmado);
+  const riscoNum = Number(riscoArmado);
+  const alvoNum = Number(alvoArmado);
+  const precoCasa = ficha?.point ?? null;
+  const casa = precoCasa && precoCasa > 0 ? precoCasa : 0.01;
+  const arredondar = (p: number) => Math.round(p / casa) * casa;
+
+  /*
+    Os NIVEIS derivados do dinheiro.
+
+    O LADO vem do botao do painel, e nao do clique: o grafico mostra um preco, e
+    um preco nao diz se o operador esta comprando ou vendendo. Sem o lado, `nivelDoValor`
+    nao sabe de que lado botar o stop, e o painel mostraria os dois — que e o que
+    `OperacaoAutomatica` faz quando nao sabe o lado, e aqui sabemos.
+  */
+  const [lado, setLado] = useState<'BUY' | 'SELL'>('BUY');
+  const slPreco =
+    precoArmado !== null && contratoOk && riscoNum > 0
+      ? nivelDoValor(precoArmado, riscoNum, volumeNum, lado, contrato!, 'stop')
+      : null;
+  const tpPreco =
+    precoArmado !== null && contratoOk && alvoNum > 0
+      ? nivelDoValor(precoArmado, alvoNum, volumeNum, lado, contrato!, 'alvo')
+      : null;
+
+  const linhasOrdem = useMemo(() => {
+    if (precoArmado === null) return [];
+    return linhasDaOrdem({
+      entrada: precoArmado,
+      lado,
+      volume: Number.isFinite(volumeNum) ? volumeNum : 0,
+      contrato: contratoOk ? contrato! : null,
+      riscoValor: riscoNum > 0 ? riscoNum : null,
+      alvoValor: alvoNum > 0 ? alvoNum : null,
+      slPreco,
+      tpPreco,
+    });
+  }, [precoArmado, lado, volumeNum, riscoNum, alvoNum, contratoOk, contrato, slPreco, tpPreco]);
+
+  /*
+    POR QUE O PAINEL RECUSA, E CADA MOTIVO TEM UM NOME
+
+    A rota `/api/trade/order` (medida em `backend/mt5_gateway.py:2190`) exige
+    `symbol`, `side`, `volume` em (0, 0.10], `sl > 0` e `tp > 0`. Sem nenhum
+    destes, o gateway responde 403/400 com o motivo DELE — que e generico
+    ("symbol, side, volume <= 0.10, sl e tp validos sao obrigatorios") e nao diz
+    qual dos cinco faltou.
+
+    Recusar aqui, com o campo nomeado, e a diferenca entre o operador corrigir o
+    campo e o operador ficar procurando defeito na corretora (AGENTS.md 5).
+  */
+  const motivoRecusa = useMemo(() => {
+    if (precoArmado === null) return '';
+    if (!simbolo) return 'Sem par configurado no motor. O símbolo vazio é recusa, nunca um ativo padrão.';
+    if (!contratoOk)
+      return 'A corretora não devolveu o tamanho do contrato deste ativo: dinheiro não vira preço sem ele.';
+    if (!Number.isFinite(volumeNum) || volumeNum <= 0) return 'Informe a quantidade.';
+    if (volumeNum > 0.1) return `Quantidade ${volumeNum} acima do máximo aceito: 0,10.`;
+    if (riscoNum <= 0) return 'Informe quanto aceita perder no stop. Ordem sem stop não vai.';
+    if (alvoNum <= 0) return 'Informe o alvo. Ordem sem alvo não vai.';
+    return '';
+  }, [precoArmado, simbolo, contratoOk, volumeNum, riscoNum, alvoNum]);
+
+  const enviarOrdem = async () => {
+    if (motivoRecusa) {
+      setErroEnvio(motivoRecusa);
+      return;
+    }
+    setEnviando(true);
+    setErroEnvio('');
+    try {
+      const resposta = await fetch(`${apiBase()}/api/trade/order`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          symbol: simbolo,
+          side: lado,
+          volume: volumeNum,
+          sl: arredondar(slPreco ?? 0),
+          tp: arredondar(tpPreco ?? 0),
+          confirm: true,
+          request_id: requestId(),
+        }),
+        signal: AbortSignal.timeout(15000),
+      });
+      const d = (await resposta.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      const ok = resposta.ok && d.ok !== false;
+      notify(
+        ok ? 'Ordem enviada' : 'Ordem recusada',
+        ok
+          ? `${lado} ${volumeNum} em ${simbolo}.`
+          : String(d.error ?? `HTTP ${resposta.status}`),
+      );
+      if (ok) {
+        setPrecoArmado(null);
+        void positionsQ.refetch();
+      } else {
+        setErroEnvio(String(d.error ?? `HTTP ${resposta.status}`));
+      }
+    } catch (e) {
+      setErroEnvio(e instanceof Error ? e.message : 'Gateway indisponível.');
+      notify('Gateway indisponível', e instanceof Error ? e.message : 'erro');
+    } finally {
+      setEnviando(false);
+    }
+  };
 
   const { sinais, idadeSeg } = useSinaisModelo(simbolo, timeframe, configurado);
   const [candles, setCandles] = useState<MarketCandle[] | undefined>(undefined);
@@ -86,13 +283,32 @@ export default function AcompanharModelos() {
       .filter((m): m is { time: number; signal: string; text: string } => m !== null);
   }, [candles, sinais]);
 
-  if (!configurado) {
+  /*
+    O ESTADO SEM PAR: A MENSAGEM DIZ ONDE ESCOLHER (06/10/2026)
+    ==========================================================
+    O titulo "Acompanhar modelos" saiu a pedido do dono, e junto com ele a
+    frase que mandava configurar o motor. O nome saia porque o bloco e o
+    GRAFICO, e nao um "acompanhamento" de nada.
+
+    A mensagem agora aponta para o lugar onde o controle ESTA — "Par para
+    operar", no topo da operacao automatica, logo acima na mesma pagina. A frase
+    antiga mandava configurar algo que o operador nao ve na tela, que e o
+    "NUNCA va para outra aba" que o painel de cima ja registrava em
+    `OperacaoAutomatica.tsx` pelo mesmo motivo.
+
+    So aparece quando NAO ha par. Com par na barra e motor sem timeframe, o
+    grafico entra e mostra o que tem, em vez de um cartao que nao ajuda.
+  */
+  if (!simbolo) {
     return (
-      <section className="card compact-card" aria-label="Acompanhar modelos">
+      <section className="card compact-card" aria-label="Gráfico ao vivo">
         <div className="section-head">
           <div>
-            <h2>Acompanhar modelos</h2>
-            <span className="muted">Configure o par no motor para ver os sinais no gráfico.</span>
+            <h2>Gráfico ao vivo</h2>
+            <span className="muted">
+              Escolha o par em &quot;Par para operar&quot;, no topo da operação automática, para
+              ver o gráfico.
+            </span>
           </div>
         </div>
       </section>
@@ -146,47 +362,29 @@ export default function AcompanharModelos() {
     }
   };
 
-  // 1-clique no grafico: mercado, com LOTE/SL/TP do motor e confirmacao.
-  // Exchanges nao tem ordem manual: o botao diz, em vez de fingir.
-  const umClique = async (lado: 'BUY' | 'SELL') => {
-    if (ocupado || !configurado) return;
-    if (broker !== 'mt5') {
-      notify('Ordem manual indisponível', 'Exchanges operam pelo motor automático.');
-      return;
-    }
-    if (!pronto1Clique) {
-      notify('Falta configurar', 'Defina LOTE, SL e TP no painel de operação automática.');
-      return;
-    }
-    const lote = Number(limites.lote);
-    if (!window.confirm(`${lado} ${lote} ${simbolo} a mercado\nSL ${limites.sl_preco} · TP ${limites.tp_preco}\nConfirma?`)) return;
-    setOcupado(true);
-    try {
-      const r = await fetch(`${apiBase()}/api/trade/order`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          broker,
-          market,
-          symbol: simbolo,
-          side: lado,
-          volume: lote,
-          sl: limites.sl_preco,
-          tp: limites.tp_preco,
-          request_id: requestId(),
-          confirm: true,
-        }),
-        signal: AbortSignal.timeout(15000),
-      });
-      const d = (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string };
-      notify(r.ok && d.ok !== false ? 'Ordem enviada' : 'Ordem recusada', r.ok && d.ok !== false ? `${lado} ${lote} ${simbolo}.` : String(d.error ?? `HTTP ${r.status}`));
-      void positionsQ.refetch();
-    } catch (e) {
-      notify('Gateway indisponível', e instanceof Error ? e.message : 'erro');
-    } finally {
-      setOcupado(false);
-    }
-  };
+  /*
+    OS BOTOES "1-CLIQUE" SAIRAM (06/10/2026)
+    =========================================
+    O dono pediu: "remover botao 1 clique deixar apenas selecionar modelos e
+    periodos treinados". E o proprio pedido anterior ja dizia: "remover botao 1
+    clique" junto com "grafico operacional".
+
+    O QUE ERA O 1-CLIQUE, E POR QUE SUMIU
+    =======================================
+    Dois botoes que enviavam ordem A MERCADO com LOTE/SL/TP do motor e uma
+    confirmacao. O problema nao e o preco — e que o preco nao era escolhido pelo
+    operador: ele mandava o que o motor tinha, e o unico lugar onde o preco e o
+    SL e o TP sao escolhidos COM VER e sao arrastados no grafico e o proprio
+    grafico.
+
+    Entao a ordem pelo mouse SUBSTITUI o 1-clique, em vez de ficar ao lado dele.
+    Dois caminhos para a mesma ordem, com nomes diferentes, sao duas chances de o
+    operador mandar o que nao queria — e o dono pediu "tudo limpo".
+
+    A funcao `umClique` inteira saiu, com o envio a `/api/trade/order`. A rota
+    continua no gateway e passa a ser chamada pelo clique no grafico, com
+    `confirm` e `request_id` como sempre (AGENTS.md 4).
+  */
   return (
     <section className="card robo-grafico" aria-label="Gráfico operacional ao vivo">
       <div className="section-head">
@@ -210,23 +408,209 @@ export default function AcompanharModelos() {
         markers={markers}
         lines={linhas}
         ema={verEma}
+        onIndicadoresChange={(estado) => setVerEma(estado.ema)}
         onMoveLine={(ticket, kind, price) => void moverLinha(ticket, kind, price)}
+        modoOrdem
+        ordem={linhasOrdem}
+        onArmarOrdem={(p) => {
+          setErroEnvio('');
+          setPrecoArmado(arredondar(p));
+        }}
+        onMoverLinhaOrdem={(papel, preco) => {
+          /*
+            ARRASTAR A LINHA E RECONFIGURAR O DINHEIRO, e nao mover o preco.
+
+            MEDIDO na XM: o `x` apaga a linha, e arrastar ajusta o nivel. O
+            operador que escolheu "aceito perder 2,00" espera ver 2,00 depois de
+            arrastar. Mover o preco em silencio e trocar o dinheiro que ele
+            escreveu — e o app decidindo o risco por ele.
+
+            O dinheiro e o inverso da conta que ja existe e esta testada em
+            `risco.ts`: `distancia * volume * contract_size`. Arredondar para
+            baixo deixa o risco digitado como teto, nunca acima.
+          */
+          if (!contratoOk || !Number.isFinite(volumeNum) || volumeNum <= 0) return;
+          const distancia = Math.abs(preco - (precoArmado ?? preco));
+          const risco = Math.floor(distancia * volumeNum * contrato! * 100) / 100;
+          if (papel === 'sl') setRiscoArmado(risco.toFixed(2));
+          else setAlvoArmado(risco.toFixed(2));
+        }}
+        onRemoverLinha={(papel) => {
+          /*
+            O `x` APAGAR A LINHA, e nao zerar o dinheiro.
+
+            `sl: 0` no payload seria enviado ao gateway e recusado com um motivo
+            generico; apagar o stop e um ato do operador que o painel precisa
+            mostrar como ausencia. Por isso o dinheiro vai a zero e o
+            `motivoRecusa` assume — com o campo nomeado.
+          */
+          if (papel === 'sl') setRiscoArmado('0');
+          else setAlvoArmado('0');
+        }}
         error={erroVelas}
         sourceLabel={`${broker.toUpperCase()} · sinais do modelo`}
       />
-      <div className="btn-row" role="group" aria-label="Operar no gráfico">
-        <button type="button" className="btn sm success" onClick={() => void umClique('BUY')} disabled={ocupado}>
-          Comprar 1-clique
-        </button>
-        <button type="button" className="btn sm danger" onClick={() => void umClique('SELL')} disabled={ocupado}>
-          Vender 1-clique
-        </button>
-        <label className="chip" style={{ cursor: 'pointer' }}>
-          <input type="checkbox" checked={verEma} onChange={(e) => setVerEma(e.target.checked)} />
-          EMA 12/26
-        </label>
-        <span className="muted">usa LOTE/SL/TP do motor · com confirmação</span>
-      </div>
+      {/*
+        O PAINEL DE CONFIRMACAO
+        =======================
+        MEDIDO na captura da XM: `Quantidade 0.01 lotes` · `Requisito de
+        margem $0.85` · `Vender quando preço atingir` · `TP/SL` · `Colocar
+        ordem a 85.510.25`.
+
+        O BOTAO E O QUE MANDA, e ele mostra o preco que vai ser enviado. Sem a
+        ordem armada nao ha painel: um painel vazio com botao desabilitado
+        seria um controle que o operador acredita ter e nao tem.
+
+        "Requisito de margem" NAO entra. E um numero que a corretora calcula
+        (alavancagem da conta, spread, taxa da exchange) e que o app nao tem de
+        onde ler — escrever um valor estimado ali seria exatamente o "numero
+        inventado no painel vira limite real" que o AGENTS.md proibe.
+      */}
+      {precoArmado !== null && (
+        <div className="robo-ticket robo-ordem-painel" aria-label="Ordem armada">
+          <div className="robo-ticket-preco" role="status" aria-live="polite" title="Preço clicado no gráfico">
+            {precoArmado}
+          </div>
+
+          <div className="robo-ticket-modo" role="group" aria-label="Lado da ordem">
+            <button
+              type="button"
+              className={`btn sm ${lado === 'BUY' ? 'primary' : 'ghost'}`}
+              aria-pressed={lado === 'BUY'}
+              onClick={() => setLado('BUY')}
+            >
+              Comprar
+            </button>
+            <button
+              type="button"
+              className={`btn sm ${lado === 'SELL' ? 'primary' : 'ghost'}`}
+              aria-pressed={lado === 'SELL'}
+              onClick={() => setLado('SELL')}
+            >
+              Vender
+            </button>
+          </div>
+
+          <label className="field robo-ticket-lote" style={{ marginBottom: 0 }}>
+            <span>{unidade ?? 'Lote'}{faixa.assumido ? '*' : ''}</span>
+            <input
+              type="number"
+              step={faixa.passo}
+              min={faixa.minimo}
+              value={volumeArmado}
+              onChange={(e) => setVolumeArmado(e.target.value)}
+              aria-label={rotuloQuantidade(unidade, faixa.passo)}
+              title={
+                faixa.assumido
+                  ? 'Faixa assumida: a corretora não devolveu volume_min/volume_max deste ativo'
+                  : `min ${faixa.minimo} · passo ${faixa.passo} (da corretora)`
+              }
+            />
+          </label>
+
+          {/*
+            O STOP E O ALVO EM DINHEIRO, e o PRECO DERIVADO ao lado.
+
+            O dinheiro e a entrada do operador; o preco e o que a corretora vai
+            entender. Mostrar so o preco deixaria o operador calibrando risco
+            sem saber quanto esta arriscando.
+          */}
+          <div className="robo-ticket-protecao">
+            <label className="field" style={{ marginBottom: 0 }}>
+              <span>Stop loss (−{riscoArmado || '0,00'} USD)</span>
+              <input
+                type="number"
+                min={0}
+                step={0.01}
+                value={riscoArmado}
+                onChange={(e) => setRiscoArmado(e.target.value)}
+                aria-label="Quanto aceita perder no stop loss"
+                title="Quanto você aceita perder. O preço do stop é derivado."
+              />
+            </label>
+            <label className="field" style={{ marginBottom: 0 }}>
+              <span>Alvo (+{alvoArmado || '0,00'} USD)</span>
+              <input
+                type="number"
+                min={0}
+                step={0.01}
+                value={alvoArmado}
+                onChange={(e) => setAlvoArmado(e.target.value)}
+                aria-label="Quanto espera ganhar no alvo"
+                title="Quanto você espera ganhar. O preço do alvo é derivado."
+              />
+            </label>
+          </div>
+
+          <div className="robo-ticket-niveis" role="status" aria-live="polite">
+            {slPreco !== null && (
+              <span className="mono">
+                Stop em <b>{arredondar(slPreco).toPrecision(8)}</b>
+              </span>
+            )}
+            {tpPreco !== null && (
+              <span className="mono">
+                Alvo em <b>{arredondar(tpPreco).toPrecision(8)}</b>
+              </span>
+            )}
+            {slPreco === null && riscoNum <= 0 && (
+              <span className="muted">Stop apagado. Clique numa linha e arraste, ou escreva o valor.</span>
+            )}
+          </div>
+
+          {motivoRecusa && (
+            <p className="hint" role="alert">
+              {motivoRecusa}
+            </p>
+          )}
+          {erroEnvio && (
+            <p className="hint" role="alert">
+              {erroEnvio}
+            </p>
+          )}
+
+          <button
+            type="button"
+            className="btn primary"
+            onClick={() => void enviarOrdem()}
+            disabled={Boolean(motivoRecusa) || enviando}
+            title={
+              motivoRecusa
+                ? motivoRecusa
+                : `Envia ${lado} ${volumeArmado} em ${simbolo} com confirm e request_id`
+            }
+          >
+            {enviando ? 'Enviando…' : rotuloDoBotao(precoArmado)}
+          </button>
+
+          <button
+            type="button"
+            className="btn ghost"
+            onClick={() => {
+              setPrecoArmado(null);
+              setErroEnvio('');
+            }}
+          >
+            Descartar
+          </button>
+        </div>
+      )}
+      {/*
+        A BARRA DE OPERAR SAIU INTEIRA (06/10/2026)
+        ============================================
+        Os botoes "Comprar 1-clique" e "Vender 1-clique" saíram a pedido do dono:
+        "remover botao 1 clique deixar apenas selecionar modelos e periodos
+        treinados".
+
+        O caminho que os substitui e o PROPRIO GRAFICO: clicar nele arma a ordem
+        no preco clicado, com stop e alvo em dinheiro arrastaveis, e a confirmacao
+        mostra tudo antes de enviar. Ver `PriceChart` (`modoOrdem`).
+
+        E o checkbox "EMA 12/26" que estava aqui tambem saiu: o botao `EMA` do
+        topo do grafico e o que manda agora, por `onIndicadoresChange`. Eram dois
+        controles para um dado, e o de cima era decorativo — o defeito que o dono
+        reportou como "botao EMA travado de cima azul".
+      */}
       {/*
         A TABELA DE SINAIS FOI REMOVIDA.
         ======================================

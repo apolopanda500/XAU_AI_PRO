@@ -11,6 +11,33 @@ type Medicao = {
   melhor_em_ms: number | null;
 };
 
+/**
+ * POR QUE A BARRA FICAVA VAZIA — e por que era invisível
+ * ========================================================
+ * MEDIDO no backend (`mt5_gateway.py`, `_autorizado`): **toda** rota GET exige
+ * `Authorization: Bearer`, e a MESMA função aplica **rate limit por minuto**.
+ *
+ * O token é injetado por `installGatewayAuth` (`lib/tauri.ts:41`), que
+ * intercepta `window.fetch` — por isso o resto do app responde e esta barra
+ * também é chamada com token.
+ *
+ * Aí está o furo: quando a resposta é **429** (cota do minuto estourada), o
+ * corpo vem `{ok: false, error: "rate limit excedido"}` **sem `corretoras`**. O
+ * componente fazia:
+ *
+ *     setMedicoes(Array.isArray(d.corretoras) ? d.corretoras : [])
+ *
+ * e depois `if (!medicoes.length) return null` — a barra **sumia da tela**.
+ *
+ * Três falhas de leitura numa linha só: 401, 429 e "nenhuma corretora
+ * configurada" produziam exatamente a mesma tela — um espaço vazio no rodapé.
+ * O operador concluía "a latência não existe" e não tinha como saber que era
+ * cota estourada.
+ *
+ * O conserto é distinguir os três e DIZER qual deles é.
+ */
+type EstadoBarra = 'medindo' | 'ok' | 'sem-corretora' | 'token' | 'cota' | 'indisponivel';
+
 /** 400 ms e o alvo: a barra satura aqui e quem decide e o operador. */
 const ALVO_MS = 400;
 
@@ -44,6 +71,7 @@ function nivel(m: Medicao): 'otima' | 'ok' | 'ruim' | 'off' {
 export default function LatenciaBar({ ativa }: { ativa?: string }) {
   const [medicoes, setMedicoes] = useState<Medicao[]>([]);
   const [erro, setErro] = useState(false);
+  const [estado, setEstado] = useState<EstadoBarra>('medindo');
   const [aberto, setAberto] = useState(false);
   const caixa = useRef<HTMLDivElement>(null);
 
@@ -51,14 +79,51 @@ export default function LatenciaBar({ ativa }: { ativa?: string }) {
     let vivo = true;
     const medir = () => {
       fetch(`${apiBase()}/api/latencia`, { signal: AbortSignal.timeout(6000) })
-        .then((r) => r.json())
-        .then((d: { corretoras?: Medicao[] }) => {
+        .then((r) => {
+          /*
+            O STATUS ANTES DO CORPO. `r.json()` em resposta de erro devolve o
+            `{ok:false}` e esconde o que aconteceu; ler o status primeiro é o
+            que separa 401 de 429 de 200 com lista vazia.
+          */
+          const status = r.status;
+          return r.json().then(
+            (d: { corretoras?: Medicao[] }) => ({ status, d }),
+            () => ({ status, d: {} as { corretoras?: Medicao[] } }),
+          );
+        })
+        .then(({ status, d }) => {
           if (!vivo) return;
-          setMedicoes(Array.isArray(d.corretoras) ? d.corretoras : []);
+          if (status === 401) {
+            setEstado('token');
+            setErro(false);
+            return;
+          }
+          if (status === 429) {
+            // Cota do minuto, nao corretora fora do ar. A mensagem tem que dizer
+            // isso: "sem medição" levaria o operador a culpar a rede.
+            setEstado('cota');
+            setErro(false);
+            return;
+          }
+          if (!Array.isArray(d.corretoras)) {
+            setEstado('indisponivel');
+            setErro(true);
+            return;
+          }
+          if (!d.corretoras.length) {
+            setEstado('sem-corretora');
+            setErro(false);
+            return;
+          }
+          setMedicoes(d.corretoras);
+          setEstado('ok');
           setErro(false);
         })
         .catch(() => {
-          if (vivo) setErro(true);
+          if (vivo) {
+            setEstado('indisponivel');
+            setErro(true);
+          }
         });
     };
     medir();
@@ -97,7 +162,47 @@ export default function LatenciaBar({ ativa }: { ativa?: string }) {
       </div>
     );
   }
-  if (!medicoes.length) return null;
+  if (!medicoes.length) {
+    /*
+      A BARRA NUNCA DESAPARECE, E DIZ POR QUE.
+
+      Antes: `return null` quando não havia medição. Ausência renderizada como
+      NADA é indistinguível de ausência real — e foi assim que 401, 429 e
+      "nenhuma corretora" viraram o mesmo espaço vazio no rodapé.
+
+      Agora cada estado tem a sua frase. "Sem medição" sem causa é um relatório
+      inútil; "cota do minuto" diz o que fazer.
+    */
+    const FRASES: Record<EstadoBarra, { texto: string; titulo: string }> = {
+      medindo: { texto: 'medindo…', titulo: 'Primeira medição de latência em andamento' },
+      'sem-corretora': {
+        texto: 'sem corretora',
+        titulo: 'Nenhuma corretora configurada ainda',
+      },
+      token: {
+        texto: 'sem token',
+        titulo: 'O gateway recusou a leitura (401). A sessão do app não foi reconhecida.',
+      },
+      cota: {
+        texto: 'cota do minuto',
+        titulo:
+          'O gateway devolveu 429: cota de leitura do minuto estourada. Não é corretora fora do ar.',
+      },
+      indisponivel: {
+        texto: 'gateway fora',
+        titulo: 'O gateway não respondeu para medir latência',
+      },
+      ok: { texto: 'sem medição', titulo: 'Sem medição disponível' },
+    };
+    const f = FRASES[estado];
+    return (
+      <div className="latencia-rodape">
+        <span className="latencia-item latencia-off" title={f.titulo}>
+          <span aria-hidden="true">◷</span> {f.texto}
+        </span>
+      </div>
+    );
+  }
 
   // A corretora ativa vem primeiro: e a que o operador opera. Sem `ativa`, a
   // melhor medidamedida escolhe a ordem — que e a mesma logica do backend em
@@ -111,7 +216,7 @@ export default function LatenciaBar({ ativa }: { ativa?: string }) {
   const n = nivel(principal);
 
   return (
-    <div className="latencia-rodape" ref={caixa}>
+    <div className="latencia-rodape" ref={caixa} data-aberto={aberto}>
       <button
         type="button"
         className={`latencia-gatilho latencia-${n}`}
@@ -143,8 +248,14 @@ export default function LatenciaBar({ ativa }: { ativa?: string }) {
                 }`}
               >
                 <span className="latencia-nome">{m.broker}</span>
+                {/*
+                    `transform: scaleX` em vez de `width`.
+                    `width` e propriedade de layout: anima-la reflowa a linha a
+                    cada quadro. `transform` move um pixel e o compositor cuida.
+                    O desenho e identico; a diferenca aparece em maquina fraca.
+                  */}
                 <span className="latencia-medidor" aria-hidden="true">
-                  <i style={{ width: `${pct}%` }} />
+                  <i style={{ transform: `scaleX(${Math.max(0.01, pct / 100)})` }} />
                 </span>
                 <span className="latencia-ms">
                   {m.ms === null ? 'sem resposta' : `${Math.round(m.ms)} ms`}

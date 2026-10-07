@@ -33,6 +33,40 @@ Thumbs.db
 # Python
 __pycache__/
 *.pyc
+
+# RASPAGEM DE CICLO (06/10/2026)
+# ==============================
+# MEDIDO: 28 arquivos soltos na RAIZ, de ciclos anteriores, sem nenhum
+# consumidor — `git grep` acha 0 para 24 deles, e os outros 4 (`limpa.py`,
+# `corrige.py`, `rebuild.py`, `diag.py`) so aparecem citados uns pelos OUTROS
+# scripts de raspagem. Nenhum entra no produto, nenhum entra em teste.
+#
+# Sao scripts de UMA TAREFA: reescrever um arquivo, contar linhas, apagar linha.
+# Depois da tarefa eles nao tem mais consumidor, mas ficam na raiz — e ai
+# `git status` mostra 178 pendentes e o proximo agente nao sabe o que e
+# trabalho e o que e lixo.
+#
+# Estes NAO foram apagados: apagamento e acao do dono. Ficam ignorados ate
+# ele decidir. O produto esta em `backend/`, `frontend/src/`, `core/src/`,
+# `app/`, `tests/`, `scripts/` — nenhum script de produto vive na raiz.
+#
+# A regra e `/*.py` e nao uma lista de nomes: 20 nomes de um vez e uma lista
+# que o proximo ciclo apaga sem querer quando aparecer o 21o.
+#
+# OS 6 `.py` JA RASTREADOS na raiz CONTINUAM RASTREADOS — `.gitignore` so vale
+# para arquivo novo, e apagar do indice seria acao do dono:
+#   _make_icon.py · check_versions.py · fix_indent.py
+#   mt5_test.py · preflight_check.py · test_app.py
+# MEDIDO: os 6 nao tem consumidor em nenhuma pasta de produto. Ficam ate o dono
+# decidir, como os de raspagem.
+/*.py
+/*.bat
+# Saidas de teste soltas, medidas na mesma listagem.
+test.txt
+test2.txt
+test3.txt
+test.pdf
+.pytest-auditoria-prova.jsonl
 # XAU_AI_PRO artifacts
 MQL5/Experts/*/*.ex5
 MQL5/Experts/*/*.log

@@ -79,25 +79,65 @@ export function limparCacheSistema() {
 
 const cacheFresco = () => Date.now() - ultimaLeituraEm < CACHE_MS;
 
-const gb = (v: number | null | undefined) =>
-  v === null || v === undefined || !Number.isFinite(v) ? '--' : `${v.toFixed(1)} GB`;
-const pct = (v: number | null | undefined) =>
-  v === null || v === undefined || !Number.isFinite(v) ? '--' : `${v.toFixed(0)}%`;
-const val = (v: string | null | undefined) => (v && String(v).trim() ? String(v).trim() : '--');
+/*
+  OS FORMATADORES DEVOLVEM `null`, NAO "--"
+  =========================================
+  Isto mudou em 05/10/2026. Antes `gb`, `pct` e `val` devolviam a string "--"
+  quando o dado nao existia, e a tabela de Maquina tinha SEIS colunas — quatro
+  delas quase sempre "--".
 
-/** Barra de ocupacao. `None` = a maquina nao expoe o dado. */
+  A tela ficava coberta de trace, e o operador lia aquilo como "o sistema esta
+  com defeito" quando a verdade era outra: o Windows simplesmente nao expoe
+  temperatura de CPU para aquele modelo, e nao ha coluna "Livre" para "Sistema".
+
+  Um trace e a forma ERRADA de dizer "isto nao se aplica aqui": ele ocupa uma
+  celula, compete com numeros reais e parece valor. Ausencia agora e OMITIR.
+*/
+
+const gb = (v: number | null | undefined) =>
+  v === null || v === undefined || !Number.isFinite(v) ? null : `${v.toFixed(1)} GB`;
+const pct = (v: number | null | undefined) =>
+  v === null || v === undefined || !Number.isFinite(v) ? null : `${v.toFixed(0)}%`;
+const val = (v: string | null | undefined) =>
+  v && String(v).trim() ? String(v).trim() : null;
+
+/**
+ * Uma medida da secao: rotulo + valor.
+ *
+ * Não renderiza NADA quando não há valor. É a diferença entre uma linha a menos
+ * e uma linha com trace — e uma linha a menos é o que o dono pediu.
+ */
+function Medida({ rotulo, valor }: { rotulo: string; valor: string | null }) {
+  if (valor === null) return null;
+  return (
+    <div className="sys-medida">
+      <span className="sys-medida-rotulo">{rotulo}</span>
+      <span className="sys-medida-valor">{valor}</span>
+    </div>
+  );
+}
+
+/**
+ * Barra de ocupacao.
+ *
+ * Sem barra E sem trace quando o par não existe: a seção de recursos mostra
+ * só CPU, memória e disco que o sistema de fato expõe.
+ */
 function Barra({ usado, total }: { usado: number | null; total: number | null }) {
-  if (usado === null || total === null || total <= 0) return <span className="muted">--</span>;
+  if (usado === null || total === null || total <= 0) return null;
   const p = Math.min(100, Math.max(0, (usado / total) * 100));
   const nivel = p >= 90 ? 'danger' : p >= 75 ? 'warn' : 'ok';
   return (
-    <span className="sys-bar-cell">
-      <span className="sys-bar">
-        <span className={`sys-bar-fill ${nivel}`} style={{ width: `${p}%` }} />
-      </span>
-      <span className="sys-bar-num">{p.toFixed(0)}%</span>
+    <span className="sys-bar">
+      <span className={`sys-bar-fill ${nivel}`} style={{ width: `${p}%` }} />
     </span>
   );
+}
+
+/** Junta as partes que existem, sem deixar buraco duplo no meio. */
+function juntar(...partes: Array<string | null>): string | null {
+  const cheio = partes.filter((p): p is string => p !== null && p.length > 0);
+  return cheio.length ? cheio.join(' · ') : null;
 }
 
 export default function SystemHealthOnly() {
@@ -220,137 +260,171 @@ export default function SystemHealthOnly() {
         </div>
       </div>
 
+      {/*
+        ENQUANTO CARREGA, A ABA MOSTRA UMA LINHA SÓ.
+
+        Este é o defeito que o dono chamou de "travando ao abrir a primeira vez",
+        e ele não era lentidão de leitura — era o que a tela mostrava durante a
+        leitura.
+
+        MEDIDO: `hardware_telemetry` no Windows abre `powershell.exe` e roda
+        cinco consultas CIM. Leva segundos na primeira vez de cada sessão. A
+        tabela antiga era renderizada durante ESSE TEMPO TODO, e ela não tem
+        dado nenhum até o fim: saíam quatro colunas de "--" em seis. O operador
+        via uma parede de traceados e lia como travamento.
+
+        Agora as quatro seções aparecem na hora com os nomes, e o corpo fica
+        aguardando uma linha só. A tela pinta imediatamente e diz o que está
+        acontecendo — que é o que um indicador honesto faz.
+      */}
+      {carregando && !hw && (
+        <p className="sys-esperando" role="status">
+          Lendo a máquina…
+        </p>
+      )}
+
       {erro && (
         <div className="card compact-card sys-erro" role="status">
           {erro}
         </div>
       )}
 
-      <section className="card compact-card" aria-labelledby="sys-maquina">
-        <div className="section-head">
-          <h2 id="sys-maquina">Maquina</h2>
+      {/* ============== CORE 1 — MÁQUINA ==============
+          O que este aparelho É. Uma medida por linha, e só as que existem:
+          nada de "Livre" para "Sistema", nada de "Total" para "Vídeo". */}
+      <section className="sys-core" aria-labelledby="sys-core-1">
+        <h2 id="sys-core-1">
+          <span className="sys-core-num">Core 1</span>
+          <span className="sys-core-nome">Máquina</span>
           {hw?.source && <span className="chip">{hw.source}</span>}
-        </div>
-        <div className="table-scroll">
-          <table className="tbl compact-table sys-grid">
-            <caption className="sr-only">Especificacoes e uso atual da maquina</caption>
-            <thead>
-              <tr>
-                <th>Item</th>
-                <th>Modelo</th>
-                <th className="num">Total</th>
-                <th className="num">Livre</th>
-                <th className="sys-th-bar">Uso</th>
-                <th className="num">Extra</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>Sistema</td>
-                <td>{val(hw?.os)}</td>
-                <td className="num muted">{val(hw?.architecture)}</td>
-                <td className="num muted">--</td>
-                <td className="muted">--</td>
-                <td className="num muted">--</td>
-              </tr>
-              <tr>
-                <td>Processador</td>
-                <td>{val(hw?.cpu_name)}</td>
-                <td className="num">{hw?.cpu_cores ? `${hw.cpu_cores} nucleos` : '--'}</td>
-                <td className="num muted">--</td>
-                <td className="muted">--</td>
-                <td className="num">
-                  {hw?.cpu_temperature_c != null ? `${hw.cpu_temperature_c.toFixed(0)} °C` : '--'}
-                </td>
-              </tr>
-              <tr>
-                <td>CPU em uso</td>
-                <td className="muted">carga</td>
-                <td className="num muted">--</td>
-                <td className="num muted">--</td>
-                <td>
-                  <Barra usado={hw?.cpu_usage_percent ?? null} total={100} />
-                </td>
-                <td className="num">{pct(hw?.cpu_usage_percent)}</td>
-              </tr>
-              <tr>
-                <td>Video</td>
-                <td>
-                  {hw?.gpu_available ? (
-                    val(hw?.gpu_name)
-                  ) : (
-                    <span className="muted">nao exposto pelo sistema</span>
-                  )}
-                </td>
-                <td className="num muted">--</td>
-                <td className="num muted">--</td>
-                <td className="muted">--</td>
-                <td className="num muted">--</td>
-              </tr>
-              <tr>
-                <td>Memoria</td>
-                <td>RAM</td>
-                <td className="num">{gb(hw?.memory_total_gb)}</td>
-                <td className="num">{gb(hw?.memory_available_gb)}</td>
-                <td>
-                  <Barra usado={ramUsada} total={hw?.memory_total_gb ?? null} />
-                </td>
-                <td className="num muted">--</td>
-              </tr>
-              <tr>
-                <td>Disco</td>
-                <td>Sistema (C:)</td>
-                <td className="num">{gb(hw?.disk_total_gb)}</td>
-                <td className="num">{gb(hw?.disk_free_gb)}</td>
-                <td>
-                  <Barra usado={discoUsado} total={hw?.disk_total_gb ?? null} />
-                </td>
-                <td className="num muted">--</td>
-              </tr>
-            </tbody>
-          </table>
+        </h2>
+        <div className="sys-lista">
+          <Medida rotulo="Sistema" valor={juntar(val(hw?.os), val(hw?.architecture))} />
+          <Medida
+            rotulo="Processador"
+            valor={juntar(val(hw?.cpu_name), hw?.cpu_cores ? `${hw.cpu_cores} núcleos` : null)}
+          />
+          <Medida rotulo="Temperatura" valor={hw?.cpu_temperature_c != null ? `${hw.cpu_temperature_c.toFixed(0)} °C` : null} />
+          {/* GPU ausente é RESPOSTA, não ausência: o sistema_ACTIVE_
+              consultou e não achou. Por isso o texto é um dado e não um buraco. */}
+          <Medida
+            rotulo="Vídeo"
+            valor={hw?.gpu_available ? val(hw?.gpu_name) : 'não exposto pelo sistema'}
+          />
         </div>
       </section>
 
-      <section className="card compact-card" aria-labelledby="sys-app">
-        <div className="section-head">
-          <h2 id="sys-app">Desempenho do app</h2>
+      {/* ============== CORE 2 — RECURSOS ==============
+          Onde o operador olha quando o app engasga. Uma linha por recurso, com
+          a barra, a porcentagem, o total e o livre — cada parte aparecendo só se
+          o sistema a forneceu. */}
+      <section className="sys-core" aria-labelledby="sys-core-2">
+        <h2 id="sys-core-2">
+          <span className="sys-core-num">Core 2</span>
+          <span className="sys-core-nome">Recursos</span>
+        </h2>
+        <div className="sys-lista">
+          {pct(hw?.cpu_usage_percent) !== null && (
+            <Recurso
+              nome="CPU"
+              barra={<Barra usado={hw?.cpu_usage_percent ?? null} total={100} />}
+              uso={pct(hw?.cpu_usage_percent)}
+              detalhe={hw?.cpu_cores ? `${hw.cpu_cores} núcleos` : null}
+            />
+          )}
+          {ramUsada !== null && (
+            <Recurso
+              nome="Memória"
+              barra={<Barra usado={ramUsada} total={hw?.memory_total_gb ?? null} />}
+              uso={
+                hw?.memory_total_gb && ramUsada !== null
+                  ? pct((ramUsada / hw.memory_total_gb) * 100)
+                  : null
+              }
+              detalhe={juntar(gb(hw?.memory_total_gb), `${gb(hw?.memory_available_gb)} livres`)}
+            />
+          )}
+          {discoUsado !== null && (
+            <Recurso
+              nome="Disco C:"
+              barra={<Barra usado={discoUsado} total={hw?.disk_total_gb ?? null} />}
+              uso={
+                hw?.disk_total_gb && discoUsado !== null
+                  ? pct((discoUsado / hw.disk_total_gb) * 100)
+                  : null
+              }
+              detalhe={juntar(gb(hw?.disk_total_gb), `${gb(hw?.disk_free_gb)} livres`)}
+            />
+          )}
+          {/* Nenhum dos três: a seção inteira some. Uma seção vazia com três
+              linhas de trace é pior que seção nenhuma. */}
+          {pct(hw?.cpu_usage_percent) === null && ramUsada === null && discoUsado === null && (
+            <p className="sys-sem-dado">O sistema não expõe medição de uso.</p>
+          )}
+        </div>
+      </section>
+
+      {/* ============== CORE 3 — APP ==============
+          O sintoma que o operador sente: quanto tempo leva e se o gateway
+          responde. */}
+      <section className="sys-core" aria-labelledby="sys-core-3">
+        <h2 id="sys-core-3">
+          <span className="sys-core-num">Core 3</span>
+          <span className="sys-core-nome">Aplicativo</span>
           <span className={`chip ${gatewayOk === null ? 'warn' : gatewayOk ? 'ok' : 'danger'}`}>
             {gatewayOk === null ? 'Sem leitura' : gatewayOk ? 'Gateway ok' : 'Gateway sem resposta'}
           </span>
+        </h2>
+        <div className="sys-lista">
+          <Medida
+            rotulo="Latência da leitura"
+            valor={latencia != null ? `${latencia.toFixed(0)} ms` : null}
+          />
+          <Medida rotulo="Intervalo de atualização" valor={`${(REFRESH_MS / 1000).toFixed(0)} s`} />
+          <Medida rotulo="Origem da leitura" valor={val(hw?.source)} />
         </div>
-        <div className="table-scroll">
-          <table className="tbl compact-table sys-grid">
-            <caption className="sr-only">Desempenho medido do aplicativo</caption>
-            <thead>
-              <tr>
-                <th>Medida</th>
-                <th className="num">Valor</th>
-                <th>Referencia</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>Latencia de leitura</td>
-                <td className="num">{latencia != null ? `${latencia.toFixed(0)} ms` : '--'}</td>
-                <td className="muted">
-                  tempo de hardware + gateway, medido a cada {REFRESH_MS / 1000}s
-                </td>
-              </tr>
-              <tr>
-                <td>Intervalo de atualizacao</td>
-                <td className="num">{(REFRESH_MS / 1000).toFixed(0)} s</td>
-                <td className="muted">esta aba</td>
-              </tr>
-              <tr>
-                <td>Origem da leitura</td>
-                <td className="num">{val(hw?.source)}</td>
-                <td className="muted">WMI no Windows, /proc no Linux, campos nativos no Android</td>
-              </tr>
-            </tbody>
-          </table>
+      </section>
+
+      {/* ============== CORE 4 — LEITURA ==============
+          Procedência: quando este dado foi lido e de onde veio. É a seção que
+          responde "de onde saiu esse número?", e por isso ela existe separada
+          do dado. */}
+      <section className="sys-core" aria-labelledby="sys-core-4">
+        <h2 id="sys-core-4">
+          <span className="sys-core-num">Core 4</span>
+          <span className="sys-core-nome">Leitura</span>
+        </h2>
+        <div className="sys-lista">
+          <Medida rotulo="Lida em" valor={lidoEm || null} />
+          <Medida
+            rotulo="Coleta"
+            valor={hw?.source === 'WMI' ? 'WMI no Windows' : hw?.source ? String(hw.source) : null}
+          />
+          <Medida rotulo="Estado" valor={erro ? 'falha na leitura' : carregando ? 'lendo…' : 'ao vivo'} />
         </div>
       </section>
     </main>
+  );
+}
+
+/** Uma linha de recurso: nome, barra, porcentagem e detalhe. */
+function Recurso({
+  nome,
+  barra,
+  uso,
+  detalhe,
+}: {
+  nome: string;
+  barra: React.ReactNode;
+  uso: string | null;
+  detalhe: string | null;
+}) {
+  return (
+    <div className="sys-recurso">
+      <span className="sys-recurso-nome">{nome}</span>
+      {barra}
+      {uso && <span className="sys-recurso-uso">{uso}</span>}
+      {detalhe && <span className="sys-recurso-detalhe">{detalhe}</span>}
+    </div>
   );
 }

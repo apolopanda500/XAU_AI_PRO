@@ -98,6 +98,22 @@ def test_modulos_do_vip_estao_declarados():
         )
 
 
+def test_modulos_do_calendario_estao_declarados():
+    """Trava especifica: o calendario deste ciclo (05/10/2026).
+
+    `economic_calendar_publica` e `planos.economic_calendar` sao importados
+    DENTRO de `_economic_calendar`, e o PyInstaller so enxerga import de topo.
+    Sem esta declaracao o gateway congelado sobe normal e a rota
+    `/api/economic/calendar` responde "agenda indisponivel" — sem excecao e sem
+    log. E o mesmo modo de falha do VIP, que por isso ganhou trava propria.
+    """
+    declarados = _hidden_imports_do_spec()
+    for modulo in ("backend.economic_calendar_publica", "backend.planos.economic_calendar"):
+        assert modulo in declarados, (
+            f"{modulo} ausente do hiddenimports. O app instalado sobe sem o calendario."
+        )
+
+
 @pytest.mark.parametrize("modulo", ["backend.metas_vip", "backend.acesso"])
 def test_modulo_existe_no_fonte(modulo: str):
     """O `__name__` precisa bater com um arquivo real."""

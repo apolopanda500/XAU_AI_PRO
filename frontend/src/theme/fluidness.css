@@ -1,0 +1,247 @@
+/* ===========================================================================
+   FLUIDEZ DE NAVEGACAO (05/10/2026)
+   ===========================================================================
+   O dono pediu: "E O RESTANDO TEMAS MAIS FLUIDOS, abas mais leves".
+
+   "FLUIDO" AQUI TEM UM SIGNIFICADO PRECISO
+   =========================================
+   Nao e enfeite. Animacao em interface de trading tem um custo concreto: cada
+   `transition` e `animation` pede ao compositor um quadro a mais por mudanca de
+   estado, e o app repintar a 15 Hz porque o medidor de latencia anima pode
+   custar a fluidez REAL da tela que o operador esta usando para operar.
+
+   Por isso este arquivo faz duas coisas ao mesmo tempo, e a segunda importa
+   tanto quanto a primeira:
+
+   1. adiciona transicao onde a mudanca de estado e instantanea e parece erro
+      (aba, chip, linha de tabela, cartao);
+   2. REDUZ o que estava gastando quadro sem retorno visual.
+
+   O QUE NAO ESTA AQUI, DE PROPOSITO
+   ==================================
+   - Nada de transicao em `width`, `height` ou `top/left`: sao propriedades de
+     layout, nao de compositor. Animar layout força recalculo de geometria em
+     CADA quadro. E o que faz a interface "puxar" numa maquina fraca.
+   - Nada de duracao acima de 160 ms em mudanca de estado. Above disso o
+     usuario japronouncedu que a acao foi lida e a animacao vira atraso.
+   - Nada de transicao em nada que o operador precise ler enquanto muda: cotacao,
+     PnL, resultado de ordem e latencia ficam SEM transicao. Um numero que
+     "anda" nao pode tar a transicao de meio segundo atrasada em relacao ao
+     dado que ele mostra.
+
+   Reduced motion
+   ==============
+   O bloco no fim desliga TUDO quando o sistema pede. Dura animacao em quem
+   pediu menos movimento e o sintoma, nao o detalhe.
+   =========================================================================== */
+
+/* ---------- Duracoes: um token, nao um numero solto ---------- */
+:root {
+  --fluido-rapido: 120ms;
+  --fluido-medio: 160ms;
+  --fluido-curva: cubic-bezier(0.2, 0, 0.15, 1);
+  --fluido-entrada: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ---------- Abas ---------- */
+.nav-tab,
+.btn-tab,
+.tab-btn {
+  transition:
+    background-color var(--fluido-medio) var(--fluido-curva),
+    border-color var(--fluido-medio) var(--fluido-curva),
+    color var(--fluido-medio) var(--fluido-curva);
+}
+
+/* A aba ativa ganha um risco na base em vez de mudar de tamanho: `width` nao
+   pode ser animada (ver o cabecalho), e mudar tamanho sozinha fazia a barra
+   de abas "saltar" quando o rotulo tinha larguras diferentes. */
+.nav-tab[aria-selected='true'],
+.btn-tab[aria-selected='true'],
+.tab-btn[aria-selected='true'] {
+  position: relative;
+}
+
+.nav-tab[aria-selected='true']::after,
+.btn-tab[aria-selected='true']::after,
+.tab-btn[aria-selected='true']::after {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  bottom: -1px;
+  height: 2px;
+  background: var(--primary, #00c6fb);
+  transform-origin: center;
+  animation: fluido-risco-entra var(--fluido-medio) var(--fluido-entrada);
+}
+
+@keyframes fluido-risco-entra {
+  from {
+    transform: scaleX(0.2);
+    opacity: 0;
+  }
+  to {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+}
+
+/* ---------- Botoes ---------- */
+/* `transform` e `background-color` sao as duas propriedades MAIS baratas: a
+   primeira nao provoca layout, a segunda nao provoca paint pesado. Os botões
+   anteriores usavam cor + `transform`, que é o par correto. */
+.btn {
+  transition:
+    background-color var(--fluido-rapido) var(--fluido-curva),
+    border-color var(--fluido-rapido) var(--fluido-curva),
+    color var(--fluido-rapido) var(--fluido-curva),
+    transform var(--fluido-rapido) var(--fluido-curva),
+    opacity var(--fluido-rapido) linear;
+}
+
+.btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(0);
+  transition-duration: 60ms;
+}
+
+/* Foco visivel e INSTANTANEO. Quem navega por teclado precisa saber onde esta
+   AGORA; um foco que chega com 160 ms de atraso faz o operador tabular as
+   coisas na linha errada. */
+.btn:focus-visible,
+.nav-tab:focus-visible,
+.tab-btn:focus-visible,
+.chip:focus-visible,
+.card:focus-visible {
+  outline: 2px solid var(--primary, #00c6fb);
+  outline-offset: 1px;
+  transition: none;
+}
+
+/* ---------- Chips de estado ---------- */
+.chip {
+  transition:
+    background-color var(--fluido-medio) var(--fluido-curva),
+    color var(--fluido-medio) var(--fluido-curva),
+    border-color var(--fluido-medio) var(--fluido-curva);
+}
+
+/* ---------- Linhas de tabela ---------- */
+/* So a COR muda no hover. Antes havia `box-shadow` com `inset` de 3px, e
+   box-shadow pinta de novo a linha inteira — a tabela do historico tem
+   centenas de linhas e o hover passava por todas elas. */
+.tbl tbody tr {
+  transition: background-color var(--fluido-rapido) linear;
+}
+
+.tbl tbody tr:hover {
+  transition-duration: 60ms;
+}
+
+/* ---------- Cartoes ---------- */
+/* `border-color` e `box-shadow` juntos: o cartao "acende" sem mover nada, e o
+   movimento fica para o botao. Um carto que sobe um pixel a cada hover faz a
+   linha inteira de cartoes tremer. */
+.card {
+  transition:
+    border-color var(--fluido-medio) var(--fluido-curva),
+    box-shadow var(--fluido-medio) var(--fluido-curva),
+    background-color var(--fluido-medio) var(--fluido-curva);
+}
+
+/* ---------- Campos ---------- */
+.field input,
+.field select,
+.field textarea,
+input,
+select,
+textarea {
+  transition:
+    border-color var(--fluido-rapido) var(--fluido-curva),
+    background-color var(--fluido-rapido) var(--fluido-curva),
+    box-shadow var(--fluido-rapido) var(--fluido-curva);
+}
+
+/* ---------- O QUE NAO PODE ANIMAR ----------
+   Numeros que o operador le enquanto mudam. Cotacao, resultado e latencia
+   precisam aparecer no instante do dado; uma transicao de 160 ms aqui
+   significa que o numero na tela estava errado durante um sexto de segundo.
+   ------------------------------------------------------ */
+.num,
+.kpi-value,
+.metric-card strong,
+.cal-row-time,
+.latencia-ms,
+.latencia-gatilho-ms,
+.price-chart-legend,
+.order-price,
+.status-bar .status-valor {
+  transition: none !important;
+}
+
+/* O ponto de status pisca: e sinal de "nao conectado", e piscar e a
+   informacao. Mantem-se. */
+.status-chip.is-warn .status-ponto {
+  animation: status-pisca 1.6s ease-in-out infinite;
+}
+
+/* ---------- Latencia: o medidor que MAIS gastava quadro ---------- */
+/*
+   A barra de latencia anima `<i style="width: ...">` a cada 15 s dentro da
+   lista. Com cinco corretoras, sao cinco elementos animados.
+
+   A lista ja e CONDICIONAL no React (`{aberto && ...}`) — quem esta fechada
+   nem existe no DOM. Nao havia animacao ociosa: a ideia de "elemento oculto
+   continua sendo composto" nao se aplica aqui.
+
+   O que E verdade: `width` e propriedade de LAYOUT, entao a transicao reflow a
+   linha a cada quadro. `transform: scaleX()` produz o mesmo desenho movendo um
+   pixel: o compositor cuida, sem recalcular geometria.
+   ------------------------------------------------------ */
+.latencia-medidor > i {
+  /* `width` sem transicao: reflow por quadro em elemento que o operador pode
+     estar olhando. O visual e o mesmo, o custo e outro. */
+  transform-origin: left center;
+}
+
+/* ---------- Scroll ---------- */
+/*
+   `scroll-behavior: smooth` em `.content` faz TODA rolagem por teclado e
+   por ancoragem ficar suave — inclusive a rolagem que acontece sozinha quando
+   uma tabela cresce. Numa lista que atualiza a cada 2 s, isso vira a tela
+   deslizando sozinha.
+   ------------------------------------------------------ */
+.content,
+.tbl-wrap,
+.table-scroll,
+.log-box {
+  scroll-behavior: auto;
+  overscroll-behavior: contain;
+}
+
+/* Rolagem por ancora (ir para uma tabela) continua suave. Quando o operador
+   PEDE o movimento, o movimento e rapido. */
+:where(a, button, [role='tab']):focus-visible {
+  scroll-behavior: smooth;
+}
+
+/* ---------- Reduced motion ---------- */
+/*
+   Um unico bloco, no fim, com `!important`, que vence a especificidade de
+   qualquer regra acima. Os `prefers-reduced-motion` que existiam em
+   `global.css`, `latencia-bar.css`, `market.css` e `quantum.css` tratavam cada
+   arquivo por conta; um elemento novo nascia animado.
+   ------------------------------------------------------ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}

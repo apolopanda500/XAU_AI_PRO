@@ -452,6 +452,38 @@ a {
   overflow: hidden;
 }
 
+/*
+  O CARIMBO DO RODAPE (06/10/2026)
+  ================================
+  O rodape tinha duas linhas de TEXTO (`XAU AI PRO · Operacao segura` e
+  `Versao 1.2.4`) e passou a ter o simbolo. A imagem e a mesma do topo
+  (`/xau-ai-pro-mark.png`).
+
+  `margin-inline: auto` e o que CENTRA: o rodape nao e flex, entao sem isso a
+  imagem fica colada na esquerda e o carimbo parece descuido em vez de
+  assinatura.
+
+  O TAMANHO e menor que a do topo (34px) de proposito: o rodape e uma
+  assinatura, nao o logotipo principal. Um carimbo do mesmo tamanho do topo
+  competiria com o nome e a marca sumiria.
+*/
+.sidebar-stamp {
+  display: block;
+  width: 44px;
+  height: 44px;
+  margin-inline: auto;
+  object-fit: cover;
+  border-radius: 10px;
+  opacity: 0.82;
+  box-shadow:
+    0 0 12px rgba(55, 194, 255, 0.22),
+    0 0 8px rgba(245, 185, 66, 0.14);
+}
+
+.sidebar-stamp:hover {
+  opacity: 1;
+}
+
 .sidebar.collapsed .brand-name,
 .sidebar.collapsed .nav-label,
 .sidebar.collapsed .sidebar-footer {
@@ -1520,6 +1552,37 @@ a {
 .content .hint {
   display: block;
   line-height: 1.55;
+}
+
+/* ---------- CONTAS E CONEXÕES: POR QUE O BOTÃO ESTÁ CINZA (05/10/2026) ----------
+   MEDIDO: o botão "Sincronizar MT5" / "Salvar e validar API" ficava morto sem
+   NOME digitado, e no MT5 o nome é opcional — o código usa o nome do terminal.
+   O operador via um botão apagado e nenhuma explicação.
+
+   A lista de pendências é o que transforma botão morto em instrução. Sem
+   `list-style` explícito, a lista entra com marcador de item e o texto fica
+   alinhado à direita do marcador, o que quebra a leitura. */
+.con-pendencias {
+  margin: 8px 0 0;
+  padding: 8px 12px 8px 26px;
+  list-style: disc;
+  border: 1px solid color-mix(in srgb, var(--warn) 34%, transparent);
+  border-radius: var(--radius-sm, 3px);
+  background: color-mix(in srgb, var(--warn) 8%, transparent);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.con-pendencias li {
+  margin: 0;
+}
+
+.con-aviso {
+  color: var(--warn, #ffb020);
+}
+
+.con-ok {
+  color: var(--ok, #22c55e);
 }
 
 /* Gavetas semânticas para detalhes secundários, compatíveis com qualquer aba. */

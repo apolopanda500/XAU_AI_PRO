@@ -23,16 +23,45 @@ export interface EconomicEvent {
   bandeira: string;
   /** Nível de impacto no mercado */
   impacto: ImpactLevel;
-  /** Título do evento */
+  /** Título do evento, JÁ TRADUZIDO para português. */
   titulo: string;
+  /**
+   * Título como veio do feed, em inglês.
+   *
+   * Guardado porque evento não reconhecido na tradução precisa continuar
+   * legível, e porque `title` é a chave que o operador usa para achar o evento
+   * no calendário da corretora.
+   */
+  tituloOriginal: string;
+  /** A tradução cobriu o título? `false` = linha marcada como "ainda em inglês". */
+  traduzido: boolean;
+  /** Categoria (Juros, Inflação, Emprego, Atividade, Energia) ou '' se nenhuma. */
+  categoria: string;
+  /**
+   * Descrição do evento vinda do feed público.
+   *
+   * É TEXTO EDITORIAL DE TERCEIRO. Renderizar como texto, nunca como HTML —
+   * um `dangerouslySetInnerHTML` aqui abriria porta para o feed injetar marcação.
+   */
+  nota: string | null;
   /** Valor anterior */
   anterior: string | null;
   /** Valor consenso/expectativa */
   consenso: string | null;
-  /** Valor real (após divulgação) */
+/** Valor real (após divulgação) */
   real: string | null;
   /** Indica se o evento já foi divulgado */
   divulgado: boolean;
+  /**
+   * true quando o horário é ESTIMADO por padrão de calendário, sem valor
+   * publicado.
+   *
+   * Isto não é detalhe: a fonte das semanas seguintes
+   * (`planos/economic_calendar.py`) sabe só QUANDO o evento acontece. Sem o
+   * rótulo, o operador leria estimativa como número publicado — a mesma coisa
+   * que usar backfill como dado de mercado real.
+   */
+  estimado: boolean;
 }
 
 /**

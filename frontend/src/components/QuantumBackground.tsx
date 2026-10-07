@@ -1,4 +1,4 @@
-﻿/**
+/**
  * XAU AI PRO — Componente QuantumBackground
  *
  * Canvas animado com partículas quânticas flutuantes e linhas de energia.
@@ -48,6 +48,36 @@ const PARTICLE_MIN_RADIUS = 1;
 const PARTICLE_MAX_RADIUS = 3;
 const LINE_WIDTH = 0.5;
 
+/**
+ * Quadros por segundo do fundo (05/10/2026).
+ *
+ * MEDIDO POR QUE 30 E SUFICIENTE
+ * ==============================
+ * O fundo e uma nuvem de particulas com linhas de energia. A 30 fps o olho nao
+ * separa o movimento de 60 fps em uma coisa que ja e desfocada por definicao.
+ * A 60 fps, o custo dobra para um ganho que ninguem ve.
+ *
+ * O dono pediu "abas mais leves". Este canvas era o MAIOR custo de repintura do
+ * app inteiro: tela inteira, `devicePixelRatio` ate 2, sessenta particulas e o
+ * par O(n^2) de conexoes, rodando a 60 fps EM TODAS AS ABAS — inclusive na de
+ * Operar, onde o operador esta lendo preco e clicando em ordem.
+ *
+ * Teto de FPS e parada em aba escondida sao as duas alavancas de um mesmo
+ * ganho: o navegador ja pausa `requestAnimationFrame` quando a aba some, mas
+ * nao quando a JANELA perde o foco com outra janela na frente.
+ */
+const MAX_FPS = 30;
+const FRAME_MS = 1000 / MAX_FPS;
+
+/**
+ * Teto de `devicePixelRatio` para um fundo desfocado.
+ *
+ * 2x dobra a quantidade de pixels preenchidos por quadro — e o custo cresce
+ * junto. Em particula de raio 1 a 3 px, a diferenca entre 1x e 2x nao aparece
+ * para ninguem; num grafico de preco seria proibido.
+ */
+const MAX_DPR = 1.5;
+
 /* ---------- Componente Principal ---------- */
 
 function QuantumBackground({
@@ -60,6 +90,8 @@ function QuantumBackground({
   const particlesRef = useRef<Particle[]>([]);
   const mouseRef = useRef({ x: 0, y: 0 });
   const activeRef = useRef(true);
+  /** Ultimo quadro desenhado, para o teto de FPS (ver `MAX_FPS`). */
+  const ultimoQuadroRef = useRef(0);
 
   // Obtém as cores do tema atual a partir das variáveis CSS
   const getThemeColors = useCallback(() => {
@@ -168,10 +200,23 @@ function QuantumBackground({
   // Loop principal de animação
   const animate = useCallback(
     (ctx: CanvasRenderingContext2D, width: number, height: number) => {
-      ctx.clearRect(0, 0, width, height);
-      updateParticles(width, height);
-      drawConnections(ctx);
-      drawParticles(ctx);
+      // Teto de FPS (05/10/2026). O agendamento continua a cada quadro — é ele
+      // que respeita o `vsync` — mas o quadro só é PINTO quando passou
+      // `FRAME_MS`. Sem isso, o canvas pinta 60 vezes para entregar 30.
+      const agora = performance.now();
+      if (agora - ultimoQuadroRef.current >= FRAME_MS) {
+        ultimoQuadroRef.current = agora;
+        ctx.clearRect(0, 0, width, height);
+        updateParticles(width, height);
+        drawConnections(ctx);
+        drawParticles(ctx);
+        ctx.globalAlpha = 1;
+      }
+      // `document.hidden` e `document.hasFocus()`: o navegador pausa rAF quando
+      // a ABA e escondida, mas nao quando a janela perde o foco com outra na
+      // frente. Sem esta checagem, o fundo continuava pintando tela inteira
+      // com o app em segundo plano.
+      activeRef.current = !document.hidden && document.hasFocus();
       if (activeRef.current) {
         animationRef.current = requestAnimationFrame(() => animate(ctx, width, height));
       }
@@ -183,7 +228,9 @@ function QuantumBackground({
   const resizeCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    // `MAX_DPR` e nao `devicePixelRatio`: ver a constante. Num fundo de
+    // particulas, 2x dobra o custo por quadro sem mudar o que se ve.
+    const dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR);
     const rect = canvas.getBoundingClientRect();
     canvas.width = Math.floor(rect.width * dpr);
     canvas.height = Math.floor(rect.height * dpr);
@@ -216,12 +263,45 @@ function QuantumBackground({
     const rect = canvas.getBoundingClientRect();
     initParticles(rect.width, rect.height);
     animate(ctx, rect.width, rect.height);
+
+    /*
+      ACORDAR QUANDO A JANELA VOLTA (05/10/2026)
+      ===========================================
+      `animate` para de enfileirar quadro quando `document.hasFocus()` e falso.
+      Isso economiza tela inteira de pintura com o app em segundo plano — mas
+      significa que o rAF DENTRO DELE morre junto. Um `focus` que so definisse
+      um booleano deixaria o fundo congelado para sempre depois da primeira
+      troca de janela.
+
+      Por isso o `focus` e o `visibilitychange` chamam `animate` de novo.
+      `animationRef.current` e zerado antes: sem isso, dois `focus` seguidos
+      deixam dois loops rodando em paralelo, e o custo dobra sem nenhum ganho.
+    */
+    const retomar = () => {
+      const alvo = canvasRef.current;
+      if (!alvo) return;
+      const contexto = alvo.getContext('2d');
+      if (!contexto) return;
+      cancelAnimationFrame(animationRef.current);
+      animationRef.current = 0;
+      activeRef.current = true;
+      ultimoQuadroRef.current = 0;
+      animate(contexto, alvo.clientWidth, alvo.clientHeight);
+    };
+    const aoEsconder = () => {
+      if (document.hidden) cancelAnimationFrame(animationRef.current);
+    };
+
     window.addEventListener('resize', resizeCanvas);
     window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('focus', retomar);
+    document.addEventListener('visibilitychange', aoEsconder);
     return () => {
       cancelAnimationFrame(animationRef.current);
       window.removeEventListener('resize', resizeCanvas);
       window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('focus', retomar);
+      document.removeEventListener('visibilitychange', aoEsconder);
       visibility.disconnect();
       activeRef.current = false;
     };

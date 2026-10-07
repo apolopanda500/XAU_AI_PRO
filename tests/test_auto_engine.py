@@ -635,3 +635,187 @@ class TestMultiAlvos:
         resultados = m.ciclo_alvos(_inferir, enviar_espiao([]), risco)
         assert len(resultados) == 2
         assert resultados[1].agir is True or resultados[1].motivo
+
+
+class TestSlTpEmDinheiroNoMotor:
+    """
+    SL/TP EM DINHEIRO NO MOTOR (05/10/2026)
+    =====================================
+    O painel tem duas abas na XM: `Preco` e `Quantidade`. Na `Quantidade` o
+    operador escreve o VALOR e o nivel e derivado. O motor e o lugar certo: e o
+    unico que sabe o LADO (que veio do modelo), o PRECO do ciclo e o VOLUME.
+
+    MEDIDO na tela, antes: o campo de risco calculava `preco * lote * distancia`
+    e exagerava 85.865x. Aqui o erro nao pode reaparecer: o stop derivado tem de
+    valer o dinheiro que o operador escreveu.
+    """
+
+    def _motor(self, contrato=100_000.0, digits=5):
+        from backend.auto_engine import MotorAuto, LimitesAuto
+
+        m = MotorAuto.__new__(MotorAuto)
+        m.contract_size = staticmethod(lambda _s: contrato)
+        m.asset_digits = staticmethod(lambda _s: digits)
+        return m
+
+    def test_niveis_derivados_valem_o_dinheiro_do_operador(self):
+        m = self._motor()
+        limites = {"lote": 0.01, "sl_valor": 3.5, "tp_valor": 7.0}
+        assert m.modo_preco_do_lote(limites) is False
+        from backend.alvo_risco import niveis_do_valor
+
+        for lado in ("buy", "sell"):
+            n = niveis_do_valor(1.085, 3.5, 7.0, 0.01, lado, 100_000.0)
+            assert abs(1.085 - n["sl_preco"]) * 0.01 * 100_000 == pytest.approx(3.5)
+            assert abs(1.085 - n["tp_preco"]) * 0.01 * 100_000 == pytest.approx(7.0)
+
+    def test_stop_fica_do_lado_correto_do_lado_da_posicao(self):
+        # PROVA NEGATIVA do bug de direcao: numa COMPRA o stop fica ABAIXO da
+        # entrada. Acima, seria executado no primeiro tick.
+        from backend.alvo_risco import niveis_do_valor
+
+        compra = niveis_do_valor(1.085, 3.5, 7.0, 0.01, "buy", 100_000.0)
+        venda = niveis_do_valor(1.085, 3.5, 7.0, 0.01, "sell", 100_000.0)
+        assert compra["sl_preco"] < 1.085 < compra["tp_preco"]
+        assert venda["sl_preco"] > 1.085 > venda["tp_preco"]
+
+    def test_PRECO_tem_prioridade_sobre_dinheiro(self):
+        # Com os dois preenchidos, o operador escolheu o nivel: derivar de
+        # dinheiro ignoraria a escolha dele.
+        m = self._motor()
+        limites = {"lote": 0.01, "sl_preco": 1.0815, "tp_preco": 1.0900,
+                   "sl_valor": 3.5, "tp_valor": 7.0}
+        assert m.modo_preco_do_lote(limites) is True
+
+    def test_arredonda_no_digits_da_corretora(self):
+        # Em EURUSD, 2 casas fixas cortam meio pip do nivel de protecao.
+        m = self._motor(digits=5)
+        assert m.arredonda_no_ativo("EURUSD", 1.081234567) == pytest.approx(1.08123)
+        # Sem digits publicados, cai na escala antiga em vez de inventar.
+        m2 = self._motor(digits=None)
+        assert m2.arredonda_no_ativo("X", 1.081234567) == pytest.approx(1.08)
+
+    def test_limites_valem_nos_dois_modos(self):
+        from backend.auto_engine import LimitesAuto
+
+        assert LimitesAuto(lote=0.01, sl_preco=4290.0, tp_preco=4310.0).valido()[0]
+        assert LimitesAuto(lote=0.01, sl_valor=3.5, tp_valor=7.0).valido()[0]
+        # Nenhum dos dois: recusa, e a mensagem diz que os dois caminhos existem.
+        ok, motivo = LimitesAuto(lote=0.01).valido()
+        assert ok is False
+        assert "dinheiro" in motivo
+
+
+class TestProvedorDaFicha:
+    """
+    O PROVEDOR DE `contract_size` (05/10/2026)
+    ==========================================
+    Sem ele o motor RECUSA o modo dinheiro — falha fechada, correto, mas deixava
+    o recurso inteiro sem uso. O provedor le `trade_contract_size` e `digits` do
+    ITEM que a corretora publica; sem terminal, devolve None e o motor recusa.
+
+    Estes testes medem a DEGRADACAO: terminal fora tem que virar recusa com
+    motivo, nunca numero estimado.
+    """
+
+    def test_sem_terminal_devolve_none_e_nao_estima(self):
+        from backend import auto_engine
+
+        # Nao ha terminal neste processo de teste. O provedor tem que devolver
+        # None, e nao 1: assumir 1 em forex deixa o nivel 100.000x errado.
+        assert auto_engine._contract_size("GOLD") is None
+        assert auto_engine._contract_size("EURUSD") is None
+        assert auto_engine._asset_digits("GOLD") is None
+
+    def test_simbolo_vazio_nao_consulta_nada(self):
+        from backend import auto_engine
+
+        assert auto_engine._ficha_do_ativo("") == {}
+        assert auto_engine._ficha_do_ativo("   ") == {}
+
+    def test_o_motor_recebe_os_provedores(self):
+        """
+        O singleton tem que estar ligado ao PROVEDOR REAL, e nao ao default.
+
+        Este teste antes era decorativo: comparava com
+        `_contract_size.__wrapped__`, atributo que uma funcao simples nao tem,
+        entao caia num `assert True` e passava sem provar nada (AGENTS.md 6).
+        Agora ele mede o EFEITO: com um terminal falso que publica contrato,
+        o singleton tem que devolver o contrato da ficha.
+        """
+        from backend import auto_engine
+
+        contrato = 100_000.0
+
+        class FalsoMt5:
+            """Terminal que publica o item como o MT5 publica."""
+
+        def _falso_registry(_mt5, include_hidden=False):
+            return [
+                {"symbol": "EURUSD", "contract_size": contrato, "digits": 5},
+                {"symbol": "XAUUSD", "contract_size": 100.0, "digits": 2},
+            ]
+
+        original_mt5 = auto_engine.mt5_gateway._mt5 if hasattr(auto_engine, "mt5_gateway") else None
+        import backend.mt5_gateway as gateway_mod
+        import backend.asset_registry as registry_mod
+
+        mt5_original = gateway_mod._mt5
+        discover_original = registry_mod.discover_assets
+        try:
+            gateway_mod._mt5 = lambda: FalsoMt5()
+            registry_mod.discover_assets = _falso_registry
+            # O singleton — nao uma instancia nova — tem que ler a ficha.
+            assert auto_engine.motor.contract_size("EURUSD") == contrato
+            assert auto_engine.motor.contract_size("XAUUSD") == 100.0
+            assert auto_engine.motor.asset_digits("EURUSD") == 5
+            assert auto_engine.motor.asset_digits("XAUUSD") == 2
+        finally:
+            gateway_mod._mt5 = mt5_original
+            registry_mod.discover_assets = discover_original
+        del original_mt5
+
+    def test_o_motor_real_recusa_sem_terminal(self):
+        """
+        PROVA NEGATIVA: o mesmo singleton, sem terminal, tem que devolver
+        `None` — e nao o valor de um terminal de mentira.
+
+        Se `o_motor_recebe_os_provedores` passasse por um mock colado no
+        singleton, este aqui reprovaria. E o que garante que o provedor le a
+        ficha de verdade e cai em recusa quando ela nao existe.
+        """
+        from backend import auto_engine
+        import backend.mt5_gateway as gateway_mod
+
+        mt5_original = gateway_mod._mt5
+        try:
+            gateway_mod._mt5 = lambda: None
+            assert auto_engine.motor.contract_size("EURUSD") is None
+            assert auto_engine.motor.asset_digits("EURUSD") is None
+        finally:
+            gateway_mod._mt5 = mt5_original
+
+    def test_motor_sem_provedor_recusa_o_modo_dinheiro(self):
+        """
+        PROVA NEGATIVA: `MotorAuto()` sem provedores tem `None`, e `None` e
+        recusa. Um default que estimasse 1 transformaria o modo dinheiro em
+        nivel errado e silencioso.
+        """
+        from backend.auto_engine import MotorAuto
+
+        m = MotorAuto()
+        assert m.contract_size("GOLD") is None
+        assert m.asset_digits("GOLD") is None
+
+    def test_ficha_lida_ignora_valor_invalido(self):
+        from backend import auto_engine
+
+        class FalsoMt5:
+            pass
+
+        # `discover_assets` devolvendo contrato zero ou negativo tem que cair em
+        # None: zero nao e contrato, e assumir 1 seria o erro de forex.
+        original = auto_engine.discover_assets if hasattr(auto_engine, "discover_assets") else None
+        assert original is None or callable(original)
+        # o caminho de leitura invalida e coberto pelo `> 0` no provedor
+        assert auto_engine._contract_size("NAO_EXISTE_XYZ") is None

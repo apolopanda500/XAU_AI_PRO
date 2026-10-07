@@ -157,12 +157,15 @@
 
 .latencia-medidor > i {
   display: block;
+  width: 100%;
   height: 100%;
   border-radius: 3px;
   background: currentColor;
-  /* A barra responde ao valor, mas sem transition longa: numa leitura ao vivo
-     um atraso de 400 ms faria a barra mostrar o valor antigo. */
-  transition: width 200ms linear;
+  /* `transform`, nao `width` (05/10/2026).
+     O componente passou a emitir `transform: scaleX(...)`. `width` e propriedade
+     de LAYOUT: transicionar reflowa a linha a cada quadro. `transform` move um
+     pixel e o compositor assume — mesmo desenho, custo de layout zero.
+     `transform-origin` vem em `fluidness.css`, carregado depois deste arquivo. */
 }
 
 .latencia-ms {
@@ -176,6 +179,10 @@
 .latencia-ruim { color: var(--warn); }
 .latencia-off { color: var(--danger); }
 
-@media (prefers-reduced-motion: reduce) {
-  .latencia-medidor > i { transition: none; }
+/* `prefers-reduced-motion` foi REMOVIDO daqui de proposito (05/10/2026).
+   A barra nao tem mais transicao nenhuma — `transform` sem `transition` muda na
+   hora, que e o que uma leitura ao vivo quer. O unico bloco de reduced motion
+   que importa agora esta em `fluidness.css` e desliga tudo de uma vez. */
+.latencia-gatilho-ponto {
+  transition: background-color 160ms linear;
 }

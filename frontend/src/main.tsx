@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { invoke } from '@tauri-apps/api/core';
@@ -43,6 +43,13 @@ import './theme/scale.css';
 // manual sem nenhum erro: e por isso que o arquivo precisa existir no repo
 // mesmo vazio.
 import './theme/figma-tokens.css';
+// FLUIDEZ — carregada depois de TODOS os temas (05/10/2026).
+//
+// Precisa vir depois porque ela declara `--fluido-*`, as duracoes e curvas que
+// as outras folhas nao conhecem. E antes dela nao apareceria: qualquer regra
+// de `transition` escrita em `global.css`, `quantum.css` ou `mining.css`
+// venceria a regra de fluidez por estar mais abaixo na cascata.
+import './theme/fluidness.css';
 
 // Ajusta para Tauri (mobile viewport)
 const metaViewport = document.querySelector('meta[name="viewport"]');

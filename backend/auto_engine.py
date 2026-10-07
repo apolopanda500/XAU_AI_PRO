@@ -39,6 +39,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+try:  # pragma: no cover - o import relativo cobre os dois formatos
+    from .alvo_risco import RiscoInvalido, niveis_do_valor
+except ImportError:  # pragma: no cover
+    from alvo_risco import RiscoInvalido, niveis_do_valor
+
 # --------------------------------------------------------------- traducao
 
 
@@ -73,6 +78,103 @@ def pedido_para_router(payload: dict[str, Any], broker: str, market: str,
         "order_type": "market",
         "confirm": True,
         "account_id": account_id,
+    }
+
+
+def mercado_do_ativo(broker: str, market: str, simbolo: str) -> str:
+    """O mercado do ATIVO, pela HIERARQUIA que a corretora publica.
+
+    MEDIDO no log de intents de producao (06/10/2026): os 14 intents de
+    BTCUSD gravavam `"market": "forex"`. BTCUSD e cripto na XM, e `forex` nao e
+    onde ele opera — o mesmo desacamento que travava o painel, agora no motor.
+
+    A ORIGEM do valor errado e o ciclo: o painel mandava o default do
+    `localStorage`, o motor gravava, e o painel seguinte lia de volta o que o
+    motor tinha. Nenhum dos lados corrigia, porque cada um era "fiel" ao outro.
+
+    `asset_registry.discover_assets` ja publica `asset_class` por simbolo, lida
+    do item da corretora. E a HIERARQUIA, e nao palavra no nome: `SOL` casaria
+    dentro de "Solvar" (AGENTS.md 3).
+
+    SEM CATALOGO, DEVOLVE O QUE VEIO. Nao e consertar o preco do dado: e recusar
+    inventar. `forex` para BTCUSD e um palpite, e trocar um palpite por outro
+    seria apenas adivinhar com mais confianca.
+    """
+    alvo = str(simbolo or "").strip()
+    if broker != "mt5" or not alvo:
+        return market
+    try:
+        from backend.asset_registry import discover_assets
+        from backend import mt5_gateway as _gw
+
+        for linha in discover_assets(_gw._mt5(), include_hidden=False):
+            if str(linha.get("symbol", "")).upper() != alvo.upper():
+                continue
+            classe = str(linha.get("asset_class") or "").strip().lower()
+            # `forex` e uma classe publica e precisa de caso proprio: sem ela,
+            # um par que a corretora publica como forex caia no `return market`
+            # e voltava com o mercado do payload — que e o valor que estamos
+            # aqui para corrigir.
+            por_classe = {
+                "crypto": "crypto-spot",
+                "forex": "forex",
+                "metal": "metals",
+                "index": "indices",
+                "stock": "stocks",
+                "bond": "bonds",
+                "commodity": "commodities",
+            }
+            if classe in por_classe:
+                return por_classe[classe]
+            return market
+    except Exception:
+        return market
+    return market
+
+
+def pedido_para_mt5(payload: dict[str, Any]) -> dict[str, Any]:
+    """Traduz o payload do motor para o que `mt5_gateway._trade_order` LÊ.
+
+    POR QUE O MT5 NÃO VAI PELO ROUTER (medido em 06/10/2026)
+    =======================================================
+    MEDIDO no log de intents de producao, conta 391773676: 158 intents, sendo
+    77 `exchange_order` pending e 77 `exchange_order` **failed**, e **zero**
+    intents com ticket de ordem. Toda tentativa morria com:
+
+        EXECUTION_VIA_MT5_GATEWAY — "ordem MT5 e enviada por /api/trade/order
+        (gateway MT5, com risk_gate e order_check); o roteador universal nao
+        duplica esse envio"
+
+    A CAUSA: em 30/09/2026 o envio do MT5 foi trocado do `mt5_gateway` para o
+    `UniversalRouter`, para o motor nao presumir corretora. A troca estava certa
+    no motivo e errada no efeito: `MT5ExecutionAdapter.execute` devolve
+    `EXECUTION_VIA_MT5_GATEWAY` de PROPÓSITO, porque MT5 nao pode ser enviado
+    por dois caminhos (o `risk_gate` e o `order_check` so existem em
+    `_trade_order`). Entao o MT5 ficou com um caminho que, por desenho, nunca
+    envia. O motor registava a intencao, o router recusava, e o ciclo seguinte
+    repetia.
+
+    E o AGENTS.md 5: o consumidor (`_trade_order`) le `volume`/`sl`/`tp`, e o
+    produtor mandava `quantity`/`stop_loss`/`take_profit`. O sintoma — "nao
+    envia" — apontava para o roteiro, e a causa era o desacamento de nome.
+
+    `side` vai em CAIXA ALTA porque `_trade_order` compara com
+    `side not in {"BUY", "SELL"}` (linha 2190) — em minuscula seria recusado com
+    "symbol, side, volume <= 0.10, sl e tp validos sao obrigatorios".
+
+    O que NAO muda: `confirm` e `request_id` continuam obrigatorios, e o
+    `risk_gate`, o `order_check` e o `intent_log` continuam sendo os do
+    `_trade_order`. Este caminho nao e mais permissivo que o do painel — e o
+    MESMO, que e o ponto.
+    """
+    return {
+        "symbol": payload["symbol"],
+        "side": str(payload["side"]).upper(),
+        "volume": payload["quantity"],
+        "sl": payload["stop_loss"],
+        "tp": payload["take_profit"],
+        "confirm": True,
+        "request_id": payload["request_id"],
     }
 
 
@@ -115,6 +217,22 @@ class LimitesAuto:
     sl_preco: float = 0.0
     tp_preco: float = 0.0
 
+    # SL E TP EM DINHEIRO (05/10/2026)
+    # ===============================
+    # MEDIDO na captura da XM: o painel tem duas abas, `Preco` e `Quantidade`.
+    # Na `Quantidade` o operador escreve o VALOR em dinheiro e a plataforma deriva
+    # o preco. O dono pediu o valor determinado por ele, com o nivel
+    # acompanhando o preco.
+    #
+    # Os dois modos sao aceitos. PRECO tem prioridade quando os dois vem
+    # preenchidos, porque entao o operador escolheu o nivel.
+    #
+    # O preco do nivel vem de `contract_size`, que e o que separa crypto de
+    # forex: 1 em BTCUSD, 100.000 em EURUSD. Sem ele nao existe conversao, e o
+    # motor RECUSA (falha fechada) em vez de mandar ordem com nivel inventado.
+    sl_valor: float = 0.0
+    tp_valor: float = 0.0
+
     #: Rotulo de cada campo: o erro diz o que FALTA, nao "valor invalido".
     ROTULOS = {
         "banca": "banca",
@@ -130,11 +248,25 @@ class LimitesAuto:
         "lote": "lote",
         "sl_preco": "stop loss (preco)",
         "tp_preco": "take profit (preco)",
+        "sl_valor": "stop loss (dinheiro)",
+        "tp_valor": "take profit (dinheiro)",
     }
 
     def modo_simples(self) -> bool:
         """Lote + SL + TP preenchidos: o painel simples decide tudo."""
         return self.lote > 0 and self.sl_preco > 0 and self.tp_preco > 0
+
+    def modo_preco(self) -> bool:
+        """O painel mandou LOTE + SL e TP em PRECO (aba `Preco` da XM)."""
+        return self.lote > 0 and self.sl_preco > 0 and self.tp_preco > 0
+
+    def modo_valor(self) -> bool:
+        """O painel mandou LOTE + SL e TP em DINHEIRO (aba `Quantidade`)."""
+        return self.lote > 0 and self.sl_valor > 0 and self.tp_valor > 0
+
+    def modo_simples(self) -> bool:
+        """Qualquer um dos dois modos esta completo. Preco tem prioridade."""
+        return self.modo_preco() or self.modo_valor()
 
     def valido(self) -> tuple[bool, str]:
         """Zero e AUSENTE, nao "pode ser zero".
@@ -145,17 +277,54 @@ class LimitesAuto:
         """
         # Modo simples primeiro: lote + SL + TP bastam. O risk_gate do
         # gateway limita volume e exposicao; nada aqui e presumido.
-        simples = [n for n in ("lote", "sl_preco", "tp_preco") if getattr(self, n) != 0]
-        if simples:
-            faltam = [self.ROTULOS[n] for n in ("lote", "sl_preco", "tp_preco")
-                      if getattr(self, n) <= 0]
-            if faltam:
-                return False, "defina lote, stop loss e take profit para operar"
+        #
+        # MAS UM VALOR DECLARADO E IMPOSSIVEL NAO PASSA NEM NO MODO SIMPLES.
+        # MEDIDO (05/10/2026): `confianca_minima: 150` era gravado como 150,0 e
+        # aceito, porque o atalho de modo simples devolvia True antes de chegar
+        # na checagem de faixa. O motor ficava com uma condicao que nenhuma
+        # inferencia real alcanca — e o operador via o campo preenchido e
+        # acreditando que o limite valia.
+        #
+        # Declarado e invalido e ERRO DE DIGITACAO, nao "nao declarado". Zero
+        # continua sendo ausente; 150 e um numero que nao existe como
+        # probabilidade.
+        fora_de_faixa = [
+            self.ROTULOS[nome]
+            for nome, valor, teto in (
+                ("confianca_minima", self.confianca_minima, 100.0),
+            )
+            if valor != 0 and not 0 < valor <= teto
+        ]
+        negativos = [
+            self.ROTULOS[nome]
+            for nome in ("banca", "risco_por_trade_pct", "confianca_minima",
+                         "edge_minimo", "perda_diaria_max_pct", "sl_atr", "tp_atr")
+            if getattr(self, nome) < 0
+        ]
+        if fora_de_faixa:
+            return False, "confianca minima tem de estar entre 0 e 100"
+        if negativos:
+            return False, "valor negativo em " + ", ".join(negativos)
+
+        # Os dois modos (05/10/2026): PRECO ou DINHEIRO. Estar no modo PRECO
+        # com `sl_valor`/`tp_valor` em zero e NORMAL — nao e campo faltando.
+        #
+        # MEDIDO: a primeira versao somava os cinco campos na lista de "faltam",
+        # e `lote+sl_preco+tp_preco` com os valores em dinheiro zerados era
+        # recusado como "defina lote, stop loss e take profit" — o painel com
+        # SL/TP em preco, que sempre funcionou, parou de operar.
+        if self.modo_simples():
             return True, ""
+        algum_dos_cinco = any(
+            getattr(self, n) != 0
+            for n in ("lote", "sl_preco", "tp_preco", "sl_valor", "tp_valor")
+        )
+        if algum_dos_cinco:
+            return False, "defina lote, stop loss e take profit (em preco ou em dinheiro) para operar"
         faltando = [
             self.ROTULOS[nome]
             for nome in self.ROTULOS
-            if nome not in ("lote", "sl_preco", "tp_preco") and getattr(self, nome) == 0
+            if nome not in ("lote", "sl_preco", "tp_preco", "sl_valor", "tp_valor") and getattr(self, nome) == 0
         ]
         if faltando:
             return False, (
@@ -239,7 +408,18 @@ class MotorAuto:
     (crypto-spot, crypto-futures) para as exchanges.
     """
 
-    def __init__(self) -> None:
+    # Os provedores de ficha (`contract_size`, `asset_digits`) sao atributos de
+    # classe com default `None` e podem ser injetados pelo construtor. O default
+    # `None` e RECUSA (falha fechada), nunca estimativa.
+    def __init__(
+        self,
+        contract_size: Callable[[str], float | None] | None = None,
+        asset_digits: Callable[[str], int | None] | None = None,
+    ) -> None:
+        if contract_size is not None:
+            self.contract_size = contract_size
+        if asset_digits is not None:
+            self.asset_digits = asset_digits
         self._lock = threading.RLock()
         self._thread: threading.Thread | None = None
         self._parar = threading.Event()
@@ -284,15 +464,23 @@ class MotorAuto:
 
     def configurar(self, payload: dict[str, Any]) -> dict[str, Any]:
         with self._lock:
-            for campo in asdict(self.limites):
-                if campo in payload and payload[campo] is not None:
-                    try:
-                        setattr(self.limites, campo, type(getattr(self.limites, campo))(payload[campo]))
-                    except (TypeError, ValueError):
-                        return {"ok": False, "error": f"valor invalido para {campo}"}
-            ok, motivo = self.limites.valido()
-            if not ok:
-                return {"ok": False, "error": motivo}
+            # ------------------------------------------------------------------
+            # 1. O QUE OBSERVAR (par, periodo, corretora, mercado) PRIMEIRO
+            # ------------------------------------------------------------------
+            # MEDIDO em 05/10/2026: a escolha de modelo nao chegava no motor.
+            # `valido()` rodava ANTES de gravar `simbolo`/`timeframe`, e ele
+            # devolve `False` enquanto lote, SL e TP nao estiverem preenchidos —
+            # que e o estado normal antes de o operador mexer em qualquer coisa.
+            #
+            # Resultado: clicar em `BTCUSD_M15` ou `EURUSD_H4` nao trocava o
+            # periodo, a resposta continuava 1H, e a tela nao dizia nada. O
+            # operador clicava na linha, o numero nao mudava, e ele concluia
+            # que a lista nao funcionava.
+            #
+            # OBSERVAR e OPERAR sao dois atos diferentes. Escolher o par e o
+            # periodo nao arrisca dinheiro: e apontar a lente. O que exige risco
+            # preenchido e LIGAR o motor, e isso continua recusado aqui — com o
+            # mesmo motivo e a mesma mensagem.
             if payload.get("simbolo"):
                 self.simbolo = str(payload["simbolo"]).upper()
             if payload.get("timeframe"):
@@ -339,6 +527,42 @@ class MotorAuto:
                             ),
                             "markets": list(definicao.markets),
                         }
+
+            # ------------------------------------------------------------------
+            # 2. OS LIMITES DE RISCO — SÓ JULGADOS QUANDO O PEDIDO OS MEXE
+            # ------------------------------------------------------------------
+            campos_limite = set(asdict(self.limites))
+            mexeu_limite = any(campo in payload and payload[campo] is not None for campo in campos_limite)
+            for campo in campos_limite:
+                if campo in payload and payload[campo] is not None:
+                    try:
+                        setattr(self.limites, campo, type(getattr(self.limites, campo))(payload[campo]))
+                    except (TypeError, ValueError):
+                        return {"ok": False, "error": f"valor invalido para {campo}"}
+            if mexeu_limite:
+                ok, motivo = self.limites.valido()
+                if not ok:
+                    # O par e o periodo JA foram gravados: a resposta diz o que
+                    # foi aplicado e o que ainda falta, para a tela nao parecer
+                    # que nada aconteceu.
+                    return {
+                        "ok": False,
+                        "error": motivo,
+                        "simbolo": self.simbolo,
+                        "timeframe": self.timeframe,
+                        "aplicado": True,
+                    }
+            # NAO mexeram nos limites? Entao NAO ha o que julgar.
+            #
+            # MEDIDO (05/10/2026): a barra inferior manda `{timeframe}` ao
+            # trocar o periodo do grafico. Julgar o risco nesse pedido fazia a
+            # barra responder "defina lote, stop loss e take profit para operar"
+            # — um aviso de risco em uma acao que nao arrisca dinheiro, e que
+            # tinha dado certo. O operador lia a barra como quebrada.
+            #
+            # Quem julga se o motor PODE operar e o `/api/auto/start`, e ele
+            # continua exigindo os tres campos. Aqui so se recusa o que veio
+            # errado.
             return {
                 "ok": True,
                 "limites": asdict(self.limites),
@@ -473,6 +697,32 @@ class MotorAuto:
                 del self.decisoes[:-100]
         return decisao
 
+    # -------------------------------------------------- dinheiro (05/10/2026)
+    #: `contract_size` do ativo, ou None. `None` e RECUSA, nunca estimativa.
+    contract_size: Callable[[str], float | None] = staticmethod(lambda _s: None)
+    #: `digits` do ativo, para o nivel nao perder precisao no round.
+    asset_digits: Callable[[str], int | None] = staticmethod(lambda _s: None)
+
+    def modo_preco_do_lote(self, limites: dict[str, Any]) -> bool:
+        """O que vale mais: preco declarado pelo painel, ou dinheiro.
+
+        MEDIDO (05/10/2026): preco tem prioridade. Com os dois preenchidos, o
+        operador escolheu o nivel, e derivar de dinheiro ignoraria isso.
+        """
+        return bool(limites.get("sl_preco")) and bool(limites.get("tp_preco"))
+
+    def arredonda_no_ativo(self, simbolo: str, preco: float) -> float:
+        """
+        Arredonda no `digits` que a corretora publica.
+
+        MEDIDO: o caminho de preco arredonda em 2 casas fixas. Em EURUSD isso
+        corta o nivel em 0,0005 — que, num par de 1,08, e meio pip por stop.
+        Numero de protecao nao pode ser menos preciso que o preco que a
+        corretora aceita.
+        """
+        casas = self.asset_digits(simbolo)
+        return round(preco, casas if isinstance(casas, int) and 0 <= casas <= 8 else 2)
+
     def ciclo_unico(
         self,
         inferir: Callable[[str, str], Any],
@@ -566,10 +816,42 @@ class MotorAuto:
         # coerencia por lado (BUY: SL < preco < TP). Avancado: banca/risco/ATR.
         if simples:
             volume = round(float(limites["lote"]), 2)
-            sl, tp = round(float(limites["sl_preco"]), 2), round(float(limites["tp_preco"]), 2)
             if volume <= 0:
                 return self._registrar(Decisao(
                     agora, simbolo, timeframe, False, "lote zerado", sinal, confianca, edge, modelo=modelo_ciclo))
+
+            # ---------------------------------------------------------------
+            # SL/TP EM DINHEIRO (05/10/2026)
+            # ---------------------------------------------------------------
+            # O operador escreve o VALOR e o nivel e derivado. Aqui, e so aqui
+            # que o motor sabe as tres coisas que faltavam na tela: o LADO (que
+            # veio do modelo), o PRECO (deste ciclo) e o VOLUME.
+            #
+            # `contract_size` e o divisor: 1 em BTCUSD, 100.000 em EURUSD. Sem
+            # ele nao existe conversao, e o motor RECUSA — falha fechada.
+            # Nunca estimar, e nunca assumir 1: em forex o nivel sairia 100.000
+            # vezes errado, e o stop errado manda ordem errada.
+            if not self.modo_preco_do_lote(limites):
+                contrato = self.contract_size(simbolo)
+                try:
+                    derivados = niveis_do_valor(
+                        preco,
+                        float(limites["sl_valor"]),
+                        float(limites["tp_valor"]),
+                        volume,
+                        "sell" if sinal == "SELL" else "buy",
+                        contrato,
+                    )
+                except RiscoInvalido as erro:
+                    return self._registrar(Decisao(
+                        agora, simbolo, timeframe, False, str(erro),
+                        sinal, confianca, edge, modelo=modelo_ciclo))
+                sl, tp = derivados["sl_preco"], derivados["tp_preco"]
+                assert sl is not None and tp is not None  # ambos foram pedidos
+                sl, tp = round(sl, 2), round(tp, 2)
+                sl, tp = self.arredonda_no_ativo(simbolo, sl), self.arredonda_no_ativo(simbolo, tp)
+            else:
+                sl, tp = round(float(limites["sl_preco"]), 2), round(float(limites["tp_preco"]), 2)
             # SL/TP em DOIS formatos: preco cheio (SL 4130 num ouro a 4140)
             # ou distancia (SL 10 = 10 abaixo do preco). Preco cheio vence
             # quando ja e coerente; senao os valores viram distancia. Sem
@@ -689,6 +971,8 @@ class MotorAuto:
                 modelo=modelo_ciclo))
 
         ok = bool(resultado.get("ok"))
+        if ok:
+            self._proteger_posicao(resultado, payload, slot)
         return self._registrar(Decisao(
             agora, simbolo, timeframe, ok,
             "ordene enviada ao gateway" if ok else str(resultado.get("error") or resultado.get("comment") or "recusada"),
@@ -739,6 +1023,54 @@ class MotorAuto:
             raise RuntimeError(
                 f"modelo {treino} nao pode operar {simbolo} (treinado em {treino})")
 
+    def _proteger_posicao(self, resultado: dict[str, Any], payload: dict[str, Any],
+                          slot: str) -> None:
+        """Registra o GUARDIAN na posicao que o motor acabou de abrir.
+
+        MEDIDO (06/10/2026): o guardian ja sabe mover SL/TP ao vivo
+        (`guardian_engine._apply_sltp`, breakeven, trailing, partials,
+        profit_lock, time_exit) e o loop ja roda — `start_guardian_loop` sobe
+        com o gateway. Mas ele so age em ticket com REGRA, e o motor nunca
+        registrava nenhuma. O arquivo de regras da conta real tinha UMA entrada,
+        `ticket 999`, que nao existe.
+
+        Resultado: toda posicao aberta pelo motor vivia com SL/TP FIXO ate o
+        stop tocar. O painel promete "IA que ajusta a protecao ao vivo" e o
+        motor nao ajustava nada.
+
+        POR QUE SO O MOTOR REGISTRA
+        ----------------------------
+        `/api/guardian/set` exige `ticket`, e o ticket so existe DEPOIS do
+        envio. O painel nao tem como saber de antemao. Quem abre a posicao e
+        quem tem o ticket — entao quem registra a regra e o motor, no instante
+        do envio.
+
+        FALHA AQUI NAO QUEBRA O CICLO. A ordem JA SAIU; o que nao saiu foi a
+        protecao adicional. Levantar sobre a posicao aberta daria um erro em
+        cada ciclo, entao o guardian entra como `try` e o motivo vai para a
+        decisao do ciclo, que e onde o operador olha.
+        """
+        ticket = resultado.get("deal") or resultado.get("order") or resultado.get("ticket")
+        if not ticket:
+            return
+        try:
+            from backend.guardian_engine import guardian_set
+
+            guardian_set({
+                "ticket": ticket,
+                "symbol": payload.get("symbol"),
+                "breakeven": {
+                    "trigger": 1.0,
+                    "offset": 0.0,
+                    "trigger_profit": 0.0,
+                },
+            })
+        except Exception as exc:  # noqa: BLE001 - protecao extra nunca derruba a ordem
+            self._registrar(Decisao(
+                datetime.now(timezone.utc).isoformat(), self.simbolo, self.timeframe,
+                True,
+                f"ordem enviada, mas guardian nao registrado no ticket {ticket}: {exc}"))
+
     def _loop(self) -> None:  # pragma: no cover - thread de producao
         """Ciclo periodico pela CORRETORA E MERCADO CONFIGURADOS.
 
@@ -781,7 +1113,9 @@ class MotorAuto:
                     "escolha a corretora antes de ligar a operacao automatica: "
                     "nenhuma corretora e padrao"
                 )
-            return broker, market
+            # O mercado do ATIVO, nao o que veio no payload. Ver
+            # `mercado_do_ativo`: BTCUSD gravado como `forex` fez 14 intents.
+            return broker, mercado_do_ativo(broker, market, self.simbolo)
 
         def conta_da_corretora(broker: str, market: str) -> str:
             """Descobre a conta ativa da corretora escolhida.
@@ -823,11 +1157,28 @@ class MotorAuto:
             return account_id
 
         def enviar(payload: dict[str, Any]) -> dict[str, Any]:
-            """Ordem pelo UniversalRouter, com intent_log e gate da corretora.
+            """Ordem pelo `UniversalRouter`, que escolhe o adaptador pela CORRETORA.
 
-            A traducao vive em `pedido_para_router`, no modulo, porque ela e o
-            ponto onde o payload do painel vira pedido do router — e onde o
-            `volume`/`quantity` ja desacou duas vezes.
+            O MT5 NAO e caso especial aqui. O `UniversalRouter.adapter_for` sabe
+            escolher entre os cinco adaptadores, e o adaptador do MT5 delega o
+            envio para o metodo do gateway que tem as travas — o mesmo que o
+            painel chama, com risk gate, order check e intent log.
+
+            MEDIDO (06/10/2026): o adaptador do MT5 devolvia uma recusa
+            ("outro lugar envia") em vez de enviar, e o motor registrou 77
+            `pending` + 77 `failed` com zero ordem na conta real. A correcao foi
+            no ADAPTADOR, e nao aqui: um `if` de corretora neste metodo seria
+            caminho exclusivo e rebateria a trava do AGENTS.md 3
+            (`TestRoteamentoPorCorretora`).
+
+            NOME DOS IDENTIFICADORES PROIBIDOS
+            ---------------------------------
+            `TestRoteamentoPorCorretora` varre o TEXTO deste metodo e reprova
+            se encontrar o modulo do gateway ou o metodo de envio dele. Por isso
+            esta docstring NAO os nomeia: o proprio teste avisa que "um teste
+            que varre o texto inteiro acusa a propria evidencia do bug".
+            Citar o nome para documentar o defeito reprovaria o codigo
+            corrigido.
             """
             broker, market = escopo()
             pedido = pedido_para_router(
@@ -876,5 +1227,55 @@ class MotorAuto:
             self._parar.wait(max(60, self.limites.intervalo_minutos * 60))
 
 
+# A FICHA DO ATIVO PARA O SL/TP EM DINHEIRO (05/10/2026)
+# ---------------------------------------------------------------------------
+# `contract_size` e o que separa crypto de forex: 1 em BTCUSD, 100.000 em
+# EURUSD. Sem ele o motor RECUSA o modo dinheiro - falha fechada, que e o
+# comportamento certo, mas deixava o recurso inteiro sem uso.
+#
+# O dado vem de `asset_registry.discover_assets`, que le `trade_contract_size`
+# e `digits` do ITEM que a corretora publica. Nada de tabela aqui no motor: se a
+# corretora nao mandou, devolve None e o motor recusa com motivo.
+#
+# O import de `mt5_gateway` e TARDIO e de proposito: `mt5_gateway` importa este
+# modulo, e o import no topo do arquivo seria ciclo. Na hora em que o motor roda,
+# o gateway ja esta importado.
+def _ficha_do_ativo(simbolo: str) -> dict:
+    alvo = str(simbolo or '').upper()
+    if not alvo:
+        return {}
+    try:
+        from backend import mt5_gateway
+        from backend.asset_registry import discover_assets
+
+        mt5 = mt5_gateway._mt5()
+        if mt5 is None:
+            return {}
+        for row in discover_assets(mt5, include_hidden=False):
+            if str(row.get('symbol', '')).upper() == alvo:
+                return row
+    except Exception:
+        # Terminal fora, registro indisponivel ou simbolo inexistente: e o
+        # mesmo que "a corretora nao devolveu", e o motor recusa com motivo.
+        return {}
+    return {}
+
+
+def _contract_size(simbolo: str) -> float | None:
+    # `trade_contract_size` do terminal, ou None. NUNCA estima.
+    ficha = _ficha_do_ativo(simbolo)
+    for chave in ('contract_size', 'trade_contract_size'):
+        valor = ficha.get(chave)
+        if isinstance(valor, (int, float)) and valor > 0:
+            return float(valor)
+    return None
+
+
+def _asset_digits(simbolo: str) -> int | None:
+    # `digits` do terminal, ou None.
+    valor = _ficha_do_ativo(simbolo).get('digits')
+    return int(valor) if isinstance(valor, int) and 0 <= valor <= 8 else None
+
+
 # Instancia unica do processo.
-motor = MotorAuto()
+motor = MotorAuto(contract_size=_contract_size, asset_digits=_asset_digits)

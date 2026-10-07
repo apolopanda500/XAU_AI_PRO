@@ -1,0 +1,347 @@
+/* Barra inferior — estilo MT5 (05/10/2026).
+ *
+ * A barra de status do MT5 fica ABAIXO de todas as janelas de serviço e é uma
+ * faixa fina, sem card, sem borda arredondada. É onde ficam as informações que
+ * o operador consulta o tempo todo e não quer procurar: estado da conexão,
+ * tráfego da sessão, e o símbolo/timeframe do gráfico.
+ *
+ * Aqui ela é filha de `.main`, DEPOIS de `.content`, e não de cada painel —
+ * colocá-la dentro do painel faria ela subir e descer com a rolagem, e o
+ * operador perderia a referência de onde ela está.
+ *
+ * A faixa é FIXA e fina de propósito: 28px. Uma barra de 48px com ícone e
+ * rótulo comeria a área do gráfico, que é o que o operador realmente usa.
+ */
+
+.status-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 28px;
+  padding: 0 10px;
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--text-secondary, #9ca9bd);
+  user-select: none;
+}
+
+.status-bar-esq,
+.status-bar-dir {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.status-bar-dir {
+  margin-left: auto;
+  /* A latência é o item mais importante do rodapé e fica à direita, como no
+   * MT5. Sem `margin-left: auto` ela colaria no meio quando o lado esquerdo
+   * fosse curto. */
+}
+
+/* ---------- Item qualquer ---------- */
+.status-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  white-space: nowrap;
+}
+
+/* O botão do símbolo+timeframe é o item PRINCIPAL da barra: é o que se lê
+   primeiro e o que se troca o tempo todo. Por isso o valor é maior que o dos
+   itens de estado, sem precisar de rótulo para dizer o que é. */
+.status-simbolo {
+  gap: 5px;
+  padding: 0 10px;
+  border-right: 1px solid var(--border);
+}
+
+.status-simbolo .status-valor {
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.status-tf-valor {
+  color: var(--primary, #00c6fb);
+}
+
+/* O ponto entre ativo e timeframe é o que separa sem gastar dois espaços. */
+.status-divisor {
+  color: var(--text-muted, #68778c);
+  font-size: 12px;
+}
+
+button.status-item {
+  cursor: pointer;
+}
+
+button.status-item:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--primary, #00c6fb) 12%, transparent);
+  color: var(--text);
+}
+
+button.status-item:focus-visible {
+  outline: 1px solid var(--primary, #00c6fb);
+  outline-offset: -1px;
+}
+
+button.status-item:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+/* O rótulo é pequeno e esmaecido; o VALOR é o que se lê. invertendo isso, o
+ * olho ia para a palavra "Ativo" em vez do símbolo. */
+.status-rotulo {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted, #68778c);
+}
+
+.status-valor {
+  font-family: var(--mono, ui-monospace, 'Cascadia Mono', Consolas, monospace);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.status-ativo .status-valor {
+  color: var(--primary, #00c6fb);
+}
+
+.status-seta {
+  font-size: 9px;
+  color: var(--text-muted, #68778c);
+}
+
+/*
+  PONTO DE CONEXAO, como no MT5 (05/10/2026)
+  ==========================================
+  Na barra do MT5 o indicador de conexão é um MARCADOR, à direita, e não uma
+  frase. "Tempo real" ocupa 70 px para dizer o que um ponto verde já diz.
+
+  O dono pediu "barra inferios sem fixo por ativos ou nomes, botões com uso
+  essencial alinhados compactos". Texto redundante é o oposto de compacto: é
+  largura gasta sem informação.
+
+  A frase continua disponível no `title` (hover) e no `.sr-only` (leitor de
+  tela). Perder a informação para o olho é ganho; perder para o leitor de tela
+  seria defeito.
+*/
+.status-conexao {
+  padding: 0 9px;
+}
+
+.status-conexao .status-ponto {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-muted, #68778c);
+  flex-shrink: 0;
+}
+
+.status-conexao.is-ok .status-ponto {
+  background: var(--ok);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ok) 25%, transparent);
+}
+
+/* Piscar é a informação: é o que o operador percebe sem estar lendo. */
+.status-conexao.is-warn .status-ponto {
+  background: var(--warn);
+  animation: status-pisca 1.6s ease-in-out infinite;
+}
+
+.status-erro {
+  color: var(--danger);
+  font-size: 10px;
+  max-width: 40ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@keyframes status-pisca {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* ---------- Seletor de timeframe ---------- */
+.status-tf {
+  position: relative;
+}
+
+.status-tf-gatilho.is-open {
+  background: color-mix(in srgb, var(--primary, #00c6fb) 12%, transparent);
+}
+
+/* A lista sobe: a barra é a última linha da tela, e uma lista para baixo
+ * sairia da janela. */
+.status-tf-lista {
+  position: absolute;
+  bottom: calc(100% + 2px);
+  left: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+  padding: 2px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 -8px 24px rgb(0 0 0 / 45%);
+}
+
+/*
+  O CAMPO DE ATIVO no topo da lista.
+  ==================================
+  Substitui o `window.prompt` que existia no botão separado. O prompt é
+  bloqueante, some atrás da janela do navegador e não aceita colar com o botão
+  direito do mouse — e trocar de par é a ação mais frequente da barra.
+
+  `autoFocus` porque quem abriu a lista quer digitar, e o cursor precisa estar
+  no campo. O `stopPropagation` no container impede que o clique dentro do campo
+  feche a lista antes de o valor ser lido.
+*/
+.status-tf-ativo {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 8px 7px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 2px;
+}
+
+.status-tf-ativo-rotulo {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted, #68778c);
+}
+
+.status-tf-ativo-input {
+  width: 100%;
+  padding: 4px 7px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--panel2, transparent);
+  color: var(--text);
+  font-family: var(--mono, ui-monospace, Consolas, monospace);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.status-tf-ativo-input:focus {
+  outline: none;
+  border-color: var(--primary, #00c6fb);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary, #00c6fb) 20%, transparent);
+}
+
+.status-tf-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-secondary, #9ca9bd);
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.status-tf-item:hover {
+  background: color-mix(in srgb, var(--primary, #00c6fb) 14%, transparent);
+  color: var(--text);
+}
+
+.status-tf-item:focus-visible {
+  outline: 1px solid var(--primary, #00c6fb);
+  outline-offset: -1px;
+}
+
+.status-tf-item.is-ativo {
+  background: color-mix(in srgb, var(--primary, #00c6fb) 20%, transparent);
+  color: var(--text);
+}
+
+.status-tf-nome {
+  font-family: var(--mono, ui-monospace, 'Cascadia Mono', Consolas, monospace);
+  font-weight: 600;
+}
+
+/* "só gráfico" fica esmaecido de propósito: o timeframe existe para ver, não
+ * para o modelo decidir. Sem esta marca, o operador liga o motor em D1 e
+ * descobre pelo gráfico parado que a inferência recusa. */
+.status-tf-item.so-grafico .status-tf-marca {
+  color: var(--warn, #ffb020);
+}
+
+.status-tf-marca {
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted, #68778c);
+}
+
+/* ---------- A latência herda o rodapé ---------- */
+/* A `LatenciaBar` já tem `.latencia-rodape` com layout de rodapé. Aqui só se
+ * ajusta a altura, para casar com os 28px da barra. */
+.status-bar .latencia-rodape {
+  height: 28px;
+}
+
+.status-bar .latencia-gatilho {
+  height: 28px;
+}
+
+/* A lista de latência abre para CIMA pelo mesmo motivo da de timeframe. */
+.status-bar .latencia-lista {
+  bottom: calc(100% + 2px);
+  top: auto;
+}
+
+/* ---------- Sem animação onde atrapalha ---------- */
+/* O rodapé não anima nada por padrão: `status-pisca` e a transição do
+ * `latencia-medidor > i` são as duas únicas. Quem tem `prefers-reduced-motion`
+ * não vê nenhuma delas. */
+@media (prefers-reduced-motion: reduce) {
+  .status-bar *,
+  .status-bar *::before,
+  .status-bar *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* ---------- Tela estreita ---------- */
+/* Em janela estreita o item "Ativo" engole a barra e empurra a latência para
+ * fora. O rótulo sai primeiro: o valor continua, e é o que se lê. */
+@media (max-width: 720px) {
+  /* Em janela estreita o timeframe é o que some: o operador troca ativo o
+     tempo todo e timeframe quase nunca. E a lista continua levando os dois. */
+  .status-tf-valor,
+  .status-divisor {
+    display: none;
+  }
+}

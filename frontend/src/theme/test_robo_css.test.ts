@@ -179,10 +179,45 @@ describe('robo.css — a pagina e uma coluna que nao encavilita', () => {
     expect(folha).toMatch(/\.robo\s*\{[^}]*gap:/);
   });
 
-  it('o cabecalho e o primeiro filho e nao e um bloco de conteudo', async () => {
+  it('o cabecalho "ROBÔ" nao esta mais na pagina', async () => {
+    /*
+    O cabecalho saiu a pedido do dono (06/10/2026): a barra lateral ja escreve
+    `ROBÔ` em todas as paginas, e o cabecalho repetia o titulo mais uma frase
+    que explicava o que a tela ja mostra. Alem disso eram DOIS `h1` na mesma
+    pagina — o `h1` do cabecalho e o titulo da primeira secao — e dois `h1` sao
+    ambiguidade para quem navega por leitor de tela.
+
+    Este teste trava a REMOCAO: `.robo-cabecalho` nao pode voltar na folha nem
+    no componente. Sem ele, voltar o `<header>` e acrescentar CSS de volta, e a
+    ordem dos blocos continua passando.
+    */
+    /*
+    O teste procura a REGRA, e nao a PALAVRA: `/^\s*\.robo-cabecalho[^{]*\{/`
+    casa um seletor de CSS, e nao um comentario.
+
+    A diferenca nao e preciosismo. A folha tem um comentario que DIZ que a
+    regra saiu e por que — e sem comentarios desse tipo, a proxima pessoa que
+    mexer aqui reintroduz o cabecalho sem saber que ele foi pedido para fora.
+    Um teste que reprovasse o comentario obrigaria a apagar a explicacao, que
+    e exatamente o oposto do que o AGENTS.md 11 pede.
+    */
     const folha = await lerCss('robo.css');
-    expect(folha).toContain('.robo-cabecalho');
-    expect(pagina).toMatch(/<header className="robo-cabecalho">/);
+    expect(folha).not.toMatch(/^\s*\.robo-cabecalho[^{]*\{/m);
+    // E o componente tambem nao tem o elemento.
+    expect(pagina).not.toMatch(/<header className="robo-cabecalho">/);
+  });
+
+  it('o botao AUTO tem regra propria no topo', async () => {
+    /*
+    O botao subiu do rodape do ticket para o `section-head`. Ele carrega
+    `grid-area: enviar` do grid do ticket, e no topo nao ha grid: sem uma regra
+    propria ele herda `min-height: 44px` e `min-width: 148px` de quando era um
+    bloco do rodape, e volta a ser o maior elemento da fileira — que e parte do
+    que escondia o controle.
+    */
+    const folha = await lerCss('robo.css');
+    expect(folha).toMatch(/\.robo-auto-topo\s*\{[^}]*grid-area:\s*auto/);
+    expect(folha).toMatch(/\.robo-auto-topo\s*\{[^}]*margin-inline-start:\s*auto/);
   });
 
   it('o grid do ticket declara as 6 areas em area, sem sobrando', async () => {
