@@ -172,3 +172,40 @@ saber o que é verdade agora:
    Foi assim com a reconciliação do saldo.
 
 **Não declarar nada "pronto" sem rodar o comando e trazer o número.**
+
+## 10. ESTADO DO GIT — MEDIDO
+
+Os **7 commits desta sessão estão nos dois remotos**, com o mesmo SHA:
+
+```
+gitlab  097567b   https://gitlab.com/apolopanda500/XAU_AI_PRO.git
+github  097567b   https://github.com/apolopanda500/XAU_AI_PRO.git
+local   097567b   develop
+working tree       0 pendentes
+```
+
+```
+097567b  docs: o indice para o proximo agente, e a conversa da sessao
+dc484d7  ouro: o nome da corretora e o nome do modelo agora se encontram
+c352d14  docs: a conta fecha, e o erro foi meu de metodo
+ed2c125  grafico e ticket: o que o app instalado mostrou e o CSS que mentia
+c578f10  docs: o instalador novo medido, e o motor que perdeu 2,94 na conta
+96a684e  margem: o requisito que o painel recusou por engano
+48754ed  grafico: as pontas, a paleta, a trava e o Ctrl+Z; historico
+540b5b4  (base) robo: tres blocos, sem previsao
+```
+
+### 10.1 ARQUIVOS CORROMPIDOS — backup em disco
+
+**Em `C:\Users\Micro\Desktop\XAU_AI_PRO_BACKUP_20261007\`:**
+
+| arquivo | o que é |
+|---|---|
+| `index_corrompido_105608_bytes.zip` | o `.git/index` **inteiro de `0x00`** |
+| `stash_ref_quebrado_41_bytes.txt` | o `refs/stash` com 41 espaços |
+| `PriceChart_recuperado_do_sourcemap_71968.tsx` | a versão **boa**, do `.map` |
+| `PriceChart_checkpoint_cline_54403.tsx` | a outra cópia boa, do checkpoint |
+| `build_app_20261006.log` | o log do build de 06/10 |
+
+**O stash não foi recuperado** — 41 bytes de espaço num arquivo que deveria ter
+40 hex + quebra. Está documentado, não escondido.
