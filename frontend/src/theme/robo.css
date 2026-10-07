@@ -112,10 +112,36 @@
    `grid-template-columns` com dois `auto` e um `1fr` deixa o botão ocupar
    o resto da linha. Em janela estreita, o `grid` colapsa para uma coluna
    pelo `media query` do fim — o botão desce inteiro, nunca fica espremido
-   entre dois campos. */
+   entre dois campos.
+
+   O `min` DA COLUNA DE PROTEÇÃO É O QUE IMPORTA AQUI (07/10/2026)
+   ==============================================================
+   MEDIDO no app instalado, 00:37 e 00:40: o campo `Stop Loss` ficou com
+   ~10px de largura, e o rotulo dele empilhou em uma coluna de UM caractere:
+
+       s
+       t
+       o
+       p
+
+   A CAUSA, e ela é do GRID e não do componente: a coluna era
+   `minmax(0, 1.35fr)`. O `min(0)` permite que a coluna chegue a ZERO, e o que
+   o `grid` precisa é sempre primeiro: com a largura curta, as colunas `auto`
+   (os presets, que tem conteúdo intrínseco) ENCHERAM a faixa e a de proteção —
+   a única com `min` zero — foi a que-collapseu.
+
+   E o efeito é pior que um campo estreito: com a largura em ~10px, o `<span>`
+   do rótulo não tem onde quebrar e o texto desce uma letra por linha. O campo
+   de `Stop Loss` some e sobra o rótulo.
+
+   Por que era `minmax(0, ...)`: alguém quis permitir que a coluna encolhesse
+   para o botão caber. O botão tem `min-width: 148px` proprio, então ele já
+   estava garantido — a proteção é que não tinha mínimo nenhum.
+*/
 .robo-ticket {
   display: grid;
-  grid-template-columns: auto minmax(96px, 0.5fr) minmax(0, 1.35fr) auto auto;
+  grid-template-columns:
+    auto minmax(112px, 0.5fr) minmax(280px, 1.35fr) auto minmax(148px, auto);
   grid-template-areas:
     'lote volume protecao presets enviar'
     'preco preco protecao presets enviar';
@@ -132,12 +158,22 @@
 }
 
 /* SL e TP juntos: é uma decisão só. Separados por outros campos, o operador
-   ajusta um e esquece o outro. */
+   ajusta um e esquece o outro.
+
+   `minmax(0, 1fr)` nos DOIS lados, e não `1fr`: num `grid`, `1fr` tem mínimo
+   automático igual ao conteúdo, e o conteúdo do `<span>` (o rótulo) não quebra.
+   Com o `min(0)`, cada metade encolhe até o piso do `input` — e o input, ao
+   contrário do texto, tem largura de uma caixa.
+
+   MEDIDO (07/10/2026, 00:40): com `1fr 1fr`, os rótulos empilharam em coluna
+   de um caractere. Ver `.robo-ticket`, que é onde a coluna externa colapsava.
+*/
 .robo-ticket-protecao {
   grid-area: protecao;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 8px;
+  min-width: 0;
 }
 
 .robo-ticket-presets {

@@ -9,9 +9,11 @@ import { requestId } from '../lib/format';
 import { useEffect, useState } from 'react';
 import PriceChart from './charts/PriceChart';
 import { nivelDoValor, linhasDaOrdem, rotuloDoBotao } from '../lib/ordemGrafico';
-import { fichaDoAtivo, faixaDoAtivo, requisitoDeMargem, unidadeDeVolume, rotuloQuantidade } from '../lib/volumeUnidade';
+import { fichaDoAtivo, faixaDoAtivo, mercadoDoAtivo, requisitoDeMargem, unidadeDeVolume, rotuloQuantidade } from '../lib/volumeUnidade';
 import { useCatalogoAtivos } from '../hooks/useCatalogoAtivos';
 import { useAccount } from '../hooks/queries';
+import { escopoAtivo as contaAtiva } from '../lib/escopoAtivo';
+import { TIMEFRAMES } from './charts/PriceChart';
 
 // Acompanhar os modelos operando, ao vivo e com seguranca.
 //
@@ -55,11 +57,56 @@ export default function AcompanharModelos() {
     nao ha candles para ler, e sem par nao ha grafico — nesses dois casos a tela
     diz ONDE escolher, e nao promete sinal.
   */
-  const broker = String(auto?.broker ?? 'mt5').toLowerCase();
-  const market = String(auto?.market ?? '').toLowerCase();
   const simbolo = String(auto?.simbolo || parDaTela || '').toUpperCase();
   const timeframe = String(auto?.timeframe ?? '').toUpperCase();
-  const configurado = Boolean(broker && market && simbolo && timeframe);
+  /*
+    O PERIODO E O MERCADO PODEM VIR DA FICHA (07/10/2026)
+    ====================================================
+    MEDIDO no app instalado 00:33, com o build novo:
+
+        Gráfico indisponível: Identidade de mercado inválida.
+        BTCUSD sem candles reais para .
+
+    O `para .` com o ponto final e o `timeframe` VAZIO chegando no `PriceChart`,
+    e a linha do rodapé dizia `BTCUSD · — ·` (o tracejado no lugar do periodo).
+
+    A CAUSA, e e a mesma que o bloco de `OperacaoAutomatica` documenta com
+    40 linhas: este componente lia SO `auto.market` e `auto.timeframe`. O motor
+    comeca sem par e so recebe quando alguem liga o automatico — entao, com o
+    `Motor desligado` na tela, os dois vinham vazios. O `getCandles` recebia
+    `market: ''`, e `normalizeMarketSource` devolvia `null` — o throw de
+    `marketApi.ts:1368`, que e a mensagem que o operador leu.
+
+    `configurado` exigia `market` E `timeframe`, entao o `useEffect` nem
+    buscava: o `error` vinha do `PriceChart`, que tentava por conta propria.
+
+    A RESERVA, e ela e a mesma do outro componente com a MESMA ressalva: o par
+    escolhido na barra (`parDaTela`) ja existia, e so o resto faltava.
+
+    POR QUE NAO E ADIVINHAR O MERCADO
+    ===================================
+    Nao existe palavra no nome que resolva: `BTCUSD` (cripto), `XAUUSD` (metal) e
+    `EURUSD` (forex) terminam igual. A classe vem da HIERARQUIA que a corretora
+    publica na ficha, e e a mesma regra do `mercado_do_ativo` do motor
+    (AGENTS.md 3). Sem ficha, fica o que veio — e o painel diz o que falta.
+
+    O PERIODO, ao contrario, tem uma unica resposta certa: o MODELO escolhido.
+    Ha um seletor de modelo na tela de cima, com `H4 · edge 15,5%`. O periodo
+    que o operador escolheu e o que o grafico tem de mostrar; um default fixo
+    seria a tela discordando do painel logo acima.
+  */
+  const { broker: brokerSalvo } = contaAtiva();
+  /*
+    O PRIMEIRO PERIODO DA LISTA do proprio `PriceChart`, e nao um `'M5'` escrito
+    aqui.
+
+    A lista e a que o grafico aceita e a que a barra de tempoframes mostra. Uma
+    constante solta aqui passaria o teste e o grafico receberia um periodo que
+    o componente nao sabe desenhar — e o sintoma seria a tela vazia de novo,
+    agora sem mensagem.
+  */
+  const tempoEscolhido = String(timeframe || auto?.timeframe || (TIMEFRAMES[0] as string)).toUpperCase();
+  const broker = String(auto?.broker ?? brokerSalvo ?? 'mt5').toLowerCase();
 
   /*
     `pronto1Clique` E `limites` SAIRAM (06/10/2026)
@@ -100,9 +147,36 @@ export default function AcompanharModelos() {
   */
   const catalogo = useCatalogoAtivos(
     (broker || 'mt5') as Parameters<typeof useCatalogoAtivos>[0],
-    market,
+    String(auto?.market || '').toLowerCase(),
   );
   const ficha = useMemo(() => fichaDoAtivo(catalogo, simbolo), [catalogo, simbolo]);
+
+  /*
+    O MERCADO DA CONSULTA, derivado da classe que a CORRETORA publicou.
+
+    `mercadoDoAtivo` e o mesmo que `OperacaoAutomatica` usa, e o mesmo que
+    `mercado_do_ativo` usa no motor: os tres lados falando a mesma lingua, ou o
+    sintoma volta a parecer "nao tem preco" — que e o AGENTS.md 5.
+
+    `null` sem ficha: nao ha conversao possivel, e escolher um mercado seria a
+    presuncao que a regra proibe.
+  */
+  const mercadoDaFicha = mercadoDoAtivo(ficha?.assetClass);
+  /*
+    `marketSalvo` NAO ENTRA NESTA CADEIA, e a razao e o defeito.
+
+    `escopoAtivo()` devolve `mt5:forex` quando a chave nao esta gravada — um
+    DEFAULT, nao uma medida. Usar esse valor como mercado de consulta faz o
+    gateway responder vazio para um par de cripto, e o sintoma vira "a corretora
+    nao devolve candles". E `OperacaoAutomatica` usa `marketSalvo` como ultimo
+    recurso porque ele TEM a ficha antes: ali o fallback so roda com ficha
+    carregada, e sem ficha o `configurado` dele ja e falso por outro caminho.
+
+    Aqui o `configurado` NAO pode aceitar `forex` como resposta: sem classe
+    publicada nao ha mercado medido, e o painel avisa em vez de consultar.
+  */
+  const market = String(mercadoDaFicha ?? auto?.market ?? '').toLowerCase();
+  const configurado = Boolean(broker && market && simbolo);
 
   /*
     A ORDEM ARMADA (06/10/2026)
@@ -269,7 +343,7 @@ export default function AcompanharModelos() {
     }
   };
 
-  const { sinais, idadeSeg } = useSinaisModelo(simbolo, timeframe, configurado);
+  const { sinais, idadeSeg } = useSinaisModelo(simbolo, tempoEscolhido, configurado);
   const [candles, setCandles] = useState<MarketCandle[] | undefined>(undefined);
   const [erroVelas, setErroVelas] = useState('');
 
@@ -278,7 +352,7 @@ export default function AcompanharModelos() {
     let vivo = true;
     const carregar = async () => {
       try {
-        const r = await getCandles({ broker: broker as never, market: market as never, symbol: simbolo }, timeframe, 300);
+        const r = await getCandles({ broker: broker as never, market: market as never, symbol: simbolo }, tempoEscolhido, 300);
         if (vivo) {
           setCandles(r.candles);
           setErroVelas('');
@@ -293,7 +367,7 @@ export default function AcompanharModelos() {
       vivo = false;
       window.clearInterval(t);
     };
-  }, [broker, market, simbolo, timeframe, configurado]);
+  }, [broker, market, simbolo, tempoEscolhido, configurado]);
 
   // Cada sinal ancora no candle fechado mais recente ate a hora do sinal.
   const markers = useMemo(() => {
@@ -423,7 +497,7 @@ export default function AcompanharModelos() {
         <div>
           <h2>Gráfico ao vivo</h2>
           <span className="muted">
-            {simbolo} · {timeframe} · {broker.toUpperCase()}
+            {simbolo} · {tempoEscolhido} · {broker.toUpperCase()}
             {desatualizado ? ` · desatualizado há ${idadeSeg}s` : ' · ao vivo'}
           </span>
         </div>
@@ -435,7 +509,7 @@ export default function AcompanharModelos() {
         symbol={simbolo}
         broker={broker as never}
         market={market as never}
-        timeframe={timeframe as never}
+        timeframe={tempoEscolhido as never}
         candles={candles}
         markers={markers}
         lines={linhas}
