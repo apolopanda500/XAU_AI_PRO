@@ -180,88 +180,154 @@ que mostra a regra antiga reprovando: `test_robo_ticket_css.test.ts` (7).
 
 ---
 
-## 2. A RECONCILIAÇÃO DO SALDO — ABERTA, E EU NÃO SEI
+## 2. A RECONCILIAÇÃO DO SALDO — FECHADA, E EU TINHA ERRADO
 
-**Esta é a questão mais importante em aberto. Não tenho resposta, e não vou
-inventar uma.**
+**A conta fecha no centavo.** E a "diferença" que eu reportei às 00:30 era um
+erro meu de método, não dinheiro faltando.
 
-MEDIDO em `history_deals_get` e `account_info()`, conta 391773676:
+MEDIDO no mesmo instante, conta 391773676 (`Henrique Carvalho`, XMGlobal-MT5 14):
 
-| | valor |
+```
+soma dos 19 deals   = +9,56
+balance             =  3,94
+credit              =  5,62     (bônus NewClients)
+balance + credit    =  9,56     ← BATE
+equity              =  9,56     ← e o equity é exatamente a soma
+```
+
+**Não faltava dinheiro. Faltavam DEALS** — entre a minha medição das 00:30 e a
+de agora, entraram **6 operações novas**, e o saldo andou junto.
+
+### 2.1 O ERRO, e a regra que ele é
+
+Eu comparei **uma soma de deals das 00:30 com um saldo lido às 01:xx**. A conta
+está **ativa e operando com o app desligado** — entre as duas leituras entraram
+6 operações. Produtor e consumidor em instantes diferentes, e o número "não
+bate".
+
+É o **AGENTS.md §5 aplicado a mim mesmo**, e a forma mais humilhante: eu relatei
+"faltam $5,11 sem deal que os explique" com três hipóteses — saque, margem
+retida, sessão diferente — e **nenhuma era a resposta**. A resposta era a mais
+boba: a conta mudou enquanto eu media.
+
+**A reconciliação só fecha lida no mesmo instante.** E, para conta que opera,
+isso significa: **`equity` é a conferência**, porque ele atualiza junto com o
+saldo.
+
+### 2.2 OS 19 DEALS, INTEIROS
+
+| quando | tipo | posição | lucro | o que é |
+|---|---|---|---|---|
+| 04/10 18:53 | MOV | — | +5,52 | `CD-AST-PIC 265376085` — depósito |
+| 04/10 18:53 | MOV | — | +0,10 | `EXP05-AST-PIC 265376085` — taxa |
+| 04/10 18:53 | MOV | — | +5,62 | `Credit-In-100%-$100-NewClients` — bônus |
+| 04/10 22:46→23:12 | OP | 245033922 | +2,01 | `[tp 86584.30]` |
+| 06/10 16:13→16:34 | OP | 245994269 | **−1,41** | `[sl 85615.69]` |
+| 06/10 17:12→17:28 | OP | 246012074 | **−1,53** | `[sl 85664.55]` |
+| 06/10 22:53→23:09 | OP | 246056881 | +0,19 | |
+| 07/10 00:36→01:12 | OP | 246071435 | **−1,45** | `[sl 85393.55]` |
+| 07/10 02:37→03:02 | OP | 246103515 | **−1,55** | `[sl 83987.84]` |
+| 07/10 03:10→03:13 | OP | 246111060 | +0,90 | **volume 0,05** |
+| 07/10 03:46→04:17 | OP | 246119090 | +1,16 | `[tp 84113.70]` |
+
+Movimentações com valor **negativo**: **nenhuma**. `Retirada: 0,00` no MT5 e
+ausência de deal negativo são o **mesmo fato visto por dois lados**.
+
+Resultado de operação: **+0,62** em 8 posições. As 4 perdas somam **−5,94**.
+
+### 2.3 O STRATEGY TESTER NÃO TOCOU NESTA CONTA
+
+MEDIDO: o MT5 rodou `XAU_AI_PRO.ex5` em **GOLD, M5** por **4h26min33s**,
+15.020.685 ticks no GOLD (55.768.587 em todos os símbolos), 12.665 barras.
+
+**MetaTester tem base própria.** Um deal de EPI **não** entra em
+`history_deals_get` da conta logada. Os 19 deals acima são **todos** da conta
+real 391773676.
+
+### 2.4 O BACKTEST, E O QUE ELE DIZ
+
+| | medido |
 |---|---|
-| `balance` | **3,94** (era 2,78 às 00:30, 3,43 às 22:56, 4,88 na XM às 14:14) |
-| `credit` | 5,62 (bônus NewClients) |
-| `equity` | 8,40 |
-| deals em 30 dias | 13 |
-| **soma dos 13 deals** | **+9,05** |
-| **diferença** | **−5,11** |
+| operações | **923** (491 wins · 417 losses) |
+| WinRate | **53,20%** |
+| **Profit** | **−334,01** |
+| **Profit Factor** | **0,48** |
+| MaxDD | 340,79 (log: 7.623,94 %) |
+| **Sharpe** | **−9,31** |
+| Perfil | Conservative · Lot 0,01 · **SL=80 · TP=160** |
+| Módulos | 15, todos `OK` |
 
-### 2.1 O saldo mexeu com o app DESLIGADO
+**53,20% de acerto com Profit Factor 0,48 é a assinatura de stop curto com alvo
+longo** — exatamente o perfil `SL=80 · TP=160`, que é 1:2. Acerta mais da metade
+e ainda perde.
 
-| quando | ticket | lucro |
-|---|---|---|
-| 07/10 00:36 | 261109609 | entrada, 0,00 |
-| 07/10 01:12 | 261118356 | **−1,45** `[sl 85393.55]` |
-
-O saldo subiu 2,78 → 3,94 **apesar** de −1,45. **Entrou dinheiro** — não foi
-operação.
-
-E o negócio maior: **o MT5 estava em EPI** (tester de estratégia) na captura de
-00:42, e o app em `AUTO NÃO` / `Motor desligado` / `EA off`. **Operação acontece
-com o app desligado** — é o EA do MT5, que roda fora do app (AGENTS.md §7).
-
-### 2.2 O rodapé do MT5 diz `Retirada: 0,00`
+**E o binário medido é de 23/09**, de uma pasta `estadoA_8445b74` **fora do
+repositório**:
 
 ```
-Lucro: -2,84  Crédito: 5,62  Recarregar: 5,62  Retirada: 0,00  Saldo: 8,40
+tester: Experts\estadoA_8445b74\XAU_AI_PRO\XAU_AI_PRO.ex5   23/09/2026 22:03
+repo:   MQL5\Experts\XAU_AI_PRO\XAU_AI_PRO.ex5              07/10/2026 01:08
 ```
 
-**Atenção:** isso é o rodapé do MT5. O MT5 pode não ver o que a XM fez.
+**Se o objetivo era medir o código de hoje, mediu o de setembro.**
 
-### 2.3 Hipóteses, nenhuma confirmada
+O log também acusa: `[NOTIFY] SendNotification falhou | Erro=4014` e
+`Sent=0 | Failed=14394`. **14.394 notificações falhadas** — quem acreditava estar
+avisado não estava sendo avisado.
 
-1. A XM reteve margem/depósito em aberto que não aparece como deal.
-2. `history_deals_get` da sessão devolve menos que a conta real.
-3. Saldo e histórico vêm de sessões diferentes.
+### 2.5 A OPERAÇÃO REAL CONTINUA COM O APP DESLIGADO
 
-Testei a hipótese óbvia — "o bônus é crédito, não saldo": `9,05 − 5,62 = 3,43`,
-e o saldo é 3,94. **Não bate.** Faltam 5,11 sem deal que os explique.
+As 4 perdas são da **conta real**, com o app em `AUTO NÃO` / `Motor desligado` /
+`EA off`. É o EA do MT5, que roda fora do app (AGENTS.md §7).
 
-### 2.4 A PERGUNTA QUE DECIDE
+| | |
+|---|---|
+| perdas | −1,41 · −1,53 · −1,45 · −1,55 |
+| padrão | **todas `[sl ...]`, todas ~$1,50** |
+| stop | ~200 pontos = **0,23%** do preço |
+| volume 0,05 | uma operação, 5× as outras |
 
-**No painel da XM, o saldo está em $3,94 ou em outro número?**
-
-- XM = 3,94 → o MT5 está certo, o histórico está incompleto, é bug de leitura.
-- XM = 9,05 → o MT5 erra o saldo e o app mostra ao operador número que a
-  corretora não confirma.
-- outro → reconcilio com o número.
-
-**Correção de uma afirmação minha:** eu disse antes que "não houve saque" com
-base no rodapé do MT5. Esse rodapé não é a corretora. Não posso afirmar isso.
+Isto é o AGENTS.md §4: forward test rodou (4 operações, Lucro −0,74) e endurance
+rodou (923 operações, PF 0,48) — **e os dois medidos em código antigo**.
 
 ---
 
 ## 3. O QUE FALTA, NESTA ORDEM
 
-1. **Responder §2.4.** Tudo o resto da conta depende disso.
-2. **GOLD / XAUUSD.** Os modelos existem — 36 `.meta.json`, incluindo
-   `XAUUSD_H1/H4/M15/M5` e `MULTI_METALS`. **Falta confirmar que o catálogo da
-   XM publica `XAUUSD`** e não só `GOLD`: se publicar só `GOLD`, a ficha não
-   vem, `mercadoDoAtivo` devolve `null`, e o gráfico fica vazio **pela regra que
-   acabei de escrever**.
+1. **GOLD / XAUUSD — confirmar o que a XM publica.** Os modelos existem: 36
+   `.meta.json`, incluindo `XAUUSD_H1/H4/M15/M5` e `MULTI_METALS`. O EA roda
+   **GOLD,M5** no tester. **Falta confirmar se o catálogo da XM publica
+   `XAUUSD` ou só `GOLD`**: se publicar só `GOLD`, `fichaDoAtivo(catalogo,
+   'XAUUSD')` devolve `null`, `mercadoDoAtivo` devolve `null`, e o gráfico fica
+   vazio **pela regra que acabei de escrever** — o mesmo bug do BTCUSD, agora
+   no metal.
+2. **Validar antes do build** (esta sessão): pytest, vitest, tsc, preflight.
 3. **Build novo** com §1.6 e §1.7.
 4. **Conferir na tela**: gráfico com candles, SL e TP lado a lado, requisito de
    margem, pontas arrastáveis, paleta, `Ctrl + Z`.
 5. **Indicadores com busca** — `rsi` → 3 resultados, como a XM. Hoje são três
    botões fixos.
 
-### 3.1 O RISCO QUE NÃO É MEU
+### 3.1 NÃO RODAR BACKTEST AGORA
 
-**A conta opera com o app desligado.** Perdeu 1,45 às 01:12 sem ninguém tocar
-em nada. Com 1000:1 e stop de 200 pontos (0,23%), três stops com a mesma
-configuração comem 15% do saldo. Isso é exatamente o que o AGENTS.md §4 exige
-antes de conta real: forward test (rodou, 4 operações, Lucro −0,74) e endurance
-test. **A amostra foi pequena demais e a conta estava real.**
+**Decisão do dono (07/10): não rodar backtest, validar antes do build.**
+
+E o motivo está medido: o último mediu um `.ex5` de **23/09**, de fora do
+repositório. Rodar de novo agora mediria o mesmo binário velho, por 4h30 — e o
+resultado não diria nada sobre o código de hoje.
+
+Para um backtest que valha alguma coisa, o `.ex5` tem de ser recompilado do
+fonte atual no MetaEditor (§7 do AGENTS.md), e **anexado ao gráfico** — e o
+`.mq5` atual roda em **GOLD,M5**, não em BTCUSD.
+
+### 3.2 O RISCO QUE NÃO É MEU, E ESTÁ ATIVO
+
+**A conta real opera com o app desligado.** 4 perdas, todas `[sl ...]`, todas
+~1,50, com o perfil de stop de 200 pontos (0,23% do preço).
+
+**E os dois testes que o AGENTS.md §4 exige já rodaram, ambos em código de
+setembro:** forward (4 operações, Lucro −0,74) e endurance (923 operações,
+PF 0,48, Sharpe −9,31). **Nenhum mediu o binário de hoje.**
 
 ---
 

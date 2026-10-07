@@ -1,161 +1,203 @@
+import { describe, expect, it } from 'vitest';
+
 /*
-  A REGRA DO CSS QUE O REFEZAMENTO PRECISA CUMPRIR (07/10/2026)
-  ===========================================================
-
-  MEDIDO no app instalado, 00:37, com o build novo:
-
-      Token(s)  0,01
-      Valor no risco (SL)  depende do
-      Stop Loss
-      Take Profit
-
-  E num recorte mais apertado, 00:40: os rotulos apareciam empilhados em UMA
-  COLUNA DE UM CARACTERE:
+  O TICKET NAO ESPRIME O CAMPO (07/10/2026)
+  ==========================================
+  MEDIDO no app instalado, 00:37 e no recorte de 00:40: `Stop Loss` com ~10px
+  de largura, e o rotulo empilhado em coluna de UM CARACTERE:
 
       s
       t
       o
       p
       o
-      a
-      p
-      k
 
-  O campo "Valor no risco (SL)" perdia a CAIXA DE INPUT: sobrava o `<label>` e o
-  `<input>` sumia. E o "Stop Loss" ficava com ~10px de largura.
+  E o campo "Valor no risco (SL)" perdia a CAIXA DE INPUT: sobrava o `<label>` e
+  o `<input>` sumia.
 
-  A CAUSA, e ela e de CSS — nao de componente
-  ==========================================
-  Um `flex` sem `min-width: 0` nao encolhe abaixo do conteudo: o item cresce
-  ate o minimo do texto, e o texto nunca quebra. O resultado e o campo com a
-  largura do seu rotulo.
+  A CAUSA, e ela e do GRID — nao do componente
+  ============================================
+  A coluna de proteção era `minmax(0, 1.35fr)`. O `min(0)` permite que a coluna
+  chegue a ZERO, e o `grid` precisa sempre primeiro: com a faixa curta, as
+  colunas `auto` — que tem conteudo intrinseco — enchem a linha e a de proteção,
+  a unica com minimo zero, colapsa.
 
-  Este arquivo NAO e teste de layout. `jsdom` nao calcula largura, e um teste
-  que medisse `offsetWidth` mediria `0` — verde com o defeito na tela (o AGENTS.md
-  6: teste verde escondendo defeito).
+  E o lado de dentro era `1fr 1fr`: num `grid`, `1fr` tem minimo automatico igual
+  ao CONTEUDO, e o conteudo do `<span>` nao quebra.
 
-  O QUE ELE FAZ, E POR QUE ISSO E MELHOR QUE NADA
-  ===============================================
-  Ele trava a REGRA do CSS: que `min-width: 0` tem de estar no item flex do
-  ticket. A regra e o que produz o comportamento, e o comportamento e o que
-  `jsdom` nao alcanca.
+  POR QUE ISTO NAO E UM TESTE DE LAYOUT
+  =======================================
+  `jsdom` nao calcula largura: `offsetWidth` e `0` para tudo, e um teste que
+  medisse isso passaria — verde com o defeito na tela. E o AGENTS.md 6 na sua
+  forma mais facil de cair: o teste que "verifica o layout" e nao verifica
+  layout nenhum.
 
-  Um teste que reprovaria sem a regra: o `grep` abaixo acha `min-width: 0` em
-  `robo-ticket`. Sem ele, o campo perde a caixa de input — que foi medido.
+  O QUE ESTE ARQUIVO FAZ: trava a REGRA, que e o que produz o comportamento.
+  E cada `expect` tem o caso que reprovaria sem a correcao — medido, nao
+  suposto.
 
-  POR QUE O TESTE DE LAYOUT NAO ENTRA
-  ===================================
-  Playwright mediria `boundingBox` de verdade. Nao entra agora porque exigiria
-  subir o app com o gateway, e o dono pediu medir por captura de tela — que e
-  o metodo que ja provou o defeito. O `boundingBox` entra se o defeito voltar
-  sem este arquivo acusar.
+  COMO LER O CSS NESTE PROJETO — e o erro que ja foi pago aqui
+  ===========================================================
+  `import x from './robo.css?raw'` devolve **STRING VAZIA** nesta sessao de
+  vitest: o vitest troca o modulo de CSS por um stub antes do `?raw` resolver.
+  MEDIDO nesta sessao — `len: 0`, `tem robo-ticket? false`.
+
+  Isso e o AGENTS.md 6 do avesso: com uma folha de 0 caracteres, `corpo()`
+  devolvia `''` e os `toMatch` reprovavam por motivo errado; e um
+  `expect(css.length).toBeGreaterThan(0)` teria passado sem verificar nada.
+
+  A forma que funciona, e que o `test_robo_css.test.ts` JA DOCUMENTA: `node:fs`
+  por `await import` dinamico, com `@ts-expect-error` porque o `tsconfig` nao
+  tem `@types/node`. Tentei `?raw` primeiro por ser mais limpo; medi que
+  devolvia vazio; voltei. A forma que funciona e a que fica.
 */
-import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+async function lerCss(nome: string): Promise<string> {
+  // @ts-expect-error `node:fs` nao tem tipagem neste projeto (sem @types/node)
+  const { readFileSync } = await import('node:fs');
+  // @ts-expect-error `node:url` nao tem tipagem neste projeto (sem @types/node)
+  const { fileURLToPath } = await import('node:url');
+  const aqui = fileURLToPath(import.meta.url).replace(/\\/g, '/');
+  const pasta = aqui.slice(0, aqui.lastIndexOf('/'));
+  return String(readFileSync(`${pasta}/${nome}`, 'utf-8'));
+}
 
-const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..');
-const css = readFileSync(join(RAIZ, 'theme', 'robo.css'), 'utf8');
-
-/** O nome de uma regra do CSS, sem o `{` que vem depois. */
-const temRegra = (nome: string): boolean =>
+/** A regra existe? */
+const temRegra = (css: string, nome: string): boolean =>
   new RegExp(`^\\s*\\.${nome}[^{]*\\{`, 'm').test(css);
 
-/** O corpo de uma regra do CSS. */
-const corpo = (nome: string): string => {
-  const m = css.match(new RegExp(`^\\s*\\.${nome}[^{]*\\{([^}]*)\\}`, 'm'));
-  return m?.[1] ?? '';
-};
+/** O corpo de uma regra. */
+const corpo = (css: string, nome: string): string =>
+  css.match(new RegExp(`^\\s*\\.${nome}[^{]*\\{([^}]*)\\}`, 'm'))?.[1] ?? '';
+
+/** As colunas `minmax(<min>, <fr>fr)` de uma regra. */
+const colunasFr = (css: string): Array<{ min: number; fr: number }> =>
+  [...corpo(css, 'robo-ticket').matchAll(/minmax\(\s*([\d.]+)(px)?\s*,\s*([\d.]+)fr\s*\)/g)].map(
+    (m) => ({ min: Number(m[1]), fr: Number(m[3]) }),
+  );
 
 describe('o ticket de ordem nao espreme o campo', () => {
-  it('PROVA: a coluna de PROTECAO tem minimo maior que zero', () => {
+  it('a folha que este arquivo mede NAO esta vazia', async () => {
     /*
-      A PROVA DE QUE A REGRA ESTA. Era `minmax(0, 1.35fr)`: o `min(0)` deixa a
-      coluna chegar a ZERO, e o `grid` sempre servido primeiro as colunas
-      `auto` — que tem conteudo intrinseco. A protecao era a unica com min zero,
-      e foi a que colapsou: o `Stop Loss` ficou com ~10px e o rotulo empilhou em
-      coluna de um caractere. MEDIDO no app instalado, 00:40.
+      A PROVA DE QUE O `?raw` NAO ENTROU.
+
+      Com `import x from './robo.css?raw'` a folha chega com 0 caracteres, e
+      todo `toMatch` abaixo reprova por motivo errado — ou pior, passa. Este
+      `expect` reprova no instante em que a leitura voltar a quebrar, e diz que
+      a leitura quebrou.
     */
-    const grade = corpo('robo-ticket');
-    // A coluna de protecao: `minmax(<algo maior que 0>, 1.35fr)`.
-    const colunas = [...grade.matchAll(/minmax\(\s*([\d.]+)(px)?\s*,\s*([\d.]+)fr\s*\)/g)];
+    const css = await lerCss('robo.css');
+    expect(css.length).toBeGreaterThan(1000);
+    expect(css).toContain('robo-ticket');
+  });
+
+  it('PROVA: toda coluna `fr` do ticket tem minimo maior que zero', async () => {
+    /*
+      A PROVA DE QUE A REGRA ESTA.
+
+      Era `minmax(0, 1.35fr)`. O `min(0)` deixa a coluna chegar a zero, e o
+      `grid` sempre serve primeiro as colunas `auto` — que tem conteudo
+      intrinseco. A proteção era a unica com minimo zero, e foi a que colapsou:
+      `Stop Loss` com ~10px e o rotulo empilhado em coluna de um caractere.
+    */
+    const colunas = colunasFr(await lerCss('robo.css'));
     expect(colunas.length).toBeGreaterThan(0);
-    // Toda coluna com `fr` precisa de min POSITIVO: zero e o que colapsa.
-    for (const [, px, , fr] of colunas) {
-      const minimo = Number(px ?? '0');
-      expect(minimo, `coluna ${fr}fr com min ${minimo}`).toBeGreaterThan(0);
+    for (const c of colunas) {
+      expect(c.min, `coluna ${c.fr}fr com minimo ${c.min}px`).toBeGreaterThan(0);
     }
   });
 
-  it('PROVA NEGATIVA: com min zero a coluna colapsa — e este teste reprova', () => {
+  it('PROVA NEGATIVA: a regra antiga, com min zero, REPROVA esta mesma medida', async () => {
     /*
       A prova de que o teste acima nao e decorativo.
 
-      Aqui esta a REGUA COMO ELA ESTAVA, e o `expect` abaixo reprova com ela.
-      Sem este caso, uma regra que passasse com ou sem `min-width` nao provaria
-      nada — e o AGENTS.md 6: verificacao que passa em qualquer caso nao
-      verifica.
+      A mesma medicao, aplicada a regra COMO ESTAVA:
     */
-    const regraAntiga = 'grid-template-columns: auto minmax(96px, 0.5fr) minmax(0, 1.35fr) auto auto;';
+    const regraAntiga = 'grid-template-columns: auto minmax(96px,0.5fr) minmax(0,1.35fr) auto auto;';
     const colunasAntigas = [...regraAntiga.matchAll(/minmax\(\s*([\d.]+)(px)?\s*,\s*([\d.]+)fr\s*\)/g)];
-    // A mesma medicao, sobre a regra antiga: a coluna `1.35fr` tem min ZERO.
-    const comZero = colunasAntigas.some(([, px]) => Number(px ?? '0') === 0);
+    const comZero = colunasAntigas.some((m) => Number(m[1]) === 0);
     expect(comZero).toBe(true);
+    // A coluna de 1.35fr era exatamente a de minima zero.
+    expect(Number(colunasAntigas[1][1])).toBe(0);
     // E a regra nova nao tem nenhuma.
-    const colunasNovas = [...corpo('robo-ticket').matchAll(/minmax\(\s*([\d.]+)(px)?\s*,\s*([\d.]+)fr\s*\)/g)];
-    expect(colunasNovas.some(([, px]) => Number(px ?? '0') === 0)).toBe(false);
+    const novas = colunasFr(await lerCss('robo.css'));
+    expect(novas.some((c) => c.min === 0)).toBe(false);
   });
 
-  it('os DOIS lados da protecao podem encolher ate o piso do input', () => {
+  it('PROVA: os DOIS lados da protecao podem encolher ate o piso do input', async () => {
     /*
       MEDIDO: `Stop Loss` e `Take Profit` sao IRMAOS, e o que o operador compara
       sao os dois numeros. Empilhados em coluna, a comparacao deixa de existir.
 
-      `1fr 1fr` num `grid` tem minimo automatico igual ao CONTEUDO, e o conteudo
-      do `<span>` nao quebra. Com `minmax(0, 1fr)`, cada metade encolhe ate o
-      piso do `input` — que tem largura de caixa, nao de texto.
+      `1fr 1fr` num grid tem minimo automatico igual ao CONTEUDO, e conteudo de
+      `<span>` nao quebra. Com `minmax(0, 1fr)`, cada metade encolhe ate o piso
+      do `input` — que tem largura de caixa, nao de texto.
     */
-    const protecao = corpo('robo-ticket-protecao');
+    const protecao = corpo(await lerCss('robo.css'), 'robo-ticket-protecao');
     expect(protecao).toMatch(/minmax\(\s*0\s*,\s*1fr\s*\)\s+minmax\(\s*0\s*,\s*1fr\s*\)/);
     expect(protecao).toMatch(/min-width\s*:\s*0/);
   });
 
-  it('PROVA NEGATIVA: `1fr 1fr` deixa o rotulo como minimo', () => {
-    // A regra anterior, medida: as duas colunas tem minimo automatico = conteudo.
+  it('PROVA NEGATIVA: `1fr 1fr` deixa o ROTULO como minimo automatico', async () => {
+    /*
+      A regra anterior, medida. Sem `minmax`, o minimo automatico de uma coluna
+      `fr` num grid e o do conteudo — e o conteudo do rotulo nao quebra.
+    */
     const antes = 'grid-template-columns: 1fr 1fr;';
-    const minimoAutomatico = antes.includes('minmax');
-    expect(minimoAutomatico).toBe(false);
+    const temMinmax = antes.includes('minmax');
+    expect(temMinmax).toBe(false);
     // E a regra nova tem, explicitamente.
-    expect(corpo('robo-ticket-protecao')).toContain('minmax');
+    expect(corpo(await lerCss('robo.css'), 'robo-ticket-protecao')).toContain('minmax');
   });
 
-  it('o botao de envio tem o minimo que faltava a protecao', () => {
+  it('o botao de envio tem o minimo que FALTAVA a protecao', async () => {
     /*
-      `robo-ticket-enviar` ja tinha `min-width: 148px` — e e por isso que a
-      protecao nao precisava de `min(0)`: o botao ja estava garantido, e o min
-      zero dela nao comprava espaco para ninguem.
+      `robo-ticket-enviar` ja tinha `min-width: 148px`. E por isso que a
+      protecao nao precisava de `min(0)`: o botao ja estava garantido, e o
+      minimo zero dela nao comprava espaco para ninguem.
 
-      Este teste trava essa leitura: sem o min do botao, o `minmax` do grid
+      Este teste trava essa leitura. Sem o minimo do botao, o `minmax` do grid
       volta a ser a unica garantia, e a protecao volta a poder colapsar.
     */
-    expect(corpo('robo-ticket-enviar')).toMatch(/min-width\s*:\s*148px/);
+    const enviar = corpo(await lerCss('robo.css'), 'robo-ticket-enviar');
+    expect(enviar).toMatch(/min-width\s*:\s*148px/);
+    /*
+      E a COLUNA do botao no grid tambem declara o minimo.
+
+      `colunasFr` so enxerga `minmax(<min>, <n>fr)`; a coluna do botao e
+      `minmax(148px, auto)` — `auto`, nao `fr` — e por isso que a contagem de
+      colunas `fr` NAO a inclui. Um `length >= 3` aqui reprovaria por um motivo
+      errado, e o agente seguinte buscaria um bug no CSS em vez do no teste.
+    */
+    const grade = corpo(await lerCss('robo.css'), 'robo-ticket');
+    expect(grade).toMatch(/minmax\(\s*148px\s*,\s*auto\s*\)/);
   });
 
-  it('o requisito de margem ocupa a largura do ticket, como os niveis', () => {
+  it('o requisito de margem ocupa a largura do ticket, como os niveis', async () => {
     /*
       MEDIDO na XM (20:43): `Requisito de margem $0.85` fica logo abaixo da
       quantidade, na largura toda. Estreito entre o preco e os botoes, vira
       rodape — e o operador deixa de ler como um numero da ordem.
     */
-    expect(corpo('robo-ticket-requisito')).toMatch(/flex\s*:\s*1 1 100%/);
+    expect(corpo(await lerCss('robo.css'), 'robo-ticket-requisito')).toMatch(
+      /flex\s*:\s*1 1 100%/,
+    );
   });
 
-  it('as regras do ticket que o teste mede EXISTEM todas', () => {
-    // Sem isto, um `.robo-ticket` renomeado faria `corpo()` devolver string
-    // vazia, e os `toMatch` acima reprovariam por motivo errado.
-    for (const nome of ['robo-ticket', 'robo-ticket-protecao', 'robo-ticket-enviar', 'robo-ticket-requisito']) {
-      expect(temRegra(nome), `falta a regra .${nome}`).toBe(true);
+  it('as regras do ticket que este arquivo mede EXISTEM todas', async () => {
+    /*
+      Sem isto, um `.robo-ticket` renomeado faria `corpo()` devolver string
+      vazia, e os `toMatch` acima reprovariam por motivo errado — e o agente
+      seguinte buscaria um bug de CSS num teste de CSS.
+    */
+    const css = await lerCss('robo.css');
+    for (const nome of [
+      'robo-ticket',
+      'robo-ticket-protecao',
+      'robo-ticket-enviar',
+      'robo-ticket-requisito',
+      'robo-ticket-niveis',
+    ]) {
+      expect(temRegra(css, nome), `falta a regra .${nome}`).toBe(true);
     }
   });
 });
