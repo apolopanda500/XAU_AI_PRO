@@ -204,14 +204,28 @@ Medido nas 48 capturas de `C:\Users\Micro\Pictures\Screenshots\`
 |---|---|---|
 | conta | XAU AI PRO #391773676 · XMGlobal-MT5 14 · **Hedge** | XM, MT5 |
 | Capital | $10,50 | XM `Gerir` |
-| **Saldo** | **$4,88** → **$3,43** (medido agora) | XM, MT5 |
-| Margem / Livre | $0,00 / $10,50 | XM |
+| **Saldo** | **$4,88 → $3,43 → $2,78** | XM, MT5, `account_info()` |
+| Patrimônio | **$8,40** | `account_info()` |
+| Margem / Livre | $0,00 / $8,40 | MT5 |
 | Crédito | $5,62 | XM |
-| **Alavancagem** | **1000:1** | XM |
+| **Alavancagem** | **1000:1** | XM `Gerir` **e** `account_info().leverage` |
 
-O saldo caiu de 4,88 para 3,43 entre as capturas de 14:14 e as de 20:28. **Não
-sei por quê** — não medi. O `telemetry_history.jsonl` mostra `balance: 3.43`
-constantemente desde 22:56.
+**A QUEDA DO SALDO, MEDIDA.** Não é depósito nem saque: são **perdas de
+operação**. MEDIDO em `history_deals_get` de 24 h:
+
+| quando | tipo | volume | lucro | ticket |
+|---|---|---|---|---|
+| 06/10 16:13 | entrada (buy) | 0,01 | 0,00 | 261028332 |
+| 06/10 16:34 | saída | 0,01 | **−1,41** | 261033675 |
+| 06/10 17:12 | entrada | 0,01 | 0,00 | 261046727 |
+| 06/10 17:28 | saída | 0,01 | **−1,53** | 261051298 |
+| 06/10 22:53 | saída | 0,01 | 0,00 | 261094596 |
+| 06/10 23:09 | saída | 0,01 | **+0,19** | 261095592 |
+
+As duas perdas somam **−2,94**, que é exatamente a queda de 4,88 para 2,78 com
+o crédito de +0,19. **Nenhuma movimentação de saldo houve** — a queda é
+resultado de operação, e o rodapé da aba Histórico separa uma coisa da outra
+(AGENTS.md §10).
 
 ### 4.2 O risco que a conta impõe
 
@@ -221,7 +235,13 @@ mostra. Confere.
 
 - Oscilação adversa de **0,57%** consome toda a margem.
 - O stop 1:1 a 200 pontos é **0,23%** — menos de metade do caminho.
-- Saldo livre **$3,43** é menor que o nocional em **249×**.
+- Saldo livre **$2,78** é menor que o nocional em **308×**.
+
+**E foi exatamente assim que as duas perdas aconteceram.** MEDIDO nos deals:
+−1,41 e −1,53 de BTCUSD, com stop a ~1,40 e ~1,50 — o stop padrão de 200 pontos.
+A margem de $0,85 segurou porque o volume é 0,01; o que comeu o saldo foi o
+**stop curto demais para o ruído**, não a alavancagem. Com $2,78 de saldo livre,
+uma sequência de 3 stops com a mesma configuração consome 15% da conta.
 
 ### 4.3 Tabela de diferenças
 
@@ -308,12 +328,35 @@ Também: 28 arquivos de raspagem na raiz (`.py` e `.bat` de uma tarefa só, sem
 consumidor) foram **ignorados** no `.gitignore`, com o motivo escrito lá. **Não
 foram apagados** — apagar é decisão do dono.
 
-### 5.2 O que fazer agora
+### 5.2 O INSTALADOR NOVO — FEITO E MEDIDO
 
-1. `pytest -q tests` e `npx vitest run` — baseline **1264** e **706**.
-2. **Instalar e testar no app de verdade.** O código está verde; o binário
-   instalado ainda é o anterior.
-3. Busca de indicadores — `rsi` → 3 resultados, como a XM.
+| passo | medido |
+|---|---|
+| `scripts\build_app.bat` | **exit 0**, 7/7 etapas |
+| frontend | `✓ built in 815ms` |
+| core Rust | `Finished release profile in 4m 10s` |
+| `XAU AI PRO.exe` | 13.827.072 bytes, 07/10 00:18 |
+| NSIS | `XAU AI PRO_1.2.4_x64-setup.exe` 230.238.951 bytes |
+| MSI | `XAU AI PRO_1.2.4_x64_en-US.msi` 356.061.488 bytes |
+| desinstalar o antigo | `uninstall.exe /S` — pasta e registro removidos |
+| instalar o novo | registro de volta: `XAU AI PRO 1.2.4` |
+| rodar pelo atalho | `Desktop\XAU AI PRO.lnk` → PID 2348, core 6368 |
+| portas | **9001** (mt5-gateway.exe, PID 9348) · **9002** · **9003** |
+| `preflight --etapa app-rodando` | **todo `[ok]`**, `pendentes no git: 0` |
+
+**O estado do usuário sobreviveu à desinstalação.** O instalador NSIS não toca
+em `%APPDATA%\XAU_AI_PRO`: `config.json`, `credenciais-backup\`, `marketdata.db`,
+`audit.jsonl`, `intents.jsonl` e `telemetry_history.jsonl` continuam lá. Backup
+em `%TEMP%\opencode\backup_estado_usuario\` antes de desinstalar, por precaução.
+
+**O MOTOR ESTÁ RODANDO E PERDEU DINHEIRO.** `telemetry_history.jsonl` mostra
+`terminal_connected: true` e `ea_state: alive` a cada minuto, e `balance: 2.78`
+com `equity: 8.40`. As duas perdas estão medidas em §4.1.
+
+**O TOKEN É SÓ DE SESSÃO.** De fora, `/api/universal/history` devolve **401**,
+como manda o AGENTS.md §4. Não há arquivo de token em disco — o Tauri injeta
+por sessão. Isso é **fail-closed correto**, não defeito. Para medir o gateway de
+fora só com `MetaTrader5` direto, que é o que §3.1 usou.
 
 ### 5.3 O QUE NÃO DEIXAR PARA O PRÓXIMO
 

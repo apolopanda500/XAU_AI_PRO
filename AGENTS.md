@@ -323,7 +323,64 @@ Quando mais de um agente compartilha o working tree:
 3. O que exige ação do dono, escrito como pergunta, não como suposição.
 4. Estado do app, medido: processos, portas, heartbeat da conta.
 
-**Nunca** declarar "pronto" sem os números. **Nunca** esconder falha de teste
+**Nunca** declarar "pronto" sem os números.
+
+---
+
+## 14. Recuperação de arquivo corrompido (06/10/2026)
+
+**Um arquivo zerado tem o MESMO tamanho do original, e o `git diff` chama de
+"binário modificado".** MEDIDO: `PriceChart.tsx` tinha 19.157 bytes — todos
+`0x00`, sem uma quebra de linha — e o original em `HEAD` também tinha 19.157.
+O diff dizia `Bin 19157 -> 19157 bytes`.
+
+Se aquilo for lido como "arquivo binário", a restauração natural é
+`git checkout` do `HEAD` — e o `HEAD` era a versão **antiga**, sem 24 horas de
+trabalho.
+
+**Como se descobre:** ler os bytes, não confiar no diff.
+
+```powershell
+$b = [System.IO.File]::ReadAllBytes("caminho.tsx")
+"zeros=$($b.Count -eq ($b | Where-Object { $_ -eq 0 }).Count)"
+```
+
+Zero no primeiro bloco é **arquivo destruído**. Não é binário, não é
+encoding, não é BOM.
+
+**Onde procurar a cópia boa, em ordem:**
+
+1. **`.git`**: `git cat-file blob HEAD:<caminho>` — costuma ser a versão
+   **antiga**, e por isso o último recurso, não o primeiro.
+2. **checkpoint do editor**: `git log --all --oneline -S "<símbolo que só a
+   versão nova tem>" -- <arquivo>`.
+3. **source map do `dist`**: `frontend/dist/assets/*.js.map` tem `sourcesContent`
+   com o **TypeScript original**, e o `.map` é do **último build**. Foi o que
+   salvou aqui: 71.001 bytes contra 19.157 do `HEAD`.
+
+Extrair:
+
+```python
+import json, pathlib
+m = json.loads(pathlib.Path("frontend/dist/assets/index-XXX.js.map").read_text(encoding="utf-8"))
+i = [n for n, s in enumerate(m["sources"]) if s.endswith("PriceChart.tsx")][0]
+print(m["sourcesContent"][i])
+```
+
+**Cuidado com `>` do PowerShell:** ele reescreve o arquivo em UTF-16 e
+corrompe o blob. Use `cmd /c "git cat-file blob ... > arquivo"`.
+
+**`git status` recusando com `bad signature 0x00000000`** é o **índice**
+zerado, não o repositório: `git read-tree HEAD` reconstrói. O stash, se existir,
+é um arquivo à parte (`git/refs/stash`) e um arquivo zerado ali **não tem
+reconstrução**.
+
+**Deixe o backup antes de reconstruir**, e o `stash` quebrado movido para fora
+em vez de apagado — `git update-ref -d` falha quando o ref está quebrado.
+
+**Depois de recuperar, meça antes de dizer que consertou:** um `.tsx` zerado faz
+`tsc` despejar milhares de `TS1127` e derruba 7 arquivos de teste ao mesmo
+tempo, e o sintoma parece "o projeto quebrou". **Nunca** esconder falha de teste
 alheio em silêncio — nomeie o arquivo e o dono.
 
 
