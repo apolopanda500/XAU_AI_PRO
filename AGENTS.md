@@ -5,6 +5,10 @@
 > não. Se um número aqui divergir do que o comando medir, **o comando vence**;
 > corrija o número.
 
+> **ESTADO DE HOJE: [`Docs/PASSAGEM_20261007_PRIMEIROS_PASSOS.md`](Docs/PASSAGEM_20261007_PRIMEIROS_PASSOS.md)**
+> O que fazer primeiro, os números medidos e o que está aberto. Leia antes de
+> mexer em qualquer coisa — este arquivo diz as regras, aquele diz o estado.
+
 ## 1. O que este projeto é
 
 Plataforma de operação de múltiplas corretoras. Uma conta **REAL** opera por
@@ -144,6 +148,14 @@ Portanto:
 3. `pytest.ini` promove `PytestReturnNotNoneWarning` a **erro**: um teste que
    **retorna** valor em vez de usar `assert` não verifica nada, e passa calado
    no fim de uma saída de mil pontos.
+4. **Uma trava que proíbe DOCUMENTAR é o defeito, não a proteção.** MEDIDO em
+   07/10/2026: o teste *"o mapa é config e o código não tem nome de ativo"*
+   (§3) varria o arquivo e reprovou no texto que documentava a medição. A regra
+   do §3 estava certa; **o teste é que estava errado**. Ao escrever uma trava
+   textual, **case a REGRA, não a palavra** — e se a regra for "nenhum nome no
+   código", meça o código sem comentário nem docstring. Use `tokenize`, não
+   regex: um `#` dentro de string (URL, caminho) não é comentário, e o regex
+   apaga a linha inteira junto com o código dela.
 
 **Toda correção precisa de prova negativa.** Um teste que só passa não prova
 que a guarda funciona. Escreva também o caso que **deveria reprovar** e
