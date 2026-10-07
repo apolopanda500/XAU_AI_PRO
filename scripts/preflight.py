@@ -187,6 +187,21 @@ AUTORIZACOES_MQL5: dict[str, dict[str, str]] = {
         "compilado": "sim - MetaEditor64 via tests/test_mql5_compila.py, 0 errors",
         "reanexado": "NAO - mesma razao",
     },
+    "Enterprise/CircuitBreaker.mqh": {
+        "commit": "pendente",
+        "motivo": (
+            "So a FREQUENCIA do log de diagnostico. MEDIDO em 07/10/2026 na "
+            "conta 391773676: 934.078 linhas / 139,2 MB de journal em um dia, "
+            "com 57.393 linhas de [CIRCUIT] SPREAD EXPLOSION e outras 57.393 de "
+            "[CIRCUIT] SPREAD ALTO no mesmo tique. `CheckSpreadExplosion` "
+            "continua devolvendo true nos mesmos tiques com o mesmo limite e "
+            "`RunSymbol` continua delegando o bloqueio ao ValidateTrade - o "
+            "proprio comentario da linha 879 dizia que esse log 'serve apenas "
+            "de diagnostico'. Throttle de 60 s por simbolo."
+        ),
+        "compilado": "PENDENTE - medir apos compilar",
+        "reanexado": "NAO - o dono reanexa (AGENTS.md §7)",
+    },
 }
 
 

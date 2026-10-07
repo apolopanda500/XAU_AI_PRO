@@ -117,6 +117,104 @@ public:
 
 
 //==================================================
+// THROTTLE DE DIAGNOSTICO
+//
+// MEDIDO em 07/10/2026 na conta 391773676 (XMGlobal-MT5 14).
+// Ver AGENTS.md §7: alterar .mqh exige recompilar no
+// MetaEditor e REANEXAR ao grafico — compilar nao reanexa.
+//
+// O QUE ESTAVA ACONTECENDO
+// -----------------------
+// 12 instancias do EA anexadas no terminal, 3 delas no
+// mesmo BTCUSD (M1, M5 e M15). O journal do dia fechou em
+// 934.078 linhas / 139,2 MB, das quais:
+//
+//   57.393  [CIRCUIT] SPREAD EXPLOSION
+//   57.393  [CIRCUIT] SPREAD ALTO  (o mesmo tique)
+//   38.331  [SAFETY] Free margin low
+//   20.067  blocos de "=== RECOVERY STATUS ===" (8 linhas cada)
+//
+// USDSEK,H1 sozinho responde por 198.079 linhas.
+//
+// A CALIBRACAO NAO FOI ALTERADA
+// -----------------------------
+// `CheckSpreadExplosion` continua devolvendo `true` nos
+// mesmos tiques, com o mesmo limite. O filtro barra spread
+// exatamente como antes. O que mudou e a FREQUENCIA do log —
+// e o proprio comentario do `RunSymbol` ja dizia que essa
+// linha "serve apenas de diagnostico".
+//
+// Por que o limite de 500 nao é o mesmo para todos: "500
+// pontos" vale $5,00 no BTCUSD (point 0,01) e $0,005 no
+// EURUSD (point 0,00001). Sao 1000x de diferenca, porque
+// `digits` vai de 2 a 5 entre os graficos. E o mapa de
+// limites `MaxSpreadBySymbol = "GOLD#:350,BTCUSD#:600,..."`
+// nunca acerta, porque os graficos usam os nomes SEM o `#`
+// e o `GetMaxSpread` compara com `StringCompare` exato.
+// MEDIDO: BTCUSD tem o MENOR spread relativo da conta
+// (0,048%) e mesmo assim era o que mais disparava.
+//==================================================
+
+#define CIRCUIT_LOG_MAX_SIMBOLOS 32
+#define CIRCUIT_LOG_INTERVALO_SEG 60
+
+string
+   g_circLogSimbolo[CIRCUIT_LOG_MAX_SIMBOLOS];
+datetime
+   g_circLogQuando[CIRCUIT_LOG_MAX_SIMBOLOS];
+int
+   g_circLogQuantos=
+   0;
+
+
+//==================================================
+// CIRCUIT LOG PODE IMPRIMIR
+//==================================================
+// Verdadeiro no maximo uma vez por `segundos` por `id`.
+// Um id diferente (ex.: "spread" vs "spread_alto") conta
+// separado, porque sao duas mensagens distintas.
+//==================================================
+
+bool
+CircuitLogPodeImprimir(
+   string id,
+   int segundos
+)
+{
+   if(segundos <= 0)
+      return(true);
+
+   datetime agora=
+      TimeCurrent();
+
+   for(int i = 0; i < g_circLogQuantos; i++)
+   {
+      if(g_circLogSimbolo[i] == id)
+      {
+         if(agora - g_circLogQuando[i] < segundos)
+            return(false);
+
+         g_circLogQuando[i]=
+            agora;
+
+         return(true);
+      }
+   }
+
+   if(g_circLogQuantos >= CIRCUIT_LOG_MAX_SIMBOLOS)
+      return(false);
+
+   g_circLogSimbolo[g_circLogQuantos]=
+      id;
+   g_circLogQuando[g_circLogQuantos]=
+      agora;
+   g_circLogQuantos++;
+
+   return(true);
+}
+
+
+//==================================================
 // STATIC DEFINITIONS
 //==================================================
 
@@ -316,20 +414,30 @@ bool CCircuitBreaker::CheckSpreadExplosion(
       emergencySpread
    )
    {
-      Print(
-         "[CIRCUIT] SPREAD EXPLOSION | ",
-         symbol,
-         " | Spread=",
-         DoubleToString(
-            spread,
-            2
-         ),
-         " | Limit=",
-         DoubleToString(
-            emergencySpread,
-            2
+      // O retorno e incondicional: a DECISAO nao depende do log.
+      // O log e throttle por `CircuitLogPodeImprimir`.
+      if(
+         CircuitLogPodeImprimir(
+            "spread|" + symbol,
+            CIRCUIT_LOG_INTERVALO_SEG
          )
-      );
+      )
+      {
+         Print(
+            "[CIRCUIT] SPREAD EXPLOSION | ",
+            symbol,
+            " | Spread=",
+            DoubleToString(
+               spread,
+               2
+            ),
+            " | Limit=",
+            DoubleToString(
+               emergencySpread,
+               2
+            )
+         );
+      }
 
       return true;
    }
@@ -879,11 +987,19 @@ void CCircuitBreaker::RunSymbol(
       // Este log serve apenas de diagnÃƒÆ’Ã‚Â³stico.
       //================================================
 
-      Print(
-         "[CIRCUIT] SPREAD ALTO | ",
-         symbol,
-         " | Bloqueio delegado ao ValidateTrade"
-      );
+      if(
+         CircuitLogPodeImprimir(
+            "spread_alto|" + symbol,
+            CIRCUIT_LOG_INTERVALO_SEG
+         )
+      )
+      {
+         Print(
+            "[CIRCUIT] SPREAD ALTO | ",
+            symbol,
+            " | Bloqueio delegado ao ValidateTrade"
+         );
+      }
    }
 
 
