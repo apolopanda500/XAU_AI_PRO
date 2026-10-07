@@ -121,4 +121,90 @@ export function mercadoDoAtivo(assetClass: string | null | undefined): string | 
   return MERCADO_POR_CLASSE[assetClass.trim().toLowerCase()] ?? null;
 }
 
+/*
+  O REQUISITO DE MARGEM (06/10/2026)
+  ===================================
+  MEDIDO nas capturas da XM (`my.xm.com/pt/symbol-info/BTCUSD`, 20:43):
+  `Quantidade 0,01 lotes` · `Requisito de margem $0.85` · barra em `8,01%`.
+
+  A CONTA E O QUE CONFIRMA. MEDIDO no painel `Gerir` da XM e no
+  `account_info()` do MT5, os dois lados dizem **1000:1**. E a conta confere:
+
+      nocional   = 0,01 x contract_size x preco
+                = 0,01 x 1,0 x 85.523        ($855,23 — contract_size do BTCUSD
+                                                e 1,0, MEDIDO no symbol_info)
+      requisito = 855,23 / 1000 = 0,855      → a XM escreve `$0.85`
+
+  `contract_size` e o que separa cripto de forex, e sem ele o dinheiro vira preco
+  errado: EURUSD tem `contract_size = 100.000` e GOLD tem `100`. Um requisito de
+  margem calculado com `1` no lugar do contrato daria `0,86` no BTCUSD e
+  `855,23` no EURUSD — o mesmo valor para os dois, e errado num deles.
+
+  POR QUE ISTO NAO ERA "NUMERO INVENTADO" (06/10/2026)
+  =====================================================
+  O ciclo anterior recusou este numero, com o motivo certo mas a conclusao
+  errada: escrevia-se que a alavancagem "e um numero que a corretora calcula e
+  que o app nao tem de onde ler". **A corretora publica, e o gateway ja lia a
+  conta.** Bastava a alavancagem virar campo do payload — feito em
+  `mt5_gateway.py`, campo `leverage`.
+
+  Um requisito de margem estimado seria o "numero inventado no painel vira
+  limite real" do AGENTS.md. Um requisito de margem CALCULADO com a
+  alavancagem da conta e o contract_size do ativo nao e estimativa: e a conta
+  da XM, conferida.
+
+  O QUE ESTA FUNCAO NAO FAZ, E POR QUE
+  =====================================
+  Ela nao sabe a margem LIVRE da conta, e por isso a BARRA fica de fora. A XM
+  escreve `8,01%` — que e `requisito / margem livre` — e a margem livre muda a
+  cada tique. Um percentual guardado no painel seria um numero que muda sozinho
+  sem que ninguem leia. Quem tem a margem livre em tempo real e a Carteira.
+*/
+export type RequisitoMargem = {
+  /** Requisito em dinheiro, ou `null` quando falta dado medido. */
+  valor: number | null;
+  /** O nocional em dinheiro que o operador esta realmente arriscando. */
+  nocional: number | null;
+  /** Por que `valor` e `null`, quando e. A tela mostra isto. */
+  motivo: string | null;
+  /**
+   * true quando algum insumo NAO veio da corretora.
+   *
+   * O mesmo sentido de `FaixaVolume.assumido`: o que importa e se o valor
+   * ATIVO veio do produtor, e nao se veio `null`. Com `contractSize` ausente e
+   * volume 0,01, um requisito calculado com `1` no lugar do contrato seria
+   * `0,86` no BTCUSD — e `855,23` no EURUSD, cujo contrato e 100.000. O numero
+   * errado com aparencia de certo e o que este campo existe para denunciar.
+   */
+  assumido: boolean;
+};
+
+export function requisitoDeMargem(
+  volume: number,
+  preco: number,
+  contractSize: number | null | undefined,
+  leverage: number | null | undefined,
+): RequisitoMargem {
+  const faltando: string[] = [];
+  if (!Number.isFinite(volume) || volume <= 0) faltando.push('quantidade');
+  if (!Number.isFinite(preco) || preco <= 0) faltando.push('preço');
+  if (typeof contractSize !== 'number' || !Number.isFinite(contractSize) || contractSize <= 0) {
+    faltando.push('tamanho do contrato');
+  }
+  if (typeof leverage !== 'number' || !Number.isFinite(leverage) || leverage <= 0) {
+    faltando.push('alavancagem da conta');
+  }
+  if (faltando.length) {
+    return { valor: null, nocional: null, motivo: `Falta ${faltando.join(', ')}`, assumido: true };
+  }
+
+  const nocional = volume * (contractSize as number) * preco;
+  return {
+    valor: nocional / (leverage as number),
+    nocional,
+    motivo: null,
+    assumido: false,
+  };
+}
+
 export default unidadeDeVolume;

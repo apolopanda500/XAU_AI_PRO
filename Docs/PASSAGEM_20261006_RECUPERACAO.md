@@ -4,10 +4,13 @@ Documento de trabalho para qualquer agente que pegar este projeto.
 Sem data e sem hora de propósito: as regras valem para sempre, os números não.
 **Se um número aqui divergir do que o comando medir, o comando vence; corrija o número.**
 
-Estado medido no fim desta sessão: **`pytest` 1259 verdes**, **`vitest` 695
-verdes (47 arquivos)**, **`tsc --noEmit` limpo**, **`preflight --etapa
-app-rodando` todo `[ok]`**. O `git status` tem **178 arquivos pendentes** e
-**NADA disso estava commitado** — ver §1.
+Estado medido no fim desta sessão: **`pytest` 1264 verdes**, **`vitest` 706
+verdes (48 arquivos)**, **`tsc --noEmit` limpo**, **`npm run build` ✓ 1,53s**,
+**`preflight --etapa app-rodando` todo `[ok]`**.
+
+**Tudo isto está commitado** — `48754ed`, 157 arquivos, 28.473 linhas. Antes
+desta sessão, **178 arquivos estavam pendentes e nada do gráfico estava no git**
+— ver §1.
 
 ---
 
@@ -233,42 +236,84 @@ mostra. Confere.
 | **espessura 1–4 px** | sim | — | **feito nesta sessão** | feito |
 | **travar desenho** | 🔒 | — | **feito nesta sessão** | feito |
 | **Ctrl+Z desfazer** | sim | — | **feito nesta sessão** | feito |
-| **requisito de margem** | `$0.85` | — | **ausente** | **falta** |
-| barra de margem | `8,01%` | — | **ausente** | **falta** |
+| **requisito de margem** | `$0.85` | — | **feito nesta sessão** | feito |
+| barra de margem | `8,01%` | — | **ausente** (assim decidedo) | falta |
 | indicadores com busca | `rsi`→3, `ema`→6 | — | botões fixos EMA/RSI/MACD | parcial |
 | pincel, texto, formas | sim | — | **ausente** | falta |
 | biblioteca com busca | sim | — | **ausente** | falta |
 | histórico | deal + saldo | deal | deal + saldo, separado | feito |
 | **"Nenhum registro" vs MT5 fechado** | — | — | **diz qual é** | feito nesta sessão |
 
-### 4.4 O que ainda falta, em ordem
+### 4.4 O REQUISITO DE MARGEM — a correção de um erro anterior
 
-1. **Requisito de margem e barra** — `nocional ÷ alavancagem`. O número é
-   computável e **medido**: `$855 ÷ 1000 = $0,85`. Não é estimativa.
-2. **Busca de indicadores** — `rsi` → 3 resultados, como a XM.
-3. **Pincel, texto, formas geométricas** — a XM tem, com `Ctrl+Z`.
+O `Docs/ORDEM_PELO_GRAFICO_20261006.md` recusou este número, e o **motivo** estava
+certo: *"é um número que a corretora calcula e que o app não tem de onde ler —
+escrever um valor estimado ali seria o 'número inventado no painel vira limite
+real' que o AGENTS.md proíbe."*
+
+A **conclusão** estava errada. **A corretora publica.** MEDIDO nos dois lados:
+
+| onde | o que diz |
+|---|---|
+| painel `Gerir` da XM | `Alavancagem 1000:1` |
+| `account_info().leverage` | `1000` |
+
+E a conta confere, que é o que autoriza a tela a escrever:
+
+```
+contract_size BTCUSD = 1,0                    (MEDIDO em symbol_info)
+alavancagem          = 1000:1
+entrada              = 85.376,63
+nocional   = 0,01 × 1,0 × 85.376,63 = 853,7663
+requisito = 853,7663 ÷ 1000       = 0,8537663   → a XM escreve "$0.85"
+```
+
+Corrigido dos dois lados: `leverage` no payload de `/api/live`
+(`mt5_gateway.py:1550`) e o cálculo no painel (`requisitoDeMargem`).
+
+**Por que `contract_size` é obrigatório junto.** MEDIDO: BTCUSD tem contrato
+`1`, EURUSD tem `100.000`, GOLD tem `100`. O mesmo `0,01` a 85.376,63 vale
+`853,77` no BTCUSD e `85.376.630` no EURUSD. Com um palpite de `1`, o número
+estaria **certo por coincidência no BTCUSD** — e o operador, que conferiu ali,
+não conferiria no forex.
+
+**A barra de margem (`8,01%`) continua fora, e é decisão.** Ela é
+`requisito ÷ margem livre`, e a margem livre muda a cada tique. Um percentual
+guardado no painel é um número que muda sozinho sem ninguém ler. Quem tem a
+margem livre em tempo real é a Carteira.
+
+Testes: `requisitoMargem.test.ts` (7), `test_alavancagem_no_payload.py` (5),
+`AcompanharModelos.ordem.test.tsx` (+4).
+
+### 4.5 O que ainda falta, em ordem
+
+1. **Busca de indicadores** — `rsi` → 3 resultados, como a XM. Hoje são três
+   botões fixos: EMA, RSI, MACD.
+2. **Pincel, texto, formas geométricas** — a XM tem, com `Ctrl+Z`.
+3. **Barra de margem** — só depois de decidir de onde vem a margem livre.
 
 ---
 
 ## 5. O QUE O PRÓXIMO AGENTE DEVE FAZER
 
-### 5.1 PRIMEIRO: commitar
+### 5.1 Commitar — FEITO
 
-**178 arquivos estão fora do git.** Foi exatamente por isso que o `.tsx` zerado
-levou o trabalho junto: `PriceChart.tsx`, `BarraFerramentas.tsx`,
-`desenhos.ts`, `ordemGrafico.ts`, `AcompanharModelos.tsx` e 100+ outros estão
-**não rastreados**. Um novo acidente perde tudo de novo.
+Commit `48754ed`, 157 arquivos. Era a primeira tarefa: **178 arquivos estavam
+fora do git**, e foi exatamente por isso que o `.tsx` zerado levou o trabalho
+junto. `PriceChart.tsx`, `BarraFerramentas.tsx`, `desenhos.ts`,
+`ordemGrafico.ts`, `AcompanharModelos.tsx` e mais 100 arquivos estavam **não
+rastreados**.
 
-```powershell
-git add -A
-git commit -m "grafico: pontas, paleta, espessura, trava e Ctrl+Z; historico: a tela para de descartar a busca"
-```
+Também: 28 arquivos de raspagem na raiz (`.py` e `.bat` de uma tarefa só, sem
+consumidor) foram **ignorados** no `.gitignore`, com o motivo escrito lá. **Não
+foram apagados** — apagar é decisão do dono.
 
-### 5.2 Depois
+### 5.2 O que fazer agora
 
-1. `pytest -q tests` e `npx vitest run` — baseline **1259** e **695**.
-2. Requisito de margem no painel de ordem, com `nocional ÷ alavancagem`.
-3. Busca de indicadores.
+1. `pytest -q tests` e `npx vitest run` — baseline **1264** e **706**.
+2. **Instalar e testar no app de verdade.** O código está verde; o binário
+   instalado ainda é o anterior.
+3. Busca de indicadores — `rsi` → 3 resultados, como a XM.
 
 ### 5.3 O QUE NÃO DEIXAR PARA O PRÓXIMO
 
@@ -290,11 +335,11 @@ git commit -m "grafico: pontas, paleta, espessura, trava e Ctrl+Z; historico: a 
 
 ```powershell
 cd <repo>
-.\.venv\Scripts\python.exe -m pytest -q tests -p no:cacheprovider   # 1259
+.\.venv\Scripts\python.exe -m pytest -q tests -p no:cacheprovider   # 1264
 cd frontend
 npx tsc --noEmit                                                    # limpo
-npx vitest run                                                      # 695, 47 arquivos
-npm run build
+npx vitest run                                                      # 706, 48 arquivos
+npm run build                                                       # ✓ 1,53s
 cd ..; cmd /c "scripts\build_app.bat"
 ```
 

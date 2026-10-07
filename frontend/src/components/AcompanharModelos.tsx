@@ -9,8 +9,9 @@ import { requestId } from '../lib/format';
 import { useEffect, useState } from 'react';
 import PriceChart from './charts/PriceChart';
 import { nivelDoValor, linhasDaOrdem, rotuloDoBotao } from '../lib/ordemGrafico';
-import { fichaDoAtivo, faixaDoAtivo, unidadeDeVolume, rotuloQuantidade } from '../lib/volumeUnidade';
+import { fichaDoAtivo, faixaDoAtivo, requisitoDeMargem, unidadeDeVolume, rotuloQuantidade } from '../lib/volumeUnidade';
 import { useCatalogoAtivos } from '../hooks/useCatalogoAtivos';
+import { useAccount } from '../hooks/queries';
 
 // Acompanhar os modelos operando, ao vivo e com seguranca.
 //
@@ -127,8 +128,39 @@ export default function AcompanharModelos() {
 
   const faixa = faixaDoAtivo(ficha);
   const unidade = unidadeDeVolume(ficha?.assetClass);
+
+  /*
+    A REQUISITO DE MARGEM (06/10/2026)
+    ==================================
+    MEDIDO na captura da XM (20:43): `Quantidade 0,01 lotes` ·
+    `Requisito de margem $0.85` · barra em `8,01%`.
+
+    O ciclo anterior recusou este numero por causa certa — nao se escreve
+    estimativa num painel onde o numero vira limite — e chegou a conclusao
+    errada: escreveu que a alavancagem "e um numero que a corretora calcula e
+    que o app nao tem de onde ler". **A corretora publica.** MEDIDO no painel
+    `Gerir` da XM: `Alavancagem 1000:1`; MEDIDO em `account_info().leverage`:
+    `1000`. O gateway agora traz o campo.
+
+    E o numero confere com a conta, o que e o que autoriza a tela a exibi-lo:
+    `0,01 x contract_size 1,0 x 85.376,63 = 853,77` de nocional, e
+    `853,77 / 1000 = 0,85`. A XM escreve `$0.85`. (Teste:
+    `requisitoMargem.test.ts`.)
+
+    A BARRA de margem, essa sim, fica de fora: e `requisito / margem livre`, e a
+    margem livre muda a cada tique. Um percentual guardado no painel seria um
+    numero que muda sozinho sem ninguem ler.
+  */
+  const contaQ = useAccount();
+  const conta = (contaQ.data ?? null) as { leverage?: number | null } | null;
+
   const contrato = ficha?.contractSize;
   const contratoOk = typeof contrato === 'number' && Number.isFinite(contrato) && contrato > 0;
+
+  const requisito = useMemo(
+    () => requisitoDeMargem(Number(volumeArmado), precoArmado ?? 0, contrato, conta?.leverage),
+    [volumeArmado, precoArmado, contrato, conta?.leverage],
+  );
 
   const volumeNum = Number(volumeArmado);
   const riscoNum = Number(riscoArmado);
@@ -461,10 +493,11 @@ export default function AcompanharModelos() {
         ordem armada nao ha painel: um painel vazio com botao desabilitado
         seria um controle que o operador acredita ter e nao tem.
 
-        "Requisito de margem" NAO entra. E um numero que a corretora calcula
-        (alavancagem da conta, spread, taxa da exchange) e que o app nao tem de
-        onde ler — escrever um valor estimado ali seria exatamente o "numero
-        inventado no painel vira limite real" que o AGENTS.md proibe.
+        O REQUISITO DE MARGEM ENTROU NESTE CICLO, e a correcao do ciclo
+        anterior: ele NAO entrava por "o app nao tem de onde ler" — a
+        corretora PUBLICA a alavancagem, e o gateway agora traz `leverage` do
+        `account_info()`. O numero que sai da conta foi conferido com a conta
+        da XM antes de a tela escrever. Ver o bloco do calculo, abaixo.
       */}
       {precoArmado !== null && (
         <div className="robo-ticket robo-ordem-painel" aria-label="Ordem armada">
@@ -540,6 +573,38 @@ export default function AcompanharModelos() {
                 title="Quanto você espera ganhar. O preço do alvo é derivado."
               />
             </label>
+          </div>
+
+          {/*
+            O REQUISITO DE MARGEM E O NOCIONAL, lado a lado.
+
+            Sao os dois numeros que o operador precisa antes de confirmar, e o
+            nocional e o que oeye le: `$0.85` de margem parece pouco, e
+            `$853.77` de dinheiro exposto diz o que a alavancagem faz.
+
+            Quando falta insumo, o texto DIZ O QUE FALTA em vez de mostrar
+            `$0,00`. `0,00` de requisito lido como "de graca" e a leitura que
+            leva o operador a abrir uma ordem que a corretora recusa.
+          */}
+          <div className="robo-ticket-requisito" role="status" aria-live="polite">
+            {requisito.valor !== null ? (
+              <>
+                <span>
+                  Requisito de margem <b>{requisito.valor.toFixed(2)} USD</b>
+                </span>
+                <span className="muted">
+                  nocional {requisito.nocional!.toLocaleString('pt-BR', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}{' '}
+                  USD{conta?.leverage ? ` · alavancagem ${conta.leverage}:1` : ''}
+                </span>
+              </>
+            ) : (
+              <span className="muted">
+                Requisito de margem indisponível — {requisito.motivo}.
+              </span>
+            )}
           </div>
 
           <div className="robo-ticket-niveis" role="status" aria-live="polite">

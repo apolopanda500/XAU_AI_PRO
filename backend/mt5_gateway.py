@@ -1547,6 +1547,29 @@ def _payload() -> dict:
                 "margin_free": optional_number(getattr(info, "margin_free", None)),
                 "margin_level": optional_number(getattr(info, "margin_level", None)),
                 "currency": getattr(info, "currency", None),
+                # ------------------------------------------------------------
+                # A ALAVANCAGEM DA CONTA (06/10/2026)
+                # ------------------------------------------------------------
+                # MEDIDO na conta 391773676 (XMGlobal-MT5 14, Hedge): o painel
+                # `Gerir` da XM escreve `Alavancagem 1000:1`, e
+                # `account_info().leverage` devolve `1000`. Sao o mesmo numero,
+                # medido de dois lados.
+                #
+                # Por que ela precisa VIR: o `Requisito de margem` do painel de
+                # ordem e `nocional / alavancagem`, e sem a alavancagem o app
+                # teria de usar um chute — que e o "numero inventado no painel
+                # vira limite real" que o proprio painel proibe.
+                #
+                # Conferido com o numero da XM: `0,01 BTCUSD` a 85.523 tem
+                # nocional `0,01 x 1 x 85.523 = 855,23` (contract_size do BTCUSD
+                # e 1,0 — MEDIDO), e `855,23 / 1000 = 0,855`. A XM escreve
+                # `$0.85`. Confere.
+                #
+                # `None` quando o campo nao existe na conta: e ausencia medida,
+                # e nao zero. Com `None` a tela nao mostra requisito de margem,
+                # em vez de mostrar `0,00` e o operador acreditar que a ordem
+                # e gratuita.
+                "leverage": optional_number(getattr(info, "leverage", None)),
                 "trade_allowed": bool(getattr(ti, "trade_allowed", False)) if ti else False,
                 "terminal_connected": bool(getattr(ti, "connected", False)) if ti else False,
                 "mode": account_mode,

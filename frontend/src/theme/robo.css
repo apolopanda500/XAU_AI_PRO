@@ -480,3 +480,27 @@
   gap: 2px;
   font-size: 11px;
 }
+
+/*
+  O REQUISITO DE MARGEM (06/10/2026)
+  ===================================
+  MEDIDO na captura da XM (20:43): `Requisito de margem $0.85`, com o nocional
+  logo abaixo. Os dois numeros lado a lado porque `$0.85` sozinho parece pouco:
+  so o `$853.77` de dinheiro exposto diz o que a alavancagem de 1000:1 faz.
+
+  `flex: 1 1 100%` como o bloco de niveis: o requisito ocupa a largura toda do
+  ticket, e uma linha apertada entre o preco e os botoes seria lida como
+  rodape.
+*/
+.robo-ticket-requisito {
+  display: flex;
+  flex: 1 1 100%;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 0;
+  font-size: 12px;
+}
+
+.robo-ticket-requisito b {
+  font-family: var(--fonte-mono, ui-monospace, monospace);
+}

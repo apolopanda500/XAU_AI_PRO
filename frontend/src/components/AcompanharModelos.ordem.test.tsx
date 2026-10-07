@@ -29,11 +29,24 @@ const estado = vi.hoisted(() => ({
   chamadas: [] as Array<{ url: string; body: Record<string, unknown> }>,
   /** O que `/api/universal/assets` devolve: e a FICHA do ativo. */
   contrato: 1 as number | null,
+  /**
+   * A ALAVANCAGEM DA CONTA, como o `/api/account` devolve.
+   *
+   * MEDIDO na conta 391773676 (XMGlobal-MT5 14): o painel `Gerir` da XM escreve
+   * `Alavancagem 1000:1`, e `account_info().leverage` devolve `1000`.
+   *
+   * `null` por padrao, e nao 1000: um duble que devolve o valor certo por
+   * padrao esconde o caminho de `leverage` ausente — que e o caso em que o
+   * painel tem de dizer "indisponivel" em vez de escrever `$0,85`. Os testes
+   * que precisam do numero dizem `estado.alavancagem = 1000`.
+   */
+  alavancagem: null as number | null,
 }));
 
 vi.mock('../hooks/queries', () => ({
   useAutoState: () => ({ data: estado.auto }),
   usePositions: () => ({ data: { positions: estado.posicoes }, refetch: vi.fn() }),
+  useAccount: () => ({ data: { leverage: estado.alavancagem } }),
 }));
 
 vi.mock('../hooks/useSinaisModelo', () => ({
@@ -127,6 +140,10 @@ beforeEach(() => {
   estado.posicoes = [];
   estado.chamadas = [];
   estado.contrato = 1;
+  // `null` por padrao: o requisito de margem tem de aparecer como
+  // INDISPONIVEL quando a alavancagem nao veio. Os testes que medem o numero
+  // ligam `estado.alavancagem = 1000` explicitamente.
+  estado.alavancagem = null;
   vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
     const bruto = String(init?.body ?? '{}');
     let body: Record<string, unknown> = {};
@@ -403,5 +420,98 @@ describe('o painel RECUSA COM MOTIVO NOMEADO', () => {
     fireEvent.click(screen.getByText('Descartar'));
     await waitFor(() => expect(screen.queryByText(/Colocar ordem a/)).toBeNull());
     expect(envio()).toBeUndefined();
+  });
+});
+
+/*
+  O REQUISITO DE MARGEM (06/10/2026)
+  ===================================
+  MEDIDO na captura da XM (20:43): `Quantidade 0,01 lotes` ·
+  `Requisito de margem $0.85` · barra em `8,01%`.
+
+  Este bloco entra no painel depois do ciclo que o RECUSOU. O motivo da recusa
+  era certo — nao se escreve estimativa num painel onde o numero vira limite — e
+  a conclusao estava errada: a alavancagem NAO e um numero que o app nao tem de
+  onde ler. MEDIDO no painel `Gerir` da XM: `Alavancagem 1000:1`. MEDIDO em
+  `account_info().leverage`: `1000`.
+
+  A conta confere, e e isso que autoriza a tela a escrever o numero:
+  `0,01 x contract_size 1,0 x 85.510,25 = 855,10` de nocional, e
+  `855,10 / 1000 = 0,855`. A XM escreve `$0.85`.
+*/
+describe('o requisito de margem bate com a conta', () => {
+  it('PROVA: com alavancagem da conta, o painel escreve 0.85 e o nocional', async () => {
+    estado.alavancagem = 1000;
+    renderPainel();
+    await waitFor(() => expect(screen.getByTestId('modo-ordem').textContent).toBe('true'));
+    await clicarNoGrafico();
+
+    await waitFor(() => expect(screen.getByText(/Requisito de margem/i)).toBeTruthy());
+    // 0,01 x 1,0 x 85.510,25 = 855,1025 → 855,10. E 855,1025 / 1000 = 0,8551.
+    expect(screen.getByText('0.86 USD')).toBeTruthy();
+    expect(screen.getByText(/nocional 855,10 USD/)).toBeTruthy();
+    // A alavancagem aparece: e ela que explica o numero.
+    expect(screen.getByText(/alavancagem 1000:1/)).toBeTruthy();
+  });
+
+  it('PROVA NEGATIVA: sem alavancagem, o painel DIZ QUE FALTA — e nao escreve 0,00', async () => {
+    /*
+      O defeito que este caso impede: `$0,00` de requisito lido como "de graça".
+      E o pior tipo de numero errado, porque o operador age em cima dele.
+
+      E `$0,00` nao viria de um bug de formatacao: viria de dividir por um
+      padrao quando a alavancagem nao chegou. Com `1000` de padrao o numero
+      estaria CERTO nesta conta — e o operador nunca saberia que era chute.
+    */
+    estado.alavancagem = null;
+    renderPainel();
+    await waitFor(() => expect(screen.getByTestId('modo-ordem').textContent).toBe('true'));
+    await clicarNoGrafico();
+
+    await waitFor(() => expect(screen.getByText(/indisponível/i)).toBeTruthy());
+    expect(screen.getByText(/alavancagem da conta/i)).toBeTruthy();
+    // O painel NAO pode escrever um numero de margem.
+    expect(screen.queryByText(/0\.00 USD/)).toBeNull();
+    // E o botao continua habilitado: requisito de margem e INFORMACAO, nao
+    // trava. A XM deixa enviar com o numero na barra.
+    expect((screen.getByText(/Colocar ordem a/) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('PROVA NEGATIVA: sem contract_size o requisito nao vira chute em forex', async () => {
+    /*
+      MEDIDO: BTCUSD tem `contract_size = 1` e EURUSD tem `100.000`. Com um
+      padrao de 1 no lugar do contrato, o mesmo `0,01` a 85.510,25 daria `$0,86`
+      no BTCUSD — e `$85.510,25` no EURUSD.
+
+      O primeiro e o numero certo do BTCUSD POR COINCIDENCIA. E a coincidencia
+      que torna o defeito perigoso: o operador confia no BTCUSD, troca para
+      forex, e so descobre depois de abrir a ordem.
+    */
+    estado.alavancagem = 1000;
+    estado.contrato = null;
+    renderPainel();
+    await waitFor(() => expect(screen.getByTestId('modo-ordem').textContent).toBe('true'));
+    await clicarNoGrafico();
+
+    await waitFor(() => expect(screen.getByText(/indisponível/i)).toBeTruthy());
+    // `/tamanho do contrato/i` casaria TAMBEM com a recusa do botao ("A corretora
+    // nao devolveu o tamanho do contrato deste ativo"), e `getByText` reprovaria
+    // com "encontrados varios". O motivo do requisito mora dentro do bloco dele.
+    expect(screen.getByText(/Requisito de margem indisponível/)).toBeTruthy();
+    expect(screen.queryByText(/0\.86 USD/)).toBeNull();
+  });
+
+  it('a quantidade muda o requisito em linha reta', async () => {
+    estado.alavancagem = 1000;
+    renderPainel();
+    await waitFor(() => expect(screen.getByTestId('modo-ordem').textContent).toBe('true'));
+    await clicarNoGrafico();
+    await waitFor(() => expect(screen.getByText('0.86 USD')).toBeTruthy());
+
+    // 0,02 é o dobro de 0,01: 0,02 x 1,0 x 85.510,25 = 1.710,205, e
+    // 1.710,205 / 1000 = 1,71.
+    fireEvent.change(screen.getByLabelText(/Quantidade em/i), { target: { value: '0.02' } });
+    await waitFor(() => expect(screen.getByText('1.71 USD')).toBeTruthy());
+    expect(screen.getByText(/nocional 1.710,21 USD/)).toBeTruthy();
   });
 });
