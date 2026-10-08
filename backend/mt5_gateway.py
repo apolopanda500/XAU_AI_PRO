@@ -1731,6 +1731,36 @@ def _quote(symbol: str) -> dict:
 
 
 def _symbols() -> dict:
+    # A SESSAO MT5, QUE A ROTA DE CANDLES JA EXIGIA E ESTA NAO EXIGIA
+    # =============================================================
+    # MEDIDO em 08/10/2026, conta 391773676 (XMGlobal-MT5 14):
+    #
+    #   terminal sem sessao:  symbols_get() -> None   -> count=0  unavailable
+    #   terminal com sessao: symbols_get() -> 1640    -> count=1640  ok
+    #
+    # A MESMA rota, os MESMOS argumentos. `discover_assets` le `symbols_get()`,
+    # e `symbols_get()` devolve `None` — sem lancar — quando a sessao nao foi
+    # aberta neste processo. Da entao: `status=unavailable`,
+    # `error="catalogo de ativos ausente no upstream"`, `count=0`.
+    #
+    # A rota de candles JA tinha a guarda, em :2036 e :2087:
+    #
+    #     inicializar = getattr(_mt5(), "initialize", None)
+    #     if callable(inicializar) and not _mt5_connected():
+    #         _ensure_mt5()
+    #
+    # Esta rota nao tinha. E por isso que o catalogo dependia da ORDEM: se a
+    # rota de candles rodasse antes, ela abria a sessao e o catalogo
+    # funcionava; se o catalogo fosse o primeiro a pedir, devolvia zero. O
+    # operador via o seletor "aparecer sozinho" as vezes, e a tela dava
+    # `Identidade de mercado invalida` as outras — e culpava o frontend.
+    #
+    # A guarda e `getattr`, e nao acesso direto, pelo mesmo motivo da de
+    # candles: os dubles de teste injetam um modulo MT5 minimo, sem
+    # `initialize`.
+    inicializar = getattr(_mt5(), "initialize", None)
+    if callable(inicializar) and not _mt5_connected():
+        _ensure_mt5()
     mt5 = _mt5()
     rows = discover_assets(mt5, include_hidden=True)
     return {

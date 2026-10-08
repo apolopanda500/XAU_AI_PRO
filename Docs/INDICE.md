@@ -1,25 +1,33 @@
 # Índice de Docs — XAU AI PRO
 
-Atualizado em **03/10/2026**. Este mapa existe porque a pasta chegou a ter
+Atualizado em **08/10/2026**. Este mapa existe porque a pasta chegou a ter
 61 arquivos com quatro "FINAL" e cinco "HANDOFF" disputando o mesmo assunto.
 
-**Comece por:** [`CONVERSA_20261003_04_DO_WINDOWS_AO_APP_PRONTO.md`](./CONVERSA_20261003_04_DO_WINDOWS_AO_APP_PRONTO.md) —
-**a conversa do ciclo na ordem**, os 7 defeitos medidos e a lista real do que
-falta.
-Depois: [`SESSAO_20261004_COOLDOWN_MARGEM_E_EA_COMPILANDO.md`](./SESSAO_20261004_COOLDOWN_MARGEM_E_EA_COMPILANDO.md) —
-a trava de margem **já existia**: o defeito era o EA insistir a cada 2-3 s.
-Segurança: [`CODE_SCANNING.md`](./CODE_SCANNING.md) — os 19 alertas do CodeQL,
-o que era real (travessia de caminho até execução de código) e o que ele só
-reporta.
+**Comece por:** [`PASSAGEM_20261008_MONITOR_GRAFICO_CALENDARIO.md`](./PASSAGEM_20261008_MONITOR_GRAFICO_CALENDARIO.md) —
+**os números e as provas do ciclo de 08/10**: o gráfico nunca aparecia porque
+`mt5_gateway._symbols()` lia `symbols_get()` **sem** a guarda de sessão que a
+rota de candles já tinha (0 ativos → **1640**); o mini terminal pintava **ERROR**
+em sete checks que diziam `OK`, porque casava `Failures`/`Error:` — **nome de
+campo** — em vez do valor; e `[SAFETY]` (63.837 linhas) e `[CIRCUIT]` (29.574)
+saíam INFO, que são as duas travas que impediram operação.
+Depois: [`CONVERSA_20261008_MONITOR_GRAFICO_CALENDARIO.md`](./CONVERSA_20261008_MONITOR_GRAFICO_CALENDARIO.md) —
+**a conversa na ordem**, com as decisões e o que cada uma mudou.
+Antes: [`CONVERSA_20261008_CICLO_BUILD_EA_ABRINDO.md`](./CONVERSA_20261008_CICLO_BUILD_EA_ABRINDO.md) —
+o ciclo do build e do EA abrindo; e [`PASSAGEM_20261007_02_BUILD_EA_DESCONECTADO.md`](./PASSAGEM_20261007_02_BUILD_EA_DESCONECTADO.md)
+— que mediu **1639** ativos e por isso apontava para o frontend. **O número era
+o de uma sessão funcionando**: o catálogo dependia da ordem das chamadas.
+Segurança: [`CODE_SCANNING.md`](./CODE_SCANNING.md) — os 19 alertas do CodeQL.
 
 ---
 
 ## Referência do estado atual
 
-| Documento                                              | Quando      | Sobre                                                                                                                                                                                     |
-| ------------------------------------------------------ | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`CONVERSA_20261003_04_DO_WINDOWS_AO_APP_PRONTO.md`** | 03→04/10    | **A conversa na ordem: 6 pedidos, 7 defeitos medidos, o cooldown de margem (3.191×), o EA que não compilava desde `dbdce10`, e as 7 pendências reais.** Leitura de entrada.               |
-| **`SESSAO_20261003_NOITE_MERGE_E_BROKER_ERROR.md`**    | 03/10 noite | **Merge `develop` → `main` (`46fd23b`, 4 conflitos de lockfile) e a causa raiz dos 4.246 `BROKER_ERROR`: 4.165 `EXEC_NO_MARGIN` entre 03h–05h. Conta DEMO preservada.**                   |
+| Documento | Quando | Sobre |
+| --------- | ------ | ----- |
+| **`PASSAGEM_20261008_MONITOR_GRAFICO_CALENDARIO.md`** | 08/10 | **Leitura de entrada.** Os três defeitos medidos, as quatro provas negativas, e **o app no ar sem backend** (porta 9001 sem dono). `1283 passed`, `773 vitest`, `tsc` limpo. |
+| **`CONVERSA_20261008_MONITOR_GRAFICO_CALENDARIO.md`** | 08/10 | **A conversa na ordem**: as 6 perguntas, o que cada resposta mudou, e as **3 premessas do resumo anterior que o comando mediu diferente**. |
+| **`CONVERSA_20261003_04_DO_WINDOWS_AO_APP_PRONTO.md`** | 03→04/10 | **A conversa na ordem: 6 pedidos, 7 defeitos medidos, o cooldown de margem (3.191×), o EA que não compilava desde `dbdce10`, e as 7 pendências reais.** |
+| **`SESSAO_20261003_NOITE_MERGE_E_BROKER_ERROR.md`** | 03/10 noite | **Merge `develop` → `main` (`46fd23b`, 4 conflitos de lockfile) e a causa raiz dos 4.246 `BROKER_ERROR`: 4.165 `EXEC_NO_MARGIN` entre 03h–05h. Conta DEMO preservada.** |
 | ---                                                    | ---         | ---                                                                                                                                                                                       |
 | **`SESSAO_20261003_TARDE_BUILD_APAGAVA_MODELOS.md`**   | 03/10 tarde | **O `robocopy /MIR` que apagava da pasta do `.spec` os 3 modelos MULTI a cada build; o cron que lê a branch errada; os 199 `ERROR` de ACL corrompida. `833 passed`.** Leitura de entrada. |
 | **`SESSAO_20261003_CI_VERMELHO_E_LEITURA_DOCS.md`**    | 03/10 manhã | **Os 3 workflows vermelhos: um corrigido (teste media artefato fora do git), um sem patch no upstream, um que é decisão do dono. Plus a leitura dos 58 docs.**                            |

@@ -625,24 +625,51 @@
 }
 
 /* ---------- A LINHA DO EVENTO ----------
-   `passado` fica esmaecido, e o evento de alto impacto ganha a faixa da
-   esquerda na cor do aviso. Sem isso, a coluna de estrelas é a única pista e
-   ela fica no meio de uma linha cinza. */
+   `passado` esmaece o CONTEUDO, nunca a SUPERFICIE.
+
+   MEDIDO em 08/10/2026, nas capturas de 14:14: a tabela do dia de hoje
+   aparecia com o papel de parede atravessando as linhas, e a do dia seguinte
+   aparecia opaca. A causa nao era a regiao do dia: era o fundo da linha.
+
+   `global.css:1112` pinta a linha, porque a linha e um `<button>`:
+
+       .calendar-tab button { background: var(--panel2) !important; }
+
+   E `opacity` no elemento INTEIRO desvanece o fundo junto com o texto. Com o
+   plano de fundo opaco vindo de outro arquivo, `opacity: 0.55` deixava a
+   linha 55% transparente e o papel de parede aparecia por tras dela.
+
+   No dia seguinte nenhum evento e `passado`, nenhuma linha desvanece, e a
+   mesma tabela saia opaca. Era o mesmo componente com duas iluminações, e o
+   operador via "fundo diferente" sem nenhuma mudanca de dado.
+
+   A correcao e de escopo: esmaecer o conteudo e deixar a superficie intacta.
+   `opacity` na linha volta a valer SO no hover, que e momentaneo. */
 .cal-row.passado {
-  opacity: 0.55;
+  color: var(--muted);
 }
 
-.cal-row.alto {
-  box-shadow: inset 3px 0 0 var(--warn, #ffb020);
+.cal-row.passado .cal-row-time,
+.cal-row.passado .cal-row-title,
+.cal-row.passado .cal-row-note,
+.cal-row.passado .cal-stars,
+.cal-row.passado .cal-row-bandeira,
+.cal-row.passado .cal-cat,
+.cal-row.passado .cal-col-import,
+.cal-row.passado .cal-row-moeda,
+.cal-row.passado .num {
+  opacity: 0.6;
 }
 
-.cal-row.medio {
-  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--primary) 45%, transparent);
+.cal-row.passado:hover {
+  color: var(--text);
 }
 
-.cal-row:hover {
-  background: color-mix(in srgb, var(--primary) 9%, transparent);
-}
+/* Evento de alto impacto: a faixa da esquerda e o aviso; o de medio, a cor
+   primaria. Vivem no bloco do fim do arquivo. Este era o PRIMEIRO par de
+   declaracoes, identico ao do fim — a segunda vencia e a primeira era codigo
+   morto que ainda prometia a mesma coisa. Declaracao repetida e codigo que
+   mente sobre o que a tela faz. */
 
 .cal-row.is-aberto {
   background: color-mix(in srgb, var(--primary) 14%, transparent);
@@ -808,12 +835,21 @@
   box-shadow: inset 3px 0 0 color-mix(in srgb, var(--primary) 45%, transparent);
 }
 
-/* Evento já divulgado: leitura periférica, sem sumir da tabela. */
-.cal-row.passado {
-  opacity: 0.55;
-}
-
-.cal-row.passado:hover {
+/* Evento já divulgado: leitura periférica, sem sumir da tabela.
+   A REGRA VIVA de `passado` esta em cima, com o comentario do porquê. Este
+   bloco era a segunda declaracao de `.cal-row.passado`, e a segunda vencia:
+   quem lesse so esta achava `opacity: 0.55` no elemento inteiro e refazia o
+   mesmo defeito. Declaracao duplicada e codigo morto que mente sobre o que a
+   tela faz. */
+.cal-row.passado:hover .cal-row-time,
+.cal-row.passado:hover .cal-row-title,
+.cal-row.passado:hover .cal-row-note,
+.cal-row.passado:hover .cal-stars,
+.cal-row.passado:hover .cal-row-bandeira,
+.cal-row.passado:hover .cal-cat,
+.cal-row.passado:hover .cal-col-import,
+.cal-row.passado:hover .cal-row-moeda,
+.cal-row.passado:hover .num {
   opacity: 0.9;
 }
 

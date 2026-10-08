@@ -10,6 +10,7 @@ import {
 } from '../hooks/queries';
 import { fmtNum, clsPnl, sideOfPosition, extractSymbol, requestId } from '../lib/format';
 import { notify } from '../lib/notify';
+import { classificarJournal } from '../lib/journalKind';
 import '../theme/mini-terminal.css';
 import '../theme/mt5-terminal.css';
 
@@ -143,13 +144,16 @@ export default function UniversalLiveTerminal() {
     for (const line of (journalQ.data?.lines ?? []) as Array<Record<string, unknown>>) {
       const message = String(line?.message ?? '').trim();
       if (!message) continue;
-      const kind = /trade|order|execut|buy|sell|close|fill/i.test(message)
-        ? 'TRADES'
-        : /warn|alert/i.test(message)
-          ? 'WARN'
-          : /error|fail/i.test(message)
-            ? 'ERROR'
-            : 'INFO';
+      //
+      // O TIPO VEM DE `classificarJournal`, que le o VALOR que o EA escreveu.
+      // Antes era uma cascata de regex sobre a PALAVRA, e medido: ela errava
+      // em 5 das 6 linhas reais do journal. Os sete checks de saude que
+      // diziam "AI: OK | Failures: 0 | Error:" apareciam ERROR, porque
+      // `Failures` e `Error:` sao NOME DE CAMPO e a regex casava o nome; e
+      // `[SAFETY]` (63.837 linhas) e `[CIRCUIT]` (29.574) apareciam INFO,
+      // que sao as duas travas que impediram operacao. O operador via
+      // vermelho no saudavel e branco no que travava. Ver `lib/journalKind`.
+      const kind = classificarJournal(message);
       const rawTime = line?.time ?? line?.timestamp;
       const parsed = rawTime
         ? new Date(String(rawTime).replace(/^(\d{4})\.(\d{2})\.(\d{2}) /, '$1-$2-$3T'))
