@@ -122,10 +122,30 @@ class TestLimites:
         ok, motivo = LimitesAuto(lote=0.01, sl_preco=4290.0, tp_preco=4310.0).valido()
         assert ok is True, motivo
 
-    def test_modo_simples_incompleto_recusa(self):
+    def test_modo_simples_incompleto_aceita_sem_sl_e_tp(self):
+        """SL e TP nao sao mais obrigatorios (decisao do dono, 07/10/2026).
+
+        Este caso era `test_modo_simples_incompleto_recusa` e affirmava o
+        contrario. O LOTE continua obrigatorio — e o que se prova logo abaixo,
+        com a prova negativa.
+        """
         ok, motivo = LimitesAuto(lote=0.01).valido()
+        assert ok is True, motivo
+
+    def test_sem_lote_ainda_recusa(self):
+        """PROVA NEGATIVA: sem lote nao ha ordem.
+
+        Retirar a obrigatoriedade de sl/tp nao pode arrastar a do lote.
+        """
+        ok, motivo = LimitesAuto(lote=0.0).valido()
         assert ok is False
-        assert "stop" in motivo.lower() or "take" in motivo.lower()
+        assert "stop" in motivo.lower() or "take" in motivo.lower() or "lote" in motivo.lower()
+
+    def test_sl_negativo_ainda_recusa(self):
+        """PROVA NEGATIVA: valor negativo e lixo, e lixo nao vira ordem."""
+        ok, motivo = LimitesAuto(lote=0.01, sl_preco=-1.0, tp_preco=10.0).valido()
+        assert ok is False
+        assert "negativo" in motivo.lower()
 
 
 # ------------------------------------------------------- nao abre quando nao deve
@@ -700,10 +720,23 @@ class TestSlTpEmDinheiroNoMotor:
 
         assert LimitesAuto(lote=0.01, sl_preco=4290.0, tp_preco=4310.0).valido()[0]
         assert LimitesAuto(lote=0.01, sl_valor=3.5, tp_valor=7.0).valido()[0]
-        # Nenhum dos dois: recusa, e a mensagem diz que os dois caminhos existem.
+        # Nenhum dos dois: agora ACEITO (decisao do dono, 07/10/2026). O risco
+        # passou a ser do operador e da IA. O que continua obrigatorio e o
+        # lote — provado abaixo, com a prova negativa.
         ok, motivo = LimitesAuto(lote=0.01).valido()
-        assert ok is False
-        assert "dinheiro" in motivo
+        assert ok is True, motivo
+
+    def test_sem_lote_nem_no_modo_dinheiro(self):
+        """PROVA NEGATIVA: os dois modos sem lote continuam recusados."""
+        from backend.auto_engine import LimitesAuto
+
+        for limites in (
+            LimitesAuto(lote=0.0),
+            LimitesAuto(lote=0.0, sl_valor=3.5, tp_valor=7.0),
+            LimitesAuto(lote=0.0, sl_preco=4290.0, tp_preco=4310.0),
+        ):
+            ok, motivo = limites.valido()
+            assert ok is False, f"lote ausente foi aceito: {motivo}"
 
 
 class TestProvedorDaFicha:

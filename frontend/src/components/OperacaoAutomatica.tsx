@@ -565,15 +565,18 @@ export default function OperacaoAutomatica() {
       ela viraria uma subtracao que o motor receberia duas vezes.
     */
     const modoDinheiro = modoProtecao === 'quantidade';
-    if (modoDinheiro) {
-      if (!(slValorN > 0) || !(tpValorN > 0)) {
-        setStatus('Preencha o valor do stop e do alvo em dinheiro para ligar o AUTO.');
-        return;
-      }
-    } else if (!(slN > 0) || !(tpN > 0)) {
-      setStatus('Preencha SL e TP para ligar o AUTO.');
-      return;
-    }
+    // SL E TP NAO SAO MAIS OBRIGATORIOS PARA LIGAR O MOTOR (decisao do dono,
+    // 07/10/2026). MEDIDO na captura de 22:01: o painel recusava com "Preencha
+    // SL e TP para ligar o AUTO", e as colunas S/L e T/P do historico saiam
+    // VAZIAS nas operacoes que ele mesmo produzia. O acoplamento nao existia.
+    //
+    // O risco passa a ser do operador e da IA. QUEM QUER protecao clica um
+    // preset (1:1 a 1:4) ou escreve o valor; quem nao quer liga sem.
+    //
+    // Sem sl/tp o motor NAO recebe os campos: `limitesNumericos()` ja devolve
+    // `sl_preco`/`tp_valor` como 0 quando o operador nao escreve nada, e o
+    // corpo abaixo so os inclui com valor > 0 — mandar zero seria pedir uma
+    // protecao de preco zero, que o motor leria como nivel invalido.
     setOcupado(true);
     try {
       /*
@@ -599,11 +602,11 @@ export default function OperacaoAutomatica() {
         ...limitesNumericos(),
       };
       if (modoDinheiro) {
-        corpo.sl_valor = slValorN;
-        corpo.tp_valor = tpValorN;
+        if (slValorN > 0) corpo.sl_valor = slValorN;
+        if (tpValorN > 0) corpo.tp_valor = tpValorN;
       } else {
-        corpo.sl_preco = slN;
-        corpo.tp_preco = tpN;
+        if (slN > 0) corpo.sl_preco = slN;
+        if (tpN > 0) corpo.tp_preco = tpN;
       }
       const cfg = await fetch(`${apiBase()}/api/auto/config`, {
         method: 'POST',

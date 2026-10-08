@@ -92,13 +92,20 @@ class TestLigarContinuaExigindoRisco:
         assert r["ok"] is True
         assert motor.timeframe == "H4"
 
-    def test_pedido_de_lote_incompleto_e_recusado(self, motor: MotorAuto) -> None:
-        # Se o pedido MEXE no risco, ele e julgado. Pedir lote sem SL e TP e
-        # recusa, com o que falta.
+    def test_pedido_so_com_lote_e_aceito(self, motor: MotorAuto) -> None:
+        """SL e TP nao sao mais obrigatorios (decisao do dono, 07/10/2026).
+
+        Este caso era `test_pedido_de_lote_incompleto_e_recusado` e afirmava o
+        contrario. Pedir so o LOTE passa; o que continua obrigatorio e o simbolo,
+        o timeframe e a corretora — provado abaixo, com a prova negativa.
+        """
         r = motor.configurar({"lote": 0.01})
+        assert r["ok"] is True, r.get("error")
+
+    def test_pedido_sem_lote_ainda_recusado(self, motor: MotorAuto) -> None:
+        """PROVA NEGATIVA: sem lote o motor nao pode operar."""
+        r = motor.configurar({"sl_preco": 100.0, "tp_preco": 200.0})
         assert r["ok"] is False
-        assert "stop loss" in r["error"]
-        assert "take profit" in r["error"]
 
     def test_com_risco_completo_o_motor_aceita(self, motor: MotorAuto) -> None:
         r = motor.configurar(

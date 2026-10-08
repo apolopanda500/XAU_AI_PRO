@@ -181,6 +181,31 @@
   flex-wrap: wrap;
 }
 
+/*
+  ORDEM SEM PROTECAO (decisao do dono, 07/10/2026)
+  ------------------------------------------------
+  SL e TP deixaram de ser obrigatorios. A obrigatoriedade era do painel: MEDIDO
+  nas capturas de 22:01, ele escrevia "Preencha SL e TP para ligar o AUTO" e
+  recusava, enquanto as colunas S/L e T/P do historico saiam VAZIAS nas
+  operacoes que ele proprio produzia.
+
+  Esta regra NAO usa `grid-area`, e deliberado: a area `presets` ja e dos
+  botoes 1:1 a 1:4 em `OperacaoAutomatica.tsx`, e dois elementos na mesma
+  area do grid se SOBREPOEM em vez de ficarem lado a lado. Aqui o botao fica
+  no fluxo normal do painel, logo abaixo do aviso.
+*/
+.robo-ticket-sem-protecao {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 8px;
+}
+
+.robo-ticket-sem-protecao .btn[aria-pressed='true'] {
+  border-color: var(--warn, #d99a2b);
+  color: var(--warn, #d99a2b);
+}
+
 .robo-ticket-preco {
   grid-area: preco;
   font-family: var(--mono, ui-monospace, Consolas, monospace);

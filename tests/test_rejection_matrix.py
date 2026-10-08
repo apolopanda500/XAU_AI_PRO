@@ -177,7 +177,164 @@ def test_trade_aceita_conta_real(monkeypatch):
         pass
 
 
-def test_demo_exige_sl_e_tp(monkeypatch):
+def _pedido_mt5(**overrides) -> dict:
+    """Payload no NOME que `_trade_order` do MT5 realmente le.
+
+    MEDIDO em 07/10/2026 ao reescrever os testes de SL/TP: `_pedido()` monta
+    `quantity` e `side: "buy"`, que e o contrato da rota UNIVERSAL. Mas
+    `_trade_order` le `payload.get("volume")` e `payload.get("side").upper()`.
+    Com `_pedido()` o volume chegava **0** e a ordem era recusada por volume —
+    antes mesmo de a recusa de sl/tp ser alcancada.
+
+    Era por isso que `test_demo_aceita_ordem_sem_sl_e_tp` passava sem provar
+    nada: a excecao vinha do volume, e a assercao ("sl" fora da mensagem)
+    sobrevivia a qualquer mensagem. E AGENTS.md 6: um teste que so passa nao
+    prova que a guarda funciona.
+    """
+    base = {
+        "symbol": "BTCUSD",
+        "side": "BUY",
+        "volume": 0.01,
+        "confirm": True,
+        "request_id": "req-mt5-1",
+    }
+    base.update(overrides)
+    return base
+
+
+def test_demo_aceita_ordem_sem_sl_e_tp(monkeypatch):
+    """SL e TP NAO sao mais obrigatorios (decisao do dono, 07/10/2026).
+
+    MEDIDO na conta 391773676 (XMGlobal-MT5 14), captura de 22:01: o painel
+    recusava com "Preencha SL e TP para ligar o AUTO" e as colunas S/L e T/P do
+    historico saiam VAZIAS nas operacoes que ele proprio produzia.
+
+    A prova de que a recusa de sl/tp saiu e a etapa alcancada: sem `symbol_info_tick`
+    no duble, uma ordem que PASSOU pela validacao de entrada morre em
+    `LookupError("cotacao indisponivel")`. Se ela morrer antes, com ValueError
+    de entrada, a obrigatoriedade ainda esta de pe.
+    """
+    monkeypatch.setenv("XAU_ENABLE_TRADE_COMMANDS", "1")
+
+    class _Conta:
+        trade_mode = 1
+        trade_allowed = True
+        login = 1
+        balance = 10000.0
+        equity = 10000.0
+
+    class _Mt5:
+        ACCOUNT_TRADE_MODE_DEMO = 1
+
+        def account_info(self):
+            return _Conta()
+
+        def symbol_select(self, *_a, **_k):
+            return True
+
+        # `_risk_state` roda ANTES do tick e chama estes tres. Sem eles o duble
+        # levanta RuntimeError em `history_deals_get` e a ordem morre antes da
+        # validacao de entrada — que e exatamente o que o teste precisa separar.
+        def account_info(self):
+            return _Conta()
+
+        def history_deals_get(self, *_a, **_k):
+            return []
+
+        def positions_get(self, *_a, **_k):
+            return []
+
+        def symbol_info_tick(self, *_a, **_k):
+            return None  # sem cotacao: morre AQUI, depois da validacao de entrada
+
+    monkeypatch.setattr(gw, "_mt5", lambda: _Mt5())
+    with pytest.raises(LookupError) as erro:
+        gw._trade_order(_pedido_mt5(sl=0, tp=0))
+    assert "cotacao" in str(erro.value), (
+        "ordem sem sl/tp foi recusada ANTES da cotacao: a obrigatoriedade "
+        "de sl/tp continua de pe. Recusou com: " + str(erro.value)
+    )
+
+
+def test_sl_e_tp_preenchidos_tambem_passam(monkeypatch):
+    """PROVA POSITIVA: com sl e tp o caminho e o mesmo ate a cotacao."""
+    monkeypatch.setenv("XAU_ENABLE_TRADE_COMMANDS", "1")
+
+    class _Conta:
+        trade_mode = 1
+        trade_allowed = True
+        login = 1
+        balance = 10000.0
+        equity = 10000.0
+
+    class _Mt5:
+        ACCOUNT_TRADE_MODE_DEMO = 1
+
+        def account_info(self):
+            return _Conta()
+
+        def symbol_select(self, *_a, **_k):
+            return True
+
+        def account_info(self):
+            return _Conta()
+
+        # Mesmos tres metodos: sem eles `_risk_state` levanta RuntimeError
+        # antes da validacao de entrada.
+        def history_deals_get(self, *_a, **_k):
+            return []
+
+        def positions_get(self, *_a, **_k):
+            return []
+
+        def symbol_info_tick(self, *_a, **_k):
+            return None
+
+    monkeypatch.setattr(gw, "_mt5", lambda: _Mt5())
+    with pytest.raises(LookupError) as erro:
+        gw._trade_order(_pedido_mt5(sl=83000.0, tp=85000.0))
+    assert "cotacao" in str(erro.value)
+
+
+def test_recusa_por_sl_negativo_continua(monkeypatch):
+    """PROVA NEGATIVA: sl informado e NEGATIVO ainda recusa.
+
+    O que mudou foi a OBRIGATORIEDADE, nao a faixa. `sl` negativo e lixo, e
+    lixo nao vira ordem.
+    """
+    monkeypatch.setenv("XAU_ENABLE_TRADE_COMMANDS", "1")
+
+    class _Conta:
+        trade_mode = 1
+        trade_allowed = True
+        login = 1
+        balance = 10000.0
+        equity = 10000.0
+
+    class _Mt5:
+        ACCOUNT_TRADE_MODE_DEMO = 1
+
+        def account_info(self):
+            return _Conta()
+
+    def _falha_no_teto(*_a, **_k):
+        raise AssertionError("a ordem passou da validacao de entrada com sl negativo")
+
+    _Mt5.symbol_select = _falha_no_teto
+
+    monkeypatch.setattr(gw, "_mt5", lambda: _Mt5())
+    with pytest.raises(ValueError, match="sl e tp"):
+        gw._trade_order(_pedido_mt5(sl=-1, tp=10))
+    with pytest.raises(ValueError, match="sl e tp"):
+        gw._trade_order(_pedido_mt5(sl=10, tp=-1))
+
+
+def test_recusa_por_symbol_e_volume_continua(monkeypatch):
+    """PROVA NEGATIVA: `symbol`, `side` e `volume` continuam obrigatorios.
+
+    Retirar a obrigatoriedade de sl/tp NAO pode arrastar a de volume: uma ordem
+    sem lote nao e uma ordem, e um volume acima do teto nao passa.
+    """
     monkeypatch.setenv("XAU_ENABLE_TRADE_COMMANDS", "1")
 
     class _Conta:
@@ -194,8 +351,42 @@ def test_demo_exige_sl_e_tp(monkeypatch):
             return _Conta()
 
     monkeypatch.setattr(gw, "_mt5", lambda: _Mt5())
-    with pytest.raises(ValueError, match="sl e tp"):
-        gw._trade_order(_pedido(confirm=True, sl=0, tp=0))
+    with pytest.raises(ValueError, match="symbol, side e volume"):
+        gw._trade_order(_pedido_mt5(symbol="", volume=0.01))
+    with pytest.raises(ValueError, match="symbol, side e volume"):
+        gw._trade_order(_pedido_mt5(side="HOLD", volume=0.01))
+    with pytest.raises(ValueError, match="symbol, side e volume"):
+        gw._trade_order(_pedido_mt5(volume=0.0))
+    with pytest.raises(ValueError, match="symbol, side e volume"):
+        gw._trade_order(_pedido_mt5(volume=0.5))
+
+
+def test_confirm_continua_obrigatorio(monkeypatch):
+    """PROVA NEGATIVA: `confirm=true` segue obrigatorio SEM sl/tp.
+
+    E o coracao do AGENTS.md 4: retirar a obrigatoriedade de sl/tp nao pode
+    abrir uma porta de ordem sem confirmacao. O clique arma, so o botao envia.
+    """
+    monkeypatch.setenv("XAU_ENABLE_TRADE_COMMANDS", "1")
+
+    class _Conta:
+        trade_mode = 1
+        trade_allowed = True
+        login = 1
+        balance = 10000.0
+        equity = 10000.0
+
+    class _Mt5:
+        ACCOUNT_TRADE_MODE_DEMO = 1
+
+        def account_info(self):
+            return _Conta()
+
+    monkeypatch.setattr(gw, "_mt5", lambda: _Mt5())
+    with pytest.raises(PermissionError, match="confirm"):
+        gw._trade_order(_pedido_mt5(confirm=False, sl=0, tp=0))
+    with pytest.raises(PermissionError, match="confirm"):
+        gw._trade_order(_pedido_mt5(confirm=None, sl=0, tp=0))
 
 
 def test_demo_respeita_teto_de_volume(monkeypatch):

@@ -278,15 +278,30 @@ export default function AcompanharModelos() {
   /*
     POR QUE O PAINEL RECUSA, E CADA MOTIVO TEM UM NOME
 
-    A rota `/api/trade/order` (medida em `backend/mt5_gateway.py:2190`) exige
-    `symbol`, `side`, `volume` em (0, 0.10], `sl > 0` e `tp > 0`. Sem nenhum
-    destes, o gateway responde 403/400 com o motivo DELE — que e generico
-    ("symbol, side, volume <= 0.10, sl e tp validos sao obrigatorios") e nao diz
-    qual dos cinco faltou.
+    A rota `/api/trade/order` (medida em `backend/mt5_gateway.py`, `_trade_order`)
+    exige `symbol`, `side` e `volume` em (0, 0.10]. Sem nenhum destes, o gateway
+    responde 403/400 com o motivo DELE — que e generico e nao diz qual faltou.
 
     Recusar aqui, com o campo nomeado, e a diferenca entre o operador corrigir o
     campo e o operador ficar procurando defeito na corretora (AGENTS.md 5).
+
+    SL E TP NAO RECUSAM MAIS (decisao do dono, 07/10/2026)
+    ----------------------------------------------------
+    MEDIDO nas capturas de 22:01 e no historico: o painel escrevia "Preencha SL
+    e TP para ligar o AUTO" e recusava sem os dois campos, enquanto as colunas
+    S/L e T/P do historico saiam VAZIAS nas 10 operacoes. O acoplamento nao
+    existia — o painel exigia e o que saia era ordem a mercado sem os dois.
+
+    O risco passou a ser do operador, e da IA quando ela sugere. Os botoes de
+    preset (1:1, 1:2, 1:3, 1:4) continuam preenchendo, entao quem quer
+    protecao clica uma vez; quem nao quer envia sem.
+
+    Quando o valor NAO e informado, ele nao vai no corpo: nao mandar `sl: 0`,
+    porque zero e um numero, e o gateway so pode distinguir "ausente" de
+    "invalido" pelo nome do campo, nao pelo valor.
   */
+  const semStop = riscoNum <= 0 || !Number.isFinite(riscoNum);
+  const semAlvo = alvoNum <= 0 || !Number.isFinite(alvoNum);
   const motivoRecusa = useMemo(() => {
     if (precoArmado === null) return '';
     if (!simbolo) return 'Sem par configurado no motor. O símbolo vazio é recusa, nunca um ativo padrão.';
@@ -294,10 +309,8 @@ export default function AcompanharModelos() {
       return 'A corretora não devolveu o tamanho do contrato deste ativo: dinheiro não vira preço sem ele.';
     if (!Number.isFinite(volumeNum) || volumeNum <= 0) return 'Informe a quantidade.';
     if (volumeNum > 0.1) return `Quantidade ${volumeNum} acima do máximo aceito: 0,10.`;
-    if (riscoNum <= 0) return 'Informe quanto aceita perder no stop. Ordem sem stop não vai.';
-    if (alvoNum <= 0) return 'Informe o alvo. Ordem sem alvo não vai.';
     return '';
-  }, [precoArmado, simbolo, contratoOk, volumeNum, riscoNum, alvoNum]);
+  }, [precoArmado, simbolo, contratoOk, volumeNum]);
 
   const enviarOrdem = async () => {
     if (motivoRecusa) {
@@ -307,18 +320,22 @@ export default function AcompanharModelos() {
     setEnviando(true);
     setErroEnvio('');
     try {
+      // SL e TP so entram no corpo quando TEM VALOR. `sl: 0` seria um numero
+      // - e nao uma ausencia - e o gateway so distingue os dois pelo nome do
+      // campo. Sem o campo, `_trade_order` le 0 e a ordem segue sem protecao.
+      const corpo: Record<string, unknown> = {
+        symbol: simbolo,
+        side: lado,
+        volume: volumeNum,
+        confirm: true,
+        request_id: requestId(),
+      };
+      if (!semStop && slPreco !== null) corpo.sl = arredondar(slPreco);
+      if (!semAlvo && tpPreco !== null) corpo.tp = arredondar(tpPreco);
       const resposta = await fetch(`${apiBase()}/api/trade/order`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          symbol: simbolo,
-          side: lado,
-          volume: volumeNum,
-          sl: arredondar(slPreco ?? 0),
-          tp: arredondar(tpPreco ?? 0),
-          confirm: true,
-          request_id: requestId(),
-        }),
+        body: JSON.stringify(corpo),
         signal: AbortSignal.timeout(15000),
       });
       const d = (await resposta.json().catch(() => ({}))) as { ok?: boolean; error?: string };
@@ -695,6 +712,46 @@ export default function AcompanharModelos() {
             {slPreco === null && riscoNum <= 0 && (
               <span className="muted">Stop apagado. Clique numa linha e arraste, ou escreva o valor.</span>
             )}
+          </div>
+
+          {/*
+            ORDEM SEM PROTECAO, DITA ANTES DE ENVIAR.
+
+            A obrigatoriedade saiu (decisao do dono, 07/10/2026). O que fica e a
+            VISIBILIDADE: quem manda sem stop e sem alvo ve isso escrito, porque
+            a ordem segue viva na conta sem limite de perda. O risco e do
+            operador — e da IA quando ela sugere — mas o operador precisa saber
+            em que situacao esta clicando.
+          */}
+          {(semStop || semAlvo) && !motivoRecusa && (
+            <p className="hint" role="alert">
+              Esta ordem vai{' '}
+              <b>sem {semStop ? 'stop' : ''}{semStop && semAlvo ? ' e sem ' : ''}{semAlvo ? 'alvo' : ''}</b>
+              . Ela fica aberta na conta sem limite de perda definido pelo app — o
+              risco é seu, e o da IA quando ela sugere. Clique num preset de risco
+              ou arraste a linha se quiser proteção.
+            </p>
+          )}
+
+          {/* Botao explicito para quem QUER enviar sem, e nao por engano.
+
+              Classe propria, e NAO `.robo-ticket-presets`: aquela area do grid
+              (`grid-area: presets`) ja e dos botoes 1:1 a 1:4 em
+              `OperacaoAutomatica.tsx`, e dois elementos na mesma area do grid se
+              sobrepoem em vez de ficarem lado a lado. */}
+          <div className="robo-ticket-sem-protecao" role="group" aria-label="Proteção da ordem">
+            <button
+              type="button"
+              className="btn ghost"
+              aria-pressed={semStop && semAlvo}
+              onClick={() => {
+                setRiscoArmado('0');
+                setAlvoArmado('0');
+              }}
+              title="Deixa a ordem sem stop e sem alvo, de propósito"
+            >
+              {semStop && semAlvo ? 'Sem SL/TP ✓' : 'Enviar sem SL/TP'}
+            </button>
           </div>
 
           {motivoRecusa && (

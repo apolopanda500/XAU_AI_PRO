@@ -2286,8 +2286,23 @@ def _trade_order(payload: dict) -> dict:
     volume = float(payload.get("volume", 0) or 0)
     sl = float(payload.get("sl", 0) or 0)
     tp = float(payload.get("tp", 0) or 0)
-    if not symbol or side not in {"BUY", "SELL"} or not (0 < volume <= 0.10) or sl <= 0 or tp <= 0:
-        raise ValueError("symbol, side, volume <= 0.10, sl e tp validos sao obrigatorios")
+    # SL E TP NAO SAO MAIS OBRIGATORIOS (decisao do dono, 07/10/2026).
+    #
+    # MEDIDO na conta 391773676 (XMGlobal-MT5 14): o painel obrigava SL e TP e
+    # escrevia "Preencha SL e TP para ligar o AUTO", enquanto as colunas S/L e T/P
+    # do historico saiam VAZIAS em todas as 10 operacoes mostradas. O acoplamento
+    # nao existia: o painel recusava sem os dois campos e o que saia era uma
+    # ordem a mercado sem os dois. O risco e do operador - e da IA quando ela
+    # sugere.
+    #
+    # O QUE NAO MUDOU: `symbol`, `side` e `volume` continuam obrigatorios; quando
+    # o operador PREENCHE sl ou tp, o valor continua tendo de ser > 0; e a ordem
+    # continua exigindo `confirm=true`, `request_id` idempotente, `risk_gate`,
+    # `intent_log` e `audit_log`. O que muda e a obrigatoriedade, nao a trilha.
+    if not symbol or side not in {"BUY", "SELL"} or not (0 < volume <= 0.10):
+        raise ValueError("symbol, side e volume entre 0 e 0.10 sao obrigatorios")
+    if sl < 0 or tp < 0:
+        raise ValueError("sl e tp, quando informados, tem de ser maiores que zero")
     # Alias modelo -> corretora (`XAUUSD` -> `GOLD` na XM): a ordem manual
     # sai com o simbolo que o terminal entende. Config do operador.
     try:
@@ -2375,7 +2390,7 @@ def _universal_execute(payload: dict, action: str) -> dict:
     Agora:
         - broker mt5  -> roteia para _trade_order/_trade_close/_trade_manage/
           _trade_cancel_orders, que ja trazem as travas de verdade
-          (XAU_ENABLE_TRADE_COMMANDS, confirm=true, SL/TP obrigatorios,
+          (XAU_ENABLE_TRADE_COMMANDS, confirm=true, request_id, risk_gate,
           order_check antes do order_send, risk_gate).
         - demais      -> adaptador da propria corretora, que aplica
           XAU_ENABLE_<BROKER>_EXECUTION e devolve o motivo dele. Antes o
@@ -2521,8 +2536,12 @@ def _trade_pending_order(payload: dict) -> dict:
         raise ValueError("symbol e side (BUY/SELL) validos sao obrigatorios")
     if order_kind not in {"limit", "stop"}:
         raise ValueError("kind deve ser 'limit' ou 'stop'")
-    if volume <= 0 or volume > 0.10 or sl <= 0 or tp <= 0 or price <= 0:
-        raise ValueError("volume <= 0.10, sl/tp > 0 e price > 0 obrigatorios")
+    # Mesma regra da ordem a mercado (decisao do dono, 07/10/2026): o preco do
+    # gatilho e obrigatorio porque e ele que define a ordem; sl e tp nao sao.
+    if volume <= 0 or volume > 0.10 or price <= 0:
+        raise ValueError("volume entre 0 e 0.10 e price > 0 sao obrigatorios")
+    if sl < 0 or tp < 0:
+        raise ValueError("sl e tp, quando informados, tem de ser maiores que zero")
 
     risk = _risk_state(mt5)
     if not mt5.symbol_select(symbol, True):

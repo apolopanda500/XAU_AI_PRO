@@ -298,7 +298,13 @@ class LimitesAuto:
         negativos = [
             self.ROTULOS[nome]
             for nome in ("banca", "risco_por_trade_pct", "confianca_minima",
-                         "edge_minimo", "perda_diaria_max_pct", "sl_atr", "tp_atr")
+                         "edge_minimo", "perda_diaria_max_pct", "sl_atr", "tp_atr",
+                         # MEDIDO em 07/10/2026 ao tornar sl/tp opcionais: a lista
+                         # NAO tinha estes cinco, e `sl_preco=-1` era aceito com
+                         # `lote>0`. Nao era efeito do relaxamento — ja passava
+                         # antes pela porta do modo simples. Um stop negativo e
+                         # lixo, e lixo nao vira ordem.
+                         "lote", "sl_preco", "tp_preco", "sl_valor", "tp_valor")
             if getattr(self, nome) < 0
         ]
         if fora_de_faixa:
@@ -314,6 +320,18 @@ class LimitesAuto:
         # recusado como "defina lote, stop loss e take profit" — o painel com
         # SL/TP em preco, que sempre funcionou, parou de operar.
         if self.modo_simples():
+            return True, ""
+        # SL E TP OPCIONAIS (decisao do dono, 07/10/2026).
+        #
+        # MEDIDO na captura de 22:01: o painel recusava com "Preencha SL e TP
+        # para ligar o AUTO", e as colunas S/L e T/P do historico saiam VAZIAS nas
+        # operacoes que o proprio motor produzia. O acoplamento nao existia: a
+        # obrigatoriedade era do painel, nao do motor.
+        #
+        # O LOTE continua obrigatorio — sem lote nao ha ordem. E a ordem sem
+        # sl/tp vai para o gateway, que tambem passou a aceita-los (decisao do
+        # dono no mesmo dia). O risco e do operador e da IA.
+        if self.lote > 0:
             return True, ""
         algum_dos_cinco = any(
             getattr(self, n) != 0

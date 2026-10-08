@@ -375,20 +375,51 @@ describe('OperacaoAutomatica — a logica que ja funcionava', () => {
     expect((screen.getByLabelText('Take profit') as HTMLInputElement).value).toBe('4150');
   });
 
-  it('PROVA NEGATIVA: sem preco ao vivo o AUTO nao manda SL zero', async () => {
+  it('sem preco ao vivo o AUTO nao manda SL zero — manda sem os campos', async () => {
     /*
     Sem cotacao nao existe nivel. Mandar `sl_preco: 0` seria recusado pelo motor
     com um motivo generico, e o operador culparia a corretora por um numero que
     o painel inventou.
+
+    MEDIDO em 07/10/2026: este caso afirmava que o painel nao chamava
+    `/api/auto/config` sem preco. Com SL/TP opcionais (decisao do dono), o painel
+    passa a chamar — e o que ele NAO pode fazer e mandar `sl_preco: 0`.
+    O campo ausente e o que significa "sem protecao"; zero e um numero.
     */
     estado.preco = null;
     renderPainel();
     await ticketMontado();
     const auto = screen.getByRole('switch', { name: 'Operação automática' });
     fireEvent.click(auto);
-    await waitFor(() => expect(screen.getByText(/Preencha SL e TP/)).toBeTruthy());
-    expect(estado.chamadas.some((c) => c.url.includes('/api/auto/config'))).toBe(false);
-    expect(estado.chamadas.some((c) => c.url.includes('/api/auto/start'))).toBe(false);
+    await waitFor(() =>
+      expect(estado.chamadas.some((c) => c.url.includes('/api/auto/config'))).toBe(true),
+    );
+    const cfg = estado.chamadas.find((c) => c.url.includes('/api/auto/config'));
+    expect(cfg).toBeTruthy();
+    expect((cfg!.body as Record<string, unknown>).sl_preco).toBeUndefined();
+    expect((cfg!.body as Record<string, unknown>).tp_preco).toBeUndefined();
+    expect((cfg!.body as Record<string, unknown>).sl_valor).toBeUndefined();
+    expect((cfg!.body as Record<string, unknown>).tp_valor).toBeUndefined();
+    // O que continua obrigatorio, presente:
+    expect((cfg!.body as Record<string, unknown>).lote).toBeTruthy();
+    expect((cfg!.body as Record<string, unknown>).simbolo).toBeTruthy();
+  });
+
+  it('PROVA NEGATIVA: com preco ao vivo e SL/TP escritos, o corpo LEVA os dois', async () => {
+    // Sem este caso, uma correcao que so apagasse os campos passaria.
+    renderPainel();
+    await ticketMontado();
+    fireEvent.change(screen.getByLabelText('Stop loss'), { target: { value: '4130' } });
+    fireEvent.change(screen.getByLabelText('Take profit'), { target: { value: '4150' } });
+    const auto = screen.getByRole('switch', { name: 'Operação automática' });
+    fireEvent.click(auto);
+    await waitFor(() =>
+      expect(estado.chamadas.some((c) => c.url.includes('/api/auto/config'))).toBe(true),
+    );
+    const cfg = estado.chamadas.find((c) => c.url.includes('/api/auto/config'));
+    const corpo = cfg!.body as Record<string, unknown>;
+    expect(Number(corpo.sl_preco)).toBe(4130);
+    expect(Number(corpo.tp_preco)).toBe(4150);
   });
 
   it('NAO envia ordem manual', async () => {

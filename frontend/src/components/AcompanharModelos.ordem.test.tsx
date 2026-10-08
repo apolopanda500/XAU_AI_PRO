@@ -357,27 +357,97 @@ describe('o painel RECUSA COM MOTIVO NOMEADO', () => {
     expect(linhasDoGrafico().map((l) => l.papel)).toEqual(['entrada']);
   });
 
-  it('PROVA NEGATIVA: o `x` no stop zera o dinheiro, e o botao desliga pelo motivo', async () => {
+  it('o `x` no stop tira a protecao, AVISA, e o botao continua clicavel', async () => {
+    // SL/TP deixou de ser obrigatorio (decisao do dono, 07/10/2026). O que este
+    // caso protege nao e mais a recusa: e que o operador VEJA que a ordem vai
+    // sem stop antes de clicar. O risco e dele — mas ele precisa saber.
     renderPainel();
     await waitFor(() => expect(screen.getByTestId('modo-ordem').textContent).toBe('true'));
     await clicarComFicha();
     fireEvent.click(screen.getByText('simular x no stop'));
     // A linha some do grafico...
     expect(linhasDoGrafico().map((l) => l.papel)).toEqual(['entrada', 'tp']);
-    // ...e o painel nomeia o que falta. Um `sl: 0` no payload seria recusado
-    // pelo gateway com um motivo que nao diz qual dos cinco campos faltou.
-    await waitFor(() => expect(screen.getByText(/Informe quanto aceita perder/)).toBeTruthy());
-    expect((screen.getByText(/Colocar ordem a/) as HTMLButtonElement).disabled).toBe(true);
+    // ...e o painel DIZ que vai sem stop, com o aviso escrito.
+    await waitFor(() => expect(screen.getByText(/Esta ordem vai/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/sem stop/i)).toBeTruthy());
+    expect((screen.getByText(/Colocar ordem a/) as HTMLButtonElement).disabled).toBe(false);
   });
 
-  it('PROVA NEGATIVA: o `x` no alvo zera o alvo, pelo mesmo caminho', async () => {
+  it('PROVA NEGATIVA: sem stop, o botao existe mas o aviso some quando o stop volta', async () => {
+    // Sem este caso, um painel que mostrasse o aviso sempre passaria.
+    renderPainel();
+    await waitFor(() => expect(screen.getByTestId('modo-ordem').textContent).toBe('true'));
+    await clicarComFicha();
+    fireEvent.click(screen.getByText('simular x no stop'));
+    await waitFor(() => expect(screen.getByText(/Esta ordem vai/)).toBeTruthy());
+    // Repoe o stop: o aviso tem de sumir.
+    fireEvent.change(screen.getByLabelText(/Quanto aceita perder/i), { target: { value: '2' } });
+    await waitFor(() => expect(screen.queryByText(/Esta ordem vai/)).toBeNull());
+  });
+
+  it('PROVA NEGATIVA: o `x` no alvo tira o alvo, pelo mesmo caminho', async () => {
     renderPainel();
     await waitFor(() => expect(screen.getByTestId('modo-ordem').textContent).toBe('true'));
     await clicarComFicha();
     fireEvent.click(screen.getByText('Vender'));
     fireEvent.change(screen.getByLabelText(/Quanto espera ganhar/i), { target: { value: '0' } });
-    await waitFor(() => expect(screen.getByText('Informe o alvo. Ordem sem alvo não vai.')).toBeTruthy());
     expect(linhasDoGrafico().map((l) => l.papel)).toEqual(['entrada', 'sl']);
+    await waitFor(() => expect(screen.getByText(/sem alvo/i)).toBeTruthy());
+  });
+
+  it('PROVA NEGATIVA: o botao "sem SL/TP" existe e zera os dois campos', async () => {
+    // O botao explicito que o dono pediu: quem QUER mandar sem clica nele, em
+    // vez de esvaziar os campos na mao e ficar na duvida se errou.
+    renderPainel();
+    await waitFor(() => expect(screen.getByTestId('modo-ordem').textContent).toBe('true'));
+    await clicarComFicha();
+    const botao = screen.getByRole('button', { name: /Enviar sem SL\/TP|Sem SL\/TP/ });
+    fireEvent.click(botao);
+    await waitFor(() => expect(screen.getByText(/Esta ordem vai/)).toBeTruthy());
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /Sem SL\/TP/ }).getAttribute('aria-pressed')).toBe(
+        'true',
+      ),
+    );
+  });
+
+  it('PROVA NEGATIVA: sem sl/tp, o corpo NAO leva sl: 0 nem tp: 0', async () => {
+    // `sl: 0` e um NUMERO, e nao uma ausencia. Mandar zero e pedir uma
+    // protecao de preco zero, que o motor leria como nivel invalido. O campo
+    // ausente e o que significa "sem protecao".
+    renderPainel();
+    await waitFor(() => expect(screen.getByTestId('modo-ordem').textContent).toBe('true'));
+    await clicarComFicha();
+    fireEvent.click(screen.getByRole('button', { name: /Enviar sem SL\/TP|Sem SL\/TP/ }));
+    await waitFor(() => expect(screen.getByText(/Esta ordem vai/)).toBeTruthy());
+    fireEvent.click(screen.getByText(/Colocar ordem a/));
+    await waitFor(() => expect(estado.chamadas.some((c) => c.body)).toBe(true));
+    const envio = estado.chamadas.find((c) => c.body && String(c.url).includes('/api/trade/order'));
+    expect(envio).toBeTruthy();
+    const corpo = envio!.body;
+    expect(corpo.sl).toBeUndefined();
+    expect(corpo.tp).toBeUndefined();
+    // E o que continua obrigatorio, presente:
+    expect(corpo.symbol).toBeTruthy();
+    expect(corpo.side).toBeTruthy();
+    expect(corpo.confirm).toBe(true);
+    expect(corpo.request_id).toBeTruthy();
+  });
+
+  it('PROVA NEGATIVA: com stop e alvo preenchidos, o corpo LEVA os dois', async () => {
+    // O caminho oposto: preenchido tem de ir no corpo. Sem este, uma correcao
+    // que so apagasse os campos passaria.
+    renderPainel();
+    await waitFor(() => expect(screen.getByTestId('modo-ordem').textContent).toBe('true'));
+    await clicarComFicha();
+    fireEvent.change(screen.getByLabelText(/Quanto aceita perder/i), { target: { value: '2' } });
+    fireEvent.change(screen.getByLabelText(/Quanto espera ganhar/i), { target: { value: '4' } });
+    fireEvent.click(screen.getByText(/Colocar ordem a/));
+    await waitFor(() => expect(estado.chamadas.some((c) => c.body)).toBe(true));
+    const envio = estado.chamadas.find((c) => c.body && String(c.url).includes('/api/trade/order'));
+    const corpo = envio!.body;
+    expect(Number(corpo.sl)).toBeGreaterThan(0);
+    expect(Number(corpo.tp)).toBeGreaterThan(0);
   });
 
   it('PROVA NEGATIVA: quantidade zero desliga o botao e nomeia o campo', async () => {
