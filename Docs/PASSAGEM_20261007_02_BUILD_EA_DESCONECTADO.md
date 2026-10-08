@@ -100,9 +100,14 @@ mesmo erro, em dois lugares, por misunderstandings diferentes.
 
 ### 3.2 Consequencia medida
 
-O EA opera **as cegas**, pelo motor de regras local de agosto. As 20 operacoes
-de BTCUSD sairam dai, nao da IA. Isso explica na raiz o defeito D5 de
-`PLANO_DEFINITIVO` ("AI: Inativo em todas as telas"): nao era a tela.
+**CORRIGIDO NA MEDICAO DAS 22:50 — ver §4.2.** Eu escrevi aqui que "o EA opera
+as cegas, pelo motor de regras local de agosto", e **estava errado**: o
+`AntiLoop` do EA nunca abriu nada e as 93 ordens da conta tm `magic = 0`. **As
+operacoes nao eram do EA.**
+
+O que continua valendo deste achado: **o EA do terminal segue sem IA, sem
+`RequireStopLoss`, e com 91 `.mqh` defasados.** Ele simply nunca operou. E
+`AI: Inativo` nas telas tem, sim, a raiz aqui — **nao ha quem pergunte a IA.**
 
 **Sao tres versoes do EA em jogo** — e o repositorio e a quarta:
 
@@ -163,21 +168,55 @@ O mesmo resultado, medido direto do `BacktestReport.csv` (BTCUSD):
 | **winrate de break-even** | **71,30%** |
 | winrate real | **52,30%** → **faltam 19 pontos** |
 
-### 4.2 O SL configurado NAO e o SL medido
+### 4.2 CORRECAO: O SL DE ~200 PONTOS NAO E DEFEITO — E AS ORDENS NAO SAO DO EA
 
-Derivado das 4 perdas reais da conta (volume 0,01, `contract_size` 1,0):
+**Este item estava ERRADO no que escrevi mais acima, e nos documentos que o
+originaram.** Medido as 22:50:
 
-| perda | preco | pontos |
-|---|---|---|
-| -1,41 | $141,00 | **14.100** |
-| -1,53 | $153,00 | **15.300** |
-| -1,45 | $145,00 | **14.500** |
-| -1,55 | $155,00 | **15.500** |
-| **media** | **$148,50** | **14.850** |
+| | medido |
+|---|---|
+| `AntiLoop: Aberturas 0/5` em 06/10 | **79.914 ocorrencias, todas `0/5`** |
+| ordens na conta em 30 dias | **93** |
+| `magic` dessas 93 ordens | **`magic = 0` em todas** |
+| ordens com `MagicNumber = 2026001` (o do EA) | **ZERO** |
+| comment das saidas | `[sl 85615.69]`, `[tp 84113.70]` — **formato nativo do MT5** |
+| `EXECUTION SUMMARY` nos 12 graficos | `Orders=0 \| Exec=0 \| Reject=0` sempre |
 
-O perfil Conservative declara **SL = 80 pontos** e `StopLossPoints = 300`.
-**O SL real e 186x o Conservative e 49x o `StopLossPoints`.** Nao medi ainda de
-onde vem — essa e a proxima peca.
+**NENHUMA ordem da conta real foi aberta pelo EA XAU_AI_PRO.** O contador
+`AntiLoop` de aberturas nunca saiu de zero, em nenhum dos 12 graficos, o dia
+inteiro. E `magic = 0` com comment no formato `[sl ...]`/`[tp ...]` e a marca de
+ordem **manual** no MT5.
+
+**As posicoes e o resultado medido sao do DONO, operando manualmente pelo MT5**
+— o caminho **MESA** do `AGENTS.md` §1, o segundo dos tres. Nao e o EA.
+
+Isso **corrige** o que `PASSAGEM_20261007_PRIMEIROS_PASSOS` §6.1 e
+`FIM_DE_CONEXAO` §2.5 afirmam — *"E o EA do MT5, que roda fora do app"* — e o
+que o commit `c578f10` titulou *"o motor que perdeu 2,94 na conta"*. **Nao foi
+o motor. Nao foi o EA.**
+
+### 4.3 O SL real e o dono que colocou
+
+| | entrada | saida | movimento | lucro |
+|---|---|---|---|---|
+| 06/10 16:13→16:34 | 85754.35 | 85613.80 | 140,55 | -1,41 |
+| 06/10 17:12→17:28 | 85513.65 | 85666.25 | 152,60 | -1,53 |
+| 07/10 00:36→01:12 | 85533.55 | 85388.55 | 145,00 | -1,45 |
+| 07/10 02:37→03:02 | 83836.95 | 83992.40 | 155,45 | -1,55 |
+
+Calibrado: **`implied_contract = 1.0` em todas** — o `contract_size` do BTCUSD
+na XM e 1,0 e o P&L fecha. Stop de **140 a 155 pontos de preco** = **0,164% a
+0,185%** do preco, com `1:1` (06/10 16:13 tem `sl 85553.75` e `tp 85953.75`,
+distancia quase igual dos dois lados).
+
+**Nao ha bug de SL para achar.** O perfil Conservative declara `SL=80` e
+`StopLossPoints=300` ($3,00) — e nenhum dos dois aparece em nenhuma ordem,
+porque nenhuma ordem e do EA. O stop de ~200 pontos **e o que o dono colocou**,
+arrastando no grafico, como a XM faz.
+
+O que fica de verdade e o economico: com razao perda/ganho de **2,484** e
+52,30% de acerto, o break-even exige **71,30%**. Isso vale para o operador
+manual tambem, nao so para o EA.
 
 ### 4.3 `BacktestReport.csv` esta CORROMPIDO
 
@@ -222,7 +261,14 @@ modelo.** O backtest rodou em **BTCUSD,M5**: o segundo pior dos 39.
   medidos, e o EA seria lucrativo. A razao medida e **2,484**.
 - Com 52,30% de acerto e razao **1:1** o EA **lucra**. O que o quebra e a razao.
 
-**Antes de treinar qualquer coisa: achar de onde vem o SL de 14.850 pontos.**
+**Antes de treinar qualquer coisa:** a razao 2,484 vem de ordens **manuais** do
+dono (§4.2), com stop de ~200 pontos arrastado no grafico e alvo 1:1. Isso nao
+mede o desempenho de um modelo — mede o de uma pessoa. **Treinar modelo nao
+corrige razao de gesto humano.**
+
+O que treinar *poderia* fechar: com razao 1:1 e 52,30% de acerto, o resultado
+seria positivo. Mas o operador precisa de 71,30% no 1:2 — e nenhum modelo do
+catalogo passa de 58,31% em 3 classes.
 
 ---
 
@@ -438,22 +484,25 @@ Tester tinha **4,80 GB**; o disco foi de 17,28 GB para **9,06 GB**. O
 ## 11. O QUE ESTA ABERTO
 
 1. **O EA do terminal.** 91 `.mqh` defasados, sem IA, sem
-   `RequireStopLoss`, com `MaxSpreadBySymbol` que nunca acerta e predicoes de
-   agosto. **Sincronizar e recompilar e o proximo passo natural.**
-2. **De onde vem o SL de 14.850 pontos**, contra 80 declarados. Sem isso, nem
-   modelo nem ajuste de parametro tem efeito.
-3. **A razao 2,484.** Com 52,30% de acerto e razao 1:1 o EA lucra.
+   `RequireStopLoss`, `MaxSpreadBySymbol` que nunca acerta, predicoes de agosto.
+   **Ele nunca operou (§4.2) — mas continua pronto para operar assim que
+   alguem ligar.** Sincronizar e recompilar e o passo natural.
+2. **Corrigir `PASSAGEM_20261007_PRIMEIROS_PASSOS` §6.1 e `FIM_DE_CONEXAO`
+   §2.5:** ambos dizem que o EA perdeu o dinheiro da conta. **Nao foi o EA**
+   (§4.2). Quem perdeu foi o dono, no MT5 manual.
+3. **A razao 2,484.** Com 52,30% de acerto e razao 1:1 o resultado e positivo.
+   Vale para operacao manual e para o EA.
 4. **Limite de spread em pontos crus** — precisa ser relativo ao preco (§6.1B).
-5. **`MinFreeMargin = 20`** contra $13,52 trava o EA.
-6. **3 instancias do EA no mesmo BTCUSD** (M1, M5, M15) com o mesmo
+   `MinFreeMargin = 20` contra $13,52 trava o EA.
+5. **3 instancias do EA no mesmo BTCUSD** (M1, M5, M15) com o mesmo
    `MagicNumber 2026001`.
-7. **`/api/trade/pending`**: tem `risk_gate`, mas nao grava `audit_log` nem
+6. **`/api/trade/pending`**: tem `risk_gate`, mas nao grava `audit_log` nem
    `intent_log` — unica abertura sem rastro das tres camadas. E nao ha
    consumidor no frontend.
-8. **`BacktestReport.csv` corrompido** (14,9%) e **acumulado** entre 12
+7. **`BacktestReport.csv` corrompido** (14,9%) e **acumulado** entre 12
    instancias sem trava.
-9. **Indicadores com busca** — `rsi` -> 3 resultados. Hoje sao tres botoes fixos.
-10. **O log de 4,80 GB** do Strategy Tester, e o disco em 9,06 GB.
+8. **Indicadores com busca** — `rsi` -> 3 resultados. Hoje sao tres botoes fixos.
+9. **O log de 4,80 GB** do Strategy Tester — apagado nesta sessao.
 
 ---
 
