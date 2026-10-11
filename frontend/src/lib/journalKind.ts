@@ -110,6 +110,57 @@ function falhasDeclaradas(linha: string): number | null {
 }
 
 /**
+ * `X errors: <n>` / `Y errors: <n>` — o NÚMERO manda, não o nome do campo.
+ *
+ * MEDIDO na captura de 10/10/2026 20:16 (Terminal ao vivo):
+ *
+ * ```
+ * DK 0 21:33:18.4 16 XAU_AI_PRO (ETHUSD,H1) JSON errors: 0
+ * RP 0 21:33:18.4 16 XAU_AI_PRO (ETHUSD,H1) Python errors: 0
+ * CH 0 21:33:18.4 16 XAU_AI_PRO (ETHUSD,H1) Indicator errors: 0
+ * ```
+ *
+ * Três checks 100% saudáveis marcados ERROR. O classificador antigo casava a
+ * PALAVRA `errors` no passo 3 (veredito explícito) — sem olhar o número que
+ * vem DEPOIS do nome do campo. É a mesma família do defeito de 08/10
+ * (`Failures`/`Error:`), só que com o plural que o EA escreve nestas linhas.
+ *
+ * Sem esta leitura, o operador vê VERMELHO no saudável — e manda olhar o EA
+ * quando não há nada para olhar (AGENTS.md §5: o sintoma manda culpar a
+ * coisa errada).
+ */
+function errosPluralDeclarados(linha: string): number | null {
+  const m = linha.match(/\b\w+\s+errors:\s*(\d+)/i);
+  return m ? Number(m[1]) : null;
+}
+
+/**
+ * `<modulo>: <n> falhas` — o dump do watchdog, variante em portugues.
+ *
+ * MEDIDO: `HealthMonitorSummary()` (Monitoring/HealthMonitor.mqh:762) emite
+ * `<modulo>: <n> falhas` para cada modulo do watchdog (ATR, ADX, RSI, AI,
+ * PYTHON, CSV, JSON). Modulo saudavel tem `<n> = 0`.
+ *
+ * ```text
+ * GD 0 14:20:22.295 XAU_AI_PRO (BTCUSD,M5) AI: 0 falhas
+ * GD 0 14:20:22.295 XAU_AI_PRO (BTCUSD,M5) RSI: 23 falhas
+ * ```
+ *
+ * Terceira variante da MESMA familia (`Failures:`/`Error:` de 08/10 e
+ * `errors:` de 10/10): o classificador casava a PALAVRA `falhas` no passo 3
+ * sem olhar o numero depois dos dois-pontos, e pintava VERMELHO no modulo
+ * 100% saudavel. O numero manda: `0` e INFO, `> 0` e falha de verdade.
+ *
+ * Fronteira: `\bfalhas\b` com `\s*` entre dois-pontos e numero, para casar
+ * `AI: 0 falhas` e `AI:0 falhas`. NAO casa `falhas=98` (sem `:`) — esse e o
+ * `[BACKUP]`, tratado pela etiqueta no passo 2.
+ */
+function falhasModuloDeclaradas(linha: string): number | null {
+  const m = linha.match(/\b\w+\s*:\s*(\d+)\s+falhas\b/i);
+  return m ? Number(m[1]) : null;
+}
+
+/**
  * `Error: <texto>` — o TEXTO DEPOIS do dois-pontos e o estado.
  *
  * Devolve `null` quando o rotulo NAO existe. `''` nao serve: `'' !== null` e
@@ -141,15 +192,21 @@ export function classificarJournal(mensagem: string): JournalKind {
   const linha = String(mensagem ?? '').trim();
   if (!linha) return 'INFO';
 
-  // 1. A linha de saude: `AI: OK | Failures: 0 | Error:`. O NUMERO e o TEXTO
-  //    depois do rotulo. `Failures: 0 | Error:` vazio e PASS, e nao ERROR.
-  //    So entra aqui se UM dos dois rotulos existir — e o ramo devolve sempre,
-  //    para que a palavra `Error` do campo nao vaze para o passo 3.
+  // 1. A linha de saude: `AI: OK | Failures: 0 | Error:`,
+  //    `DK ... JSON errors: 0` e `... AI: 0 falhas`. O NUMERO e o TEXTO
+  //    depois do rotulo. `Failures: 0 | Error:` vazio e PASS, e nao ERROR —
+  //    e `errors: 0` e `falhas: 0` tambem. So entra aqui se UM dos rotulos
+  //    existir — e o ramo devolve sempre, para que a palavra `Error`/
+  //    `errors`/`falhas` do campo nao vaze para o passo 3.
   const falhas = falhasDeclaradas(linha);
   const erro = erroDeclarado(linha);
-  if (falhas !== null || erro !== null) {
+  const errosPlural = errosPluralDeclarados(linha);
+  const falhasModulo = falhasModuloDeclaradas(linha);
+  if (falhas !== null || erro !== null || errosPlural !== null || falhasModulo !== null) {
     if (falhas !== null && falhas > 0) return 'ERROR';
     if (erro) return 'ERROR';
+    if (errosPlural !== null && errosPlural > 0) return 'ERROR';
+    if (falhasModulo !== null && falhasModulo > 0) return 'ERROR';
     return 'INFO';
   }
 
