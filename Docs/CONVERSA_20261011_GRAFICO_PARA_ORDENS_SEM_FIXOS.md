@@ -99,3 +99,12 @@ EconomicCalendar, pré-existentes); tsc limpo; diff-check limpo.
 - 1 grafico so, na Operacao (RobotTabs + 6 testes).
 - Validacao: pytest 1333/0, vitest 857 passed + 10 pre-existentes (EconomicCalendar), tsc limpo.
 - Rebuild + reinstalacao OK (hash igual), rotas 401, preflight sem bloqueio.
+
+## Adendo 12/10 — comparacao MT5 aberto x fechado + motor universal
+
+- Com MT5 ABERTO e escopo MEXC (sem credenciais validas): graficos de forex vazios + motor em loop 'mercado nao suportado para mexc'. Causa: escopo errado, nao codigo morto.
+- MotorAuto.ligar() agora recusa par (corretora, mercado) nao suportado NA PORTA (mesma regra do roker_registry), com 3 testes. Fim do erro-em-loop.
+- Planos NAO dependem do MT5: ackend/planos/*.py sem uma referencia a MT5; catalogo carregou com MT5 fechado (captura 20:39).
+- WARN 'Spot/Futuros indisponivel' agora traz o motivo (CryptoAccount.error, cortado em 90) — rede OK (mexc/binance ping 200), falta a credencial valer.
+- Instalacao: NSIS /S com mesma versao pode DESINSTALAR em vez de instalar (pasta sumiu); reinstalado do zero, hash igual.
+- Commit 1f76d93 push origin/develop. Validacao: pytest 1336/0, vitest 857+10 pre-existentes, tsc limpo.
