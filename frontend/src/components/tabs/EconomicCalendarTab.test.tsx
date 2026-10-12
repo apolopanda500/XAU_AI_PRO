@@ -345,20 +345,27 @@ it('marca evento estimado como estimado', async () => {
         PROVA NEGATIVA do teste acima, e a prova de que "hoje" e a unica ancora.
 
         A tela mostra os sete dias da semana visivel. MEDIDO: hoje e quinta
-        09/10/2026, a semana e 05/10 a 11/10 — e `em(3, 10, 0)` era 12/10, na
+        09/10/2026, a semana e 05/10 a 11/10 - e `em(3, 10, 0)` era 12/10, na
         semana SEGUINTE.
 
-        Este teste percorre os sete deslocamentos e mede quais tem aba. A
+        Este teste percorre QUATORZE deslocamentos e mede quais tem aba. A
         expectativa NAO e "todos tem linha": e que existem deslocamentos sem
         linha, e que o deslocamento ZERO e um deles. Sem esta medida, um
         `em(3, ...)` voltaria a passar em quarta e sexta e reprovar em sabado,
         com o calendario intacto.
 
+        QUATORZE, e nao sete (12/10/2026): com sete deslocamentos o teste
+        dependia do dia da semana em que rodava — numa segunda-feira (12/10) os
+        sete caiam DENTRO da semana visivel e o `toBeLessThan(7)` reprovava com
+        o calendario intacto. Quatorze dias consecutivos nunca cabem numa
+        semana de sete, em nenhum dia da semana: o zero continua garantido e
+        a janela de sete dias continua travada (`toBeLessThanOrEqual(7)`).
+
         O contra-teste de relogio congelado, que prova a marca em qualquer dia
         da semana, esta em `EconomicCalendarTab.semana.test.tsx`.
       */
       const comLinha: number[] = [];
-      for (let deslocamento = 0; deslocamento < 7; deslocamento += 1) {
+      for (let deslocamento = 0; deslocamento < 14; deslocamento += 1) {
         H.eventos = [
           ev(`d-${deslocamento}`, H.em(deslocamento, 10, 0), {
             estimado: true,
@@ -373,12 +380,13 @@ it('marca evento estimado como estimado', async () => {
 
       // Hoje esta sempre na semana visivel.
       expect(comLinha, 'hoje tem de estar na semana visivel').toContain(0);
-      // E existe deslocamento que cai fora dela — e nao por defeito do
-      // calendario, mas porque "hoje + 3 dias" nao cabe numa semana de sete.
+      // E a janela continua tendo SETE dias, em qualquer dia da semana: com
+      // quatorze deslocamentos para a frente, no maximo sete caem dentro.
+      // Se a janela crescer um dia, isto reprova — e e para reprovar.
       expect(
         comLinha.length,
-        'todo deslocamento caberia, e a semana nao tem sete dias',
-      ).toBeLessThan(7);
+        'a semana visivel nao tem sete dias',
+      ).toBeLessThanOrEqual(7);
     });
 
     it('marca "en" o titulo que o dicionario nao traduziu', async () => {
