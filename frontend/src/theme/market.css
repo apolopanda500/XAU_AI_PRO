@@ -611,109 +611,11 @@
 }
 
 /*
-  A BARRA DE FERRAMENTAS (06/10/2026)
-  ================================
-  MEDIDO nas capturas da XM: a barra e uma fileira curta e densa, com botao
-  quadrado. Aqui fica com o mesmo peso visual, senao os botoes somem entre os
-  outros controles da pagina — e um controle que o operador nao ve e um
-  controle que nao existe.
-
-  `flex-wrap` porque em janela estreita a fileira quebra em vez de espremer o
-  grafico; o grafico e o que o operador precisa ver, e a barra cabe em duas.
+  BARRA DE FERRAMENTAS, ESTILO E CAMADA DE DESENHO: REMOVIDOS (11/10/2026).
+  ==========================================================================
+  Decisao do dono: o grafico e para colocar ordens, nao para editar/estudar/
+  analisar. Saiu deste arquivo tudo que so a edicao usava: `.price-chart-barra`,
+  `.price-chart-ferramenta`, `.price-chart-conta`, `.price-chart-dica`,
+  `.price-chart-desenhos`, `.price-chart-estilo`, `.price-chart-cor[.ativo]`,
+  `.price-chart-espessura` e   `.price-chart-opacidade`.
 */
-.price-chart-barra {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding: 6px 0 8px;
-}
-
-.price-chart-ferramenta {
-  min-width: 30px;
-  padding: 3px 7px;
-  font-size: 14px;
-  line-height: 1;
-}
-
-.price-chart-conta {
-  font-size: 11px;
-  white-space: nowrap;
-}
-
-.price-chart-dica {
-  margin: 0 0 6px;
-  font-size: 11px;
-}
-
-/*
-  A CAMADA DOS DESENHOS.
-  ========================
-  `pointer-events: none` e OBRIGATORIO: um SVG por cima do grafico que captura
-  o ponteiro esconderia o crosshair, o arraste das linhas de ordem e o clique
-  que arma a ordem — os tres gestos que o operador precisa. E nao ha como
-  "corrigir" depois, porque o sintoma seria o grafico inteiro morto e nao um
-  desenho faltando.
-*/
-.price-chart-desenhos {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  overflow: visible;
-}
-
-/*
-  A BARRA DE ESTILO DO DESENHO ESCOLHIDO (06/10/2026)
-  ==================================================
-  MEDIDO nas capturas da XM (20:35, 20:36): a paleta e uma grade de quadrados
-  coloridos, a espessura em "1 px" a "4 px", o controle de opacidade mostra o
-  numero em %, e o cadeado alterna entre trancado e destrancado.
-*/
-.price-chart-estilo {
-  align-items: center;
-  gap: 3px;
-  padding: 3px 6px;
-  border: 1px solid var(--borda, rgba(139, 147, 167, .22));
-  border-radius: 6px;
-}
-
-.price-chart-cor {
-  width: 16px;
-  height: 16px;
-  padding: 0;
-  border: 1px solid rgba(0, 0, 0, .45);
-  border-radius: 3px;
-  cursor: pointer;
-}
-
-/*
-  A BORDA DO ATIVO E O CONTRATO DO GRUPO.
-
-  O botao de cor ativo precisa parecer o escolhido de relance: sem a borda, 16
-  quadrados de cor sao indistinguiveis e o operador mudaria de cor as vezes
-  ate acertar, achando que o controle nao responde.
-*/
-.price-chart-cor.ativo {
-  outline: 2px solid var(--texto, #e8ecf5);
-  outline-offset: 1px;
-}
-
-.price-chart-espessura {
-  min-width: 30px;
-  padding: 2px 5px;
-  font-size: 11px;
-}
-
-.price-chart-opacidade {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 11px;
-  margin-left: 4px;
-}
-
-.price-chart-opacidade input[type="range"] {
-  width: 74px;
-}

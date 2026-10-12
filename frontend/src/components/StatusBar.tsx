@@ -212,7 +212,21 @@ export default function StatusBar() {
                   id="status-ativo-campo"
                   className="status-tf-ativo-input"
                   defaultValue={simbolo}
-                  placeholder="ex.: XAUUSD"
+                  /*
+                    Nem exemplo no placeholder (09/10/2026).
+
+                    MEDIDO: era `placeholder="ex.: XAUUSD"`. Um nome de ativo
+                    no codigo — ainda que so como exemplo — e um ativo preso no
+                    produto: ele aparece quebrado em conta que nao o tem
+                    (MEDIDO em `volumeUnidade.ts:31`: XAUUSD NAO EXISTE no
+                    terminal XM) e sugere que o app conhece um ativo que nao
+                    conhece.
+
+                    O campo fica LIVRE: quem manda a lista e o catalogo da
+                    corretora, e o placeholder so explica o que fazer com o
+                    campo — sem nunca nomear um ativo.
+                  */
+                  placeholder="digite ou escolha da lista"
                   autoFocus
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {

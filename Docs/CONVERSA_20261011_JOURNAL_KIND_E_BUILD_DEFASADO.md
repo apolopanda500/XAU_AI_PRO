@@ -119,3 +119,84 @@ velho). Meu `journalKind` não aparece em nenhuma lista de falhas.
    existem no fonte atual** — vieram de um EA ainda mais antigo anexado.
 3. **Commit**: o working tree está com 115 arquivos pendentes. Commitar é
    decisão do dono.
+
+---
+
+## 7. Feito em 11/10 (tarde) — commit + rebuild + reinstalação limpa
+
+O dono autorizou as opções **3 (commit)** e **1 (rebuild + reinstalação)**.
+
+### Commit `9e40854` (branch `develop`)
+
+Escopo **fechado nos 3 arquivos desta sessão** (§11 — não varreu os outros 112):
+
+```
+Docs/CONVERSA_20261011_JOURNAL_KIND_E_BUILD_DEFASADO.md   (novo)
+frontend/src/lib/journalKind.ts                            (M)
+frontend/src/lib/journalKind.test.ts                       (M)
+3 files changed, 251 insertions(+), 18 deletions(-)
+```
+
+Os arquivos de `journalKind` já tinham a correção de 10/10 (`errors:`) **não
+commitada**; hoje entrou `falhas:`. Mesma feature, um commit.
+
+### Reinstalação limpa (§7) — hash, não data
+
+1. Parados os 3 processos do app (portas 9011/9002/9003 liberadas).
+2. `build_app.bat` — **9 de 10 verificações OK, mas a [7/7] FALHOU**:
+
+   ```
+   Error failed to bundle project: Failed to bundle app with makensis
+   ERRO: Bundle Tauri falhou
+   ```
+
+   O makensis **falhou depois** de escrever os artefatos. Medido nos bundles
+   (ambos existem e têm data de hoje):
+
+   | Artefato | tamanho | data |
+   |---|---|---|
+   | `bundle\msi\XAU AI PRO_1.2.4_x64_en-US.msi` | 356.159.792 B | 11/10 11:53:44 |
+   | `bundle\nsis\XAU AI PRO_1.2.4_x64-setup.exe` | 230.256.858 B | 11/10 11:54:33 |
+
+   **A prova de que o NSIS é válido: ele EXECUTOU.** O `setup` de 230 MB
+   rodou (`/S`) e completou a instalação — um instalador truncado não
+   instalaria nem criaria `uninstall.exe`. Verificado por hash: os 3 binários
+   instalados batem com o build (tabela abaixo). O `makensis` retornou código
+   ≠ 0 (provavelmente sinal de saída/tail), mas o artefato foi válido.
+   **Erramos ao ler o log cedo demais antes** — a falha só aparecia minutos
+   depois, e concluí "7/7 sucesso" sem esperar a linha final.
+3. Removida a pasta `%LOCALAPPDATA%\XAU AI PRO` (desinstalar sozinho deixa
+   lixo; e a 1ª tentativa do instalador `/S` sobrescreveu pela metade — foi
+   interrompida e refeita do zero).
+4. Instalador novo rodado `/S`.
+
+**Prova por hash dos 3 binários instalados vs. o que o build gerou:**
+
+| Binário | instalado | build/repo | igual |
+|---|---|---|---|
+| `bridge\mt5-gateway.exe` | `974D7FCA…` | repo `974D7FCA…` | **SIM** |
+| `core\xau-ai-pro-core.exe` | `BE1D4A34…` | build `BE1D4A34…` | **SIM** |
+| `XAU AI PRO.exe` | `BE4AE36B…` (13.969.408 B) | release cru `9B9B475B…` (13.969.920 B) | diferem por 512 B = patch de bundle do NSIS (esperado) |
+
+O bundle `App-ZXwYxBtp.js` (239,59 kB, mesmo do log de build) contém o marcador
+`falhas\b` — a correção foi compilada.
+
+### App no ar, medido
+
+| Medida | Valor |
+|---|---|
+| processos | 3 (XAU AI PRO PID 7080, mt5-gateway 10304, xau-ai-pro-core 1840), subidos 12:02 |
+| porta 9011 | escutando (PID 10304) |
+| portas 9002/9003 | escutando (PID 1840) |
+| `GET /health` | `{"ok": false, "error": "nao autorizado"}` = **fail-closed correto** (§4) |
+
+A correção do journal (`AI: 0 falhas` / `errors: 0` → INFO) agora está na tela.
+Confirmação visual pelo dono na aba Terminal ao vivo.
+
+## 8. O que ainda exige ação do dono
+
+1. **Reanexar o EA ao gráfico** (pendência de 10/10): os defeitos
+   `HEALTH_WD_MODULE_TIMEOUT`/`RSI: N falhas` das 08:07 **não existem no fonte
+   atual** — vieram de EA mais antigo anexado.
+2. **Commit** do resto: o working tree ainda tem ~112 arquivos de outros
+   escopos (modelos, calendário, i18n). Commitar é decisão do dono.

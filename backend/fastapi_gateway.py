@@ -26,6 +26,8 @@ from backend import ai_inference
 from backend import auto_engine
 from backend import ea_manager
 from backend import chart_attach
+from backend import ea_deploy
+from backend.mt5_gateway import _porta_gateway
 from backend import copilot
 from backend import intent_log
 from backend import persistent_queue
@@ -459,6 +461,41 @@ async def eas_list() -> dict:
 async def eas_status() -> dict:
     """Estado por EA: instalado, visto no journal, heartbeat do terminal."""
     return await _read_call(lambda: ea_manager.status_eas(com_journal=True), timeout=25.0)
+
+
+@app.get("/api/eas/deploy")
+async def eas_deploy_estado() -> dict:
+    """O binario do repo esta defasado em relacao ao do terminal? SO LEITURA.
+
+    Compilar no MetaEditor gera o `.ex5` ao lado do `.mq5`, no repo; o grafico
+    carrega de `MQL5/Experts` do TERMINAL. Reanexar nao copia. Esta rota compara
+    os dois por HASH e diz se estao defasados — sem copiar nada.
+    """
+    return await _read_call(ea_deploy.estado_deploy, timeout=15.0)
+
+
+@app.post("/api/eas/deploy")
+async def eas_deploy(request: Request) -> JSONResponse:
+    """Copia o `.ex5` do repo para o terminal (o que reanexar nao faz).
+
+    Exige `XAU_ALLOW_EA_DEPLOY=1` no ambiente do gateway e `aplicar` no corpo.
+    Grava backup do destino antes, copia de forma atomica e NUNCA escreve no
+    repo. Copiar tem efeito so ao REANEXAR o EA no grafico — o EA em execucao
+    roda a versao em memoria.
+    """
+    try:
+        corpo = await request.json()
+    except Exception:
+        corpo = {}
+    aplicar = bool(corpo.get("aplicar", True)) if isinstance(corpo, dict) else True
+    resultado = await _read_call(
+        lambda: ea_deploy.sincronizar_ex5(aplicar=aplicar), timeout=30.0
+    )
+    acao = resultado.get("acao")
+    # 200 quando copiou ou ja estava atualizado; 400 quando faltou autorizacao
+    # ou terminal; o motivo vem no corpo, nao escondido no status.
+    ok = acao in ("copiado", "ja_atualizado")
+    return _send(resultado, 200 if ok else 400)
 
 
 @app.get("/api/auto/state")
@@ -1587,8 +1624,12 @@ def main() -> None:
         gw.start_guardian_loop()
         persistent_queue.start_queue_loop()
         gw.watchdog.start_telemetry_loop()
-    print(f"[gateway] FastAPI Universal Gateway v1.2.4 rodando em http://127.0.0.1:9001")
-    uvicorn.run(app, host="127.0.0.1", port=9001, log_level="info")
+    _porta = _porta_gateway()
+    print(
+        f"[gateway] FastAPI Universal Gateway v1.2.4 rodando em "
+        f"http://127.0.0.1:{_porta}"
+    )
+    uvicorn.run(app, host="127.0.0.1", port=_porta, log_level="info")
 
 
 if __name__ == "__main__":

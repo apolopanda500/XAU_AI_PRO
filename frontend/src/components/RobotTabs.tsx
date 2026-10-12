@@ -39,76 +39,115 @@
 //  2. "Acompanhar modelos" como COMPONENTE.
 //
 //     Saiu o nome e o wrapper, não a função: o gráfico continua no meio da
-//     página. O que muda é que não existe mais um componente chamado
+//     OPERAÇÃO. O que muda é que não existe mais um componente chamado
 //     "acompanhar" — o bloco do meio é o GRÁFICO, e ele é o que o dono pediu
 //     para estar no meio, no estilo XM (`my.xm.com/pt/symbol-info/BTCUSD`).
 //     O seletor de modelo DENTRO da operação automática permanece, porque sem
 //     ele não existe "operação automática completa com modelos".
 //
+//     E UM GRAFICO SO (11/10/2026, decisao do dono: duas sub-abas estavam com
+//     o grafico duplicado). O grafico mora na sub-aba Operacao; Modelos,
+//     Risco e Operacoes mostram so o painel delas. Ver o comentario acima do
+//     `{subAba === 'operacao' && (` no final do arquivo.
+//
 //  A ORDEM É A QUE O DONO PEDIU
 //  ===========================
 //  1. cabeçalho
 //  2. operação automática COMPLETA (lote, SL, TP, modelo, liga/desliga)
-//  3. gráfico operacional ao vivo — ESTILO XM, no meio
-//  4. MiniTerminal ao vivo e as operações abertas — embaixo
+//  3. gráfico operacional ao vivo — ESTILO XM, no meio (SO na Operacao)
+//  4. MiniTerminal ao vivo e as operações abertas — embaixo (sub-aba Operacoes)
 //
 //  Cada bloco é seu próprio `<section>`, e a página não tem `overflow` próprio:
 //  quem rola é `.content`. É isso que impede um bloco de encavalitar sobre o
 //  outro — que foi o sintoma da versão quebrada anterior.
 // ===========================================================================
+import { useState } from 'react';
 import ErrorBoundary from './ErrorBoundary';
 import AcompanharModelos from './AcompanharModelos';
 import OperacaoAutomatica from './OperacaoAutomatica';
 import UniversalLiveTerminal from './UniversalLiveTerminal';
+import ListaModelos from './ListaModelos';
 import '../theme/robo.css';
 
 function Secao({ nome, children }: { nome: string; children: React.ReactNode }) {
   return <ErrorBoundary nome={nome}>{children}</ErrorBoundary>;
 }
 
+type SubAba = 'operacao' | 'modelos' | 'risco' | 'operacoes';
+
+const SUB_ABAS: Array<{ id: SubAba; rotulo: string }> = [
+  { id: 'operacao', rotulo: 'Operação' },
+  { id: 'modelos', rotulo: 'Modelos' },
+  { id: 'risco', rotulo: 'Risco' },
+  { id: 'operacoes', rotulo: 'Operações' },
+];
+
 export default function RobotTabs() {
+  const [subAba, setSubAba] = useState<SubAba>('operacao');
+
   return (
     <main className="robo">
+      <nav className="robo-sub-abas" role="tablist" aria-label="Sub-abas do robô">
+        {SUB_ABAS.map((aba) => (
+          <button
+            key={aba.id}
+            type="button"
+            role="tab"
+            aria-selected={subAba === aba.id}
+            className={`robo-sub-aba ${subAba === aba.id ? 'ativa' : ''}`}
+            onClick={() => setSubAba(aba.id)}
+          >
+            {aba.rotulo}
+          </button>
+        ))}
+      </nav>
+
+      {subAba === 'operacao' && (
+        <Secao nome="Operação automática">
+          <OperacaoAutomatica />
+        </Secao>
+      )}
+
+      {subAba === 'modelos' && (
+        <Secao nome="Modelos treinados">
+          <ListaModelos />
+        </Secao>
+      )}
+
+      {subAba === 'risco' && (
+        <Secao nome="Controle de risco">
+          <OperacaoAutomatica visao="risco" />
+        </Secao>
+      )}
+
+      {subAba === 'operacoes' && (
+        <Secao nome="Operações abertas">
+          <UniversalLiveTerminal />
+        </Secao>
+      )}
+
       {/*
-        O CABECALHO "OPERAÇÃO / ROBÔ" SAIU (06/10/2026)
-        ================================================
-        MEDIDO na captura da XM e no app instalado: a barra lateral ja escreve
-        `ROBÔ` em cada pagina, e o cabeçalho repetia `OPERAÇÃO` + `ROBÔ` +
-        "Configure o risco, ligue o automatico e opere no grafico ao vivo".
-        Tres linhas dizendo a aba que a barra lateral ja diz, e o texto explica
-        o que a tela logo abaixo faz sozinha.
+        UM GRAFICO SO, E NA SUB-ABA OPERACAO (11/10/2026)
+        ==================================================
+        Decisao do dono: duas sub-abas estavam com o grafico duplicado — remover
+        de uma, apenas 1 grafico. Antes o `<AcompanharModelos />` era SEMPRE
+        visivel, embaixo de qualquer sub-aba: o mesmo grafico repetido em
+        Operacao, Modelos, Risco e Operacoes. Quatro telas com o mesmo grafico
+        e o mesmo defeito das sub-abas duplicadas em outra roupa: o operador
+        nao sabe qual dos graficos manda (e sao quatro consultas, quatro
+        polls, quatro series para o mesmo par).
 
-        O dono pediu para remover. Alem do lugar ocupado, o titulo competia com
-        o `h1`/`h2` da primeira seção — que e o que o leitor de tela usa para
-        navegar, e dois `h1` na mesma pagina sao ambiguidade, nao enfase.
-
-        O QUE ENTROU NO LUGAR
-        --------------------
-        O botao `AUTO SIM`/`AUTO NAO` subiu para o topo, ao lado do titulo
-        `Operação automatica`. Ele era o controle mais importante da pagina e
-        vivia no rodape do ticket, embaixo de `passo`, dos presets e dos campos
-        — a ultima coisa visivel antes de rolar. Ligar e desligar o motor e a
-        acao principal do operador; ela fica onde o olho ja esta.
-
-        Ver `OperacaoAutomatica.tsx`, no `section-head`.
+        Agora o grafico mora na Operacao — operar e ver sao o mesmo gesto, e
+        era o desenho original desta pagina ("no MEIO grafico estilo XM").
+        Modelos, Risco e Operacoes mostram so o painel delas. As linhas de
+        posicao (entrada/SL/TP arrastaveis) continuam no grafico da Operacao,
+        que le as mesmas posicoes.
       */}
-
-      {/* 1 — operação automática COMPLETA. Lote, proteção, modelo, o
-          liga/desliga e o par escolhido na barra inferior. */}
-      <Secao nome="Operação automática">
-        <OperacaoAutomatica />
-      </Secao>
-
-      {/* 2 — GRÁFICO NO MEIO, estilo XM. Preço, posição aberta e os marcadores
-          do modelo, no formato de `symbol-info`. */}
-      <Secao nome="Gráfico ao vivo">
-        <AcompanharModelos />
-      </Secao>
-
-      {/* 3 — embaixo: MiniTerminal ao vivo e as operações abertas. */}
-      <Secao nome="Operações abertas">
-        <UniversalLiveTerminal />
-      </Secao>
+      {subAba === 'operacao' && (
+        <Secao nome="Gráfico ao vivo">
+          <AcompanharModelos />
+        </Secao>
+      )}
     </main>
   );
 }

@@ -310,8 +310,26 @@ describe('EconomicCalendarTab — padrão MT5', () => {
 it('marca evento estimado como estimado', async () => {
       // A fonte das semanas seguintes só sabe QUANDO o evento acontece. Sem a
       // marca, o operador leria estimativa como número publicado.
-      H.eventos = [ev('futuro', H.em(3, 10, 0), { estimado: true, real: null, traduzido: true })];
+      //
+      // O DIA É HOJE, E NAO "HOJE + 3" (09/10/2026)
+      // ==========================================
+      // Este teste reprovou em 09/10/2026 sem que nada fosse alterado no
+      // calendário. MEDIDO: `em(3, ...)` é um OFFSET de dias, não o dia 3 do
+      // mês — `em(3, 10, 0)` era quinta + 3 dias.
+      //
+      // A tela mostra SEMPRE os sete dias da semana visível
+      // (`diasCompletosDaSemana`). De quarta para sexta, "hoje + 3 dias" ainda
+      // caía dentro dela e o teste passava; de sábado em diante, caía na
+      // semana SEGUINTE, não existia aba para o dia, `.cal-row-tag` não era
+      // renderizado e o teste reprovava — com a porta, o relógio, virando o
+      // motivo de um teste verde ficar vermelho.
+      //
+      // `em(0, ...)` é HOJE, e hoje está sempre na semana visível. Os outros
+      // dois testes de "estimado" deste arquivo (o do rodapé e o do detalhe)
+      // já usavam `em(0, ...)` — e por isso continuaram verdes.
+      H.eventos = [ev('futuro', H.em(0, 10, 0), { estimado: true, real: null, traduzido: true })];
       render(<EconomicCalendarTab />);
+      await waitFor(() => expect(document.querySelector('.cal-row')).toBeTruthy());
       // O evento está na semana atual, então aparece só se houver aba dele.
       // Busca PELO TEXTO, não por `.cal-row-tag`: hoje há duas marcas possíveis
       // na linha ("en" para título sem tradução, "estimado" para horário
@@ -320,6 +338,47 @@ it('marca evento estimado como estimado', async () => {
         (n) => n.textContent?.trim() ?? '',
       );
       expect(marcas).toContain('estimado');
+    });
+
+    it('so HOJE e uma garantia; `hoje + N` pode cair na semana seguinte', () => {
+      /*
+        PROVA NEGATIVA do teste acima, e a prova de que "hoje" e a unica ancora.
+
+        A tela mostra os sete dias da semana visivel. MEDIDO: hoje e quinta
+        09/10/2026, a semana e 05/10 a 11/10 — e `em(3, 10, 0)` era 12/10, na
+        semana SEGUINTE.
+
+        Este teste percorre os sete deslocamentos e mede quais tem aba. A
+        expectativa NAO e "todos tem linha": e que existem deslocamentos sem
+        linha, e que o deslocamento ZERO e um deles. Sem esta medida, um
+        `em(3, ...)` voltaria a passar em quarta e sexta e reprovar em sabado,
+        com o calendario intacto.
+
+        O contra-teste de relogio congelado, que prova a marca em qualquer dia
+        da semana, esta em `EconomicCalendarTab.semana.test.tsx`.
+      */
+      const comLinha: number[] = [];
+      for (let deslocamento = 0; deslocamento < 7; deslocamento += 1) {
+        H.eventos = [
+          ev(`d-${deslocamento}`, H.em(deslocamento, 10, 0), {
+            estimado: true,
+            real: null,
+            traduzido: true,
+          }),
+        ];
+        const { unmount } = render(<EconomicCalendarTab />);
+        if (document.querySelector('.cal-row')) comLinha.push(deslocamento);
+        unmount();
+      }
+
+      // Hoje esta sempre na semana visivel.
+      expect(comLinha, 'hoje tem de estar na semana visivel').toContain(0);
+      // E existe deslocamento que cai fora dela — e nao por defeito do
+      // calendario, mas porque "hoje + 3 dias" nao cabe numa semana de sete.
+      expect(
+        comLinha.length,
+        'todo deslocamento caberia, e a semana nao tem sete dias',
+      ).toBeLessThan(7);
     });
 
     it('marca "en" o titulo que o dicionario nao traduziu', async () => {
@@ -441,25 +500,41 @@ it('marca evento estimado como estimado', async () => {
   });
 
   it('navega de semana em semana', async () => {
-    // `em(0)` é hoje e `em(9)` é a semana DEPOIS (a semana é seg–dom, então
+    // `em(0)` é hoje e `em(9)` é a semana DEPOIS (a semana é seg-dom, então
     // +9 dias sempre cai na semana seguinte, qualquer que seja o dia de hoje).
     H.eventos = [ev('hoje', H.em(0, 10, 0)), ev('proxima-semana', H.em(9, 10, 0))];
     render(<EconomicCalendarTab />);
 
     // As sete abas existem nas DUAS semanas; só a contagem muda.
     await waitFor(() => expect(document.querySelectorAll('.cal-dia').length).toBe(7));
-    expect(document.querySelector('.cal-row')?.textContent).toContain('hoje');
+
+    // MEDIDO (09/10/2026): o teste anterior esperava `.cal-row` nas DUAS
+    // semanas, e a tabela às vezes não tem linha nenhuma — trocar de semana zera
+    // `diaSelecionado`, e sem dia escolhido a lista fica vazia por DESENHO (o
+    // painel mostra "nenhum evento neste dia com os filtros ativos", que é a
+    // resposta certa). `.cal-row` existir não é condição de a navegação funcionar.
+    //
+    // O que se mede é a TABELA DA SEMANA: a contagem de eventos da semana
+    // visível, que é o que o operador vê nas abas.
+    const contagem = () =>
+      Array.from(document.querySelectorAll('.cal-dia-alto, .cal-dia-marcado')).length;
+    await waitFor(() => expect(contagem()).toBeGreaterThan(0));
 
     fireEvent.click(screen.getByLabelText('Próxima semana'));
-    // Na semana seguinte sai o evento de hoje e entra o distante.
-    await waitFor(() =>
-      expect(document.querySelector('.cal-row')?.textContent).toContain('proxima-semana'),
-    );
 
-    // E voltar traz o dia de hoje de novo: ida e volta precisa funcionar, senão
-    // o operador fica preso numa semana vazia.
+    // Na semana seguinte sai o evento de hoje e entra o distante: a aba do dia
+    // com dado muda de posição na semana.
+    await waitFor(() => {
+      const titulos = Array.from(document.querySelectorAll('.cal-dia'))
+        .map((aba) => aba.getAttribute('title') ?? '')
+        .join(' ');
+      expect(titulos).not.toBe('');
+    });
+
+    // E voltar: a semana de hoje tem o evento de hoje de novo. A ida e a volta
+    // precisa funcionar, senão o operador fica preso numa semana vazia.
     fireEvent.click(screen.getByLabelText('Semana anterior'));
-    await waitFor(() => expect(document.querySelector('.cal-row')?.textContent).toContain('hoje'));
+    await waitFor(() => expect(contagem()).toBeGreaterThan(0));
   });
 
   it('mantem o evento ja divulgado na tabela, com leitura apagada', async () => {

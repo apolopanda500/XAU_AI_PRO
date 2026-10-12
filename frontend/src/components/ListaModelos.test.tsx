@@ -125,7 +125,12 @@ describe('ListaModelos — o inventario real aparece inteiro', () => {
 
   it('conta quantos podem operar', async () => {
     render(<ListaModelos />);
-    await waitFor(() => expect(document.body.textContent).toContain('1 de 3 podem operar'));
+    // O contador mudou em 09/10/2026: dizia "1 de 3 podem operar" e contava
+    // LINHAS, quando o modelo de classe tem quatro linhas para um artefato.
+    // MEDIDO: 48 linhas para 39 modelos, e o operador lia "48 modelos".
+    await waitFor(() =>
+      expect(document.body.textContent).toContain('1 de 3 períodos podem operar'),
+    );
   });
 
   it('o publicavel vem PRIMEIRO na lista', async () => {
@@ -217,5 +222,108 @@ describe('ListaModelos — escolher o modelo move par E período', () => {
     await waitFor(() =>
       expect(document.body.textContent).toContain('Nenhum modelo treinado encontrado'),
     );
+  });
+});
+
+/* ===========================================================================
+   OS MODELOS DE CLASSE NA TABELA (09/10/2026)
+   =========================================================================
+   O DONO VIU na captura de 20:28: `MULTI_METALS | MULTI_METALS | METALS`.
+
+   MEDIDO, eram dois defeitos no mesmo ponto:
+
+   1. O `listar_modelos` descartava os tres artefatos sem underscore no nome
+      (`MULTI_METALS`, `MULTI_FIAT`, `MULTI_CRYPTO`) — e o `MULTI_METALS` e o de
+      MAIOR edge do catalogo. Travado no Python (`tests/test_ai_inference.py`).
+
+   2. Com os multi de volta, a coluna MODELO mostrava `m.id` (nome do arquivo,
+      que nos multi e o proprio simbolo) e a coluna PAR mostrava `m.symbol` — o
+      mesmo texto duas vezes.
+
+   E a chave da linha repetia: `key={m.id}` com quatro periodos do mesmo
+   artefato sao quatro chaves iguais, e o React reaproveitava o no errado.
+   Nao dava erro no console, so mostrava o periodo da primeira linha e
+   selecionava o M5 quando o operador clicava no H1.
+   ========================================================================= */
+describe('os modelos multi-classe tem chave propria e rotulo que nao repete', () => {
+  const linhasDaTela = () =>
+    Array.from(document.querySelectorAll('tbody tr'));
+
+  const multi = (tf: string) =>
+    modelo({
+      id: 'MULTI_METALS',
+      symbol: 'MULTI_METALS',
+      timeframe: tf,
+      label: `MODELO MULTI_METALS ${tf === 'H1' ? '1H' : tf}`,
+      edge: 0.2497,
+    });
+
+  it('os quatro periodos do mesmo artefato geram quatro linhas', async () => {
+    M.modelos = [multi('M5'), multi('M15'), multi('H1'), multi('H4')];
+    render(<ListaModelos />);
+
+    // Quatro linhas, uma por periodo, e nao quatro iguais.
+    await waitFor(() => expect(linhas()).toHaveLength(4));
+  });
+
+  it('clicar no H1 seleciona o H1, e nao o M5 da primeira linha', async () => {
+    // Mede a CHAVE. Com `key={m.id}`, o React reaproveitava o no da primeira
+    // linha e a escolha do operador caia no periodo errado.
+    M.modelos = [multi('M5'), multi('H1')];
+    render(<ListaModelos />);
+    await waitFor(() => expect(linhas()).toHaveLength(2));
+
+    fireEvent.click(linhas()[1]);
+    await waitFor(() => expect(M.chamadas.length).toBeGreaterThan(0));
+
+    // A chamada que importa e a que configura o motor; as outras (a leitura
+    // inicial dos modelos, o estado do motor) nao escolhem nada.
+    const configs = M.chamadas.filter((c) => String(c.url).includes('/api/auto/config'));
+    expect(configs.length, 'clicar no H1 tem de mandar UMA configuracao').toBe(1);
+    const corpo = configs[0].body as { simbolo: string; timeframe: string };
+    expect(corpo.timeframe).toBe('H1');
+    expect(corpo.simbolo).toBe('MULTI_METALS');
+  });
+
+  it('a coluna MODELO nao repete a coluna PAR', async () => {
+    // Mede a redundancia que o dono apontou: duas colunas com o mesmo texto.
+    M.modelos = [multi('H1')];
+    render(<ListaModelos />);
+    await waitFor(() => expect(linhas()).toHaveLength(1));
+
+    const colunas = Array.from(linhas()[0].querySelectorAll('td')).map((td) =>
+      (td.textContent ?? '').trim(),
+    );
+    expect(colunas[0], 'Modelo').toBe('MODELO MULTI_METALS 1H');
+    // A CLASSE NAO E UM ATIVO (11/10/2026)
+    // =====================================
+    // MEDIDO na captura do dono (12:26): a coluna PAR dizia `MULTI_METALS` — o
+    // id cru do artefato, que e a CLASSE, nao um simbolo que se pode operar. A
+    // cabeca da tabela dizia "37 de 37 periodos podem operar", e a coluna ao
+    // lado mostrava um nome que nao existe no catalogo da corretora (§3).
+    //
+    // Esta trava ANTES esperava `MULTI_METALS` — ou seja, travava o valor
+    // ERRADO (variante do §6: a trava mediu MODELO != PAR, nao "a classe
+    // precisa aparecer como classe"). Agora ela mede o que a tela precisa
+    // dizer: o operador lê `classe METALS`, e nunca um ativo inventado.
+    expect(colunas[1], 'Par').toContain('classe METALS');
+    expect(colunas[1], 'nunca um simbolo cru da classe').not.toBe('METALS');
+    expect(colunas[1], 'nunca o id cru do artefato').not.toBe('MULTI_METALS');
+    expect(colunas[0]).not.toBe(colunas[1]);
+  });
+
+  it('o contador fala em artefatos E em periodos', async () => {
+    // "48 modelos" era mentira: sao 39 artefatos, tres deles com quatro
+    // periodos. O operador lia a quantidade de modelos.
+    M.modelos = [multi('M5'), multi('H1'), modelo({})];
+    render(<ListaModelos />);
+
+    // O CONTADOR nao estava no texto unico: o `<span>` quebrava em dois nos,
+    // e o `getByText` nao achava o texto inteiro. Por isso a escrita pelo
+    // `document.body.textContent`, como os outros testes deste arquivo.
+    await waitFor(() =>
+      expect(document.body.textContent).toContain('2 artefatos'),
+    );
+    expect(document.body.textContent).toContain('de 3 períodos');
   });
 });

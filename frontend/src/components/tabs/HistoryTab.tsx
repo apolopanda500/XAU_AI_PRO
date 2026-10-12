@@ -41,7 +41,7 @@
 import { useMemo, useState } from 'react';
 import { fmtNum, fmtSigned } from '../../lib/format';
 import { useHistorico } from '../../lib/historico';
-import { linhasMt5, resumoMt5 } from '../../lib/historicoMt5';
+import { corDaOperacao, linhasMt5, resumoMt5 } from '../../lib/historicoMt5';
 import '../../theme/history.css';
 // Carregado por último: sobrescreve as celulas de 40px do history.css.
 import '../../theme/history-grid.css';
@@ -352,12 +352,19 @@ export default function HistoryTab() {
 
                     Agora o texto diz a verdade de cada caso, e `Todas` mostra
                     que as exchanges ficam de fora sem simbolo.
+
+                    E NENHUM exemplo de ativo no texto (09/10/2026): era
+                    `(ex.: BTCUSD)`. Um nome de ativo preso no codigo — em
+                    conta que nao tem esse par, o exemplo nao so nao ajuda, ele
+                    afirma que o app conhece um ativo que ele nao conhece.
+                    Quem sabe os nomes e a corretora, pelo catalogo. O campo
+                    continua livre: digitar ou deixar vazio.
                   */
                   broker === 'mt5'
-                    ? 'Opcional (ex.: BTCUSD)'
+                    ? 'Opcional'
                     : broker === 'all'
-                      ? 'Opcional — sem par, só MT5 (ex.: BTCUSD)'
-                      : 'Obrigatório (ex.: BTCUSDT)'
+                      ? 'Opcional — sem par, só MT5'
+                      : 'Obrigatório'
                 }
               />
             </label>
@@ -513,8 +520,20 @@ export default function HistoryTab() {
                         rotulo traduzido impediria o operador de bater o
                         registro com o MT5.
                       */}
+                      {/*
+                        A COR DA OPERACAO vem de `corDaOperacao`, e nao de um
+                        `if` aqui.
+
+                        MEDIDO (09/10/2026): esta celula era
+                        `linha.movimentacao ? 'warn' : 'ok'` — e o dono reportou
+                        o resultado: "quando tem sell fica verde e nao vermelho".
+                        O `else` cobria compra E venda com o mesmo verde.
+
+                        Movimentacao e amarela, compra e verde, venda e
+                        vermelha, e o que nao tem lado conhecido e amarelo.
+                      */}
                       <td>
-                        <span className={`chip ${linha.movimentacao ? 'warn' : 'ok'}`}>
+                        <span className={`chip ${corDaOperacao(linha.tipo, linha.movimentacao)}`}>
                           {linha.tipo || '—'}
                         </span>
                       </td>

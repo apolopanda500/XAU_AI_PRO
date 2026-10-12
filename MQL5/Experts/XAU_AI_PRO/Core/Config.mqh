@@ -59,7 +59,7 @@ input double MaxDailyLossPercent= 5.0;
 input double MaxDrawdownPercent = 15.0;
 input double MinEquityPercent   = 10.0;  // Equity minima (% do balance) para operar
 
-input double MinFreeMargin      = 20.0;  // Margem livre minima (moeda da conta)
+input double MinFreeMargin      = 10.0;  // Margem livre minima (moeda da conta)
 
 input int    MaxTradesPerDay    = 20;
 input int    MaxOpenPositions   = 5;
@@ -70,57 +70,131 @@ input int    MaxOpenPositions   = 5;
 input bool   AllowMinLotOverride = true;
 
 //==================================================
-// EXECUCAO
+// LIMITE DE SPREAD — EM PORCENTAGEM DO PRECO (08/10/2026)
 //==================================================
-// MaxSpread (pontos) - limite de spread por simbolo.
-// Antes 30.0: em backtest/M15 o GOLD# tem spread ~31,
-// o que fazia o ValidateTrade bloquear com
-// "[VALIDATION] BLOCK | SPREAD | GOLD# | 31.00/30.00".
-// Ajustado para 50.0 para tolerar o spread normal do ouro
-// (~30-40 pips) mantendo protecao contra spread anormal.
-input double MaxSpread          = 50;
-// Limites de spread POR SIMBOLO (pontos), separados por virgula.
-// Formato: "SIMBOLO:limite,SIMBOLO:limite"
-// Crypto (BTCUSD#, ETHUSD#) tem spread natural alto em pontos
-// (~345-1500+), por isso usa limite proprio bem maior.
-// Simbolos nao listados usam MaxSpread (fallback).
-input string MaxSpreadBySymbol  = "GOLD#:350,BTCUSD#:600,ETHUSD#:600";
+// MEDIDO na conta 391773676 (XMGlobal-MT5 14), terminal aberto, com o EA
+// operando BTCUSD H4:
+//
+//   simbolo   point    spread_preco   spread_pts   limite de 50 pts =   bloqueia?
+//   BTCUSD    0.01        40,00000       4000,0           0,50000        SIM
+//   ETHUSD    0.01         3,00000        300,0           0,50000        SIM
+//   USDSEK    0.00001      0,01550       1579,0           0,00050        SIM
+//   GOLD      0.01         0,57000         57,0           0,50000        SIM
+//   USDCNH    0.0001       0,00430         43,0           0,00500        nao
+//   EURUSD    0.00001      0,00019         19,0           0,00050        nao
+//
+// 4 de 12 simbolos BLOQUEADOS com spread NORMAL. E o OURO, por 57 contra 50:
+// um limite em pontos crus e fragil ate no metal que da nome ao projeto.
+//
+// A CAUSA: `point` varia mil vezes entre um forex e o BTCUSD. "50 pontos"
+// vale $5,00 no BTCUSD e $0,0005 no EURUSD. O mesmo numero nao pode servir
+// as duas coisas.
+//
+// A CAUSA SEGUNDA: o mapa por simbolo nao ACERTAVA para nenhum dos tres que
+// ele nomeava. Os nomes tinham `#` no fim (`GOLD#:350`) e a comparacao e
+// `StringCompare(sym, symbol, false)` com `symbol = _Symbol`, que e `GOLD` —
+// sem `#`. Entao o mapa caia sempre no fallback. (O `CircuitBreaker.mqh:153`
+// ja tinha um comentario sobre isso; o comentario estava certo e o codigo
+// continuou errado.)
+//
+// A CORRECAO: o limite passa a ser PORCENTAGEM DO PRECO, e o
+// `GetMaxSpread` continua devolvendo PONTOS — derivados do preco e do `point`
+// do proprio simbolo. Entao os SEIS lugares que comparam
+// (`SymbolValidator:123`, `ValidationEngine:90`, `SpreadFilter:91` e `:145`,
+// `SmartExecution:334` e `:341`) nao mudam uma linha, e a unidade do broker
+// deixa de importar.
+//
+// FOLGA MEDIDA com 0,6% de fallback (spread real em % do preco):
+//   USDSEK 0,158% -> 3,8x   ETHUSD 0,121% -> 5,0x   USDCNH 0,064% -> 9,4x
+//   BTCUSD 0,049% -> 12,3x  NZDUSD 0,055% -> 10,8x  GOLD 0,014% -> 43,6x
+// Todos passam, e o mais apertado ainda tem 3,8x antes de a trava fechar.
+input double MaxSpreadPct       = 0.6;
+// Limites POR SIMBOLO, tambem em porcentagem. Formato "SIMBOLO:pct".
+// Sem `#`: o nome e o que o terminal escreve, e `_Symbol` nao tem sufixo.
+// Simbolos nao listados usam MaxSpreadPct.
+input string MaxSpreadPctBySymbol = "";
 
 //==================================================
-// GET MAX SPREAD BY SYMBOL
-// Retorna o limite de spread especifico do simbolo
-// ou o fallback MaxSpread se nao configurado.
+// GET MAX SPREAD PCT — a porcentagem do simbolo
 //==================================================
+double GetMaxSpreadPct(string symbol="")
+{
+   if(symbol == "")
+      symbol = _Symbol;
+
+   string list = MaxSpreadPctBySymbol;
+   StringTrimLeft(list);
+   StringTrimRight(list);
+   if(list != "")
+   {
+      string entries[];
+      int n = StringSplit(list, ',', entries);
+      for(int i = 0; i < n; i++)
+      {
+         string kv[];
+         int k = StringSplit(entries[i], ':', kv);
+         if(k == 2)
+         {
+            string sym = kv[0];
+            StringTrimLeft(sym);
+            StringTrimRight(sym);
+            string val = kv[1];
+            StringTrimLeft(val);
+            StringTrimRight(val);
+            // Comparacao sem `#`: `_Symbol` nunca tem sufixo, e era exatamente
+            // o sufixo que fazia o mapa nunca casar (medido acima).
+            if(StringCompare(sym, symbol, false) == 0)
+            {
+               double pct = StringToDouble(val);
+               if(pct > 0.0)
+                  return pct;
+            }
+         }
+      }
+   }
+   return(MaxSpreadPct > 0.0 ? MaxSpreadPct : 0.6);
+}
+
+//==================================================
+// GET MAX SPREAD — em PONTOS, derivado do preco
+//==================================================
+// A UNIDADE CONTINUA SENDO PONTO, porque os seis leitores ja comparam com
+// `spread = (ask-bid)/point`. O que muda e de onde o numero vem: em vez de
+// "50 pontos" escrito a mao, e a porcentagem do preco convertida no `point`
+// daquele simbolo.
 double GetMaxSpread(string symbol="")
 {
    if(symbol == "")
       symbol = _Symbol;
 
-   string list = MaxSpreadBySymbol;
-   StringTrimLeft(list);
-   StringTrimRight(list);
-   if(list == "")
-      return MaxSpread;
+   double pct = GetMaxSpreadPct(symbol);
+   if(pct <= 0.0)
+      return(50.0);
 
-   string entries[];
-   int n = StringSplit(list, ',', entries);
-   for(int i = 0; i < n; i++)
-   {
-      string kv[];
-      int k = StringSplit(entries[i], ':', kv);
-      if(k == 2)
-      {
-         string sym = kv[0];
-         StringTrimLeft(sym);
-         StringTrimRight(sym);
-         string val = kv[1];
-         StringTrimLeft(val);
-         StringTrimRight(val);
-         if(StringCompare(sym, symbol, false) == 0)
-            return StringToDouble(val);
-      }
-   }
-   return MaxSpread;
+   double ask  = SymbolInfoDouble(symbol, SYMBOL_ASK);
+   double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
+
+   // Sem ficha do simbolo nao ha preco nem point: nao se chora o limite, e
+   // nao se inventa um numero. O fallback e a mesma 50 pontos de antes.
+   if(point <= 0.0)
+      return(50.0);
+   if(ask <= 0.0)
+      ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+   if(ask <= 0.0)
+      return(50.0);
+
+   double limitePreco = ask * pct / 100.0;
+   double limitePts   = limitePreco / point;
+   if(limitePts <= 0.0)
+      return(50.0);
+
+   // Teto e piso em PONTOS, para o limite nao virar absurdo em nenhum dos
+   // extremos: 1 ponto no minimo (nunca "spread 0"), e 100.000 no maximo.
+   if(limitePts < 1.0)
+      return(1.0);
+   if(limitePts > 100000.0)
+      return(100000.0);
+   return(limitePts);
 }
 input int    Slippage           = 5;
 
@@ -141,6 +215,26 @@ input int    RetrySlippageIncrement = 2;
 //==================================================
 input int StopLossPoints        = 300;
 input int TakeProfitPoints      = 600;
+
+//----------------------------------------------
+// RISCO por operacao em DINHEIRO (decisao do dono, 08/10/2026)
+//----------------------------------------------
+// MEDIDO na conta 391773676: `StopLossPoints=300` e PONTOS CRUOS, e ponto nao
+// e dinheiro. No GOLD (point 0,01) dava US$ 3,00; no EURUSD (point 0,00001)
+// dava US$ 3,00 tambem; no USDJPY daria US$ 20 e no BTCUSD US$ 0,03. Um
+// numero so, quatro riscos diferentes.
+//
+// E o pior: US$ 3,00 contra um orcamento diario de 5% de US$ 12,13 = US$ 0,61.
+// Uma operacao estouraria o limite diario inteiro, que foi exatamente o que
+// aconteceu: SELL 0,01 GOLD @ 4152,43 com stop em 4155,43 (+3,00), tocado.
+//
+// Aqui o risco e em DOLARES e vale para todos os simbolos. `RewardRatio = 1.0`
+// deixa alvo e stop iguais (2 por 2, 3 por 3); 2.0 volta ao 1:2 antigo.
+// Os inputs em PONTOS continuam existindo como caminho de fuga: se
+// `RiskPerTradeUsd <= 0` eles voltam a valer, entao nenhum controle fica sem
+// consumidor.
+input double RiskPerTradeUsd     = 2.0;   // risco do STOP por operacao, em moeda da conta
+input double RewardRatio         = 1.0;   // alvo = risco x isto. 1.0 = 1:1
 
 //==================================================
 // BREAK EVEN
@@ -450,6 +544,40 @@ input string Symbols=
 "USDSEK,"
 
 "USDCNH";
+
+//==================================================
+// RISCO EM DINHEIRO -> DISTANCIA EM PONTOS
+//==================================================
+// Definicao UNICA do "quanto de preco corresponde a N dolares de risco" para
+// um simbolo e um lote. `ExecutionEngine` e `OrderManager` consomem ISTA funcao.
+//
+// Se cada um dividisse por conta propria, um deles acabaria com um numero e o
+// outro com outro — e o sintoma seria o mesmo que ja-investigamos: o cliente
+// lendo um nome e o servidor entregando outra medida.
+//
+// `distancia = risco_usd / (contrato x volume x point)`
+//
+// `SYMBOL_TRADE_CONTRACT_SIZE` e propriedade DOUBLE, nao enum inteiro: no MT5 o
+// tamanho de contrato pode ser fracionario, e o compilador rejeita com
+// "cannot convert enum" quando ele e pedido como `SymbolInfoInteger`. Medido
+// em 08/10/2026: e o primeiro erro que aparece ao compilar este trecho.
+double DistanciaPontosParaRiscoUSD(
+   string symbol,
+   double volume,
+   double risco_usd
+)
+{
+   if(risco_usd <= 0.0 || volume <= 0.0)
+      return(0.0);
+
+   double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
+   double contrato = SymbolInfoDouble(symbol, SYMBOL_TRADE_CONTRACT_SIZE);
+
+   if(point <= 0.0 || contrato <= 0.0)
+      return(0.0);
+
+   return(risco_usd / (contrato * volume * point));
+}
 
 //==================================================
 // DEBUG - NAO ALTERE

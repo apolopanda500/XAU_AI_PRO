@@ -347,7 +347,7 @@ describe('a barra do grafico — desfazer e refazer', () => {
     expect(botao('EMA').getAttribute('aria-pressed')).toBe('true');
     expect(botao('RSI').getAttribute('aria-pressed')).toBe('true');
 
-    fireEvent.click(botao('Desfazer'));
+fireEvent.click(botao('Desfazer'));
     expect(botao('EMA').getAttribute('aria-pressed')).toBe('false');
     expect(botao('RSI').getAttribute('aria-pressed')).toBe('true');
     expect(botao('Linha').getAttribute('aria-pressed')).toBe('true');
@@ -360,6 +360,56 @@ describe('a barra do grafico — desfazer e refazer', () => {
     expect(botao('Linha').getAttribute('aria-pressed')).toBe('false');
     expect(botao('Candles').getAttribute('aria-pressed')).toBe('true');
     expect(desabilitado('Desfazer')).toBe(true);
+  });
+});
+
+/*
+  OS ICONES DA BARRA SAIRAM COM A BARRA (11/10/2026, decisao do dono: o grafico
+  e para colocar ordens). `IconesGrafico.tsx` servia so a `BarraFerramentas` —
+  os dois arquivos sairam, e este describe saiu junto. Apagar teste de coisa
+  removida nao e afrouxar trava: e nao medir o que nao existe (a trava que
+  proibe o retorno e a ausencia do arquivo, medida no `tsc` — qualquer
+  `import` dele reprova).
+*/
+
+/*
+  A TABELA DE DADOS EXISTE COM CANDLES — MESMO COM ERRO (11/10/2026)
+  ===================================================================
+  MEDIDO na captura do dono (12:29, ROBÔ): grafico desenhado, aviso de erro, e
+  NADA abaixo do canvas — sem legenda de rodape, sem "Ver dados em tabela".
+  Na outra visao do MESMO componente (12:27) a tabela estava la. O mesmo
+  componente com e sem tabela conforme a visao e o AGENTS.md 5: o operador da
+  ROBÔ perde o unico lugar onde confere o numero que o grafico desenhou.
+
+  A regra: havendo candles na tela, o `<details>` existe — o erro nao o
+  esconde. Sem candles, nao ha o que tabular e ele nao existe.
+*/
+describe('a tabela de dados existe com candles, mesmo com erro (11/10/2026)', () => {
+  it('PROVA: com candles E erro, "Ver dados em tabela" continua na tela', () => {
+    render(
+      <PriceChart
+        symbol="BTCUSD"
+        candles={CANDLES}
+        error="Atualização falhou: sem sessão — mostrando os últimos candles recebidos."
+      />,
+    );
+    const resumo = screen.getByText('Ver dados em tabela');
+    expect(resumo).toBeTruthy();
+    // A tabela tabula o que esta desenhado: 20 linhas, as mais novas primeiro.
+    const linhas = document.querySelectorAll('.market-chart-data tbody tr');
+    expect(linhas.length).toBe(20);
+    const cabecalho = Array.from(
+      document.querySelectorAll('.market-chart-data thead th'),
+    ).map((th) => th.textContent);
+    expect(cabecalho).toEqual(['Data', 'Abertura', 'Máxima', 'Mínima', 'Fechamento', 'Volume']);
+  });
+
+  it('PROVA NEGATIVA: sem candles nao ha tabela — e o erro continua explicando', () => {
+    render(<PriceChart symbol="BTCUSD" candles={[]} error="sem sessão" />);
+    expect(screen.queryByText('Ver dados em tabela')).toBeNull();
+    // Sem este caso, forcar a tabela a existir sempre passaria — e uma tabela
+    // vazia ao lado de "Gráfico indisponível" seria o mesmo defeito invertido.
+    expect(document.body.textContent).toContain('Gráfico indisponível');
   });
 });
 

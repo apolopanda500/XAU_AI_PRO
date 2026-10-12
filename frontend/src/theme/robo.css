@@ -89,6 +89,40 @@
   min-height: 100%;
 }
 
+/* ---------- Sub-abas do robô ---------- */
+.robo-sub-abas {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0;
+}
+
+.robo-sub-aba {
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--muted, #8a94a6);
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.robo-sub-aba:hover {
+  color: var(--text, #e2e8f0);
+  background: color-mix(in srgb, var(--primary, #00c6fb) 6%, transparent);
+}
+
+.robo-sub-aba.ativa {
+  color: var(--text, #e2e8f0);
+  background: var(--surface, #0f172a);
+  border-color: var(--border);
+  margin-bottom: -1px;
+}
+
 /* Cada bloco é filho direto da coluna. `min-width: 0` deixa os blocos
    encolherem dentro da coluna em vez de estourar a largura. */
 .robo > * {
@@ -506,6 +540,15 @@
   padding: 0 10px 8px;
   margin: 0;
   font-size: 11px;
+}
+
+/* A linha do botão que aplica os limites (visão de risco, 11/10/2026).
+   Sem isto o botão encosta na borda do bloco — e o bloco tem a mesma
+   moldura embaixo que nos campos. */
+.robo-limites-acoes {
+  display: flex;
+  gap: 8px;
+  padding: 0 10px 10px;
 }
 /*
   SL/TP POR DINHEIRO (05/10/2026)

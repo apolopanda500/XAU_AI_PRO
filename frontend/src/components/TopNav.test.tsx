@@ -140,6 +140,37 @@ describe('useInferenciaIA — o interruptor enabled passou a valer', () => {
     result.current.ativar(false);
     expect(useAppStore.getState().aiStatus).toBe('Inativa');
   });
+
+  it('PROVA NEGATIVA: o motivo da inferência NÃO apaga o que o interruptor escreveu', async () => {
+    /*
+      O DEFECT (11/10/2026), medido na captura do dono: 12:25 mostrava
+      `AI: Ativa`, e 12:27 mostrava `AI: Inativa` — dois minutos, sem ninguém
+      tocar no botão.
+
+      A CAUSA: `ativar(true)` gravava 'Ativa' UMA vez, e o loop seguinte de
+      `inferir()` chamava `setAiStatus('IA: ' + motivo)`, que e `IA desligada
+      pelo operador` ou `sem inferencia`. O ultimo a escrever venceu, e o
+      cabecalho mudou sozinho — o operador perdia a confianca nele (§5).
+
+      A PROVA: o caminho que o hook DESLIGADO segue (`enabled=false`), que e o
+      que a captura mostrou. Sem a correcao, `inferir()` gravava
+      `IA: IA desligada pelo operador` por cima de `Ativa`. Com ela, o
+      `aiStatus` continua o que o operador escolheu, e a mensagem continua
+      visivel no `motivo` — os dois dizem a verdade, um nao apaga o outro.
+    */
+    const { result } = renderHook(() => useInferenciaIA('H1', false));
+    result.current.ativar(true);
+    expect(useAppStore.getState().aiStatus).toBe('Ativa');
+
+    const r = await result.current.inferir('BTCUSD');
+    // O motivo continua sendo a resposta — e continua visivel no hook.
+    expect(r.motivo).toContain('desligada');
+    // Mas NAO apaga o cabecalho, que e dono do interruptor.
+    expect(
+      useAppStore.getState().aiStatus,
+      'o motivo da inferencia nao pode apagar o estado do interruptor',
+    ).toBe('Ativa');
+  });
 });
 
 // ---------------------------------------------------------------------------

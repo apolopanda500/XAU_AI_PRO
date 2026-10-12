@@ -25,13 +25,15 @@ export default function RobotMarketBar() {
   const selectedSymbol = useAppStore((state) => state.selectedSymbol);
   const setSelectedSymbol = useAppStore((state) => state.setSelectedSymbol);
   const escopo = escopoAtivo();
-  // `normalizeMarketSource` recebe broker e mercado em separado e devolve
-  // `null` para fonte desativada. O fallback e o mesmo usado pela leitura de
-  // mercado: sem fallback, uma conta desativada deixaria a faixa sem preco.
+  /*
+    SEM ESCOPO, SEM FONTE (11/10/2026, decisao do dono: nada de MT5 fixo). Era
+    `?? ({ broker: 'mt5', market: 'other' })` — e a faixa nascia falando MT5 e
+    cotando por uma corretora que ninguem escolheu. `normalizeMarketSource`
+    devolve `null` para fonte desativada/vazia, e agora o `null` atravessa: a
+    faixa mostra `sem corretora`, nada e cotado, e o chip diz o motivo.
+  */
   const source = useMemo(
-    () =>
-      normalizeMarketSource(escopo.broker, escopo.market) ??
-      ({ broker: 'mt5', market: 'other' } as MarketSource),
+    () => normalizeMarketSource(escopo.broker, escopo.market),
     [escopo.broker, escopo.market],
   );
   const [quote, setQuote] = useState<MarketQuote | null>(null);
@@ -39,11 +41,28 @@ export default function RobotMarketBar() {
   const [agora, setAgora] = useState(() => Date.now());
   const [erro, setErro] = useState('');
 
-  const simbolo = (selectedSymbol || 'XAUUSD').toUpperCase();
+  /*
+    NENHUM ATIVO E PRESUMIDO AQUI (09/10/2026)
+    ==========================================
+    MEDIDO: esta linha era `(selectedSymbol || 'XAUUSD').toUpperCase()`. Com a
+    loja sem ativo escolhido, a faixa cotava XAUUSD — um ativo que ninguem
+    tinha escolhido, e que pode NAO existir na conta (MEDIDO em
+    `volumeUnidade.ts:31`: XAUUSD nao existe no terminal XM). O operador via
+    preco de um ativo que nao pediu e que nao pode operar.
+
+    E exatamente a regra do AGENTS.md §3: simbolo vazio e RECUSA COM MOTIVO,
+    nunca um ativo padrao. Sem escolha, a faixa mostra `—`, e o chip diz
+    `sem ativo` — que e o motivo. O `carregar` ja saia com `if (!simbolo)`,
+    entao nenhuma cotacao e pedida: nada de resposta vazia nem de erro.
+
+    O componente inteiro fica LIVRE: ele nao sabe qual ativo existe. Quem sabe
+    e a corretora, pelo catalogo. O prompt apenas oferece o que ja la esta.
+  */
+  const simbolo = String(selectedSymbol ?? '').trim().toUpperCase();
 
   const carregar = useCallback(
     async (signal: AbortSignal) => {
-      if (!simbolo) return;
+      if (!simbolo || !source) return;
       const resposta = await getQuotes(source, [simbolo], { signal });
       setQuote(resposta.quotes.find((item) => item.symbol.toUpperCase() === simbolo) ?? null);
       setAge(Date.now());
@@ -91,6 +110,8 @@ export default function RobotMarketBar() {
           type="button"
           className="rmb-symbol"
           onClick={() => {
+            // O prompt sugere o que JA esta escolhido, e nao um ativo do
+            // codigo: sem escolha ele vem vazio.
             const next = window.prompt('Ativo para operar', simbolo);
             if (next?.trim()) setSelectedSymbol(next.trim().toUpperCase());
           }}
@@ -99,11 +120,19 @@ export default function RobotMarketBar() {
           {simbolo || '—'}
         </button>
         <span className="muted">
-          {brokerLabel(source.broker)} · {MARKET_LABELS[source.market] ?? source.market}
+          {source
+            ? `${brokerLabel(source.broker)} · ${MARKET_LABELS[source.market] ?? source.market}`
+            : 'sem corretora — ative a conta em Conexões'}
         </span>
-        <span className={`chip ${temPreco && !vencida ? 'ok' : 'warn'}`}>
-          {erro ? 'sem gateway' : !temPreco ? 'sem preço' : vencida ? 'vencida' : 'ao vivo'}
-        </span>
+          {/*
+            O chip separa "sem ativo escolhido" de "sem preco": os dois dizem
+            que nao ha numero na tela, mas o motivo e diferente, e o operador
+            precisa do motivo para saber ONDE agir — escolher o ativo ou olhar
+            a conexao.
+          */}
+          <span className={`chip ${!simbolo || temPreco ? (!simbolo ? 'warn' : 'ok') : 'warn'}`}>
+            {erro ? 'sem gateway' : !simbolo ? 'sem ativo' : !temPreco ? 'sem preço' : vencida ? 'vencida' : 'ao vivo'}
+          </span>
         <span className="muted rmb-time">
           {quote?.received_at ? formatTime(quote.received_at) : '--:--:--'}
         </span>

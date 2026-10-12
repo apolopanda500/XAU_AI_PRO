@@ -1,21 +1,27 @@
 # Índice de Docs — XAU AI PRO
 
-Atualizado em **08/10/2026**. Este mapa existe porque a pasta chegou a ter
+Atualizado em **11/10/2026**. Este mapa existe porque a pasta chegou a ter
 61 arquivos com quatro "FINAL" e cinco "HANDOFF" disputando o mesmo assunto.
 
-**Comece por:** [`PASSAGEM_20261008_MONITOR_GRAFICO_CALENDARIO.md`](./PASSAGEM_20261008_MONITOR_GRAFICO_CALENDARIO.md) —
-**os números e as provas do ciclo de 08/10**: o gráfico nunca aparecia porque
-`mt5_gateway._symbols()` lia `symbols_get()` **sem** a guarda de sessão que a
-rota de candles já tinha (0 ativos → **1640**); o mini terminal pintava **ERROR**
-em sete checks que diziam `OK`, porque casava `Failures`/`Error:` — **nome de
-campo** — em vez do valor; e `[SAFETY]` (63.837 linhas) e `[CIRCUIT]` (29.574)
-saíam INFO, que são as duas travas que impediram operação.
-Depois: [`CONVERSA_20261008_MONITOR_GRAFICO_CALENDARIO.md`](./CONVERSA_20261008_MONITOR_GRAFICO_CALENDARIO.md) —
-**a conversa na ordem**, com as decisões e o que cada uma mudou.
-Antes: [`CONVERSA_20261008_CICLO_BUILD_EA_ABRINDO.md`](./CONVERSA_20261008_CICLO_BUILD_EA_ABRINDO.md) —
-o ciclo do build e do EA abrindo; e [`PASSAGEM_20261007_02_BUILD_EA_DESCONECTADO.md`](./PASSAGEM_20261007_02_BUILD_EA_DESCONECTADO.md)
-— que mediu **1639** ativos e por isso apontava para o frontend. **O número era
-o de uma sessão funcionando**: o catálogo dependia da ordem das chamadas.
+**Comece por:** [`CONVERSA_20261011_TEMAS_RENOMEADOS_E_ESTADO_MEDIDO.md`](./CONVERSA_20261011_TEMAS_RENOMEADOS_E_ESTADO_MEDIDO.md) —
+**o ciclo de 11/10**: app novo rodando pelo atalho, `0 falhas bloqueantes`, e a
+lacuna fechada — a pergunta de temas com nome de ativo (`xau_dark`/`btc_dark`) que
+o ciclo anterior deixou em aberto **já estava resolvida no código**
+(`dourado_dark`/`laranja_dark`, com migração da preferência) e só faltava
+documentar. Sem commit: é decisão do dono.
+Depois: [`CONVERSA_20261010_VALIDACAO_COMPLETA_E_APROVACAO.md`](./CONVERSA_20261010_VALIDACAO_COMPLETA_E_APROVACAO.md) —
+**o ciclo de 10/10 que fechou tudo**: as 82 imagens lidas, o build 7/7, a
+reinstalação limpa (hash da ponte medido, 1,39 GB de resíduo removidos), as
+telas medidas uma por uma e **dois defeitos a mais** — o preflight que media
+9001 fixa enquanto o produto usava 9011 (corrigido, com prova negativa) e o app
+que fecha sozinho em sessão longa (medido, não corrigido). `1315 passed`,
+`874 vitest`, `tsc` limpo.
+Depois: [`CONVERSA_20261010_AMBIENTE_LIVRE_E_CORRECOES.md`](./CONVERSA_20261010_AMBIENTE_LIVRE_E_CORRECOES.md) —
+os 6 defeitos da fila e a decisão dos ícones.
+Antes: [`PASSAGEM_20261008_MONITOR_GRAFICO_CALENDARIO.md`](./PASSAGEM_20261008_MONITOR_GRAFICO_CALENDARIO.md) —
+o gráfico que nunca aparecia (`symbols_get()` sem a guarda de sessão, 0 → 1640
+ativos) e o terminal que pintava ERROR em sete checks que diziam `OK`, porque
+casava `Failures`/`Error:` em vez do valor.
 Segurança: [`CODE_SCANNING.md`](./CODE_SCANNING.md) — os 19 alertas do CodeQL.
 
 ---
@@ -24,6 +30,9 @@ Segurança: [`CODE_SCANNING.md`](./CODE_SCANNING.md) — os 19 alertas do CodeQL
 
 | Documento | Quando | Sobre |
 | --------- | ------ | ----- |
+| **`CONVERSA_20261011_TEMAS_RENOMEADOS_E_ESTADO_MEDIDO.md`** | 11/10 | **Leitura de entrada.** App novo rodando pelo atalho, `0 falhas`, e a **lacuna fechada**: a pergunta de temas `xau_dark`/`btc_dark` já estava resolvida no código (`dourado_dark`/`laranja_dark`, com migração da preferência) — este ciclo só documentou. Sem commit. |
+| **`CONVERSA_20261010_VALIDACAO_COMPLETA_E_APROVACAO.md`** | 10/10 tarde | Build 7/7, reinstalação limpa com hash medido, cada tela validada, e os 2 defeitos achados na validação (preflight com porta fixa — corrigido; app que fecha sozinho — medido). `1315 passed`, `874 vitest`, 9,51 GB livres. |
+| **`CONVERSA_20261010_AMBIENTE_LIVRE_E_CORRECOES.md`** | 10/10 | **Os 6 defeitos da fila** (IA que desligava, `max 0`, `MULTI_METALS`, menu do botão direito, excedente sob o gráfico, fuso) e a decisão do dono sobre ícone. |
 | **`PASSAGEM_20261008_MONITOR_GRAFICO_CALENDARIO.md`** | 08/10 | **Leitura de entrada.** Os três defeitos medidos, as quatro provas negativas, e **o app no ar sem backend** (porta 9001 sem dono). `1283 passed`, `773 vitest`, `tsc` limpo. |
 | **`CONVERSA_20261008_MONITOR_GRAFICO_CALENDARIO.md`** | 08/10 | **A conversa na ordem**: as 6 perguntas, o que cada resposta mudou, e as **3 premessas do resumo anterior que o comando mediu diferente**. |
 | **`CONVERSA_20261003_04_DO_WINDOWS_AO_APP_PRONTO.md`** | 03→04/10 | **A conversa na ordem: 6 pedidos, 7 defeitos medidos, o cooldown de margem (3.191×), o EA que não compilava desde `dbdce10`, e as 7 pendências reais.** |
@@ -154,6 +163,17 @@ git show <commit-antigo>:Docs/<arquivo>
 | `HANDOFF_XAU_AI_PRO_20260923.md`   | 23/09         | Substituído pelo handoff de 28/09                |
 | `HANDOFF_2026-09-14_XAU_AI_PRO.md` | 14/09         | Sessão antiga                                    |
 | `HANDOFF_XAU_AI_PRO_20260925.md`   | 25/09         | Substituído pelo handoff de 28/09                |
+
+---
+
+## Sessoes de 09/10/2026
+
+| documento | o que responde |
+|---|---|
+| `SESSAO_20261009_RISCO_DINHEIRO_ESCADA_E_CONTA_ZERO.md` | Risco em dinheiro (spread, DD realizado, `MinFreeMargin`, SL/TP e gatilhos em dolares), escada de 9 padroes, regra sem stop, os 4 defeitos corrigidos, os 8 erros meus, e a conta que foi a zero por `magic 0` |
+| `CONVERSA_20261009_PORTA_CONFIGURAVEL_E_APP.md` | Conflito de porta MT5 x gateway (`WinError 10013`), a opcao (B) que deixa a porta configuravel em Python/Core/Tauri/CSP, e o estado do build interrompido |
+
+As duas sao referencia do estado atual. O `AGENTS.md` continua mandando nas regras.
 
 ---
 

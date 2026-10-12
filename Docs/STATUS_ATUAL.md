@@ -1,83 +1,83 @@
 # STATUS ATUAL DO PROJETO
 
-**Data:** 07/10/2026
+**Data:** 11/10/2026
 **Versão:** 1.2.4
-**Status:** código validado (pytest 1271 · vitest 731 · tsc limpo) — **aguardando build**
+**Status:** app novo **instalado e rodando** pelo atalho; todas as telas validadas;
+`0 falhas bloqueantes`. Pendências são **ação do dono** (ver §ABERTO).
 
 ---
 
 ## LEIA PRIMEIRO
 
-**→ [`Docs/PASSAGEM_20261007_PRIMEIROS_PASSOS.md`](PASSAGEM_20261007_PRIMEIROS_PASSOS.md)**
+**→ [`Docs/CONVERSA_20261011_TEMAS_RENOMEADOS_E_ESTADO_MEDIDO.md`](CONVERSA_20261011_TEMAS_RENOMEADOS_E_ESTADO_MEDIDO.md)**
 
-Esse arquivo diz o que fazer, o que medir e o que está aberto. Este aqui é o
-resumo.
+Diz o que fazer, o que medir e o que está aberto, com o estado de agora.
+Este arquivo é o resumo.
 
 ---
 
-## OS NÚMEROS
+## OS NÚMEROS (medidos em 11/10/2026)
 
 | | |
 |---|---|
-| `pytest` | **1271 verdes** |
-| `vitest` | **731 verdes**, 51 arquivos |
-| `tsc --noEmit` | **limpo** |
-| `git status` | **0 pendentes** |
-| `preflight --etapa app-rodando` | 2 avisos, **nenhuma falha bloqueante** |
+| `preflight --etapa app-rodando` | **0 falhas**, 2 avisos (MQL5 + git pendente) |
+| `tsc --noEmit` | **exit 0** |
+| app em execução | `XAU AI PRO` + `mt5-gateway` + `xau-ai-pro-core` |
+| portas escutando | **9011** (gateway), **9002**/**9003** (core) — ocupadas |
+| `frontend/src` com nome de ativo no código | **0** (com comentário/docstring removidos) |
+| disco C: livre | **8,99 GB** |
+| branch | `develop`, 2 commits à frente de `origin/develop` |
+| arquivos pendentes no git | **108** |
 
-## COMMITS DESTA SESSÃO
+Números da suíte completa vêm do ciclo de 10/10 (`1315 passed`, `874 vitest`);
+não foram re rodados em 11/10 porque a mudança deste ciclo foi **só documentação**
+— nenhum fonte foi tocado, e o `tsc --noEmit` de agora confirma o frontend limpo.
 
-```
-dc484d7  ouro: o nome da corretora e o nome do modelo agora se encontram
-c352d14  docs: a conta fecha, e o erro foi meu de metodo — nao dinheiro faltando
-ed2c125  grafico e ticket: o que o app instalado mostrou e o CSS que mentia o motivo
-c578f10  docs: o instalador novo medido, e o motor que perdeu 2,94 na conta
-96a684e  margem: o requisito que o painel recusou por engano, e a alavancagem da conta
-48754ed  grafico: as pontas, a paleta, a trava e o Ctrl+Z; historico: a tela para de descartar a busca
-```
+---
 
-## O QUE FOI CORRIGIDO NESTA SESSÃO
+## O QUE FOI FEITO NO CICLO DE 11/10
 
 | item | antes | agora |
 |---|---|---|
-| `PriceChart.tsx` **zerado** (19.157 bytes de `0x00`) | `tsc` despejava milhares de erro | restaurado do **source map** do `dist` |
-| `.git/index` **zerado** | `git status` recusava com `bad signature` | reconstruído com `git read-tree` |
-| Gráfico vazio (`Identidade de mercado inválida`) | não carregava com o motor desligado | mercado da ficha + período do modelo |
-| Campo SL espremido a ~10 px | rótulo em coluna de 1 caractere | `minmax(280px, …)` no grid |
-| Histórico descartava a busca ao trocar o filtro | filtro novo com dados do filtro antigo | token de requisição |
-| Histórico não dizia quando o MT5 está fechado | "Nenhum registro no período" | "Sem leitura: o MetaTrader 5 está sem sessão" |
-| Requisito de margem ausente | recusado como "número inventado" | `0,85 USD`, conferido com a conta |
-| Ouro não abria | `GOLD` na corretora ≠ `XAUUSD` no modelo | `model_symbol` casa os dois |
-| Pontas, paleta, trava, `Ctrl + Z` | 19 testes reprovando | **0** |
+| pergunta de temas com nome de ativo | em aberto (`xau_dark`/`btc_dark`) | **resolvida no código** e **documentada** (`dourado_dark`/`laranja_dark`, com migração da preferência salva) |
+| deploy do `.ex5` para o terminal | inexistente (reanexar não copiava) | **`backend/ea_deploy.py`** copia só o `.ex5` (com backup, atômico, `XAU_ALLOW_EA_DEPLOY=1`) + **12 testes** (prova positiva e negativa) |
 
-## O PRÓXIMO PASSO
+A renomeação dos temas já estava pronta no fonte; este ciclo **fechou a lacuna de
+documentação** e **mediu o estado**.
 
-**Build.** O app instalado é **anterior a quatro correções** — testar agora
-mostra o gráfico vazio. `build_app.bat`, ~8 min. Os passos estão em
-`PASSAGEM_20261007_PRIMEIROS_PASSOS.md` §3.
+### ⚠️ Descoberta: o EA no terminal está defasado e operando a conta real
 
-## O QUE ESTÁ ABERTO
+MEDIDO (hash, não data):
 
-1. **A conta real opera com o app desligado** — 8 posições, 4 perdas de ~1,50,
-   todas `[sl …]`, stop de 0,23% a 1000:1. Não é do app: é o EA do MT5, que
-   roda fora dele.
-2. **Forward e endurance rodaram em código de 23/09**, não no de hoje
-   (endurance: 923 operações, PF 0,48, Sharpe −9,31).
-3. **Indicadores com busca** — `rsi` → 3 resultados, como a XM.
+| Onde | Hash (12) | Modificado |
+|---|---|---|
+| repo `XAU_AI_PRO.ex5` | `dc115aecc4df` | 10/10 21:00 |
+| terminal `XAU_AI_PRO.ex5` | `6f86cd6e37cd` | **08/10 23:03** |
 
-## A RECONCILIAÇÃO DO SALDO FECHA
+Compilar no MetaEditor gera o `.ex5` **ao lado do `.mq5`, no repo** — mas o
+gráfico carrega de `MQL5/Experts` do **terminal**. Reanexar não copia. O journal
+de 11/10 (domingo) mostra o EA **velho** operando a conta 391773676: 1132 vendas
+de EURUSD, 566 com `[Market closed]`. Opera EURUSD, não o BTCUSD do app.
 
-```
-soma dos 19 deals   = +9,56
-balance             =  3,94
-credit              =  5,62
-balance + credit    =  9,56   ← bate
-```
+**Fechado a ferramenta, não o deploy.** `ea_deploy.py` está pronto e testado,
+mas **não copiei** — exige `XAU_ALLOW_EA_DEPLOY=1` e mexe no binário da conta
+real. Decisão do dono.
 
-Movimentações negativas: **nenhuma**. `Retirada: 0,00` no MT5.
+---
+
+## O QUE ESTÁ ABERTO (ação do dono, não do ciclo)
+
+1. **Reanexar o EA ao gráfico.** Compilar não reanexa; 21 arquivos MQL5 estão com
+   autorização declarada no preflight. O EA anexado ao terminal é mais antigo que
+   o do repo.
+2. **Confirmar o AutoTrading do terminal.** A validação do app é só em leitura:
+   motor e IA ficam desligados.
+3. **Commit dos 108 arquivos** — decisão do dono.
+4. **Fechamento espontâneo do app** em sessão longa: medido, sem log nem stack.
+   Se repetir, rodar com o console aberto para ter o rastro.
 
 ---
 
 **Um documento antigo neste `Docs/` não está desatualizado por estar no fim da
 lista — e sim por ser de um ciclo anterior. O `command` vence o número; o
-documento mais recente manda.** Ver `PASSAGEM_20261007_PRIMEIROS_PASSOS.md` §9.
+documento mais recente manda.** Ver `CONVERSA_20261011_TEMAS_RENOMEADOS_E_ESTADO_MEDIDO.md` §7.

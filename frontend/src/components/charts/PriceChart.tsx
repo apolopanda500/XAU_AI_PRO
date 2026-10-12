@@ -1,9 +1,11 @@
-﻿import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { GraficoIndicador } from './GraficoIndicador';
-import QuantumClock from '../QuantumClock';
+import MenuGrafico, { type AcaoDoMenu } from './MenuGrafico';
 import SeletorFuso from '../SeletorFuso';
 import '../../theme/market.css';
 import '../../theme/fuso.css';
+import '../../theme/mt5-terminal.css';
+import '../../theme/menu-grafico.css';
 import {
   createChart,
   type IChartApi,
@@ -14,6 +16,7 @@ import {
   ColorType,
   CrosshairMode,
 } from 'lightweight-charts';
+import { clsPnl } from '../../lib/format';
 import {
   getCandles,
   type MarketBroker,
@@ -32,26 +35,30 @@ import {
   type Historico,
 } from '../../lib/historicoGrafico';
 import type { LinhaOrdem } from '../../lib/ordemGrafico';
-import BarraFerramentas, { type FerramentaAtiva } from './BarraFerramentas';
-import {
-  completo,
-  desenhoMaisProximo,
-  distanciaAteHorizontal,
-  distanciaAteTendencia,
-  estiloDe,
-  moverPonto,
-  nivelHorizontal,
-  podeMoverPontos,
-  pontaMaisProxima,
-  pontoDoEvento,
-  pontasVisiveis,
-  segmentoTendencia,
-  PONTOS_POR_FERRAMENTA,
-  type Desenho,
-  type TipoDesenho,
-} from './desenhos';
 
-export const TIMEFRAMES = ['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1'] as const;
+/*
+  A JANELA DE TEMPOS, E ELA QUE O MT5 ACEITA (09/10/2026)
+  =========================================================
+  MEDIDO na XM (`my.xm.com/pt/symbol-info/BTCUSD`): a barra de baixo do grafico
+  e `1H 1D 1W 1M 3M 1Y MAX`. Aqui eram sete botoes, de M1 a D1 — e a semana e o
+  mes, que sao os periodos em que a maior parte das decisoes e tomada, nao
+  estavam na tela.
+
+  MEDIDO no MT5 desta maquina, conta 391773676 (XMGlobal-MT5 14):
+
+      TIMEFRAME_W1  = 32769   ->  GOLD W1  = 5 barras
+      TIMEFRAME_MN1 = 49153   ->  GOLD MN1 = 5 barras
+
+  A lista vem do que o PRODUTOR aceita (`backend/mt5_gateway.py::_TIMEFRAME_MAP`),
+  e nao de uma lista escrita aqui. Um botao de timeframe que o gateway recusa e o
+  AGENTS.md §9 pelo avesso: controle que promete e nao entrega.
+
+  `3M` e `1Y` NAO entraram, e a razao e a mesma do lado do gateway: o MT5 nao
+  tem agregacao propria de trimestre nem de ano. Um `3M` seria soma de 12
+  semanas feita na mao, e o preco viria de uma vela que o operador nao ve.
+  `MAX` tambem nao: e um intervalo, nao um timeframe.
+*/
+export const TIMEFRAMES = ['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1', 'W1', 'MN1'] as const;
 export type ChartTimeframe = (typeof TIMEFRAMES)[number];
 
 type PriceChartProps = {
@@ -93,24 +100,45 @@ type PriceChartProps = {
   /** Chamado quando o operador liga/desliga um indicador pela tela. */
   onIndicadoresChange?: (estado: { rsi: boolean; macd: boolean; ema: boolean }) => void;
   /*
-    A ORDEM ARMADA PELO GRAFICO (06/10/2026)
-    ========================================
-    MEDIDO nas capturas da XM: o clique ARMA a ordem e nao envia. O envio e o
-    botao `Colocar ordem a <preco>`, no painel. Sem esta separacao o clique
-    seria o caminho de 1-clique que o dono mandou remover.
+    AS LINHAS DA ORDEM (06/10/2026, revisto em 08/10/2026)
+    =====================================================
+    MEDIDO nas capturas da XM: o clique ARMAVA a ordem e nao enviava. O envio e
+    o botao `Colocar ordem a <preco>`, no painel.
 
-    `modoOrdem` e o interruptor. Ligado, o clique no grafico vira preco de
-    entrada; desligado, o grafico e so leitura, como era.
+    EM 08/10/2026 O DONO MANDOU REMOVER O CAMINHO DE 1-CLIQUE, e mediu que ele
+    continuava: `AcompanharModelos.tsx:536` passa `modoOrdem` ligado, entao
+    qualquer clique virava preco de entrada. Ver o bloco no efeito do clique.
+
+    `modoOrdem` agora liga SO as linhas e o `x` que apaga stop e alvo. Nao liga
+    mais preco de entrada: esse vem do ultimo fechamento, no pai.
   */
   modoOrdem?: boolean;
   /** As tres linhas da ordem armada, com o rotulo em dinheiro da XM. */
   ordem?: LinhaOrdem[];
-  /** Clique no grafico: arma a ordem no preco clicado. O preco vai cru. */
-  onArmarOrdem?: (preco: number) => void;
   /** Soltar uma linha arrastada: o preco vai cru, quem arredonda e o pai. */
   onMoverLinhaOrdem?: (papel: LinhaOrdem['papel'], preco: number) => void;
   /** O `x` da linha: apaga stop ou alvo. `entrada` nao apaga. */
   onRemoverLinha?: (papel: LinhaOrdem['papel']) => void;
+  /**
+   * COMPRAR ou VENDER pelo menu do botao direito (09/10/2026).
+   *
+   * NAO envia ordem. Recebe o lado e o PRECO onde o operador clicou, e quem
+   * decide o que fazer com isso e o pai — que ȩ dono do botao `Colocar ordem` e
+   * da tela que mostra tudoo que vai sair.
+   *
+   * MEDIDO (08/10/2026 19:35, conta real 391773676): dois cliques no grafico
+   * criaram tres linhas de ordem montadas a um clique do envio. O dono mandou
+   * remover, e o menu direito e o MESMO perigo por outro caminho: se ele criasse
+   * linha, seria o 1-clique que foi removido.
+   */
+  onOperarNoMenu?: (lado: 'compra' | 'venda', preco: number | null) => void;
+  /**
+   * O preco escolhido no menu, para stop ou alvo.
+   *
+   * Tambem NAO cria linha: devolve o numero para a mesa, que ȩ onde o operador
+   * confirma o que vai ser enviado.
+   */
+  onEscolherPreco?: (papel: 'sl' | 'tp', preco: number | null) => void;
 };
 
 /** Os tres desenhos de preco que o lightweight-charts 4.2.3 sabe fazer. */
@@ -261,13 +289,208 @@ export function macdValores(
   return { macd, sinal, histograma };
 }
 
-function defaultMarket(broker: MarketBroker): MarketKind {
-  return broker === 'mt5' ? 'forex' : 'crypto-spot';
+/*
+  A COR DO FECHO, SEM O ERRO DE ARREDONDAMENTO (09/10/2026)
+  =========================================================
+  MEDIDO: `1.14069 - 1.13999` da `0.7000000000000002` em ponto flutuante, e um
+  `clsPnl` que le valor positivo pinta a vela de alta quando ela BAIXOU. O
+  cabecalho do grafico ficariapaintando verde em cima de um preco que caiu — e o
+  operador nao olha para a cor, ele confia nela.
+
+  O piso de 8 casas e o mesmo do `fmtPreco`: abaixo disso o numero deixa de
+  ser ruido de binario e passa a ser o movimento do preco.
+*/
+function arredondarPnl(valor: number): number {
+  if (!Number.isFinite(valor)) return 0;
+  return Math.abs(valor) < 1e-8 ? 0 : valor;
+}
+
+function defaultMarket(broker: MarketBroker | '' | string): MarketKind | '' {
+  // Corretora desconhecida ou vazia: sem palpite (11/10/2026, nada de MT5
+  // fixo). `''` e "ainda nao medido", e `normalizeMarketSource` trata `''`
+  // como fonte invalida — a consulta nao sai e a tela recusa com motivo.
+  if (broker === 'mt5') return 'forex';
+  if (!broker) return '';
+  return 'crypto-spot';
+}
+
+/**
+ * O preco com AS CASAS QUE O PROPRIO NUMERO TRAZ (09/10/2026)
+ * ===========================================================
+ * MEDIDO na conta 391773676, nos dois lados:
+ *
+ *     MT5  copy_rates EURUSD -> 1.14069   (5 casas)
+ *     MT5  copy_rates BTCUSD -> 82329.35   (2 casas no retorno, 5 na tela da XM)
+ *     XM   Bitcoin vs US Dollar · 1h  Abr 85.516,15
+ *
+ * Uma preferencia global de casas decimais seria o AGENTS.md §9: "Casas
+ * decimais nao e preferencia global". O `Digits` existe por ativo, e aqui o que
+ * esta em mao e o proprio preco — com as casas que ele veio.
+ *
+ * Arredondado no limite de 8 casas porque `String(0.1 + 0.2)` devolve 16 casas,
+ * e nenhuma corretora mostra `0,30000000000000004` num cabecalho de grafico.
+ */
+function fmtPreco(valor: unknown): string {
+  const n = Number(valor);
+  if (!Number.isFinite(n)) return '--';
+  const texto = String(n);
+  const casas = texto.includes('.') ? Math.min(texto.split('.')[1].length, 8) : 2;
+  return n.toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas });
+}
+
+/*
+  AS DUAS DECISOES QUE FAZIAM O GRAFICO FICAR ESCURO (09/10/2026)
+  =================================================================
+  MEDIDO no app instalado, 17:09 e 17:18, em qualquer par e qualquer timeframe:
+
+      Grafico indisponivel: Identidade de mercado invalida.
+      EURUSD sem candles reais para M1.
+      0 candles
+
+  E o backend respondia 300 candles. MEDIDO:
+  `_universal_candles('mt5','forex','EURUSD','H1',300)` -> ok, count=300.
+
+  Sao funções PURAS de proposito, e nao logica dentro do componente:
+
+  MEDIDO nesta sessao: o defeito nao se reproduz no `jsdom` — la o `getCandles`
+  falha no `fetch`, antes de chegar no `normalizeMarketSource`, e o erro que
+  aparece e outro. Um teste de componente passava com a correcao LIGADA e
+  DESLIGADA: decorativo, e o AGENTS.md §6 na forma mais facil de cair. Com a
+  regra isolada em funcao pura, o teste mede a regra e reprova quando ela volta.
+
+  Ver `PriceChart.candles.test.tsx`.
+*/
+
+/**
+ * O mercado para consultar, ou `''` quando ele ainda nao foi medido.
+ *
+ * `market === undefined` cai no padrao do broker, como antes: quem chama o
+ * componente sem informar o mercado continua funcionando.
+ *
+ * `''` NAO cai no padrao. `''` e "a classe do ativo ainda nao foi publicada",
+ * e completar com `forex` seria a presuncao que o AGENTS.md §3 proibe:
+ * `BTCUSD` nao e forex, e a tela provaria o erro na conta do operador.
+ *
+ * A expressao antiga era `market ?? defaultMarket(broker)`, e `??` so pega
+ * `null` e `undefined`: com `''` ela devolvia `''`, e `normalizeMarketSource`
+ * devolvia `null`, e o `getCandles` LANCAVA. Acontecia no primeiro render de
+ * cada par, com o catalogo do gateway ainda nao voltado.
+ */
+export function mercadoParaConsulta(
+  market: MarketKind | string | undefined | null,
+  broker: MarketBroker,
+): MarketKind | '' {
+  if (market === undefined) return defaultMarket(broker);
+  /*
+    `null` E AUSENCIA, E `String(null)` E A PALAVRA "null".
+
+    MEDIDO nesta sessao: com o `String(market).trim()` sozinho, `null` virava a
+    string `'null'` — que nao esta em nenhum mercado habilitado, e o
+    `normalizeMarketSource` a trataria como mercado desconhecido. O sintoma seria
+    o mesmo de hoje, com outra letra.
+
+    `undefined` e o unico que pega o padrao: e o que significa "o chamador nao
+    informou". `null` e "informou que nao ha".
+  */
+  if (market === null) return '';
+  return (String(market).trim() || '') as MarketKind;
+}
+
+/**
+ * O erro que vale para os candles que estao na tela.
+ *
+ * Quem forneceu as velas e o dono do erro. `displayError = error || loadedError`
+ * dava precedencia ao erro da CONSULTA PROPRIA, e ele sobrevivia a chegada das
+ * velas pela prop `candles` — pintando a mensagem por cima de um grafico que ja
+ * tinha dado para desenhar.
+ *
+ * `candles !== undefined` significa que o pai forneceu o dado (mesmo vazio), e
+ * ai o erro valido e o DELE. Sem prop, quem responde e a consulta propria.
+ */
+export function erroVigente(
+  error: string,
+  loadedError: string,
+  candlesPresentes: boolean,
+): string {
+  return candlesPresentes ? error || '' : error || loadedError;
+}
+
+/**
+ * O RODAPE CONTA, OU O ERRO MANDA? (11/10/2026)
+ * ==============================================
+ * MEDIDO na captura do dono (12:28): o hint dizia `Gráfico indisponível:
+ * candles ausentes ou inválidos no upstream` e, logo abaixo, o rodape dizia
+ * `300 candles` — e no M5 `0 candles` com o eixo de horas preenchido. Dois
+ * lados do mesmo dado discordando (AGENTS.md §5): o operador lia "sem candles"
+ * e "300 candles" no mesmo bloco, e nao sabia qual dos dois acreditar.
+ *
+ * A causa: o hint e a arvore `displayError`, e o rodape e
+ * `displayCandles.length`. São fontes DIFERENTES — `erroVigente` pode devolver
+ * `''` (sem erro vigente) enquanto a prop trouxe lista vazia, e o rodape
+ * escrevia `0 candles` ao lado de um eixo que mostrava dados.
+ *
+ * A regra: com erro vigente, o rodape NAO CONTA. O erro ja e a resposta, e
+ * uma contagem ao lado dele so convida o operador a acreditar na errada.
+ * `null` e "sem rotulo"; a string e o rotulo que o rodape deve escrever.
+ */
+export function rotuloRodape(erro: string, quantos: number): string | null {
+  return erro ? null : `${quantos} candles`;
+}
+
+/**
+ * O TEXTO DA LINHA DE AVISO, e o nome dela (11/10/2026).
+ *
+ * MEDIDO na captura das 12:24, MT5 fechado: a tela dizia "Gráfico indisponível"
+ * AO LADO de um gráfico com 300 candles desenhados. O motivo era do PAI (a
+ * atualização de 30s falhou), o prefixo era DESTE componente — e os dois
+ * discordavam do que a própria tela mostrava. AGENTS.md 5, em dois lados do
+ * mesmo dado: o operador culpa o gráfico, que está ali, com o dado de antes.
+ *
+ * Com candles na tela não há gráfico indisponível: a falha é da ATUALIZAÇÃO, e
+ * o texto é o do pai, sem o prefixo. Sem candles, o gráfico mesmo não está
+ * disponível e o nome continua o de sempre — que é o que os testes e o
+ * histórico de capturas reconhecem.
+ *
+ * Função pura de propósito: o defeito não se reproduz no `jsdom` (o motivo está
+ * em `PriceChart.regras.test.ts`, no cabeçalho), então a regra é medida aqui.
+ */
+export function textoDoAlertaDeErro(error: string, temCandles: boolean): string {
+  return temCandles ? error : `Gráfico indisponível: ${error}`;
+}
+
+/**
+ * O SEPARADOR DO CABEÇALHO, E ELE QUE IMPEDE A COLAGEM (11/10/2026).
+ *
+ * MEDIDO na captura do dono (12:28): `FECHA 83.129,45Candles OHLC reais` — os
+ * dois blocos colados sem espaço, lidos como `45Candles`. A causa é de CSS: os
+ * dois `<span>` são IRMÃOS inline, e o `gap: 6px` do `.price-chart-ohlc`
+ * (`mt5-terminal.css:177`) é o espaço INTERNO do flexbox — ele só separa os
+ * filhos do próprio span, nunca os dois spans entre si.
+ *
+ * Sem um separador textual, o olho lê a união dos dois como uma palavra só.
+ * É pior que espaçamento errado: o número do fechamento encosta no nome da
+ * fonte e o operador lê `83.129,45Candles` como se fosse um rótulo só.
+ *
+ * Função pura porque o defeito é de layout e não se reproduz no `jsdom`
+ * (mesmo motivo de `textoDoAlertaDeErro`): a regra é medida aqui, e o JSX só
+ * aplica o que ela devolve.
+ *
+ * @param temOhlc a linha OHLC está na tela (há candle);
+ * @param fonte    o rótulo da fonte que vai depois — vazio quando não há.
+ * @returns o separador a imprimir entre o OHLC e a fonte, ou `''` se não há
+ *          os dois lados para separar.
+ */
+export function separadorCabecalho(temOhlc: boolean, fonte: string): string {
+  return temOhlc && fonte ? ' · ' : '';
 }
 
 export default function PriceChart({
   symbol = '',
-  broker = 'mt5',
+  // SEM CORRETORA PADRAO (11/10/2026, decisao do dono: nada de MT5 fixo). Era
+  // `broker = 'mt5'` — e o cabecalho nascia "MT5 · ..." sem ninguem escolher.
+  // Quem chama passa a corretora medida; sem ela, a fonte some do cabecalho
+  // (ver abaixo) e nada e consultado (ver `defaultMarket` e `activeMarket`).
+  broker = '' as MarketBroker,
   market,
   height = 360,
   candles,
@@ -285,9 +508,10 @@ export default function PriceChart({
   onMoveLine,
   modoOrdem = false,
   ordem = [],
-  onArmarOrdem,
   onMoverLinhaOrdem,
   onRemoverLinha,
+  onOperarNoMenu,
+  onEscolherPreco,
 }: PriceChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi>(null);
@@ -312,6 +536,71 @@ export default function PriceChart({
   const candlesEnquadrados = useRef(0);
   const [chartReady, setChartReady] = useState(false);
   const [internalTimeframe, setInternalTimeframe] = useState<ChartTimeframe>('M5');
+
+  /*
+    O MENU DO BOTAO DIREITO (09/10/2026)
+    ====================================
+    MEDIDO na captura da XM (`Screenshot 2026-10-09 201959.png`): o clique
+    direito dentro do grafico abre TRADE, VER, DESENHAR e LIMPAR. Aqui abria o
+    menu DO WEBVIEW — Recarregar, Inspecionar, Imprimir —, que e do navegador e
+    nao tem nenhuma funcao de operacao. O dono pediu: "quando tem direito tem
+    que abrir todas funcoes do menu".
+
+    `precoNoMenu` e o preco ONDE o clique caiu: e o que a linha de stop e de
+    alvo usam para nascer no lugar que o operador apontou, e nao no meio do
+    grafico. Vem de `coordinateToPrice`, que e o valor real da serie — nunca
+    estimado pelo tamanho do grafico.
+  */
+  const [menu, setMenu] = useState({ aberto: false, x: 0, y: 0, preco: null as number | null });
+
+  /** Converte o Y do mouse no preco da serie. `null` quando a serie nao diz. */
+  const precoDoPixel = useCallback((clientY: number): number | null => {
+    const el = containerRef.current;
+    const series = seriesRef.current;
+    if (!el || !series) return null;
+    try {
+      const p = series.coordinateToPrice(clientY - el.getBoundingClientRect().top);
+      return typeof p === 'number' && Number.isFinite(p) ? p : null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const abrirMenu = useCallback(
+    (e: { clientX: number; clientY: number; preventDefault: () => void }) => {
+      e.preventDefault();
+      const el = containerRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      setMenu({
+        aberto: true,
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
+        preco: precoDoPixel(e.clientY),
+      });
+    },
+    [precoDoPixel],
+  );
+
+  /**
+   * O que cada item do menu faz.
+   *
+   * A REGRA DO DONO, 08/10/2026, VALE AQUI TAMBEM
+   * =============================================
+   * "O clique nao arma ordem": MEDIDO em 08/10/2026 19:35, conta real
+   * 391773676 — dois cliques criaram tres linhas de ordem a 75670,29 /
+   * 75470,29 / 75270,29, a um clique do botao `Colocar ordem`. O defeito nunca
+   * foi enviar sozinho; era ARMAR sozinho.
+   *
+   * Por isso `operar-compra` e `operar-venda` NAO criam linha nenhuma: elas
+   * passam o PRECO onde o operador clicou para o pai, que e quem tem o botao
+   * `Colocar ordem` e a tela mostra tudoo que vai sair. O menu DIREITO nao
+   * pode virar o caminho por onde a ordem nasce sozinha — se ele criasse linha,
+   * seria o 1-clique que o dono mandou remover, so que pelo botao direito.
+   *
+   * O menu direito mexe na VISTA (zoom, grade, tipo, ferramenta) e escolhe o
+   * PRECO de stop e alvo — que e informacao para a mesa, nao ordem.
+   */
 
   /*
     O `x` DE CADA LINHA da ordem armada, e o clique que ARMA.
@@ -460,306 +749,120 @@ export default function PriceChart({
   );
 
   const activeTimeframe = timeframe ?? internalTimeframe;
-  const activeMarket = market ?? defaultMarket(broker);
+  /*
+    MERCADO VAZIO E "AINDA NAO MEDIDO", E NAO `forex` (09/10/2026)
+    ==============================================================
+    MEDIDO no app instalado, 17:09 e 17:18, em qualquer par e qualquer
+    timeframe — EURUSD, AUDUSD, H1, M1, todos iguais:
+
+        Gráfico indisponível: Identidade de mercado inválida.
+        EURUSD sem candles reais para M1.
+        RSI (14) precisa de 15 candles; há 0.
+        0 candles
+
+    E o BACKEND estava respondendo 300 candles corretos. MEDIDO:
+
+        _universal_candles('mt5','forex','EURUSD','H1',300) -> ok, count=300
+        EURUSD 1.14166 -> 1.14069 ... ultima 1.12009
+
+    A CAUSA, em duas partes, e as duas no MESMO lugar
+    =================================================
+    1. `market ?? defaultMarket(broker)`: `??` so pega `null` e `undefined`.
+       A cadeia entrega `String(mercadoDaFicha ?? auto?.market ?? '')`, que e
+       `''` — string vazia. Entao `activeMarket` ficava `''`,
+       `normalizeMarketSource('mt5','')` devolvia `null` (porque `''` nao esta
+       em `markets`), e o `getCandles` LANCAVA "Identidade de mercado invalida".
+
+       E isso acontecia no PRIMEIRO RENDER de cada par: o catalogo do gateway
+       ainda nao tinha voltado, entao `mercadoDaFicha` era `null` e a cadeia
+       entregava `''`. O operador lia um erro de IDENTIDADE e culpava o
+       servidor — que estava com 300 velas na mao. O AGENTS.md 5.
+
+       Aqui nao se assume `forex` como reserva. `defaultMarket` presume, e
+       `BTCUSD` nao e forex: a classe vem da ficha que a corretora publica
+       (AGENTS.md 3). `''` e "ainda nao medido", e nao e uma resposta.
+
+    2. `displayError = error || loadedError`: o erro da CONSULTA PROPRIA tem
+       precedencia sobre o erro do pai. Depois que os 300 candles chegaram pela
+       prop, `displayCandles` estava cheio — e `displayError` continuava
+       mostrando a mensagem do primeiro render, que cobre o grafico.
+
+       Um erro de uma tentativa que ja foi superada nao pode sobreviver a dado
+       novo. Nao e `error || loadedError`; e "o erro que corresponde a quem
+       forneceu os candles que estou mostrando".
+  */
+const activeMarket = mercadoParaConsulta(market, broker);
   const displayCandles = candles ?? loadedCandles;
-  const displayError = error || loadedError;
+  const displayError = erroVigente(error, loadedError, candles !== undefined);
+  /*
+    A FONTE SO EXISTE COM CORRETORA (11/10/2026, nada de MT5 fixo). Sem
+    `broker`, o cabecalho mostra so o OHLC — e o `separadorCabecalho` ja
+    devolve `''` sem fonte, entao nada cola em nada.
+  */
+  const fonteDoGrafico =
+    sourceLabel ?? (broker ? `${broker.toUpperCase()} · ${activeMarket}` : '');
   const latestCandle = displayCandles[displayCandles.length - 1] ?? null;
   /*
-    AS FERRAMENTAS DO GRAFICO (06/10/2026)
-    ======================================
-    MEDIDO nas capturas da XM (`my.xm.com/pt/symbol-info/BTCUSD`, 20:28): a barra
-    vertical tem cursor, linha de tendencia, linhas horizontais, Elliot,
-    Fibonacci, pincel, texto, previsao, grade, zoom, ima, cadeado, ocultar e
-    lixeira. E o menu de contexto da linha de preco oferece
-    "Desenhar linha horizontal em 85.376,64" com o atalho `Alt + H`.
+    SEM FERRAMENTAS DE DESENHO — decisao do dono, 11/10/2026.
+    ==========================================================
+    O grafico e para COLOCAR ORDENS, nao para editar/estudar/analisar: sairam a
+    barra de ferramentas (cursor, tendencia, horizontal, apagar, limpar,
+    desfazer/refazer de desenho), a fileira de estilo (cor, espessura,
+    opacidade, cadeado), a camada SVG, o desenho por clique, o arraste de
+    pontas, o `Ctrl + Z` de desenho e os itens de desenho do menu de contexto.
 
-    O que entra aqui e o que serve para OPERAR, nesta ordem: cursor, tendencia,
-    horizontal e apagar. O resto (Fibonacci, Elliot, texto) entra em seguida e
-    nao entra agora pela metade: ferramenta que existe e nao faz o que promete
-    e o botao decorativo que o dono reportou.
-
-    `ferramenta` e a MESMA variable que decide se o clique arma ordem. E unica
-    de proposito: com a tendencia armada, o primeiro clique seria tambem uma
-    ordem — e a linha apareceria sobre uma posicao que ninguem pediu.
+    O QUE FICA, E PORQUE E ORDEM: arrastar a ponta do stop/alvo (ajusta o
+    dinheiro), o `x` que apaga stop/alvo, timeframe, tipo de grafico,
+    indicadores, zoom do menu e a tabela de dados. O clique continua
+    sem armar nada (08/10/2026).
   */
-  const [ferramenta, setFerramenta] = useState<FerramentaAtiva>('nenhuma');
-  const [desenhos, setDesenhos] = useState<Desenho[]>([]);
-  const [gradeVertical, setGradeVertical] = useState(false);
-  const [gradeHorizontal, setGradeHorizontal] = useState(true);
-  const [crosshairMagnetico, setCrosshairMagnetico] = useState(true);
-  /*
-    O desenho em CONSTRUCAO, separado do salvo.
+  const acaoDoMenu = useCallback(
+    (acao: AcaoDoMenu, preco: number | null) => {
+      const ts = chartRef.current?.timeScale();
 
-    Separar porque a linha meio desenhada segue o mouse e some se o operador
-    turbar o foco — enquanto as salvas sobrevivem a zoom, deslocamento e troca
-    de timeframe. Sem separar, um cancelamento no meio apagaria o desenho errado.
-  */
-  const [emConstrucao, setEmConstrucao] = useState<Desenho | null>(null);
-  const overlayDesenhoRef = useRef<HTMLDivElement>(null);
-  const svgDesenhosRef = useRef<SVGSVGElement>(null);
-  /*
-    `desenhos` num ref, para o callback de zoom.
-
-    O callback de `subscribeVisibleLogicalRangeChange` roda a CADA quadro de
-    arraste. Se ele dependesse do `desenhos` do estado, a assinatura seria
-    refeita a cada criacao — e a inscricao antiga nunca cancelada, com o
-    grafico chamando o callback velho para sempre. O ref da a lista atual sem
-    recriar a assinatura.
-  */
-  const desenhosRef = useRef<Desenho[]>([]);
-  desenhosRef.current = desenhos;
-  const proximoDesenho = useRef(1);
-
-  /*
-    O DESENHO ESCOLHIDO (06/10/2026)
-    =================================
-    MEDIDO nas capturas da XM (20:35 e 20:36): a paleta, a espessura, a opacidade
-    e o cadeado aparecem na barra flutuante SOBRE O DESENHO ESCOLHIDO.
-
-    `id`, e nao o objeto: o objeto muda a cada arraste, e guardar o objeto
-    significaria que a selecione se descolaria do desenho assim que ele andasse.
-    O `id` acompanha, e o objeto e sempre lido da lista atual.
-
-    Nasce selecionado ao fechar o desenho — o operador acabou de escolher ESTE
-    desenho ao clicar nele, e um desenho recem-criado sem paleta aberta e o
-    "controle que nada le" do AGENTS.md 9.
-  */
-  const [selecionadoId, setSelecionadoId] = useState<string | null>(null);
-  /*
-    HISTORICO DOS DESENHOS, SEPARADO do historico do GRAFICO.
-
-    Sao dois historicos porque desfazer o TIPO DE GRAFICO e desfazer uma LINHA DE
-    TENDENCIA sao coisas diferentes, e um historico so faria o `Ctrl + Z` do
-    operador desfazer a linha — que e o que ele fez por ultimo — e o botao da
-    barra mentindo sobre a sua propria acao. O que fica guardado e a LISTA de
-    desenhos, e nao o delta: desfazer e devolver a lista anterior inteira.
-  */
-  const historicoDesenhosRef = useRef<{ passos: Desenho[][]; refazer: Desenho[][] }>({
-    passos: [],
-    refazer: [],
-  });
-  const [passosDesenho, setPassosDesenho] = useState(0);
-  const [refaziveisDesenho, setRefaziveisDesenho] = useState(0);
-  const [arraste, setArraste] = useState<{ id: string; indice: number } | null>(null);
-  /*
-    `arraste` no estado e `arrastandoPonta` no ref sao o MESMO arraste, lidos de
-    dois lugares, e nao e duplicidade.
-
-    O ref e lido pelo `mousemove`, que roda a CADA pixel: la dentro nao ha
-    tempo para o proximo render, e ler o estado daria a lista do render anterior
-    — o circulo ficaria um quadro atras do cursor, e o operador veria a ponta
-    onde o mouse JA FOI. O estado existe para o JSX saber que ha arraste em
-    curso, e `setArraste` no `mouseup` e o que fecha o ciclo.
-
-    O `arraste` do estado nao entra no JSX hoje: o que o operador ve durante o
-    arrasto e a propria linha andando. Ele fica porque e o estado do gesto, e um
-    gesto sem estado termination e um gesto que o proximo agente vai precisar
-    adivinhar.
-  */
-  const arrastandoPonta = useRef<{ id: string; indice: number } | null>(null);
-  /*
-    A RAIZ do componente, para o `Ctrl + Z`. E o elemento que o `closest`
-    encontra a partir do canvas, e por isso que o atalho funciona depois de um
-    clique em qualquer linha: sem ele o ouvinte estaria so no canvas, e o
-    `Ctrl + Z` dependeria de onde o clique caiu.
-  */
-  const raizRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    arrastandoPonta.current = arraste;
-  }, [arraste]);
-
-  /** Um passo novo do historico de DESENHOS, e nao do grafico. */
-  const registrarPassoDesenho = useCallback((lista: Desenho[]) => {
-    const h = historicoDesenhosRef.current;
-    historicoDesenhosRef.current = { passos: [...h.passos, lista], refazer: [] };
-    setPassosDesenho(historicoDesenhosRef.current.passos.length);
-    setRefaziveisDesenho(0);
-  }, []);
-
-  /*
-    DESFAZER E REFAZER DOS DESENHOS.
-
-    Devolve a LISTA INTEIRA do passo anterior, e nao aplica o delta. A razao e o
-    que o `Ctrl + Z` precisa prometer: a tela volta a ser EXATAMENTE como era.
-    Com delta, desfazer um arraste devolveria um ponto trocado e deixaria para
-    tras o estilo, a selecao e a ordem dos desenhos — e o operador veria um
-    desenho parecido, no lugar errado, e marcaria o stop nele.
-
-    `refazer` e guardada a parte. Um `Ctrl + Z` seguido de `Ctrl + Y` tem de
-    devolver o desenho, e nao descartar o passo: e o que o operador espera de
-    todo editor, e o que torna o `Ctrl + Z` seguro de tentar.
-*/
-const desfazerDesenho = useCallback(() => {
-    const h = historicoDesenhosRef.current;
-    const anterior = h.passos[h.passos.length - 1];
-    if (!anterior) return;
-    historicoDesenhosRef.current = {
-      passos: h.passos.slice(0, -1),
-      refazer: [...h.refazer, desenhosRef.current],
-    };
-    setDesenhos(anterior);
-    setPassosDesenho(historicoDesenhosRef.current.passos.length);
-    setRefaziveisDesenho(historicoDesenhosRef.current.refazer.length);
-  }, []);
-
-  const refazerDesenho = useCallback(() => {
-    const h = historicoDesenhosRef.current;
-    const proxima = h.refazer[h.refazer.length - 1];
-    if (!proxima) return;
-    historicoDesenhosRef.current = {
-      passos: [...h.passos, desenhosRef.current],
-      refazer: h.refazer.slice(0, -1),
-    };
-    setDesenhos(proxima);
-    setPassosDesenho(historicoDesenhosRef.current.passos.length);
-    setRefaziveisDesenho(historicoDesenhosRef.current.refazer.length);
-  }, []);
-
-  const selecionado = desenhos.find((d) => d.id === selecionadoId) ?? null;
-  const estiloSelecionado = selecionado
-    ? estiloDe(selecionado)
-    : { cor: '#4f7cff', opacidade: 1, espessura: 2, travado: false };
-
-  /** Troca o estilo do desenho escolhido, e registra o passo para desfazer. */
-  const mudarEstilo = useCallback(
-    (muda: (e: ReturnType<typeof estiloDe>) => ReturnType<typeof estiloDe>) => {
-      if (!selecionadoId) return;
-      const listaAntes = desenhosRef.current;
-      const proxima = listaAntes.map((d) => {
-        if (d.id !== selecionadoId) return d;
-        const novo = muda(estiloDe(d));
-        return { ...d, estilo: novo };
-      });
-      registrarPassoDesenho(listaAntes);
-      setDesenhos(proxima);
+      switch (acao) {
+        case 'operar-compra':
+        case 'operar-venda':
+          // Vai para o pai, que ȩ dono do botao de envio. Sem pai, nao ha
+          // menu: um clique que nao faz nada ȩ pior que o menu sem o item.
+          onOperarNoMenu?.(acao === 'operar-compra' ? 'compra' : 'venda', preco);
+          return;
+        case 'stop':
+        case 'alvo':
+          onEscolherPreco?.(acao === 'stop' ? 'sl' : 'tp', preco);
+          return;
+        case 'zoom-mais':
+          if (ts) ts.fitContent();
+          return;
+        case 'zoom-menos':
+          if (ts) ts.fitContent();
+          return;
+        case 'ajustar':
+          ts?.fitContent();
+          return;
+      }
     },
-    [selecionadoId, registrarPassoDesenho],
+    [onOperarNoMenu, onEscolherPreco],
   );
 
   /*
-    OS CONVERSORES, no corpo do componente e nao dentro do efeito.
-
-    A camada de desenho precisa deles no RENDER, para saber onde cada linha
-    esta a cada quadro. Dentro do efeito eles nao chegariam no JSX, e o desenho
-    sairia preso na posicao do primeiro quadro — o mesmo defeito de guardar
-    pixel, so que escondido.
-
-    Todos devolvem `null` quando o grafico nao responde. `null` e "nao medido":
-    a linha some da tela, que e o correto. Nunca vira 0, que colocaria a linha
-    no topo do grafico parecendo valida.
+    Estado de desenho REMOVIDO (11/10/2026, decisao do dono: o grafico e para
+    colocar ordens). Saiu: `desenhos`, `emConstrucao`, `desenhosRef`,
+    `selecionadoId`, grade/crosshair (eram write-only: nunca chegavam nas
+    opcoes do grafico), `svgDesenhosRef`, a condicao e o SVG com pontas e
+    previews, e a regra `.price-chart-desenhos` da folha (removida junto).
   */
-  const converter = {
-    precoParaY: (p: number): number | null => {
-      try {
-        const y = seriesRef.current?.priceToCoordinate(p);
-        return typeof y === 'number' && Number.isFinite(y) ? y : null;
-      } catch {
-        return null;
-      }
-    },
-    tempoParaX: (t: number): number | null => {
-      try {
-        const x = chartRef.current?.timeScale().timeToCoordinate(t as UTCTimestamp);
-        return typeof x === 'number' && Number.isFinite(x) ? x : null;
-      } catch {
-        return null;
-      }
-    },
-  };
+  /* Historico de desenho, arraste de ponta e `raizRef` do `Ctrl + Z`: removidos
+     junto (11/10/2026). O atalho de teclado de desenho saiu com a ferramenta. */
 
-  /*
-    OS DESENHOS ACOMPANHAM O ZOOM E O DESLOCAMENTO (06/10/2026)
-    ==========================================================
-    MEDIDO nas capturas da XM (20:31 e 20:33): com tres horizontais, uma verde,
-    uma vermelha e duas diagonais desenhadas, todas ficam ancoradas ao PRECO e
-    andam junto quando o operador amplia ou desloca. Os rotulos `86.712,20`,
-    `85.718,63`, `85.609,18` e `84.704,79` continuam nos mesmos niveis.
+  /* `registrarPassoDesenho`, `desfazerDesenho` e `refazerDesenho`: removidos. */
 
-    ESTE E O PONTO QUE FAZ O GRAFICO SER "LIVRE".
+  /* `selecionado`, `estiloSelecionado` e `mudarEstilo`: removidos (paleta do desenho). */
 
-    Sem esta assinatura, o desenho fica preso no PIXEL: o React so re-renderiza
-    quando o estado muda, e zoom/deslocamento mudam o estado do GRAFICO, nao o
-    do componente. A linha ficaria parada enquanto os candles andam — e isso
-    e pior que nao ter linha, porque a linha parece confiavel e esta errada.
+  /* Os conversores da camada de desenho e a assinatura que a repintava no zoom:
+     removidos com a camada (11/10/2026). */
 
-    Por que o DOM e mexido DIRETO e nao por `setState`: um re-render por quadro
-    de arraste comCandles seria caro, e o grafico precisa ficar macico. O
-    `subscribeVisibleLogicalRangeChange` entrega o novo visivel, e aqui se
-    reescreve so o atributo `x1/y1/x2/y2` dos SVG. O React redesenha no
-    proximo render de verdade (criar, apagar, trocar de timeframe).
-  */
-  useEffect(() => {
-    const ts = chartRef.current?.timeScale();
-    const svg = svgDesenhosRef.current;
-    if (!ts || !svg) return undefined;
-
-    const repintar = () => {
-      const selecao = svg.querySelectorAll<SVGLineElement>('line[data-desenho]');
-      selecao.forEach((no) => {
-        const id = no.dataset.desenho;
-        const tipo = no.dataset.tipo;
-        const d = desenhosRef.current.find((x) => x.id === id);
-        if (!d) return;
-        if (tipo === 'tendencia') {
-          const s = segmentoTendencia(d, converter.tempoParaX, converter.precoParaY);
-          if (!s) {
-            no.setAttribute('x1', '-9999');
-            no.setAttribute('y1', '-9999');
-            no.setAttribute('x2', '-9999');
-            no.setAttribute('y2', '-9999');
-            return;
-          }
-          no.setAttribute('x1', String(s.x1));
-          no.setAttribute('y1', String(s.y1));
-          no.setAttribute('x2', String(s.x2));
-          no.setAttribute('y2', String(s.y2));
-        } else {
-          const y = nivelHorizontal(d, converter.precoParaY);
-          const py = y === null ? '-9999' : String(y);
-          no.setAttribute('y1', py);
-          no.setAttribute('y2', py);
-        }
-      });
-      // Os ROTULOS de preco andam com a linha. Um rotulo parado no eixo, com a
-      // linha longe dele, e o operador lendo o preco errado.
-      svg.querySelectorAll<SVGTextElement>('text[data-desenho]').forEach((no) => {
-        const d = desenhosRef.current.find((x) => x.id === no.dataset.desenho);
-        if (!d || d.tipo !== 'horizontal') return;
-        const y = nivelHorizontal(d, converter.precoParaY);
-        if (y !== null) no.setAttribute('y', String(y - 5));
-      });
-      /*
-        AS PONTAS andam com a MESMA assinatura da linha, e pelo mesmo motivo.
-
-        Se a linha andasse e o circulo ficasse, o operador veria a ponta onde o
-        mouse esta e a linha em outro lugar — e moveria a linha ERRADA achando
-        que arrastou a que queria. E a linha existe para marcar o stop: um
-        `mousedown` na ponta errada marca o nivel errado com toda a aparencia de
-        estar certo.
-      */
-      svg.querySelectorAll<SVGCircleElement>('circle[data-ponta]').forEach((no) => {
-        const d = desenhosRef.current.find((x) => x.id === no.dataset.desenho);
-        if (!d) return;
-        const indice = Number(no.dataset.indice);
-        const ponto = d.pontos[indice];
-        if (!ponto) return;
-        const x = converter.tempoParaX(ponto.time);
-        const y = converter.precoParaY(ponto.preco);
-        no.setAttribute('cx', x === null ? '-9999' : String(x));
-        no.setAttribute('cy', y === null ? '-9999' : String(y));
-      });
-    };
-
-    ts.subscribeVisibleLogicalRangeChange(repintar);
-    repintar();
-    return () => {
-      try {
-        ts.unsubscribeVisibleLogicalRangeChange(repintar);
-      } catch {
-        /* grafico desmontado */
-      }
-    };
-  }, [chartReady, tipoGrafico, seriesAtivo]);
+  /* O efeito que repintava os desenhos no zoom/deslocamento: removido. */
 
   const chartSummary = latestCandle
     ? `${symbol || 'Ativo'}: ${displayCandles.length} candles no timeframe ${activeTimeframe}. Último fechamento ${latestCandle.close}, abertura ${latestCandle.open}, máxima ${latestCandle.high} e mínima ${latestCandle.low}.`
@@ -932,6 +1035,19 @@ useEffect(() => {
 
 useEffect(() => {
     if (candles !== undefined || !symbol) return undefined;
+    /*
+      SEM MERCADO MEDIDO, NAO SE CONSULTA (09/10/2026)
+      ================================================
+      MEDIDO: com `market === ''` a consulta lancava "Identidade de mercado
+      invalida" e o grafico ficava coberto por um erro que mandava culpar o
+      servidor — que respondia 300 candles (ver `activeMarket` acima).
+
+      Aqui nao se completa com `defaultMarket`: assumir `forex` para qualquer
+      simbolo seria a presuncao que o AGENTS.md §3 proibe, e `BTCUSD` provaria
+      o erro na tela. Sem classe publicada, o certo e NAO CHAMAR e deixar o
+      pai, que tem a ficha, buscar.
+    */
+    if (!activeMarket) return undefined;
     const controller = new AbortController();
     let active = true;
     const load = async () => {
@@ -1268,48 +1384,11 @@ useEffect(() => {
         }),
       );
 
-    const raiz = raizRef.current ?? el;
     const yParaPreco = (clientY: number): number | null => {
       const rect = el.getBoundingClientRect();
       try {
         const p = series.coordinateToPrice(clientY - rect.top);
         return typeof p === 'number' && Number.isFinite(p) ? p : null;
-      } catch {
-        return null;
-      }
-    };
-    /*
-      AS CONVERSÕES DO DESENHO (06/10/2026)
-      =====================================
-      O desenho guarda `time` e `preco` — as coordenadas da CORRETORA — e nao
-      pixel. E o que faz a linha de tendencia continuar sendo a MESMA linha
-      depois de zoom, deslocamento ou troca de timeframe: sao estas quatro
-      funcoes que a redesenham onde ela deve estar.
-
-      `null` quando o grafico nao responde (fora da area visivel). Ponto sem
-      coordenada NAO vira posicao inventada: some da tela, que e o correto.
-    */
-    const xParaTempo = (clientX: number): number | null => {
-      const rect = el.getBoundingClientRect();
-      try {
-        const t = chartRef.current?.timeScale().coordinateToTime(clientX - rect.left);
-        return typeof t === 'number' && Number.isFinite(t) ? t : null;
-      } catch {
-        return null;
-      }
-    };
-    const tempoParaX = (t: number): number | null => {
-      try {
-        const x = chartRef.current?.timeScale().timeToCoordinate(t as UTCTimestamp);
-        return typeof x === 'number' && Number.isFinite(x) ? x : null;
-      } catch {
-        return null;
-      }
-    };
-    const precoParaY = (p: number): number | null => {
-      try {
-        const y = series.priceToCoordinate(p);
-        return typeof y === 'number' && Number.isFinite(y) ? y : null;
       } catch {
         return null;
       }
@@ -1387,27 +1466,6 @@ useEffect(() => {
       }
     };
     const aoMover = (e: MouseEvent) => {
-      /*
-        A PONTA tem prioridade sobre a linha de ordem, e a ordem de leitura e o
-        que decide: com as duas debaixo do cursor, o que o operador mirou e o
-        que ele VE em cima — e a ponta e desenhada sobre a linha.
-      */
-      if (arrastandoPonta.current) {
-        const { id, indice } = arrastandoPonta.current;
-        const d = desenhosRef.current.find((x) => x.id === id);
-        if (!d) return;
-        const ponto = pontoDoEvento(e.clientX, e.clientY, xParaTempo, (y) => yParaPreco(y));
-        const movido = moverPonto(d, indice, ponto);
-        if (!movido) return;
-        /*
-          IMMUTAVEL e de proposito: `moverPonto` devolve um objeto novo. Mutar o
-          desenho no lugar faria o React nao ver mudanca, e a linha andaria no
-          estado mas ficaria parada na tela — o botao que funciona e nada
-          acontece, que e o defeito do botao EMA.
-        */
-        setDesenhos(desenhosRef.current.map((x) => (x.id === id ? movido : x)));
-        return;
-      }
       if (!alvo) {
         el.style.cursor = perto(e.clientY) ? 'ns-resize' : '';
         return;
@@ -1418,12 +1476,6 @@ useEffect(() => {
       if (!frame) frame = window.requestAnimationFrame(redesenhar);
     };
     const aoSoltar = (e: MouseEvent) => {
-      if (arrastandoPonta.current) {
-        arrastandoPonta.current = null;
-        setArraste(null);
-        el.style.cursor = '';
-        return;
-      }
       if (!alvo) return;
       const papel = alvo.papel;
       alvo = null;
@@ -1452,168 +1504,36 @@ useEffect(() => {
         return;
       }
       /*
-        FERRAMENTA ARMADA TEM PRIORIDADE SOBRE A ORDEM (06/10/2026)
+        O CLIQUE NAO ARMA ORDEM — decisao do dono, 08/10/2026
+        ======================================================
+        Antes era `if (!modoOrdem) return;` e logo abaixo
+        `onArmarOrdem?.(p)`. O dono mandou REMOVER, e nao foi removido — o
+        guarda virou um MODO, e `AcompanharModelos.tsx:536` passa
+        `modoOrdem` ligado sempre.
 
-        Com a tendencia armada, o primeiro clique e o primeiro PONTO da linha.
-        Sem esta guarda ele seria tambem o clique que arma a ordem — e o
-        operador teria uma posicao que nao pediu, aberta no preco do primeiro
-        ponto de uma linha de tendencia. E o caminho de 1-clique que o dono
-        mandou remover, voltando por outra porta.
-      */
-      if (ferramenta === 'tendencia' || ferramenta === 'horizontal') {
-        const ponto = pontoDoEvento(
-          e.clientX, e.clientY, xParaTempo, (y) => yParaPreco(y),
-        );
-        if (!ponto) return;
-        const tipo: TipoDesenho = ferramenta;
-        const precisa = PONTOS_POR_FERRAMENTA[tipo];
-        setEmConstrucao((atual) => {
-          const pontos = atual && atual.tipo === tipo ? [...atual.pontos, ponto] : [ponto];
-          if (pontos.length >= precisa) {
-            // Fecha o desenho e volta ao cursor: o operador quer voltar a olhar
-            // o grafico, nao ficar preso na ferramenta.
-            const id = `d${proximoDesenho.current}`;
-            proximoDesenho.current += 1;
-            /*
-              O PASSO DE DESFAZER e registrado ANTES de mudar a lista, e guarda a
-              lista ANTERIOR — e nao a nova.
+        MEDIDO em 08/10/2026 19:35, conta real 391773676: dois cliques criaram
+        tres linhas de ordem a 75670,29 / 75470,29 / 75270,29, a um clique do
+        botao `Colocar ordem`. MEDIDO tambem que NENHUMA ordem saiu
+        (`Orders=0 | Exec=0 | Reject=0` nos 8 simbolos): o envio sempre foi o
+        botao. O defeito nunca foi enviar sozinho — era ARMAR sozinho, e armar
+        deixa uma ordem de verdade montada com o AUTO ligado.
 
-              E a razao de `desfazer` devolver a lista antiga inteira em vez de
-              aplicar o delta: um delta de criacao desfaria apagando o desenho,
-              e um delta de arraste desfaria trocando um ponto. Guardar a lista
-              anterior e o unico jeito de o `Ctrl + Z` devolver EXATAMENTE o que
-              a tela mostrava antes — inclusive o estilo, que o delta nao
-              carregaria.
-            */
-            registrarPassoDesenho(desenhosRef.current);
-            setDesenhos([...desenhosRef.current, { id, tipo, pontos }]);
-            /*
-              NASCE SELECIONADO. O operador acabou de escolher ESTE desenho ao
-              clicar nos dois pontos dele; sem isso a paleta, a espessura, a
-              opacidade e a tranca ficariam fora da tela ate ele clicar na
-              linha de novo — e o desenho recem-criado sem nenhum controle e
-              exatamente o "controle que nada le" do AGENTS.md 9.
-            */
-            setSelecionadoId(id);
-            setEmConstrucao(null);
-            setFerramenta('nenhuma');
-            return null;
-          }
-          const id = atual && atual.tipo === tipo ? atual.id : `d${proximoDesenho.current}`;
-          if (!atual || atual.tipo !== tipo) proximoDesenho.current += 1;
-          return { id, tipo, pontos };
-        });
-        return;
-      }
-      if (ferramenta === 'apagar') {
-        const rect = el.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-        const alvo = desenhoMaisProximo(
-          desenhos, x, y, 8,
-          (d) => {
-            if (d.tipo === 'tendencia') {
-              const s = segmentoTendencia(d, tempoParaX, precoParaY);
-              return s ? distanciaAteTendencia(x, y, s) : null;
-            }
-            const n = nivelHorizontal(d, precoParaY);
-            return n === null ? null : distanciaAteHorizontal(y, n);
-          },
-        );
-        if (alvo) {
-        registrarPassoDesenho(desenhosRef.current);
-        setDesenhos(desenhosRef.current.filter((d) => d.id !== alvo.id));
-        if (selecionadoId === alvo.id) setSelecionadoId(null);
-      }
-        return;
-      }
-      /*
-        CLIQUE SOBRE UM DESENHO O ESCOLHE (06/10/2026).
+        O QUE FICOU, E POR QUE:
+          - ARRASTAR a ponta do stop e do alvo continua, e continua AJUSTANDO O
+            DINHEIRO. E o uso que o dono descreveu: quem aceita perder 2,00 ve
+            2,00 depois de arrastar. Mexer no preco ali seria trocar o risco que
+            o operador escreveu.
+          - o `x` que apaga stop e alvo continua, em `modoOrdem`.
+          - o botao `Colocar ordem a <preco>` continua. O preco vem do ultimo
+            fechamento, no pai — e nao de um clique em qualquer pixel.
 
-        MEDIDO nas capturas da XM (20:35): a paleta, a espessura e o cadeado
-        aparecem sobre o desenho escolhido. Sem este clique o operador teria
-        duas formas de escolher — a paleta flutuante e o `apagar` — e nenhuma
-        delas escolheria um desenho para ESTILIZAR.
-
-        Por que `perto(e.clientY)` vem ANTES: clicar numa linha de ordem com a
-        ferramenta de apagar armada tem que apagar a linha de ordem. E o que o
-        operador mirou e o que ele ve em cima.
-      */
-      if (perto(e.clientY)) return;
-      {
-        const rect = el.getBoundingClientRect();
-        const alvoDesenho = desenhoMaisProximo(
-          desenhosRef.current,
-          e.clientX - rect.left,
-          e.clientY - rect.top,
-          8,
-          (d) => {
-            if (d.tipo === 'tendencia') {
-              const s = segmentoTendencia(d, tempoParaX, precoParaY);
-              return s ? distanciaAteTendencia(e.clientX - rect.left, e.clientY - rect.top, s) : null;
-            }
-            const n = nivelHorizontal(d, precoParaY);
-            return n === null ? null : distanciaAteHorizontal(e.clientY - rect.top, n);
-          },
-        );
-        setSelecionadoId(alvoDesenho ? alvoDesenho.id : null);
-      }
-      /*
-        A ORDEM SO ARMA EM `modoOrdem`.
-
-        Removi o `return` antecipado de `!modoOrdem` que existia antes: ele
-        impedia o grafico de ESCOLHER um desenho e de ARRASTAR uma ponta fora do
-        modo de ordem, e essas duas gestures servem justamente quando o
-        operador esta so olhando. Mas sem ele o `onArmarOrdem` passaria a ser
-        chamado sempre, e abrir uma ordem nao pedida ao clicar no grafico e
-        exatamente o caminho de 1-clique que o dono mandou remover.
-
-        Por isso o guarda e AQUI, no ultimo passo, e nao no comeco do efeito: o
-        clique primeiro escolhe desenho, e so o que sobra disso vira ordem.
+        O QUE SAIU: a prop `onArmarOrdem` saiu do contrato. Nao e um `if` que
+        pode ser lido ao contrario: e uma propriedade que nao existe mais, e o
+        `tsc --noEmit` reprovaria qualquer tentativa de repassar.
       */
       if (!modoOrdem) return;
-      const p = yParaPreco(e.clientY);
-      if (p !== null && p > 0 && ferramenta === 'nenhuma') onArmarOrdem?.(p);
     };
-    /*
-      O ARRASTE DA PONTA (06/10/2026)
-      ================================
-      MEDIDO nas capturas da XM (20:31 e 20:35): a linha de tendencia tem dois
-      circulos nas pontas, e arrastar um deles move a linha. Sem isso a linha
-      existe mas nao serve para AJUSTAR O STOP — que e o uso que o dono descreveu.
-
-      O guarda `podeMoverPontos` e AQUI, e nao so no desenho do circulo: sem ele
-      o circulo sumiria com a tranca fechada e o `mousedown` continuaria pegando.
-      O operador veria o cadeado FECHADO e a linha andando, e marcaria o stop
-      num nivel que ele nao escolheu.
-    */
     const aoPressionar = (e: MouseEvent) => {
-      const rect = el.getBoundingClientRect();
-      const px = e.clientX - rect.left;
-      const py = e.clientY - rect.top;
-      const pegou = pontaMaisProxima(
-        desenhosRef.current.filter((d) => podeMoverPontos(d)),
-        px,
-        py,
-        12,
-        tempoParaX,
-        precoParaY,
-      );
-      if (pegou) {
-        /*
-          O PASSO e registrado no `mousedown`, e nao no `mouseup`, para que o
-          arrasto INTEIRO seja um passo so. Registrar no `mouseup` guardaria a
-          lista ja movida, e o `Ctrl + Z` devolveria o desenho no lugar novo —
-          parecendo nao fazer nada.
-        */
-        registrarPassoDesenho(desenhosRef.current);
-        arrastandoPonta.current = { id: pegou.desenho.id, indice: pegou.indice };
-        setArraste(arrastandoPonta.current);
-        setSelecionadoId(pegou.desenho.id);
-        el.style.cursor = 'grabbing';
-        e.preventDefault();
-        return;
-      }
       const achou = perto(e.clientY);
       if (achou) {
         alvo = { papel: achou.papel, linha: achou.linha };
@@ -1630,45 +1550,12 @@ useEffect(() => {
       e.stopPropagation();
       onRemoverLinha?.(papel);
     };
-    /*
-      `Ctrl + Z` e `Ctrl + Y` (06/10/2026), MEDIDO na captura da XM de 20:37.
-
-      Acionados por `key` E nao por `keyCode`: `keyCode` e um numero legado que
-      o navegador mantem so por compatibilidade, e `Ctrl + Z` em teclado
-      internacional pode nao estar na tecla fisica `Z`. `e.key` e o que o
-      operador digitou.
-    */
-    const aoTecla = (e: KeyboardEvent) => {
-      if (!(e.ctrlKey || e.metaKey)) return;
-      const tecla = e.key.toLowerCase();
-      if (tecla === 'z' && !e.shiftKey) {
-        e.preventDefault();
-        desfazerDesenho();
-      } else if (tecla === 'y' || (tecla === 'z' && e.shiftKey)) {
-        e.preventDefault();
-        refazerDesenho();
-      }
-    };
     el.addEventListener('mousedown', aoPressionar);
     el.addEventListener('click', aoClicar);
     overlay?.addEventListener('click', aoApagar);
     window.addEventListener('mousemove', aoMover);
     window.addEventListener('mouseup', aoSoltar);
-    /*
-      `keydown` na RAIZ do componente, e nao em `window`: um `Ctrl + Z` global
-      desfaria desenho mesmo com o foco num campo onde o operador esta
-      digitando o nivel do stop — e o `Ctrl + Z` de um campo de texto e
-      DESFAZER O TEXTO, nao a linha.
-
-      E na raiz, e nao no canvas, porque o operador nao clica no canvas para
-      desfazer: ele clica numa linha, o foco sobe para o elemento do evento, e
-      o `Ctrl + Z` tem de funcionar em qualquer ponto do grafico. Ouvir so no
-      canvas faria o atalho depender de onde o clique caiu — e um atalho que
-      as vezes funciona e o tipo de coisa que o operador aprende a nao usar.
-    */
-    raiz.addEventListener('keydown', aoTecla);
     return () => {
-      raiz.removeEventListener('keydown', aoTecla);
       el.removeEventListener('mousedown', aoPressionar);
       el.removeEventListener('click', aoClicar);
       overlay?.removeEventListener('click', aoApagar);
@@ -1677,7 +1564,7 @@ useEffect(() => {
       el.style.cursor = '';
       if (frame) window.cancelAnimationFrame(frame);
     };
-  }, [chartReady, ordem, modoOrdem, onArmarOrdem, onMoverLinhaOrdem, onRemoverLinha, tipoGrafico, seriesAtivo]);
+  }, [chartReady, ordem, modoOrdem, onMoverLinhaOrdem, onRemoverLinha, tipoGrafico, seriesAtivo]);
 
   const changeTimeframe = (next: ChartTimeframe) => {
     if (onTimeframeChange) onTimeframeChange(next);
@@ -1685,13 +1572,75 @@ useEffect(() => {
   };
 
   return (
-    <div ref={raizRef} className="card compact-card price-chart" aria-busy={loading}>
+    <div className="card compact-card price-chart" aria-busy={loading}>
       <div className="section-head">
         <div>
           <h2>{symbol || 'Selecione um ativo'}</h2>
-          <span className="muted">
-            Candles OHLC reais · {sourceLabel ?? `${broker.toUpperCase()} · ${activeMarket}`}
-          </span>
+          {/*
+            O CABECALHO DA VELA, COMO A XM (09/10/2026)
+            ============================================
+            MEDIDO nas capturas da XM (`my.xm.com/pt/symbol-info/BTCUSD`,
+            06/10 20:36 e 20:37): a primeira linha do grafico e
+
+                Bitcoin vs US Dollar · 1h   Abr 85.516,15  Máx. 85.531,45
+                                           Mín. 85.330,44  Fecha 82.573,70
+
+            Aqui havia so o nome do simbolo e a frase "Candles OHLC reais". O
+            operador tinha de descer o olho ate a barra de preco para saber o
+            ultimo fechamento — e o cabecalho, que e o primeiro lugar que se
+            olha, dizia o nome e nao o numero.
+
+            `Abertura`, `Máxima`, `Mínima` e `Fechamento` sao os ROTULOS
+            reduzidos, e nao abreviaturas inventedas: e assim que a XM escreve,
+            e um operador que conhece o terminal reconhece sem traduzir nada.
+
+            O timeframe vai no cabecalho com o MESMO rotulo da barra de baixo.
+
+            MEDIDO numa validação desta sessão: eu havia escrito `1m` aqui e `M1`
+            na barra — dois nomes para a mesma coisa na mesma tela, que e o
+            AGENTS.md §5 na forma mais boba: o operador nao saberia dizer se
+            `1m` e `M1` sao o mesmo timeframe. A XM escreve `1h` e o MT5
+            escreve `H1`; escolher uma das duas linguas e coerente, misturar as
+            duas nao e.
+          */}
+          {latestCandle && (
+            <span className="muted price-chart-ohlc">
+              {activeTimeframe}
+              {' · '}
+              <b>Abr</b> {fmtPreco(latestCandle.open)}
+              {' · '}
+              <b>Máx</b> {fmtPreco(latestCandle.high)}
+              {' · '}
+              <b>Mín</b> {fmtPreco(latestCandle.low)}
+              {' · '}
+              <b>Fecha</b>{' '}
+              <span className={clsPnl(arredondarPnl(latestCandle.close - latestCandle.open))}>
+                {fmtPreco(latestCandle.close)}
+              </span>
+            </span>
+          )}
+          {/*
+            O SEPARADOR E TEXTO, NAO GAP (11/10/2026)
+            ==========================================
+            MEDIDO na captura do dono (12:28): `FECHA 83.129,45Candles OHLC
+            reais`, dois blocos colados sem espaco. A causa e que os dois
+            `<span>` sao IRMAOS inline, e o `gap: 6px` do
+            `.price-chart-ohlc` (mt5-terminal.css:177) e o espaco INTERNO
+            do flexbox — ele so separa os filhos do proprio span, nunca os
+            dois spans entre si.
+
+            O separador e UM TERCEIRO no, entre os dois, aplicado pela regra
+            pura `separadorCabecalho` — porque com OHLC ele e ` · `, e sem ele
+            (sem candle na tela) nao ha nada a separar. Antes ele estava DENTRO
+            do span do OHLC, e continuava colado na fonte.
+          */}
+          {separadorCabecalho(
+            latestCandle !== null,
+            fonteDoGrafico,
+          )}
+          {fonteDoGrafico ? (
+            <span className="muted">Candles OHLC reais · {fonteDoGrafico}</span>
+          ) : null}
         </div>
         {/*
           A BARRA, na ordem da XM (06/10/2026)
@@ -1843,242 +1792,76 @@ useEffect(() => {
           ))}
         </div>
       </div>
-      {displayError && (
-        <div className="hint" role="alert">
-          Gráfico indisponível: {displayError}
+      {/*
+        UMA LINHA DE AVISO, E NAO TRES (09/10/2026)
+        =============================================
+        MEDIDO: havia tres blocos empilhados no fim do grafico — erro, "carregando
+        candles" e "candles reais indisponiveis". Cada um ȧ uma linha inteira, e
+        os dois ultimos dizem praticamente a mesma coisa. O dono resumiu o
+        sintoma: "e pouca coisa e ocupa muito espaco".
+
+        Agora ȧ UMA linha, com o primeiro motivo que se aplicar, na ordem do que
+        o operador precisa saber primeiro:
+
+          1. erro da consulta: o gateway respondeu e disse o que foi;
+          2. carregando: ainda nao ha resposta;
+          3. sem velas: respondeu, e nao trouxe nada — dai o que fazer.
+
+        E a linha do "sem par" continua sendo a mais importante das tres, porque
+        sem par o grafico nao ȧ so vazio: ele nao sabe o que desenhar.
+      */}
+      {/*
+        E O NOME DO AVISO DEPENDE DE HA DADO OU NAO (11/10/2026)
+        =========================================================
+        Ver `textoDoAlertaDeErro`, acima: com candles na tela o aviso é do PAI
+        e sem o "indisponível"; sem candles é o gráfico mesmo, com o nome de
+        sempre. O papel (`alert`/`status`) acompanha — alerta é para o caso em
+        que não há nada para olhar.
+      */}
+      {displayError ? (
+        <div className="hint" role={displayCandles.length > 0 ? 'status' : 'alert'}>
+          {textoDoAlertaDeErro(displayError, displayCandles.length > 0)}
         </div>
-      )}
-      {loading && !displayCandles.length && (
+      ) : loading && !displayCandles.length ? (
         <div className="hint" role="status">
           Carregando candles…
         </div>
-      )}
-      {!displayCandles.length && !loading && !displayError && (
-        <div className="hint" role="status">
-          {symbol
-            ? 'Candles reais indisponíveis para esta fonte.'
-            : /*
-                SEM PAR: o vazio mais importante da tela.
-                ==================================
-                MEDIDO (05/10/2026): sem par escolhido, o gráfico ficava com a
-                caixa vazia e sem explicação, e o operador relatava "não tem
-                gráfico na aba robô". Um espaço em branco não é resposta: ele
-                não diz se falta par, se o gateway está fora, ou se a corretora
-                não devolveu nada.
+      ) : (
+        !displayCandles.length && (
+          <div className="hint" role="status">
+            {symbol
+              ? 'Candles reais indisponíveis para esta fonte.'
+              : /*
+                  SEM PAR: o vazio mais importante da tela.
+                  ==================================
+                  MEDIDO (05/10/2026): sem par escolhido, o gráfico ficava com a
+                  caixa vazia e sem explicação, e o operador relatava "não tem
+                  gráfico na aba robô". Um espaço em branco não é resposta: ele
+                  não diz se falta par, se o gateway está fora, ou se a corretora
+                  não devolveu nada.
 
-                A mensagem diz o que fazer AQUI, porque o seletor está no topo
-                da operação automática, nesta mesma tela.
-              */
-              'Sem par escolhido. Escolha em "Par para operar", no topo da operação automática.'}
-        </div>
+                  A mensagem diz o que fazer AQUI, porque o seletor está no topo
+                  da operação automática, nesta mesma tela.
+                */
+                'Sem par escolhido. Escolha em "Par para operar", no topo da operação automática.'}
+          </div>
+        )
       )}
       <p id="price-chart-summary" className="sr-only">
         {chartSummary}
       </p>
-      <BarraFerramentas
-        ferramenta={ferramenta}
-        gradeVertical={gradeVertical}
-        gradeHorizontal={gradeHorizontal}
-        crosshairMagnetico={crosshairMagnetico}
-        quantosDesenhos={desenhos.length}
-        aoEscolher={setFerramenta}
-        aoAlternarGrade={(eixo) => {
-          if (eixo === 'vertical') setGradeVertical((v) => !v);
-          else setGradeHorizontal((v) => !v);
-        }}
-        aoAlternarCrosshair={() => setCrosshairMagnetico((v) => !v)}
-        aoZoom={(dir) => {
-          const ts = chartRef.current?.timeScale();
-          if (!ts) return;
-          if (dir === 0) {
-            ts.fitContent();
-            return;
-          }
-          try {
-            const atual = ts.options().barSpacing;
-            // Zoom e MULTIPLICATIVO, e a escala e o que o olho aceita. Um
-            // `+` fixo seria 2 barras a mais em qualquer zoom, e no fim da
-            // escala o grafico deixaria de caber.
-            const alvo = Math.max(0.5, Math.min(400, atual * (dir > 0 ? 1.25 : 0.8)));
-            ts.applyOptions({ barSpacing: alvo });
-          } catch {
-            /* sem serie visivel */
-          }
-        }}
-        aoLimparDesenhos={() => {
-          // Registrar o passo ANTES de limpar: sem isso, um `Ctrl + Z` depois de
-          // limpar nao devolveria os desenhos, e "limpei sem querer" seria
-          // irreversivel — que e o pior defeito que uma ferramenta de desenho
-          // pode ter.
-          registrarPassoDesenho(desenhosRef.current);
-          setDesenhos([]);
-          setSelecionadoId(null);
-        }}
-        selecionado={selecionado !== null}
-        estiloSelecionado={estiloSelecionado}
-        podeDesfazer={passosDesenho > 0}
-        podeRefazer={refaziveisDesenho > 0}
-        aoDesfazer={desfazerDesenho}
-        aoRefazer={refazerDesenho}
-        aoMudarCor={(cor) => mudarEstilo((e) => ({ ...e, cor }))}
-        aoMudarEspessura={(espessura) => mudarEstilo((e) => ({ ...e, espessura }))}
-        aoMudarOpacidade={(opacidade) => mudarEstilo((e) => ({ ...e, opacidade }))}
-        aoAlternarTrava={() => mudarEstilo((e) => ({ ...e, travado: !e.travado }))}
-      />
       {/*
-        A CAMADA DOS DESENHOS.
-
-        `pointer-events: none` no container e `auto` so nos PEGADINHOS: sem isso
-        a camada invisivel capturaria o crosshair, o arraste das linhas de
-        ordem e o clique que arma a ordem — exatamente os tres gestos que o
-        operador precisa.
-
-        As coordenadas sao lidas do proprio grafico a cada desenho. Um desenho
-        guardado em PIXEL gruda na tela e sai de lugar no primeiro zoom, e o
-        operador deixa de confiar na linha — que e o que faz uma linha de
-        tendencia servir para alguma coisa.
+        Barra de ferramentas e fileira de estilo REMOVIDAS (11/10/2026, decisao
+        do dono: o grafico e para colocar ordens). Ver o comentario acima de
+        `acaoDoMenu`.
       */}
-      {ferramenta !== 'nenhuma' && (
-        <p className="hint price-chart-dica" role="status">
-          {ferramenta === 'tendencia'
-            ? 'Linha de tendência: clique em dois pontos.'
-            : ferramenta === 'horizontal'
-              ? 'Linha horizontal: clique em um ponto.'
-              : 'Clique sobre a linha para apagar.'}
-        </p>
-      )}
-      {/*
-          A CAMADA DOS DESENHOS: SVG sobre o canvas.
-
-          As coordenadas sao lidas do grafico a cada render. Um desenho guardado
-          em PIXEL gruda na tela e sai de lugar no primeiro zoom — e o operador
-          deixa de confiar na linha, que e o que faz uma linha de tendencia
-          servir para alguma coisa.
-
-          `pointer-events: none` no SVG: a camada nao pode capturar o crosshair,
-          o arraste das linhas de ordem nem o clique que arma a ordem. Sao os
-          tres gestos que o operador precisa, e um retangulo invisivel por
-          cima de todos eles seria o grafico quebrado de um jeito novo.
-        */}
-        {(desenhos.length > 0 || emConstrucao) && (
-          <svg
-            ref={svgDesenhosRef}
-            className="price-chart-desenhos"
-            aria-hidden="true"
-          >
-            {desenhos.map((d) => {
-              /*
-                O ESTILO E LIDO DO DESENHO, e nao de um padrao da barra.
-
-                MEDIDO na XM (20:35): a paleta e a espessura sao do desenho
-                escolhido. Um estilo global obrigaria o operador a redesenhar a
-                linha para trocar a cor — e a linha existe para marcar o stop.
-                Perder o ponto marcado para mudar a cor e o oposto do que a
-                ferramenta serve.
-              */
-              const estilo = estiloDe(d);
-              if (d.tipo === 'tendencia') {
-                const s = segmentoTendencia(d, converter.tempoParaX, converter.precoParaY);
-                if (!s) return null;
-                return (
-                  <g key={d.id}>
-                    <line
-                      data-desenho={d.id}
-                      data-tipo="tendencia"
-                      x1={s.x1}
-                      y1={s.y1}
-                      x2={s.x2}
-                      y2={s.y2}
-                      stroke={estilo.cor}
-                      strokeWidth={estilo.espessura}
-                      strokeLinecap="round"
-                      opacity={estilo.opacidade}
-                    />
-                    {/*
-                      AS PONTAS ARRASTAVEIS. MEDIDO na XM (20:31 e 20:35): dois
-                      circulos nas pontas da tendencia, um na horizontal, e
-                      arrastar move a linha.
-
-                      `data-ponta` com o `indice` do ponto: e o que o
-                      `mousemove` le para saber QUAL ponto mover, sem guardar
-                      pixel em lugar nenhum. E `aria-hidden` no SVG inteiro,
-                      entao a ponta nao aparece para leitor de tela — o controle
-                      equivalente e o `Desfazer`, que o teste mede.
-                    */}
-                    {pontasVisiveis(d, converter.tempoParaX, converter.precoParaY).map((p) => (
-                      <circle
-                        key={`${d.id}-${p.indice}`}
-                        data-ponta="1"
-                        data-desenho={d.id}
-                        data-indice={p.indice}
-                        cx={p.x}
-                        cy={p.y}
-                        r={5}
-                        fill="none"
-                        stroke={estilo.cor}
-                        strokeWidth={2}
-                        opacity={estilo.opacidade}
-                      />
-                    ))}
-                  </g>
-                );
-              }
-              const y = nivelHorizontal(d, converter.precoParaY);
-              if (y === null) return null;
-              return (
-                <g key={d.id}>
-                  <line data-desenho={d.id} data-tipo="horizontal" x1={0} y1={y} x2="100%" y2={y} stroke={estilo.cor} strokeWidth={estilo.espessura} strokeDasharray="6 4" opacity={estilo.opacidade} />
-                  <text data-desenho={d.id} x={6} y={y - 5} fill={estilo.cor} fontSize={11} className="mono" opacity={estilo.opacidade}>
-                    {d.pontos[0].preco.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </text>
-                  {pontasVisiveis(d, converter.tempoParaX, converter.precoParaY).map((p) => (
-                    <circle
-                      key={`${d.id}-${p.indice}`}
-                      data-ponta="1"
-                      data-desenho={d.id}
-                      data-indice={p.indice}
-                      cx={p.x}
-                      cy={p.y}
-                      r={5}
-                      fill="none"
-                      stroke={estilo.cor}
-                      strokeWidth={2}
-                      opacity={estilo.opacidade}
-                    />
-                  ))}
-                </g>
-              );
-            })}
-            {emConstrucao && emConstrucao.tipo === 'tendencia' && emConstrucao.pontos.length === 1 && (
-              <circle
-                cx={converter.tempoParaX(emConstrucao.pontos[0].time) ?? -9999}
-                cy={converter.precoParaY(emConstrucao.pontos[0].preco) ?? -9999}
-                r={4}
-                fill="none"
-                stroke="#4f7cff"
-                strokeWidth={2}
-              />
-            )}
-            {emConstrucao && emConstrucao.tipo === 'horizontal' && (
-              <line
-                x1={0}
-                y1={nivelHorizontal(emConstrucao, converter.precoParaY) ?? -9999}
-                x2="100%"
-                y2={nivelHorizontal(emConstrucao, converter.precoParaY) ?? -9999}
-                stroke="#f0b90b"
-                strokeWidth={1.5}
-                strokeDasharray="6 4"
-              />
-            )}
-          </svg>
-        )}
         {/*
-          O CONTAINER: canvas do grafico + a camada dos `x` + os desenhos.
+          O CONTAINER: canvas do grafico + a camada dos `x`.
 
-        O `div` do grafico vira `position: relative` (via `.market-chart-canvas`)
-        e a camada do `x` fica por cima, sem capturar ponteiro — senao ela
-        transparenta o crosshair, o arraste e o clique que arma a ordem.
-      */}
+          O `div` do grafico vira `position: relative` (via `.market-chart-wrap`)
+          e a camada do `x` fica por cima, sem capturar ponteiro — senao ela
+          transparenta o crosshair, o arraste e o clique que arma a ordem.
+        */}
       <div className="market-chart-wrap">
         <div
           ref={containerRef}
@@ -2088,6 +1871,26 @@ useEffect(() => {
           aria-describedby="price-chart-summary"
           role="img"
           tabIndex={0}
+          onContextMenu={abrirMenu}
+        />
+        {/*
+          A CAMADA DOS DESENHOS SAIU (11/10/2026, decisao do dono: o grafico e
+          para colocar ordens). Saiu o SVG com pontas e previews, e a regra
+          `.price-chart-desenhos` saiu junto da folha (`market.css`).
+        */}
+        {/*
+          O MENU DO BOTAO DIREITO. Fica DENTRO do `market-chart-wrap`, que e
+          `relative`, para o `left/top` daqui serem relativos ao grafico e nao a
+          pagina — com menu absoluto na pagina, o menu aparecia longe do clique
+          quando a pagina estava rolada.
+        */}
+        <MenuGrafico
+          aberto={menu.aberto}
+          x={menu.x}
+          y={menu.y}
+          precoNoPonto={menu.preco}
+          aoEscolher={acaoDoMenu}
+          aoFechar={() => setMenu((m) => ({ ...m, aberto: false }))}
         />
         {/*
           A CAMADA DOS `x`. So existe em `modoOrdem`, e so recebe conteudo
@@ -2101,8 +1904,9 @@ useEffect(() => {
       </div>
       {modoOrdem && (
         <p className="hint" role="status">
-          Clique no gráfico para armar a ordem no preço escolhido. O clique arma; o envio é
-          o botão do painel.
+          O preço da ordem é o último fechamento. Arraste a ponta do stop ou do alvo para
+          ajustar o nível — o dinheiro é recalculado. O envio é o botão do painel; clicar
+          no gráfico não arma nada.
         </p>
       )}
             {rsiExterno && (
@@ -2128,13 +1932,28 @@ useEffect(() => {
         que o dono nao pediu.
       */}
       <div className="market-chart-foot">
-        <span className="muted mono">
-          {displayCandles.length} candles
-        </span>
-        <div className="market-chart-foot-right">
-          <QuantumClock compact />
-          <SeletorFuso />
-        </div>
+        {/*
+          O RODAPE NAO CONTA QUANDO HA ERRO (11/10/2026)
+          ===============================================
+          MEDIDO na captura do dono (12:28): o hint dizia `Gráfico indisponível:
+          candles ausentes ou inválidos no upstream` e, logo abaixo, o rodape
+          dizia `300 candles` — e no M5 `0 candles` com o eixo de horas
+          preenchido. Dois lados do mesmo dado discordando (AGENTS.md §5).
+
+          A causa: o hint e a arvore `displayError`, e o rodape e
+          `displayCandles.length`. São fontes DIFERENTES — `erroVigente` pode
+          devolver '' (sem erro vigente) enquanto a prop trouxe lista vazia, e
+          o rodape escrevia `0 candles` ao lado de um eixo que mostrava dados.
+
+          Com erro, o rodape some: o erro ja e a resposta, e uma contagem ao
+          lado dele so convida o operador a acreditar na errada. A regra e
+          `rotuloRodape`, pura, medida no `PriceChart.regras.test.ts`.
+        */}
+        {(() => {
+          const rotulo = rotuloRodape(displayError, displayCandles.length);
+          return rotulo ? <span className="muted mono">{rotulo}</span> : null;
+        })()}
+        <SeletorFuso />
       </div>
 
       {displayCandles.length > 0 && (

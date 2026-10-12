@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { linhasMt5, resumoMt5, tipoDaLinha, nomeDoTipo } from './historicoMt5';
+import { corDaOperacao, linhasMt5, resumoMt5, tipoDaLinha, nomeDoTipo } from './historicoMt5';
 import type { Deal } from './historico';
 
 /*
@@ -488,5 +488,56 @@ describe('agrupamento sem `position_id` — a rede de seguranca', () => {
     ]);
     expect(linhas).toHaveLength(1);
     expect(linhas[0].lucro).toBeCloseTo(3.51, 6);
+  });
+});
+
+/*
+  A COR DA OPERACAO — compra verde, venda vermelha (09/10/2026)
+  =============================================================
+  O DONO REPORTOU, textualmente: "quando tem sell fica verde e nao vermelho, e
+  quando tem buy fica verde".
+
+  MEDIDO no fonte: a celula do Tipo no historico era
+  `linha.movimentacao ? 'warn' : 'ok'` — o `else` cobria compra E venda com o
+  mesmo verde (`HistoryTab.tsx:524`). A aba do motor tinha uma segunda regra
+  (`AutoEnginePanel.tsx:666`): `buy -> ok`, `sell -> warn`. Amarelo nao e
+  vermelho, e a mesma venda aparecia de duas cores em duas telas.
+
+  As duas agora chamam `corDaOperacao`. Estes testes travam os dois lados.
+*/
+describe('corDaOperacao - a cor da operacao e UMA', () => {
+  it('compra e verde, venda e vermelha', () => {
+    expect(corDaOperacao('BUY')).toBe('ok');
+    expect(corDaOperacao('SELL')).toBe('danger');
+  });
+
+  it('movimentacao de saldo e amarela, e NUNCA ganha cor de lado', () => {
+    /*
+      Regra 10 do AGENTS.md: movimentacao de saldo nao tem lado. Um deposito
+      com `movimentacao` ligado NAO pode cair no teste de lado e sair vermelho.
+    */
+    expect(corDaOperacao('BALANCE', true)).toBe('warn');
+    expect(corDaOperacao('CREDIT', true)).toBe('warn');
+    expect(corDaOperacao('BUY', true), 'movimentacao marcada como BUY nao e compra').toBe('warn');
+    expect(corDaOperacao('SELL', true), 'movimentacao marcada como SELL nao e venda').toBe('warn');
+  });
+
+  it('entrada e saida herdam a cor do lado', () => {
+    expect(corDaOperacao('BUY_IN')).toBe('ok');
+    expect(corDaOperacao('SELL_OUT')).toBe('danger');
+  });
+
+  it('PROVA NEGATIVA: lado desconhecido NAO vira compra verde', () => {
+    /*
+      O defeito original era o `else` generico: o que nao era movimentacao virava
+      verde. Lado vazio, lado que nao existe, texto livre — tudo isso tem de
+      ficar amarelo, que diz "nao sei", e nao verde, que diria "compra".
+    */
+    for (const lado of ['', '--', 'DESCONHECIDO', undefined]) {
+      expect(corDaOperacao(lado), `"${lado}" nao pode ser verde`).toBe('warn');
+    }
+    // E a maiuscula/minuscula nao pode mudar a resposta.
+    expect(corDaOperacao('sell')).toBe('danger');
+    expect(corDaOperacao('buy')).toBe('ok');
   });
 });

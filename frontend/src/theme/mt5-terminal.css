@@ -28,6 +28,67 @@
   border-right: 0;
 }
 
+/*
+  ROTULO E VALOR NA MESMA LINHA, COMO NO MT5 (09/10/2026)
+  =======================================================
+  MEDIDO nas capturas da XM (`my.xm.com`, 06/10 20:37) e do MT5 desktop
+  (08/10 22:14) — os dois no mesmo formato:
+
+      Saldo: $4.88  Capital: $10.50  Margem Livre: $10.50  Margem: -
+      Lucro: -5.65  Crédito: 6.27  Recarregar: 16.67  Retirada: 0.00
+
+  Aqui o rotulo ficava EM CIMA do valor, em caixa propria com `min-width: 78px`
+  e `padding: 4px 10px`. Dez casas empilhadas ocupavam meia aba para repetir o
+  que o MT5 mostra numa faixa.
+
+  `align-items: baseline` e o que mantem as celulas na MESMA linha de base:
+  os rotulos sao menores que os valores, e sem alinhar a base o texto de cada
+  casa sobe e desce — a faixa vira uma escada. E `white-space: nowrap` impede
+  que "Margem Livre" quebre em duas linhas, que era o defeito do `Stop Loss`
+  (07/10 §1.7) repetido aqui em menor escala.
+*/
+.mt-celula {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 5px;
+  padding: 3px 10px;
+  border-right: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.mt-celula em {
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1.3;
+}
+
+.mt-celula strong {
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+/* A conta e o servidor nao sao numero que se compara: ficam no fim, menores. */
+.mt-celula-conta em,
+.mt-celula-conta strong {
+  font-size: 11px;
+}
+
+/* O motor e a unica casa que precisa de espaco: ela carrega o ciclo. */
+.mt-celula-auto {
+  flex: 1 1 auto;
+  min-width: 0;
+  justify-content: flex-end;
+}
+
+.mt-celula-auto strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .mt-status-strip em {
   color: var(--muted);
   font-size: 10px;
@@ -90,4 +151,42 @@
    chip "Operando" da sub-aba Automação). */
 .mt-status-strip .auto-on {
   color: var(--success, #34d399);
+}
+
+/*
+  O CABECALHO DA VELA, COMO A XM (09/10/2026)
+  ============================================
+  MEDIDO nas capturas da XM (06/10 20:36 e 20:37):
+
+      Bitcoin vs US Dollar · 1h   Abr 85.516,15  Máx. 85.531,45  Mín. 85.330,44
+                                 Fecha 82.573,70
+
+  Os numeros vao em fonte monoespacada com algarismos tabulares, e o rotulo em
+  negrito pequeno. A razao e alinhamento: `Abr`, `Máx`, `Mín` e `Fecha` sao de
+  comprimentos diferentes, e em fonte proporcional o olho perde a coluna do
+  numero. E o espaco entre os grupos e fixo, para os dois grupos nao pularem de
+  coluna quando o preco muda de tamanho.
+
+  `1h` e o timeframe no rotulo que o operador ve na barra, e nao o codigo
+  interno. O mesmo timeframe com dois nomes no mesmo grafico seria o
+  AGENTS.md §5: o operador nao saberia se `H1` e `1h` sao a mesma coisa.
+*/
+.price-chart-ohlc {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 2px;
+}
+
+.price-chart-ohlc b {
+  font-family: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text);
+  opacity: 0.72;
 }

@@ -43,6 +43,15 @@ import '../theme/robo.css';
 
 export type ModeloTreinado = {
   id: string;
+  /**
+   * O nome do modelo como o operador le: `MODELO MULTI_METALS 5M`.
+   *
+   * MEDIDO (09/10/2026): o `id` e o `symbol` mostravam o MESMO texto nos
+   * artefatos de classe — o dono viu `MULTI_METALS | MULTI_METALS | METALS`
+   * na captura, duas colunas dizendo a mesma coisa. O `label` vem do
+   * `rotulo_modelo` do backend, que e descreve com o periodo.
+   */
+  label?: string;
   symbol: string;
   timeframe: string;
   accuracy: number | null;
@@ -61,6 +70,24 @@ export type ModeloTreinado = {
 
 const pct = (v: number | null | undefined, casas = 1): string =>
   v === null || v === undefined || !Number.isFinite(v) ? '—' : `${(v * 100).toFixed(casas)}%`;
+
+/*
+  A CLASSE NAO E UM ATIVO, E A COLUNA PAR PRECISA DIZER ISSO (11/10/2026)
+  ========================================================================
+  MEDIDO na captura do dono (12:26): a linha `MODELO MULTI_METALS 5M` mostrava
+  `METALS` na coluna PAR. `METALS` e uma CLASSE de ativo (o `class` do meta),
+  nao um simbolo que se pode operar — e a propria cabeca da tabela dizia
+  "37 de 37 periodos podem operar". Duas afirmacoes que se contradizem no
+  mesmo painel (AGENTS.md §5): o operador nao sabe se pode escolher `METALS`
+  como par, e nao pode — ele nao existe no catalogo da corretora.
+
+  O rotulo e "classe X" porque a coluna PAR e onde se le o ativo. Um `METALS`
+  cru parece um ativo; "classe METALS" e a verdade, e e o que separa "isto e
+  uma classe" de "isto e um ativo que voce vai operar".
+*/
+export function rotuloClasseMulti(id: string): string {
+  return `classe ${id.slice('MULTI_'.length)}`;
+}
 
 export default function ListaModelos() {
   const [modelos, setModelos] = useState<ModeloTreinado[]>([]);
@@ -132,6 +159,20 @@ export default function ListaModelos() {
     [modelos],
   );
 
+  /**
+   * Quantos ARTEFATOS existem, tirando os repetidos.
+   *
+   * MEDIDO (09/10/2026): os tres modelos de classe cobrem varios periodos e
+   * cada periodo e uma linha. Contar linhas diria 48 modelos quando existem 39
+   * arquivos `.pkl`. O contador pela coluna "Modelo" repetia o mesmo nome
+   * quatro vezes para o mesmo artefato, que e exatamente o que o dono apontou
+   * na captura de 20:28.
+   */
+  const artefatos = useMemo(
+    () => new Set(modelos.map((m) => m.id)).size,
+    [modelos],
+  );
+
   /*
     ESCOLHER O MODELO ESCOLHE O PAR E O PERÍODO.
 
@@ -185,7 +226,21 @@ const escolher = async (m: ModeloTreinado) => {
         <span className="robo-modelos-titulo">Modelos treinados</span>
         {modelos.length > 0 && (
           <span className="muted">
-            {publicaveis} de {modelos.length} podem operar
+            {/*
+              O CONTADOR CONTA LINHAS, E LINHAS NAO SAO ARTEFATOS (09/10/2026)
+              =================================================================
+              MEDIDO: um modelo de CLASSE (`MULTI_METALS`) cobre QUATRO periodos
+              e virou quatro linhas aqui. O contador somava as linhas, entao
+              depois da correcao que trouxe os tres multi de volta ele passou a
+              dizer "37 de 48" — e sao 39 artefatos, tres deles com quatro
+              linhas cada. 48 e a quantidade de OPORTUNIDADES de operacao, nao
+              de modelos, e o operador lia como quantidade de modelos.
+
+              Agora o numero certo aparece por linha: quantos ARTEFATOS
+              diferentes existem (pelos `id` unicos) e quantos deles podem
+              operar.
+            */}
+            {artefatos} artefatos · {publicaveis} de {modelos.length} períodos podem operar
           </span>
         )}
         {carregando && <span className="muted">lendo…</span>}
@@ -240,22 +295,60 @@ const escolher = async (m: ModeloTreinado) => {
                   m.timeframe.toUpperCase() === tfMotor;
                 return (
                   <tr
-                    key={m.id}
+                    /*
+                      A CHAVE E O PAR + O PERIODO, E NAO SO O `id` (09/10/2026)
+                      ==========================================================
+                      MEDIDO: os tres modelos de CLASSE (`MULTI_METALS`,
+                      `MULTI_FIAT`, `MULTI_CRYPTO`) cobrem QUATRO periodos cada, e o
+                      `id` deles e o nome do arquivo — o MESMO para os quatro. Com
+                      `key={m.id}` o React via quatro linhas com a mesma chave e
+                      reaproveitava o no da primeira: o periodo mostrado era o da
+                      primeira, e clicar na linha do H1 selecionava o M5.
+
+                      Nao dava erro no console, so comportamento errado.
+                    */
+                    key={`${m.id}|${m.timeframe}`}
                     className={`robo-modelo${emUso ? ' em-uso' : ''}${
                       podeOperar ? '' : ' reprovado'
                     }`}
                     onClick={() => void escolher(m)}
                     title={
                       podeOperar
-                        ? `${m.id} — clique para operar este par neste período`
+                        ? `${m.symbol} em ${m.timeframe} — clique para operar este par neste período`
                         : (m.reason ?? 'modelo reprovado no treino')
                     }
                   >
+                    {/*
+                      A COLUNA MODELO mostra o que o operador le, e a coluna PAR
+                      mostra o simbolo. Antes as duas mostravam `MULTI_METALS` — o
+                      mesmo nome duas vezes, porque o `id` do artefato de classe e
+                      o proprio simbolo.
+
+                      MEDIDO na captura de 20:28 do dono: `MULTI_METALS |
+                      MULTI_METALS | METALS`, tres colunas onde duas diziam a
+                      mesma coisa. Duas colunas iguais nao informam nada e ocupam
+                      o lugar de uma que informaria.
+
+                      Agora o rotulo (`MODELO MULTI_METALS 5M`) carrega o nome do
+                      artefato com o prefixo que a coluna ja diz, e o Par mostra a
+                      classe — que e a informacao que faltava e que o meta tem em
+                      `class`.
+                    */}
+                    {/*
+                      Como o operador le. O `label` vem pronto do
+                      `rotulo_modelo`; se o gateway nao mandar, o nome do
+                      arquivo continua sendo a resposta — nunca `undefined` na
+                      tela.
+                    */}
                     <td>
-                      <code>{m.id}</code>
+                      <code>{m.label ?? m.id}</code>
                     </td>
                     <td>
-                      <strong>{m.symbol}</strong>
+                      <strong>
+                        {m.id.startsWith('MULTI_')
+                          ? rotuloClasseMulti(m.id)
+                          : m.symbol}
+                      </strong>
                     </td>
                     <td>{m.timeframe}</td>
                     <td className="num">{pct(m.accuracy)}</td>

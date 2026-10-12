@@ -7,9 +7,10 @@ import { THEMES } from '../hooks/useTheme';
 import ConnectionSettings from './ConnectionSettings';
 import ConnectedDevicesPanel from './ConnectedDevicesPanel';
 import DeclaracoesConfianca from './DeclaracoesConfianca';
+import PlanoConfig from './PlanoConfig';
 import '../theme/settings.css';
 
-type Section = 'general' | 'connections' | 'security' | 'confianca';
+type Section = 'general' | 'connections' | 'security' | 'plans' | 'confianca';
 const tabs: [Section, string][] = [
   ['general', 'Geral / Interface'],
   // "Notificações & Alertas" saiu: a seção existia no menu sem renderizar
@@ -17,6 +18,9 @@ const tabs: [Section, string][] = [
   // é pior que não existir.
   ['connections', 'Conexões & Corretoras'],
   ['security', 'Segurança'],
+  // Plano (11/10/2026): era a tela que não existia enquanto o 403
+  // PLAN_REQUIRED mandava o operador para lugar nenhum. Ver `PlanoConfig`.
+  ['plans', 'Plano'],
   // Declarações de confiança: o que o app faz, o que nunca faz, e quem
   // developeu. Cada afirmação da tela tem um teste ou auditoria por trás.
   ['confianca', 'Confiança & Responsável'],
@@ -358,6 +362,12 @@ export default function SettingsCore() {
                 {status}
               </div>
             )}
+          </div>
+        )}
+
+        {section === 'plans' && (
+          <div className="settings-panel">
+            <PlanoConfig />
           </div>
         )}
 

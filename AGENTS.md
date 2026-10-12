@@ -5,9 +5,11 @@
 > não. Se um número aqui divergir do que o comando medir, **o comando vence**;
 > corrija o número.
 
-> **ESTADO DE HOJE: [`Docs/PASSAGEM_20261007_PRIMEIROS_PASSOS.md`](Docs/PASSAGEM_20261007_PRIMEIROS_PASSOS.md)**
+> **ESTADO DE HOJE: [`Docs/CONVERSA_20261011_GRAFICO_PARA_ORDENS_SEM_FIXOS.md`](Docs/CONVERSA_20261011_GRAFICO_PARA_ORDENS_SEM_FIXOS.md)**
 > O que fazer primeiro, os números medidos e o que está aberto. Leia antes de
 > mexer em qualquer coisa — este arquivo diz as regras, aquele diz o estado.
+> (O ciclo anterior, com a validação completa e aprovação, está em
+> [`CONVERSA_20261010_VALIDACAO_COMPLETA_E_APROVACAO.md`](Docs/CONVERSA_20261010_VALIDACAO_COMPLETA_E_APROVACAO.md).)
 
 ## 1. O que este projeto é
 
@@ -70,6 +72,17 @@ corretora oferece é exatamente essa presunção. A classe de um ativo vem da
 fronteira de palavra, `SOL` casa dentro de "Solvar".
 
 Trava: `tests/test_ai_inference.py::TestNenhumAtivoPresumido`.
+
+**A regra vale para o frontend tambem, e agora tem trava la.** MEDIDO em
+10/10/2026: `frontend/src` tinha 6 ocorrencias em CODIGO — dois `|| 'XAUUSD'`
+(`RobotMarketBar.tsx`, `AIControlTab.tsx`), uma classe adivinhada pelo nome
+(`ModelCover.tsx`) e tres exemplos em `placeholder`. Simbolo vazio e RECUSA COM
+MOTIVO, nunca ativo padrao, em qualquer camada.
+
+Trava: `frontend/src/ativoPresumido.test.ts` (le o fonte, remove comentario e
+docstring, reprova nome de ativo no codigo). E o mapeador de sigla
+(`lib/assetIcons.ts`) nao recebe mais o SIMBOLO — so a classe —, porque um
+parametro que se pode ignorar e um parametro que alguem vai usar.
 
 **Nenhuma corretora pode ser caminho exclusivo.** `backend/broker_registry.py`
 é o catálogo. Escolher uma corretora na tela tem de ser a corretora que
@@ -186,6 +199,32 @@ diff em `MQL5/Experts` que não esteja declarado em `AUTORIZACOES_MQL5`.
 Alteração declarada dá **aviso**, nunca `ok`, porque compilar e reanexar são
 passos fora do repositório.
 
+### A BRIDGE INSTALADA PODE FICAR DEFASADA (MEDIDO 10/10/2026)
+
+O `build_app.bat` recompila o gateway (passo 5/7) e copia para
+`frontend/src-tauri/bridge` (passo 6/7). Mas o **instalador NSIS compara a versão
+do arquivo**: o `.exe` tem a mesma versão 1.2.4 nas duas compilações, então ele
+**não sobrescreve** — só os arquivos novos (`bridge/_internal`) são escritos.
+
+MEDIDO: frontend novo (contador "28 artefatos") rodando com backend velho
+(`MULTI_METALS` com `PERÍODO = METALS`). Dois lados do mesmo dado divergindo, e
+a tela não acusa nada.
+
+**Como se descobre: hash, não data.**
+
+```powershell
+(Get-FileHash "$env:LOCALAPPDATA\XAU AI PRO\bridge\mt5-gateway.exe").Hash -eq
+  (Get-FileHash "frontend\src-tauri\bridge\mt5-gateway.exe").Hash
+```
+
+**A reinstalação limpa exige apagar a pasta antes:**
+
+```powershell
+Remove-Item "$env:LOCALAPPDATA\XAU AI PRO\bridge" -Recurse -Force
+```
+
+Só depois rodar o instalador. Sem isso, `exit 0` do instalador não prova nada.
+
 ---
 
 ## 8. Desenvolvimento
@@ -252,6 +291,14 @@ Nao reporte "pronto" com suite parcial rodando. **Meça e mostre o numero.**
 A etapa importa. Com o app no ar, a porta 9001 **deve** estar ocupada:
 `preflight.py` usa `esperar_livre=etapa != "app-rodando"`. Rodar a etapa errada
 acusa falha onde o sistema esta correto.
+
+**A porta medida e a que o produto usa, nao uma escrita no aparelho.** MEDIDO
+10/10/2026: com `XAU_GATEWAY_PORT=9011`, o gateway subia em 9011 e o preflight
+media 9001 — livre porque o processo estava em outra porta — e respondia `ok`.
+Eram dois defeitos: a porta fixa, e "livre" virar `ok` numa etapa que exige o
+processo escutando. `porta_do_gateway()` le a variavel; na etapa `app-rodando`,
+porta livre e **falha**. Prova negativa no teste: sem app, a etapa reprova as
+tres portas.
 
 Antes de `git status` travar: `.\scripts\limpeza_segura.ps1 -Apply -DebugCache`.
 Nao apagar nada com build ou teste no ar.

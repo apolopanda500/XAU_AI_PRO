@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import EditarConexao from './EditarConexao';
+import { definirEscopoAtivo, escopoAtivo, limparEscopoAtivo } from '../lib/escopoAtivo';
 import {
   connectionAction,
   detectTerminal,
@@ -159,8 +160,19 @@ export default function ConnectionSettings() {
       await load();
       await connectionAction(id, 'test');
       setVerified((values) => ({ ...values, [id]: 'Sessão do terminal' }));
+      /*
+        SINCRONIZAR TAMBEM ESCOLHE (11/10/2026, fim do beco sem saida).
+        ================================================================
+        MEDIDO no app instalado: "Sem corretora escolhida" em toda a ROBO com
+        o MT5 conectado e sessao detectada — e NADA no app gravava
+        `xau-active-account` (`definirEscopoAtivo` nao tinha um chamador
+        sequer). A recusa mandava "escolher a conta" para telas onde a escolha
+        nao existia. Sincronizar o terminal E a escolha: passou no teste de
+        leitura, virou a conta ativa da ROBO.
+      */
+      definirEscopoAtivo('mt5', market);
       setStatus(
-        `MT5 sincronizado: ${current.login} · ${current.server}. Conexão registrada como as demais.`,
+        `MT5 sincronizado: ${current.login} · ${current.server}. Conexão registrada como as demais e marcada como conta ativa.`,
       );
       return;
     }
@@ -172,7 +184,12 @@ export default function ConnectionSettings() {
     try {
       await connectionAction(id, 'test');
       setVerified((values) => ({ ...values, [id]: 'Leitura validada' }));
-      setStatus('Credenciais salvas e leitura da conta validada. Nenhuma ordem foi enviada.');
+      // Salvar + validar TAMBEM escolhe (mesmo motivo do MT5 acima): quem
+      // acabou de provar a credencial escolheu operar por ela.
+      definirEscopoAtivo(broker, market);
+      setStatus(
+        'Credenciais salvas e leitura da conta validada — marcada como conta ativa. Nenhuma ordem foi enviada.',
+      );
     } catch {
       setVerified((values) => ({ ...values, [id]: 'Falha na validação' }));
       throw new Error(
@@ -184,6 +201,24 @@ export default function ConnectionSettings() {
     setVerified((values) => ({ ...values, [id]: 'Não verificada' }));
     await connectionAction(id, command);
     await load();
+    /*
+      ATIVAR NA TABELA TAMBEM ESCOLHE (11/10/2026, mesmo beco sem saida do
+      `save`). O botao "Ativar" da linha e a escolha EXPLICITA de conta — e a
+      ROBO le a escolha do `localStorage`. Sem esta linha, ativar no gateway
+      nao mudava nada na ROBO, e a recusa "escolha a conta" continuava mesmo
+      com a conta ativa. Desativar a conta ESCOLHIDA limpa a escolha, pelo
+      motivo inverso: senao a ROBO falaria da corretora que acabou de cair.
+    */
+    if (command === 'activate') {
+      const linha = rows.find((r) => r.id === id);
+      if (linha) definirEscopoAtivo(linha.broker, linha.market);
+    } else if (command === 'deactivate') {
+      const linha = rows.find((r) => r.id === id);
+      const atual = escopoAtivo();
+      if (linha && linha.broker === atual.broker && linha.market === atual.market) {
+        limparEscopoAtivo();
+      }
+    }
     setVerified((values) => ({
       ...values,
       [id]: command === 'deactivate' ? 'Desativada' : 'Leitura validada',

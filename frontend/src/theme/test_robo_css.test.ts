@@ -92,12 +92,31 @@ describe('robo.css — toda classe usada pelo ticket tem regra', () => {
     }
   });
 
-  it('o painel usa exatamente as classes que a folha define', async () => {
-    // Se o painel trocar o nome de uma classe sem atualizar o CSS, o defeito
-    // volta pelo outro lado: classe sem regra = elemento sem estilo.
+  it('o painel NAO usa mais as classes do bloco que saiu', async () => {
+    /*
+    Este caso exigia que o painel USASSE as seis areas do grid. DECISAO DO DONO,
+    08/10/2026: o bloco do ticket saiu da tela — `Token(s)`,
+    `Valor no risco (SL)`, `Preco Quantidade`, `Stop Loss`, `Take Profit` e
+    `passo 1:1..1:4`.
+
+    MEDIDO na captura de 08/10 19:36: `Stop loss (-2,00 USD) 2,00` e
+    `Alvo (+2,00 USD) 2,00` saiam com valor FIXO, e as tres linhas de ordem em
+    75670,29 / 75470,29 / 75270,29 — exatamente +200,00 e -200,00 em volta do
+    preco. Um painel que parece configuravel e escreve numero fixo.
+
+    `enviar` CONTINUA no painel: o botao do AUTO nao estava no bloco removido,
+    e sem ele nao ha como ligar o motor. Por isso ele fica na lista de areas
+    exigidas, e as outras cinco sao as que a folha pode guardar como sobra.
+    */
     const folha = await lerCss('robo.css');
-    for (const area of AREAS) {
-      expect(painel, `a folha define robo-ticket-${area}, o painel nao usa`).toContain(
+    const USADAS = ['enviar'];
+    const SAIRAM = ['preco', 'lote', 'volume', 'protecao', 'presets'];
+    for (const area of USADAS) {
+      expect(painel, `o painel precisa usar robo-ticket-${area}`).toContain(`robo-ticket-${area}`);
+      expect(folha, `falta a regra .robo-ticket-${area}`).toContain(`.robo-ticket-${area}`);
+    }
+    for (const area of SAIRAM) {
+      expect(painel, `robo-ticket-${area} nao deveria mais estar no painel`).not.toContain(
         `robo-ticket-${area}`,
       );
     }

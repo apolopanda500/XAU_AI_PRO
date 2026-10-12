@@ -6,7 +6,7 @@ import { useSinaisModelo } from '../hooks/useSinaisModelo';
 import { getCandles, type MarketCandle } from '../lib/marketApi';
 import { notify } from '../lib/notify';
 import { requestId } from '../lib/format';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import PriceChart from './charts/PriceChart';
 import { nivelDoValor, linhasDaOrdem, rotuloDoBotao } from '../lib/ordemGrafico';
 import { fichaDoAtivo, faixaDoAtivo, mercadoDoAtivo, requisitoDeMargem, unidadeDeVolume, rotuloQuantidade } from '../lib/volumeUnidade';
@@ -30,6 +30,30 @@ import { TIMEFRAMES } from './charts/PriceChart';
 // - Sem resposta, a fita mostra "desatualizado ha Xs" em vez de sumir: sinal
 //   velho passado por novo e o modo silencioso de operar no escuro.
 // - Sem par configurado no motor, o painel diz isso em vez de adivinhar um.
+/**
+ * O MOTIVO DA ATUALIZACAO QUE FALHOU, com o que a tela MOSTRA de verdade
+ * (11/10/2026).
+ *
+ * MEDIDO na captura das 12:24, MT5 fechado: 300 candles na tela e, na mesma
+ * tela, "Gráfico indisponível: candles ausentes ou inválidos no upstream". O
+ * intervalo de 30s falhava e o `erroVelas` ficava gravado por cima do dado que
+ * ja estava la — duas telas da mesma tela discordando (AGENTS.md 5), com o
+ * agravante de o grafico estar desenhado.
+ *
+ * Com dado em mao, a falha e da ATUALIZACAO e nao do grafico: o texto diz as
+ * duas coisas, o motivo e o que a tela esta mostrando. Sem dado, o motivo vai
+ * sem enfeite — e o `PriceChart` e quem coloca "Gráfico indisponível" na
+ * frente, que e o caso em que o nome e o certo.
+ *
+ * Funcao pura de proposito: o `erroVigente` do PriceChart ja trancava o lado
+ * de la; esta e a mesma trava deste lado, e ela e medida direto.
+ */
+export function erroDeVelas(motivo: string, temCandles: boolean): string {
+  return temCandles
+    ? `Atualização falhou: ${motivo} — mostrando os últimos candles recebidos.`
+    : motivo;
+}
+
 export default function AcompanharModelos() {
   const autoQ = useAutoState();
   const auto = autoQ.data;
@@ -105,8 +129,127 @@ export default function AcompanharModelos() {
     o componente nao sabe desenhar — e o sintoma seria a tela vazia de novo,
     agora sem mensagem.
   */
-  const tempoEscolhido = String(timeframe || auto?.timeframe || (TIMEFRAMES[0] as string)).toUpperCase();
-  const broker = String(auto?.broker ?? brokerSalvo ?? 'mt5').toLowerCase();
+  /*
+  O TEMPOFRAME E DO OPERADOR, E O DO MODELO E O PONTO DE PARTIDA (09/10/2026)
+  ===========================================================================
+  MEDIDO pelo dono: "o grafico esta preso em cada ativo, nao tem como escolher
+  timeframes diferentes". E MEDIDO no codigo por que:
+
+      PriceChart.tsx:603   const activeTimeframe = timeframe ?? internalTimeframe;
+      PriceChart.tsx:1892  if (onTimeframeChange) onTimeframeChange(next);
+                            else setInternalTimeframe(next);
+
+  Este componente passa `timeframe={tempoEscolhido}` e NAO passava
+  `onTimeframeChange`. Entao:
+
+    - clicar num timeframe chamava `setInternalTimeframe`, que grava estado
+      INTERNO;
+    - a linha 603 le `timeframe ?? internalTimeframe`, e `timeframe` estava
+      SEMPRE definido — o `??` nunca chegava no lado interno;
+    - o clique nao mudava NADA. Nove botoes, um botao decorativo: e o AGENTS.md §9
+      ("um controle que nada le e pior que a ausencia dele").
+
+  E o timeframe vinha do MODELO (`auto?.timeframe`), entao o grafico ficava
+  preso no periodo do modelo — que era a decisao antiga, documentada nas linhas
+  93-96 deste arquivo.
+
+  A DECISAO DO DONO, 09/10/2026: o grafico e LIVRE. O modelo e uma lista
+  separada, com os periodos que cada modelo REALMENTE foi treinado. Escolher o
+  timeframe para ver o ativo e uma coisa; ligar um modelo para operar e outra.
+
+  O que muda:
+
+    - `periodoDoGrafico` e estado PROPRIO, comecando no periodo do modelo (o
+      ponto de partida, nao uma prisao);
+    - clicar num timeframe passa a valer;
+    - trocar de PAR volta ao periodo do modelo daquele par, porque o periodo do
+      modelo anterior nao tem nada a ver com o ativo novo.
+
+  E `null` quando o operador escolheu fora do que o modelo cobre: e assim que o
+  painel diz "este modelo nao foi treinado em H1", em vez de o painel afirmar
+  que o modelo opera no periodo que so o grafico esta mostrando.
+*/
+const [periodoDoGrafico, setPeriodoDoGrafico] = useState<string>('');
+  /*
+    A ORDEM DESTA LINHA ERA O DEFEITO (09/10/2026)
+    ==============================================
+    MEDIDO pelo dono: "clicar num timeframe nao muda nada". O teste
+    `AcompanharModelos.grafico.test.tsx` reprovou com
+
+        o clique no timeframe nao valeu: expected 'M15' to be 'W1'
+
+    A ORDEM era `timeframe || periodoDoGrafico`: o periodo do MODELO vinha
+    primeiro e cobria o periodo que o OPERADOR tinha clicado. O estado do
+    operador existia, era gravado pelo `onTimeframeChange`, e nunca era lido —
+    a barra inteira era decorativa, exatamente como o dono reportou.
+
+    Agora a escolha do operador vem primeiro. O `timeframe` continua sendo o
+    periodo do modelo e continua sendo o PONTO DE PARTIDA: o `periodoDoGrafico`
+    comeca vazio, e o `useEffect` de troca de par o devolve a vazio para o par
+    novo. Quem escolheu por ultimo e quem vale.
+
+    `auto?.timeframe` saiu do meio: `timeframe` (linha 61) ja e esse mesmo valor
+    com `.toUpperCase()`, e repetir os dois era a mesma leitura com nomes
+    diferentes — o defeito que a regra da secao 5 do AGENTS.md descreve.
+  */
+  const tempoEscolhido = String(
+    periodoDoGrafico || timeframe || (TIMEFRAMES[0] as string),
+  ).toUpperCase();
+  /*
+    O BROKER VEM DA CORRETORA ATIVA, E `??` NAO VIAVA (09/10/2026)
+    ==============================================================
+    MEDIDO: `auto_engine.motor.snapshot()` com o motor DESLIGADO devolve
+
+        broker = ''   market = ''   simbolo = ''   timeframe = ''
+
+    E a linha era
+
+        const broker = String(auto?.broker ?? brokerSalvo ?? 'mt5').toLowerCase();
+
+    (`??` so pega `null` e `undefined`. `'' ?? brokerSalvo` devolve `''` — o
+    operador `??` atravessava a string vazia do motor desligado e o `broker`
+    ficava vazio.)
+
+    ATOISS O `normalizeMarketSource('' , ...)` devolvia `null`, e o `getCandles`
+    LANCAVA "Identidade de mercado invalida" — com o gateway respondendo 300
+    candles (MEDIDO: `_universal_candles('mt5','forex','EURUSD','H1',300)` ->
+    ok, count=300). O operador lia um erro de IDENTIDADE e culparia o servidor.
+
+    E o AGENTS.md §5: o defeito e do lado que le o nome diferente.
+
+    `||` em vez de `??`: aqui a diferenca entre "nao informado" e "vazio" e o
+    que decide qual das DUAS fontes medidas usar. O mesmo operador que produziu
+    o defeito no `market`, na mesma cadeia, na mesma tela.
+
+    MEDIDO NESTA MESMA HORA: o primeiro `edit` desta correcao casou a linha DENTRO
+    deste comentario — que e o exemplo do codigo ANTIGO — e deixou a linha de
+    codigo com `??`. O comentario dizia `||` e o codigo dizia `??`, e o teste
+    reprovava por isso. Um `oldString` sem contexto Finds a primeira ocorrencia, e
+    num arquivo com documentacao longa a primeira ocorrencia raramente e a que
+    voce queria.
+  */
+  /*
+    SEM CORRETORA MEDIDA, SEM CORRETORA NA TELA (11/10/2026, decisao do dono:
+    nada de MT5 fixo). Esta linha era `|| 'mt5'` — e a aba ROBO inteira nascia
+    falando MT5 antes de o operador escolher qualquer corretora. Agora vazio e
+    vazio: `configurado` fica falso, nada e consultado, e o painel diz para
+    escolher a corretora/conta (AGENTS.md 3: recusa com motivo, nunca padrao).
+  */
+  const broker = String(auto?.broker || brokerSalvo || '').toLowerCase();
+
+  /*
+    A PROVA NEGATIVA, E ONDE ELA CAI (09/10/2026)
+    ===============================================
+    Esta linha e a unica alteracao do `??` para o `||`. Desligada, o teste
+    "com o motor desligado, o grafico consulta com o BROKER da conta ativa"
+    REPROVA com `expected 0 to be greater than 0` — nenhuma consulta sai, porque
+    `configurado` e `false` com `broker` vazio.
+
+    E o primeiro `edit` desta correcao nao a achou: casou a linha do exemplo
+    dentro do comentario acima. O comentario passou a dizer `||`, o codigo
+    continuou `??`, e o teste reprovava por isso — o defeito do CODIGO
+    escondido dentro da DOCUMENTACAO do defeito.
+  */
 
   /*
     `pronto1Clique` E `limites` SAIRAM (06/10/2026)
@@ -146,7 +289,7 @@ export default function AcompanharModelos() {
     `null` e a resposta correta quando a corretora nao devolveu. Nao ha default.
   */
   const catalogo = useCatalogoAtivos(
-    (broker || 'mt5') as Parameters<typeof useCatalogoAtivos>[0],
+    (broker || '') as Parameters<typeof useCatalogoAtivos>[0],
     String(auto?.market || '').toLowerCase(),
   );
   const ficha = useMemo(() => fichaDoAtivo(catalogo, simbolo), [catalogo, simbolo]);
@@ -165,10 +308,10 @@ export default function AcompanharModelos() {
   /*
     `marketSalvo` NAO ENTRA NESTA CADEIA, e a razao e o defeito.
 
-    `escopoAtivo()` devolve `mt5:forex` quando a chave nao esta gravada — um
-    DEFAULT, nao uma medida. Usar esse valor como mercado de consulta faz o
-    gateway responder vazio para um par de cripto, e o sintoma vira "a corretora
-    nao devolve candles". E `OperacaoAutomatica` usa `marketSalvo` como ultimo
+    Antes `escopoAtivo()` devolvia `mt5:forex` sem a chave gravada — um DEFAULT,
+    nao uma medida (desde 11/10/2026 ele devolve vazio: nada de MT5 fixo). Usar
+    um default como mercado de consulta faz o gateway responder vazio para um
+    par de cripto, e o sintoma vira "a corretora nao devolve candles". E `OperacaoAutomatica` usa `marketSalvo` como ultimo
     recurso porque ele TEM a ficha antes: ali o fallback so roda com ficha
     carregada, e sem ficha o `configurado` dele ja e falso por outro caminho.
 
@@ -194,6 +337,20 @@ export default function AcompanharModelos() {
     zero, que o gateway rejeitaria com outra mensagem e outra camada de causa.
   */
   const [precoArmado, setPrecoArmado] = useState<number | null>(null);
+  /*
+    `descartado` e a resposta a uma REGRESSAO que este ciclo mediu.
+
+    O preco passou a vir do ultimo fechamento (o dono mandou remover o caminho de
+    1-clique). O efeito que preenche so age enquanto `precoArmado` e `null` — e
+    `Descartar` FAZ ele virar `null`. Resultado: o operador clicava Descartar e
+    o painel voltava sozinho, no mesmo tique. O teste `o painel aceita DESCARTER
+    sem enviar` reprovou e tinha razao.
+
+    Descartar e um gesto do operador e significa "esta ordem nao existe". Entao
+    ele tambem desliga o preenchimento automatico, ate o par ou o periodo mudar —
+    que e quando o operador esta olhando outra coisa e espera o painel de novo.
+  */
+  const [descartado, setDescartado] = useState(false);
   const [volumeArmado, setVolumeArmado] = useState('0.01');
   const [riscoArmado, setRiscoArmado] = useState('2.00');
   const [alvoArmado, setAlvoArmado] = useState('2.00');
@@ -363,19 +520,43 @@ export default function AcompanharModelos() {
   const { sinais, idadeSeg } = useSinaisModelo(simbolo, tempoEscolhido, configurado);
   const [candles, setCandles] = useState<MarketCandle[] | undefined>(undefined);
   const [erroVelas, setErroVelas] = useState('');
+  /*
+    A REFERÊNCIA DOS CANDLE QUE JÁ ESTÃO NA TELA (11/10/2026)
+    =========================================================
+    O intervalo de 30s precisa saber se AINDA HÁ dado em mãos quando a
+    atualização falha — e o `candles` do estado não pode ser lido dentro do
+    `catch`: o closure fica com o valor de quando o efeito montou.
+
+    MEDIDO na captura das 12:24, MT5 fechado: o gráfico mostrava 300 candles e,
+    na mesma tela, "Gráfico indisponível: candles ausentes ou inválidos no
+    upstream". Duas telas da mesma tela discordando — e o AGENTS.md 5 diz o
+    que o operador faz: culpa o servidor, que estava com o dado na mão.
+  */
+  const candlesRef = useRef<MarketCandle[]>([]);
 
   useEffect(() => {
     if (!configurado) return undefined;
     let vivo = true;
+    /*
+      MUDOU O PAR OU O PERIODO, ZERA: o que está na tela é do ativo de antes,
+      e uma falha daqui não pode dizer "mostrando os últimos candles" apontando
+      para o gráfico do ativo errado. O `vivo=false` do efeito anterior já
+      impede a resposta antiga de gravar; o zêro impede a REFERÊNCIA de mentir.
+    */
+    candlesRef.current = [];
+    setCandles(undefined);
     const carregar = async () => {
       try {
         const r = await getCandles({ broker: broker as never, market: market as never, symbol: simbolo }, tempoEscolhido, 300);
         if (vivo) {
+          candlesRef.current = r.candles;
           setCandles(r.candles);
           setErroVelas('');
         }
       } catch (e) {
-        if (vivo) setErroVelas(e instanceof Error ? e.message : 'Candles indisponíveis.');
+        if (!vivo) return;
+        const motivo = e instanceof Error ? e.message : 'Candles indisponíveis.';
+        setErroVelas(erroDeVelas(motivo, candlesRef.current.length > 0));
       }
     };
     void carregar();
@@ -385,6 +566,54 @@ export default function AcompanharModelos() {
       window.clearInterval(t);
     };
   }, [broker, market, simbolo, tempoEscolhido, configurado]);
+
+  /*
+    TROCOU O PAR, VOLTA AO PERIODO DO MODELO DESTE PAR (09/10/2026)
+    ================================================================
+    Sem isto, o operador escolhe BTCUSD em M15, troca para EURUSD — e o grafico
+    continua em M15, que e o periodo do modelo de BTCUSD. O periodo escolhido na
+    barra pertence ao par escolhido na barra.
+
+    E o que o proprio componente ja faz em outro lugar: quando o par ou o
+    periodo muda, o "Descartar" da ordem vale para AQUele ativo e nao para o
+    seguinte. Aqui e a mesma regra, aplicada ao timeframe.
+  */
+  useEffect(() => {
+    setPeriodoDoGrafico('');
+  }, [simbolo]);
+
+  /*
+    O PRECO DA ORDEM E O ULTIMO FECHAMENTO (decisao do dono, 08/10/2026)
+    =====================================================================
+    Antes o preco vinha de `onArmarOrdem`, e o clique no grafico era o caminho
+    de 1-clique que o dono mandou remover. MEDIDO em 08/10 19:35, conta real:
+    dois cliques criaram tres linhas de ordem a 75670,29 / 75470,29 /
+    75270,29 — a um clique do botao `Colocar ordem`. Nenhuma ordem saiu
+    (`Orders=0 | Exec=0`), mas a ordem FICAVA MONTADA.
+
+    Entao o preco nasce do dado que a corretora ja mandou: o ultimo fechamento
+    do ultimo candle. Nao e escolha do operador — e leitura, e por isso nao
+    precisa de clique nenhum. O que o operador ESCOLHE continua sendo o nivel:
+    arrastando a ponta do stop ou do alvo, que recalcula o dinheiro em
+    `onMoverLinhaOrdem`.
+
+    So preenche uma vez, enquanto `precoArmado` for `null`: um efeito que
+    reescrevesse o preco a cada tique transformaria a ordem num preco movel, e
+    o painel mostraria um numero que muda sozinho sem ninguem ler.
+  */
+  useEffect(() => {
+    if (precoArmado !== null || descartado) return;
+    const ultimo = candles?.[candles.length - 1];
+    if (!ultimo) return;
+    const fechamento = Number(ultimo.close);
+    if (!Number.isFinite(fechamento) || fechamento <= 0) return;
+    setPrecoArmado(arredondar(fechamento));
+  }, [candles, precoArmado, descartado]);
+
+  // Mudou o par ou o periodo: o gesto de Descartar valeu para AQUele ativo.
+  useEffect(() => {
+    setDescartado(false);
+  }, [simbolo, tempoEscolhido]);
 
   // Cada sinal ancora no candle fechado mais recente ate a hora do sinal.
   const markers = useMemo(() => {
@@ -407,38 +636,34 @@ export default function AcompanharModelos() {
   }, [candles, sinais]);
 
   /*
-    O ESTADO SEM PAR: A MENSAGEM DIZ ONDE ESCOLHER (06/10/2026)
-    ==========================================================
-    O titulo "Acompanhar modelos" saiu a pedido do dono, e junto com ele a
-    frase que mandava configurar o motor. O nome saia porque o bloco e o
-    GRAFICO, e nao um "acompanhamento" de nada.
+    O ESTADO SEM PAR fica la embaixo, colado no `return` principal (11/10/2026).
+    ============================================================================
+    MEDIDO no app instalado (captura 20:37, Modelos): "Gráfico ao vivo
+    indisponível / Minified React error #310". A #310 e "mais hooks que no
+    render anterior": este `if (!simbolo) return` estava ANTES do `useMemo`
+    das linhas de posicao (e de todo o resto abaixo). Com par sempre
+    preenchido o defeito dormia; sem par presumido (decisao do dono: nada de
+    BTCUSD fixo) o `simbolo` alterna entre `''` e valor, a contagem de hooks
+    muda, e o React derruba a secao inteira no ErrorBoundary.
 
-    A mensagem agora aponta para o lugar onde o controle ESTA — "Par para
-    operar", no topo da operacao automatica, logo acima na mesma pagina. A frase
-    antiga mandava configurar algo que o operador nao ve na tela, que e o
-    "NUNCA va para outra aba" que o painel de cima ja registrava em
-    `OperacaoAutomatica.tsx` pelo mesmo motivo.
-
-    So aparece quando NAO ha par. Com par na barra e motor sem timeframe, o
-    grafico entra e mostra o que tem, em vez de um cartao que nao ajuda.
+    Regra: nenhum `return` condicional antes do ultimo hook. O bloco desceu
+    para depois de todos eles.
   */
-  if (!simbolo) {
-    return (
-      <section className="card compact-card" aria-label="Gráfico ao vivo">
-        <div className="section-head">
-          <div>
-            <h2>Gráfico ao vivo</h2>
-            <span className="muted">
-              Escolha o par em &quot;Par para operar&quot;, no topo da operação automática, para
-              ver o gráfico.
-            </span>
-          </div>
-        </div>
-      </section>
-    );
-  }
 
-  const desatualizado = idadeSeg !== null && idadeSeg > 150;
+  /*
+    A IDADE DA LEITURA FOI PARA O CHIP DE SINAIS (09/10/2026)
+    ==========================================================
+    MEDIDO: a faixa `symbol · H1 · MT5 · desatualizado ha Xs` do cabecalho do
+    PAI saiu — o `PriceChart` ja mostra simbolo, periodo e corretora no
+    cabecalho dele, e repetir aqui era o excedente que o dono pediu para tirar
+    ("e so tres coisas, entao tire o excedente").
+
+    A IDADE nao foi perdida: ela passou a valer no chip de sinais, que ȩ o dado
+    que ela qualifica. "3 sinais no grafico" nao diz ha quanto tempo eles foram
+    lidos, e com a cotacao parada o numero envelhece sem aviso. Agora o chip
+    fica amarelo e diz a idade. Ver a fita em `useSinaisModelo`.
+  */
+  const sinaisVelhos = idadeSeg !== null && idadeSeg > 150;
 
   // Posicoes do par desenhadas no grafico: entrada, SL e TP. SL/TP com
   // ticket arrastam e aplicam ao soltar (estilo MT5).
@@ -508,25 +733,87 @@ export default function AcompanharModelos() {
     continua no gateway e passa a ser chamada pelo clique no grafico, com
     `confirm` e `request_id` como sempre (AGENTS.md 4).
   */
+  /*
+    O ESTADO SEM PAR: A MENSAGEM DIZ ONDE ESCOLHER (06/10/2026, movido para
+    ca em 11/10/2026 — ver o comentario acima: `return` condicional antes do
+    ultimo hook quebrava o React #310).
+
+    O titulo "Acompanhar modelos" saiu a pedido do dono, e junto com ele a
+    frase que mandava configurar o motor. A mensagem aponta para o lugar onde
+    o controle ESTA — "Par para operar", no topo da operacao automatica.
+
+    So aparece quando NAO ha par. Com par na barra e motor sem timeframe, o
+    grafico entra e mostra o que tem, em vez de um cartao que nao ajuda.
+  */
+  if (!simbolo) {
+    return (
+      <section className="card compact-card" aria-label="Gráfico ao vivo">
+        <div className="section-head">
+          <div>
+            <h2>Gráfico ao vivo</h2>
+            <span className="muted">
+              Escolha o par em &quot;Par para operar&quot;, no topo da operação automática, para
+              ver o gráfico.
+            </span>
+          </div>
+        </div>
+      </section>
+    );
+  }
   return (
     <section className="card robo-grafico" aria-label="Gráfico operacional ao vivo">
-      <div className="section-head">
-        <div>
-          <h2>Gráfico ao vivo</h2>
-          <span className="muted">
-            {simbolo} · {tempoEscolhido} · {broker.toUpperCase()}
-            {desatualizado ? ` · desatualizado há ${idadeSeg}s` : ' · ao vivo'}
+      {/*
+        O CABECALHO DO PAI SAIU (09/10/2026)
+        =====================================
+        MEDIDO na captura de 20:16 e na tela ao vivo: o painel mostrava DOIS
+        cabecalhos empilhados — o daqui (`Gráfico ao vivo` + `BTCUSD · H1 · MT5 ·
+        ao vivo`) e o do proprio `PriceChart` (<h2>BTCUSD</h2> + a faixa OHLC com
+        o timeframe). O dono resumiu: "e so tres coisas, entao tire o excedente,
+        deixa apenas mesmos itens".
+
+        O que ficou: o chip dos sinais, que e a UNICA informacao que o grafico
+        nao tem. Simbolo, periodo, corretora e estado da cotacao ja estao todos
+        no cabecalho do `PriceChart`, que ȩ quem tem o dado — repetir aqui seria
+        duas versoes do mesmo numero na mesma tela, e a regra 5 do AGENTS.md
+        sobre dois lados do mesmo dado.
+
+        O `section-head` vazio nao: quando nao ha chip ainda (carregando), o
+        espaco do cabecalho tambem nao aparece.
+      */}
+      {sinais.length > 0 && (
+        <div className="section-head robo-grafico-cabeca">
+          <span
+            className={`chip ${sinaisVelhos ? 'warn' : sinais.length ? 'ok' : 'warn'}`}
+            title={
+              sinaisVelhos && idadeSeg !== null
+                ? `Leitura de ha ${idadeSeg}s — a cotacao pode estar parada`
+                : 'Leitura ao vivo'
+            }
+          >
+            {sinais.length} sinais no gráfico
+            {sinaisVelhos && idadeSeg !== null ? ` · há ${idadeSeg}s` : ''}
           </span>
         </div>
-        <span className={`chip ${desatualizado ? 'warn' : 'ok'}`}>
-          {sinais.length ? `${sinais.length} sinais no gráfico` : 'aguardando sinal'}
-        </span>
-      </div>
+      )}
+      {/*
+        SEM CORRETORA, O GRAFICO DIZ ISSO (11/10/2026, decisao do dono: nada de
+        MT5 fixo). Sem este aviso o grafico nasceria vazio com "Candles reais
+        indisponíveis para esta fonte" — e o operador culparia a fonte por uma
+        escolha que ele ainda nao fez. Vazio aqui e "escolha a corretora/conta
+        na barra inferior ou em Conexões", nunca um grafico de outra corretora.
+      */}
+      {!broker && (
+        <p className="hint" role="status">
+          Sem corretora escolhida. Escolha a conta em Configurações → Conexões
+          (botão Ativar da conexão) para ver o gráfico.
+        </p>
+      )}
       <PriceChart
         symbol={simbolo}
         broker={broker as never}
         market={market as never}
         timeframe={tempoEscolhido as never}
+        onTimeframeChange={(periodo) => setPeriodoDoGrafico(String(periodo).toUpperCase())}
         candles={candles}
         markers={markers}
         lines={linhas}
@@ -535,10 +822,12 @@ export default function AcompanharModelos() {
         onMoveLine={(ticket, kind, price) => void moverLinha(ticket, kind, price)}
         modoOrdem
         ordem={linhasOrdem}
-        onArmarOrdem={(p) => {
-          setErroEnvio('');
-          setPrecoArmado(arredondar(p));
-        }}
+        /*
+          SEM `onArmarOrdem` — decisao do dono, 08/10/2026.
+          O clique no grafico nao arma mais ordem. O preco vem do ULTIMO
+          FECHAMENTO, abaixo, e o operador ajusta o nivel arrastando a ponta do
+          stop ou do alvo. Ver `PriceChart` no efeito do clique.
+        */
         onMoverLinhaOrdem={(papel, preco) => {
           /*
             ARRASTAR A LINHA E RECONFIGURAR O DINHEIRO, e nao mover o preco.
@@ -571,7 +860,49 @@ export default function AcompanharModelos() {
           else setAlvoArmado('0');
         }}
         error={erroVelas}
-        sourceLabel={`${broker.toUpperCase()} · sinais do modelo`}
+        /*
+          SEM CORRETORA, SEM ROTULO DE FONTE (11/10/2026, nada de MT5 fixo).
+          MEDIDO na captura do dono (Risco, 20:37): "Candles OHLC reais · ·
+          sinais do modelo" — o `broker.toUpperCase()` vazio com o resto da
+          frase em volta. `undefined` aqui deixa o `PriceChart` esconder a
+          linha da fonte inteira (ver `fonteDoGrafico`).
+        */
+        sourceLabel={broker ? `${broker.toUpperCase()} · sinais do modelo` : undefined}
+        /*
+          COMPRAR E VENDER PELO MENU DO BOTAO DIREITO (09/10/2026)
+          ==========================================================
+          MEDIDO na captura da XM (`Screenshot 2026-10-09 201959.png`): o menu
+          direito do grafico tem TRADE no topo, com compra e venda. O dono pediu:
+          "quando tem direito tem que abrir todas funcoes do menu".
+
+          NAO envia ordem e NAO cria linha. Recebe o lado e o PRECO onde o
+          operador clicou, e so escolhe o lado da ordem que o painel abaixo
+          mostra. O que manda continua sendo o botao `Colocar ordem`.
+
+          E a mesma regra de 08/10/2026: o clique sozinho nao pode montar uma
+          ordem a um clique do envio (MEDIDO entao: dois cliques criaram tres
+          linhas montadas na conta real). O menu direito e o mesmo perigo por
+          outro caminho, e por isso ele so CHEGA AQUI — na escolha do lado, com
+          o preco para a mesa conferir.
+        */
+        onOperarNoMenu={(escolhido) => setLado(escolhido === 'compra' ? 'BUY' : 'SELL')}
+        onEscolherPreco={(papel, precoNoPonto) => {
+          /*
+            O stop e o alvo nascem no PRECO onde o operador apontou, e nao no
+            meio do grafico — que e o que um clique em qualquer pixel daria.
+
+            O valor ȩ DISTANCIA em dinheiro, porque ȩ assim que o painel pense
+            e que o dono descreveu: quem aceita perder 2,00 ve 2,00. O calculo
+            ȩ o mesmo do arraste (`risco.ts`), pela mesma razao: dois lugares
+            com a mesma conta ȉ dois lugares para divergir.
+          */
+          if (precoNoPonto === null) return;
+          const referencia = precoArmado ?? precoNoPonto;
+          const distancia = Math.abs(precoNoPonto - referencia);
+          const risco = Math.floor(distancia * volumeNum * (contratoOk ? contrato! : 1) * 100) / 100;
+          if (papel === 'sl') setRiscoArmado(risco.toFixed(2));
+          else setAlvoArmado(risco.toFixed(2));
+        }}
       />
       {/*
         O PAINEL DE CONFIRMACAO
@@ -783,6 +1114,7 @@ export default function AcompanharModelos() {
             type="button"
             className="btn ghost"
             onClick={() => {
+              setDescartado(true);
               setPrecoArmado(null);
               setErroEnvio('');
             }}

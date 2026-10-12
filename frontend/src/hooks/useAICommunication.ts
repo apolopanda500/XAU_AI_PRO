@@ -256,6 +256,22 @@ export function useInferenciaIA(timeframe: string, enabled: boolean) {
           motivo: 'IA desligada pelo operador',
         } as unknown as ResultadoInferencia;
         setMotivo(parado.motivo);
+        /*
+          O MOTIVO NAO SOBRESCREVE O INTERRUPTOR (11/10/2026)
+          ===================================================
+          MEDIDO na captura do dono (12:25 → 12:27, 2 minutos): `AI: Ativa` caiu
+          para `AI: Inativa` sem ninguém tocar no botão. A causa e que
+          `ativar(true)` grava 'Ativa' UMA vez, e o loop seguinte de `inferir()`
+          chama `setAiStatus('IA: ' + motivo)` — que e `IA desligada pelo
+          operador`, `sem inferencia`, ou qualquer outro. O interruptor diz uma
+          coisa, o motivo diz outra, e o ultimo a escrever vence: o operador
+          via o cabecalho mudar sozinho e perdia a confianca nele (§5).
+
+          Aqui o motivo so entra quando a IA esta LIGADA. Desligada, o estado
+          do interruptor e a resposta, e ele prevalece — porque e o dono da
+          tela. A mensagem continua visivel no `motivo` do hook (o painel a
+          mostra), so nao apaga mais o cabecalho.
+        */
         return parado;
       }
       setCarregando(true);

@@ -52,7 +52,43 @@ from backend import gateway_server
 from Python.model_registry import model_catalog
 
 HOST = "127.0.0.1"
-PORT = 9001
+
+
+def _porta_gateway() -> int:
+    """Porta do gateway, por `XAU_GATEWAY_PORT`, padrao 9001.
+
+    MEDIDO em 09/10/2026 23:41: com o MT5 aberto, o app abria a janela e o
+    gateway morria logo depois de subir:
+
+        PermissionError: [WinError 10013]
+          mt5_gateway.py -> gateway_server.py:147 criar_servidor -> server_bind
+
+    Quem ocupava `127.0.0.1:9001` era `terminal64`, porque
+    `config/assistant.ini` do MT5 tem `[MCP.MetaTrader] Enable=1` com
+    `Endpoint=http://127.0.0.1:9001/mcp` — o MT5 sobe o servidor MCP dele
+    exatamente na porta que este gateway usa. Nao e o MT5 "roubando" a porta: os
+    dois foram configurados para o mesmo numero.
+
+    Valor invalido cai no padrao em vez de derrubar o gateway: porta errada
+    leitura em silencio e' pior que porta errada recusada. `XAU_GATEWAY_PORT`
+    segue o mesmo spirit do token de sessao (AGENTS.md §4): o ambiente vence o
+    `.env`.
+    """
+    bruto = os.environ.get("XAU_GATEWAY_PORT", "").strip()
+    if not bruto:
+        return 9001
+    try:
+        porta = int(bruto)
+    except ValueError:
+        print(f"[gateway] XAU_GATEWAY_PORT invalido: {bruto!r} -> usando 9001")
+        return 9001
+    if not (1 <= porta <= 65535):
+        print(f"[gateway] XAU_GATEWAY_PORT fora da faixa: {porta} -> usando 9001")
+        return 9001
+    return porta
+
+
+PORT = _porta_gateway()
 
 
 def _gateway_build() -> str:
@@ -160,7 +196,20 @@ RATE_LIMIT_CMD_MAX = int(os.getenv("XAU_RATE_LIMIT_CMD", "0") or 0)  # comandos/
 _RATE_STATE = {"count": 0, "window": 0.0}
 _RATE_STATE_CMD = {"count": 0, "window": 0.0}
 CONFIG_DEFAULTS = {"theme": "dark", "language": "pt-BR", "precision": 2, "marketAutoRefresh": True, "dashboardAutoRefresh": True, "historyAutoRefresh": True}
-DEFAULT_CORS_ORIGINS = {"http://127.0.0.1:1420", "http://localhost:1420", "http://127.0.0.1:3000", "http://localhost:3000", "http://127.0.0.1:9001", "http://localhost:9001", "http://tauri.localhost", "https://tauri.localhost"}
+DEFAULT_CORS_ORIGINS = {
+    "http://127.0.0.1:1420",
+    "http://localhost:1420",
+    "http://127.0.0.1:3000",
+    "http://localhost:3000",
+    # A origem da propria porta do gateway entra derivando de `PORT`: com a
+    # porta movida por `XAU_GATEWAY_PORT`, um CORS fixo em 9001 deixaria de
+    # valer e o symptom seria "o navegador bloqueia" — o mesmo defeito de
+    # nome e medida, so que agora do outro lado (AGENTS.md §5).
+    f"http://127.0.0.1:{PORT}",
+    f"http://localhost:{PORT}",
+    "http://tauri.localhost",
+    "https://tauri.localhost",
+}
 CORS_ORIGINS = {item.strip() for item in os.getenv("XAU_CORS_ORIGINS", "").split(",") if item.strip()} or set(DEFAULT_CORS_ORIGINS)
 
 def _safe_number(value) -> float:
@@ -1028,14 +1077,39 @@ def _universal_candles(broker: str, market: str, symbol: str, timeframe: str = "
         leitura = _para_corretora(broker, symbol) or symbol
     except Exception:
         leitura = symbol
-    resposta_mt5 = _cached_market(
-        key,
-        lambda: _candles_from_raw(
-            "mt5", market, symbol,
-            _mt5_candles(leitura, timeframe, limit).get("candles", []),
-            timeframe, "copy_rates_from_pos",
-        ),
-    )
+
+    def _leitura_mt5() -> dict:
+        """
+        O MOTIVO E O DA SESSAO, NAO UM GENERICO (11/10/2026)
+        ====================================================
+        MEDIDO na captura das 12:24, MT5 fechado: a tela dizia "candles
+        ausentes ou inválidos no upstream" — o texto generico de
+        `_candles_from_raw` —, e o motivo REAL estava sendo JOGADO FORA aqui:
+        `_mt5_candles` ja separa "terminal MT5 nao conectado ou nao autorizado"
+        (`terminal_disconnected`) de "sem candles para o simbolo"
+        (`no_candles_for_symbol`), mas so o `.get("candles", [])` era repassado,
+        e a lista vazia virava o generico do outro lado.
+
+        E o AGENTS.md 5 na forma mais cara: o operador le "upstream" e culpa a
+        corretora, quando a resposta certa — "abra o MetaTrader 5" — ja tinha
+        sido escrita uma funcao acima. O sintoma aponta pro lado errado.
+        """
+        interna = _mt5_candles(leitura, timeframe, limit)
+        linhas = interna.get("candles", []) if isinstance(interna, dict) else (interna or [])
+        if linhas:
+            return _candles_from_raw("mt5", market, symbol, linhas, timeframe, "copy_rates_from_pos")
+        resposta = _candles_from_raw("mt5", market, symbol, [], timeframe, "copy_rates_from_pos")
+        if isinstance(interna, dict):
+            motivo = str(interna.get("error") or "").strip()
+            codigo = str(interna.get("reason_code") or "").strip()
+            if motivo or codigo:
+                if motivo:
+                    resposta["error"] = motivo
+                if codigo:
+                    resposta["reason_code"] = codigo
+        return resposta
+
+    resposta_mt5 = _cached_market(key, _leitura_mt5)
     if broker == "mt5":
         return _com_fallback_publico(resposta_mt5, symbol, timeframe, limit)
     client = _exchange_client(broker, market)
@@ -1928,7 +2002,37 @@ def _history(days: int = 30, symbol: str = "") -> dict:
 
 
 
-_TIMEFRAME_MAP = {"M1": 1, "M5": 5, "M15": 15, "M30": 30, "H1": 16385, "H4": 16388, "D1": 16408}
+# A JANELA DE TEMPOS DO GRAFICO (09/10/2026)
+# ===========================================
+# MEDIDO na XM (`my.xm.com/pt/symbol-info/BTCUSD`): a barra de baixo do
+# grafico e `1H 1D 1W 1M 3M 1Y MAX`. Aqui eram sete botoes, de M1 a D1, e o
+# operador nao conseguia ver a semana nem o mes — que sao os periodos em que a
+# maior parte das decisoes deForex e tomada.
+#
+# MEDIDO no MT5 desta maquina, conta 391773676 (XMGlobal-MT5 14):
+#
+#     TIMEFRAME_W1  = 32769   -> GOLD W1  = 5 barras
+#     TIMEFRAME_MN1 = 49153   -> GOLD MN1 = 5 barras
+#
+# Entao o terminal aceita, e a tela e que nao oferecia. Um timeframe no botao
+# que o gateway recusa e o AGENTS.md §9 pelo avesso: controle que promete e nao
+# entrega.
+#
+# `3M` e `1Y` NAO entraram, e a razao e medida: o MT5 nao tem agregacao propria
+# de trimestre nem de ano (`TIMEFRAME_*` vai de M1 a MN1). Um `3M` aqui seria
+# soma de 12 semanas feita na mao, e o preco viria de uma vela que o operador
+# nao consegue ver. `MAX` tambem nao: e um intervalo, nao um timeframe.
+_TIMEFRAME_MAP = {
+    "M1": 1,
+    "M5": 5,
+    "M15": 15,
+    "M30": 30,
+    "H1": 16385,
+    "H4": 16388,
+    "D1": 16408,
+    "W1": 32769,
+    "MN1": 49153,
+}
 
 # Instante em que ESTE processo subiu. O arquivo de telemetria e um historico
 # permanente que sobrevive a reinicios e a troca de conta; o high-water mark do

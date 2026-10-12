@@ -4,6 +4,10 @@
 // Android: o WebView não pode usar 127.0.0.1 (o gateway roda no PC/VPS do trader).
 // Definir VITE_API_BASE/VITE_WS_URL no build (.env.production) OU ajustar em runtime
 // pela tela de conexão (localStorage 'xau-api-base' / 'xau-ws-url').
+//
+// A PORTA do localhost desktop NÃO morre aqui: vem de `lib/portas.ts`, que a
+// pergunta ao Tauri. Ver o motivo medido em `portas.ts`.
+import { baseGatewayLocal, ehGatewayLocal, portaGateway, portaWsMercado } from './portas';
 type ViteEnv = { env?: Record<string, string | undefined> };
 const viteEnv: ViteEnv = (import.meta as unknown as ViteEnv) ?? {};
 
@@ -23,24 +27,41 @@ export function isMobileRuntime(): boolean {
 }
 
 // Base HTTP do gateway.
-//   Desktop: 127.0.0.1:9001 (gateway local empacotado com o app)
+//   Desktop: a base que o Tauri mandou no boot (ver `lib/portas.ts`) — e o
+//            gateway local empacotado com o app. Sem o Tauri, 127.0.0.1:9001.
 //   Android: VITE_API_BASE (servidor remoto) — fallback para o gateway padrão.
+//
+// MEDIDO em 09/10/2026: aqui estava `'http://127.0.0.1:9001'` escrito à mão,
+// e o gateway subindo em 9011. A tela inteira ficava sem back-end — e o
+// operador via "Falha ao inicializar o ambiente local seguro", sem nenhuma
+// pista de que a porta era o motivo. A porta é uma MEDIDA, e quem mede é o
+// Tauri (que lê `XAU_GATEWAY_PORT`). Aqui só se usa o valor que ele mandou.
 export function apiBase(): string {
   const explicit = stored('xau-api-base') || viteEnv.env?.VITE_API_BASE;
   if (explicit) return explicit;
+  const local = baseGatewayLocal();
+  if (local) return local;
   // Sem configuração explícita: no desktop o gateway local é o default.
   if (isMobileRuntime()) {
     // Evita apontar para loopback no celular (o gateway não roda no dispositivo).
     console.warn('[api] Android sem VITE_API_BASE/xau-api-base: configure o gateway remoto.');
   }
-  return 'http://127.0.0.1:9001';
+  return `http://127.0.0.1:${portaGateway()}`;
 }
 
 // WebSocket de mercado.
-//   Desktop: ws://127.0.0.1:9002/ws/market
+//   Desktop: ws://127.0.0.1:<XAU_WS_PORT>/ws/market — o Tauri manda a porta.
 //   Android: wss remoto via VITE_WS_URL / localStorage 'xau-ws-url'
+//
+// MEDIDO em 09/10/2026: aqui estava `ws://127.0.0.1:9002` escrito à mão. O Rust
+// já lia `XAU_WS_PORT` — e o compilador acusava `porta_ws is never used`, com
+// razão. Funcionava por ACASO, porque o padrão do Rust e o padrão do frontend
+// eram o mesmo número; no dia em que a porta fosse movida, o Rust subiria na
+// nova e o preço deixaria de atualizar, sem erro nenhum.
 export function wsUrl(): string {
-  return stored('xau-ws-url') || viteEnv.env?.VITE_WS_URL || 'ws://127.0.0.1:9002/ws/market';
+  const explicita = stored('xau-ws-url') || viteEnv.env?.VITE_WS_URL;
+  if (explicita) return explicita;
+  return `ws://127.0.0.1:${portaWsMercado()}/ws/market`;
 }
 
 // ---------------------------------------------------------------------------
@@ -138,9 +159,13 @@ export function isGatewayRequest(input: unknown): boolean {
   if (!/^https?:\/\//i.test(raw)) return false;
   try {
     const url = new URL(raw);
-    const local =
-      url.port === '9001' && (url.hostname === '127.0.0.1' || url.hostname === 'localhost');
-    return local || url.origin === new URL(apiBase()).origin;
+    /*
+      Era `url.port === '9001' && loopback`. Com o gateway em 9011 isso dava
+      `false` para a própria requisição do app, e o token de sessão deixava de
+      ser injetado — o gateway responderia 401 em tudo e o sintoma seria "o app
+      perdeu a sessão". `ehGatewayLocal` compara com a base RESOLVIDA.
+    */
+    return ehGatewayLocal(url) || url.origin === new URL(apiBase()).origin;
   } catch {
     return false;
   }

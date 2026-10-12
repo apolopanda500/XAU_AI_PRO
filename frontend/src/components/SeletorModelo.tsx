@@ -133,7 +133,11 @@ export default function SeletorModelo() {
     gráfico.
   */
   const { broker: brokerEscopo, market: mercadoEscopo } = escopoAtivo();
-  const broker = String(brokerEscopo || 'mt5') as Broker;
+  // SEM CORRETORA MEDIDA, SEM CORRETORA AQUI (11/10/2026, decisao do dono:
+  // nada de MT5 fixo). Era `|| 'mt5'` — e o seletor listava o catalogo de uma
+  // corretora que ninguem escolheu. Com vazio, o catalogo vem vazio (ver
+  // `useCatalogoAtivos`) e os campos pedem a escolha em vez de listar MT5.
+  const broker = String(brokerEscopo || '') as Broker;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -160,27 +164,63 @@ export default function SeletorModelo() {
   const simbolos = useMemo(() => catalogo.map((a) => a.symbol), [catalogo]);
   const comModelo = useMemo(() => new Set(modelos.map((m) => m.symbol)), [modelos]);
 
+  /*
+    A LISTA DE PARES: SO OS QUE TEM MODELO, E O RESTO A UM CLIQUE (09/10/2026)
+    ==========================================================================
+    MEDIDO no app instalado, 17:09, com o seletor aberto na conta 391773676:
+    a lista comeca em `EUR50CASH (sem modelo)`, `EURAUD (sem modelo)`,
+    `EURAZE (sem modelo)`... e segue por centenas de pares do mesmo tipo.
+
+    Sao 1639 ativos na conta e 28 com modelo treinado. Ou seja: **1611 das
+    opcoes nao podem ser operadas**, porque `_trava_instrumento()` recusa ciclo
+    sem modelo. O operador tinha de rolar uma lista de 1639 itens para achar os
+    28 que servem — e cada item nao operavel ainda carregava um sufixo de texto
+    que ocupava espaco.
+
+    O que muda:
+
+    - A lista mostra os **28 com modelo**, primeiro. E o que o operador pode
+      usar.
+    - Um interruptor no rodape do campo mostra **os 1639**, para quem precisa
+      ver a corretora inteira. O catalogo NAO e escondido: e so tirado da
+      frente.
+    - Se o par **ja escolhido** nao tem modelo, ele continua na lista, marcado.
+      Sem isso, escolher um par sem modelo e recarregar a tela deixaria o
+      operador sem ver o que estava selecionado — e o campo mentindo sobre o
+      proprio valor.
+
+    MEDIDO antes e depois da lista: `1639 opcoes` -> `28 opcoes`.
+  */
+  const [mostrarTodos, setMostrarTodos] = useState(false);
+  const simbolosComModelo = useMemo(() => {
+    const comModeloOrdenados = simbolos.filter((s) => comModelo.has(s));
+    if (mostrarTodos) return simbolos;
+    return comModeloOrdenados;
+  }, [simbolos, comModelo, mostrarTodos]);
+  const totalSemModelo = useMemo(
+    () => simbolos.length - simbolos.filter((s) => comModelo.has(s)).length,
+    [simbolos, comModelo],
+  );
+
   const simbolo = useMemo(() => {
     const atual = (selectedSymbol || '').toUpperCase();
     // O par já escolhido vence, desde que ainda exista no catálogo.
     if (atual && simbolos.includes(atual)) return atual;
 
     /*
-      SEM ESCOLHA, O PAR VEM DO MODELO, E NAO DO PRIMEIRO ITEM DA LISTA.
+      SEM ESCOLHA, SEM PAR (11/10/2026, decisao do dono: nada de BTCUSD fixo).
 
-      MEDIDO (05/10/2026): caía no `simbolos[0]` do catálogo. Com 1639 ativos na
-      conta real, esse primeiro item é arbitrário — e a tela reclamou "gráfico
-      preto sem nada": o container desenhava, mas aquele par não tinha candle
-      naquele mercado. Um par escolhido no escuro é pior do que nenhum par.
+      MEDIDO: sem par escolhido, esta linha caia no primeiro modelo publicavel
+      da resposta da API — na pratica, BTCUSD — e o efeito abaixo GRAVAVA esse
+      par no store. A aba ROBO inteira nascia operando BTCUSD sem ninguem ter
+      escolhido: par, grafico, preco e modelo, tudo do primeiro item da lista.
 
-      A ordem agora é: par já escolhido → par de um modelo PUBLICÁVEL e com
-      artefato → nada. O motivo é concreto: par sem modelo não é operado
-      automaticamente, então não é um bom padrão para uma tela de operação.
+      E o AGENTS.md §3 na forma mais direta: simbolo vazio e RECUSA COM MOTIVO,
+      nunca um ativo padrao. Sem escolha o campo mostra o placeholder e o resto
+      da tela recusa nomeando este seletor.
     */
-    const comModeloOperavel = modelos.find((m) => m.publicable && m.pkl_present)?.symbol;
-    if (comModeloOperavel && simbolos.includes(comModeloOperavel)) return comModeloOperavel;
-    return atual ?? '';
-  }, [selectedSymbol, simbolos, modelos]);
+    return '';
+  }, [selectedSymbol, simbolos]);
 
   const visiveis = useMemo(
     () => modelos.filter((m) => m.symbol === simbolo),
@@ -208,15 +248,27 @@ export default function SeletorModelo() {
     const doPeriodo = timeframeDoMotor
       ? visiveis.find((m) => m.timeframe.toUpperCase() === timeframeDoMotor)
       : undefined;
-    return doPeriodo ?? visiveis[0] ?? null;
+    // SEM MODELO DO PERIODO, NADA (11/10/2026): era `?? visiveis[0]` — o
+    // primeiro da resposta da API, que na pratica exibia um modelo de outro
+    // periodo com toda a certeza. A frase abaixo passa a dizer que nao ha
+    // modelo para o periodo (ver o `<select>`: placeholder em vez de valor).
+    return doPeriodo ?? null;
   }, [visiveis, timeframeDoMotor]);
 
+  /*
+    SEM CANDIDATO, SEM MODELO (11/10/2026). Era "primeiro publicavel, senao o
+    primeiro da lista" — e com o par vindo do primeiro modelo publicavel, a
+    combinacao escolhia SOZINHA o par e o modelo da tela inicial (na pratica,
+    BTCUSD). O operador escolhia o modelo; a tela mostra o placeholder ate la.
+  */
+  const modeloReservado = useMemo(() => candidatoDoPeriodo, [candidatoDoPeriodo]);
+
   useEffect(() => {
-    const alvo = candidatoDoPeriodo?.id ?? '';
+    const alvo = modeloReservado?.id ?? '';
     // Só troca quando o alvo MUDA. Sem esta guarda o efeito reescrevia o
     // estado a cada render e o `<select>` perdia a seleção do operador.
     if (alvo && alvo !== modeloId) setModeloId(alvo);
-  }, [candidatoDoPeriodo, modeloId]);
+  }, [modeloReservado, modeloId]);
 
   /*
     Trocar de par ZERA o modelo escolhido.
@@ -234,24 +286,12 @@ export default function SeletorModelo() {
   );
 
   /*
-    O PAR EXIBIDO TEM QUE SER O PAR GRAVADO.
-
-    MEDIDO (05/10/2026): o painel escrevia "ESCOLHE O PAR EM 'PAR PARA OPERAR'
-    ..." e o AUTO nao ligava — com o dropdown MOSTRANDO um par.
-
-    A causa: `simbolo` e um `useMemo` que cai no primeiro item do catalogo
-    quando o estado esta vazio. O `<select>` renderizava esse valor, o operador
-    via um par na tela, e o `selectedSymbol` continuava `''` — porque NADA
-    gravava o valor de display no estado. O painel automatico lia o estado, via
-    par vazio, e recusava.
-
-    Mostrar um valor que nao esta gravado e a forma mais cara de divergencia: a
-    tela afirma uma coisa e o motor tem outra. Por isso aqui o valor de display
-    e GRAVADO, e nao apenas mostrado.
+    A GRAVACAO AUTOMATICA SAIU (11/10/2026, decisao do dono: nada de BTCUSD
+    fixo). Este efeito gravava no store o par que o `simbolo` derivava — e o
+    `simbolo` caia no primeiro modelo publicavel, ou seja, gravava BTCUSD sem
+    ninguem escolher. Agora `simbolo` so repete o `selectedSymbol` ja gravado
+    (ou `''`), e quem grava e o `onChange` do operador (`escolherAtivo`).
   */
-  useEffect(() => {
-    if (simbolo && simbolo !== selectedSymbol) setSelectedSymbol(simbolo);
-  }, [simbolo, selectedSymbol, setSelectedSymbol]);
 
   const escolhido = useMemo(
     () => visiveis.find((m) => m.id === modeloId) ?? null,
@@ -284,16 +324,46 @@ export default function SeletorModelo() {
           <select
             aria-label="Par para operar"
             value={simbolo}
-            disabled={!simbolos.length}
+            disabled={!simbolosComModelo.length}
             onChange={(e) => escolherAtivo(e.target.value)}
           >
-            {!simbolos.length && <option value={simbolo}>{simbolo || '—'}</option>}
-            {simbolos.map((s) => (
+            {/*
+              SEM PAR, PLACEHOLDER — nunca o primeiro da lista (11/10/2026).
+              Um `<select>` sem opcao para o valor `''` mostra o primeiro item
+              como se fosse escolha, e era assim que o BTCUSD nascia "fixo".
+            */}
+            {!simbolo && <option value="">Escolha o par…</option>}
+            {!simbolosComModelo.length && (
+              <option value={simbolo}>{simbolo || '—'}</option>
+            )}
+            {/*
+              O par JA ESCOLHIDO sempre aparece, mesmo sem modelo. Sem esta
+              linha, quem escolheu um par sem modelo veria o campo vazio ao
+              recarregar — e o campo estaria mentindo sobre o proprio valor.
+            */}
+            {simbolo &&
+              !simbolosComModelo.includes(simbolo) && (
+                <option value={simbolo}>{simbolo} (sem modelo)</option>
+              )}
+            {simbolosComModelo.map((s) => (
               <option key={s} value={s}>
-                {comModelo.has(s) ? s : `${s} (sem modelo)`}
+                {s}
               </option>
             ))}
           </select>
+          {totalSemModelo > 0 && (
+            <button
+              type="button"
+              className="btn xs ghost robo-par-ver-todos"
+              aria-pressed={mostrarTodos}
+              onClick={() => setMostrarTodos((v) => !v)}
+              title={`Mostrar os ${simbolos.length} ativos da corretora, incluindo os ${totalSemModelo} que ainda não têm modelo treinado`}
+            >
+              {mostrarTodos
+                ? `Mostrar só os que podem operar`
+                : `Ver os ${totalSemModelo} sem modelo`}
+            </button>
+          )}
         </label>
 
         <label className="field robo-par-modelo">
@@ -304,11 +374,14 @@ export default function SeletorModelo() {
             disabled={!visiveis.length}
             onChange={(e) => setModeloId(e.target.value)}
           >
+            {!modeloId && visiveis.length > 0 && (
+              <option value="">Escolha o modelo…</option>
+            )}
             {!visiveis.length && (
               <option value="">
                 {simbolo
                   ? `Nenhum modelo carregável para ${simbolo}`
-                  : 'Escolha um par na barra inferior'}
+                  : 'Escolha o par ao lado ou na barra inferior'}
               </option>
             )}
             {visiveis.map((m) => (
@@ -326,8 +399,7 @@ export default function SeletorModelo() {
       ) : null}
       {escolhido && (
         <p className="robo-par-nota">
-          O motor vai operar <strong>{escolhido.symbol}</strong> no período{' '}
-          <strong>{escolhido.timeframe}</strong> quando o automático estiver ligado.
+          O motor opera neste modelo quando o automático estiver ligado.
         </p>
       )}
     </div>

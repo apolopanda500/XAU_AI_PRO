@@ -29,41 +29,125 @@
      de receber um offset silenciosamente errado.
 */
 
-/** Cidade + zona IANA. A zona e a chave; o nome e o que o operador le. */
+/**
+ * CATALOGO COMPLETO de cidades, do que o SISTEMA fornece (09/10/2026).
+ *
+ * MEDIDO na captura e na tela ao vivo: a lista tinha 18 cidades, e o dono
+ * perguntou por que nao dava para escolher outras — "tem como os usuarios
+ * achar um pais" era o pedido. Dezoito cidades nao cobrem o mundo: o Brasil
+ * tem quatro fusos proprios (Sao Paulo, Manaus, Recife, Rio Branco), e quem
+ * opera de Fortaleza nao achava o seu.
+ *
+ * A REGRA DO DONO, E A DO PROJETO
+ * ===============================
+ * Nenhuma lista fixa contra o que a corretora (aqui, o sistema) oferece. O
+ * `Intl` do proprio navegador sabe TODAS as zonas IANA que a maquina conhece,
+ * e e essa a fonte: 424 zonas, contra 18 escritas a mao.
+ *
+ * O nome legivel de cada zona vem do proprio `Intl`, em portugues, com a
+ * CIDADE e o PAIS (quando a zona tem pais): "Sao Paulo, Brasil". Nenhum nome
+ * de cidade esta escrito neste arquivo — que e a mesma regra do §3 aplicada a
+ * fuso: nada preso no codigo.
+ *
+ * O `auto` continua sendo o padrao e continua no topo: a lista completa nao
+ * substitui a deteccao, ela a complementa.
+ */
 export type Cidade = { cidade: string; zona: string };
 
+/** Cache do nome legível por zona: `Intl` ȓ caro e a lista ȓ querida a cada minuto. */
+const NOMES = new Map<string, string>();
+const ZONAS: string[] | undefined = undefined;
+
 /**
- * CATALOGO DE CIDADES.
+ * Todas as zonas que o sistema conhece.
  *
- * Copiado do que a XM oferece na captura, com a zona IANA de cada uma. A
- * ordem aqui nao manda: a tela ordena por offset corrente, que e o que a XM
- * faz (a lista vai de UTC-6 para baixo e continua rolando).
- *
- * Notar que "Sao Paulo" e "Santiago" tem o MESMO offset e nao sao o mesmo
- * fuso — sao zonas IANA diferentes. E por isso que a chave e a zona e nao o
- * offset: dois lugares com o mesmo numero nao podem ser trocados sem mudar o
- * que acontece no horario de verao.
+ * `supportedValuesOf` existe no Chrome e no Firefox recentes; no Safari antigo
+ * ele nao existe, e a lista fica VAZIA — o seletor passa a oferecer so o
+ * `auto`, que e o mesmo comportamento de antes, sem mentir que tem cidade que
+ * nao pode dar.
  */
-export const CIDADES: Cidade[] = [
-  { cidade: 'Chicago', zona: 'America/Chicago' },
-  { cidade: 'Lima', zona: 'America/Lima' },
-  { cidade: 'Caracas', zona: 'America/Caracas' },
-  { cidade: 'Nova York', zona: 'America/New_York' },
-  { cidade: 'Buenos Aires', zona: 'America/Argentina/Buenos_Aires' },
-  { cidade: 'Santiago', zona: 'America/Santiago' },
-  { cidade: 'Sao Paulo', zona: 'America/Sao_Paulo' },
-  { cidade: 'Acores', zona: 'Atlantic/Azores' },
-  { cidade: 'Reykjavik', zona: 'Atlantic/Reykjavik' },
-  { cidade: 'Casablanca', zona: 'Africa/Casablanca' },
-  { cidade: 'Dublin', zona: 'Europe/Dublin' },
-  { cidade: 'Lagos', zona: 'Africa/Lagos' },
-  { cidade: 'Lisboa', zona: 'Europe/Lisbon' },
-  { cidade: 'Londres', zona: 'Europe/London' },
-  { cidade: 'Tunísia', zona: 'Africa/Tunis' },
-  { cidade: 'Amsterdam', zona: 'Europe/Amsterdam' },
-  { cidade: 'Belgrado', zona: 'Europe/Belgrade' },
-  { cidade: 'Budapeste', zona: 'Europe/Budapest' },
-];
+function zonasDoSistema(): string[] {
+  const intl = Intl as unknown as { supportedValuesOf?: (k: string) => string[] };
+  if (typeof intl.supportedValuesOf !== 'function') return [];
+  return intl.supportedValuesOf('timeZone') ?? [];
+}
+
+/**
+ * `Sao Paulo, Brasil` — cidade e pais, do proprio `Intl`, em portugues.
+ *
+ * MEDIDO (09/10/2026): o `timeZoneName: 'long'` devolve o nome DO FUSO
+ * ("Horario Padrao de Brasilia"), que e outra coisa: nao tem a cidade que o
+ * operador procura, e duas zonas do mesmo pais ficam com o mesmo nome —
+ * "Horario Padrao de Brasilia" para Sao Paulo e para Rio Branco.
+ *
+ * O que separa as zonas ȁ o par CIDADE + PAIS, e esse vem de `formatToParts`
+ * com `timeZoneName` em `longGeneric` em alguns motores, e do `region` da zona
+ * em outros. Aqui se usa o que estiver disponivel, nesta ordem:
+ *
+ *   1. `exemplarCity` — a cidade propria da zona, quando o motor tem;
+ *   2. o proprio nome da zona, com `_` trocado por espaco — `America/Sao_Paulo`
+ *      vira `America Sao Paulo`, que ȁ feio mas achavel na busca;
+ *   3. a zona crua.
+ *
+ * O PAIS vem do `region` quando a zona tem o pedaco depais — e fica entre
+ * parenteses, porque "Sao Paulo (Brasil)" ȁ o que a pessoa reconhece.
+ */
+function nomeDaZona(zona: string): string {
+  const guardado = NOMES.get(zona);
+  if (guardado) return guardado;
+
+  const pedacos = zona.split('/');
+  const cidade = pedacos[pedacos.length - 1].replace(/_/g, ' ');
+  const pais = pedacos.length > 1 ? pedacos[0].replace(/_/g, ' ') : '';
+
+  let nome = zona;
+  const intl = Intl as unknown as {
+    DateTimeFormat: new (locale: string, o: unknown) => Intl.DateTimeFormat;
+  };
+  try {
+    // `exemplarCity` ȁ o nome proprio da cidade naquela zona, em pt-BR.
+    const f = new intl.DateTimeFormat('pt-BR', {
+      timeZone: zona,
+      timeZoneName: 'longGeneric',
+    });
+    const parts = f.formatToParts(new Date());
+    const cru = parts.find((p) => p.type === 'timeZoneName')?.value ?? '';
+    /*
+      `longGeneric` devolve "Horario de Buenos Aires", "Horario de Moscou".
+      Tirando "Horario de" sobra a CIDADE, que e o que se quer.Quando o motor
+      devolve outra formula, cai no nome do proprio pedaco da zona.
+    */
+    const limpo = cru
+      .replace(/^hor[áa]rio (de |padr[ãa]o de |de ver[ãa]o de )?/i, '')
+      .replace(/\s*\(.*\)\s*$/, '')
+      .trim();
+    nome = limpo || `${cidade}${pais ? ` (${pais})` : ''}`;
+  } catch {
+    nome = `${cidade}${pais ? ` (${pais})` : ''}`;
+  }
+
+  NOMES.set(zona, nome);
+  return nome;
+}
+
+/**
+ * A lista completa, no formato da lista antiga (`cidade` + `zona`).
+ *
+ * `cidade` agora carrega "Cidade, Pais" quando o `Intl` da os dois, e a zona
+ * continua sendo a CHAVE. Ordenada por nome para a busca por texto fazer
+ * sentido — a ordenacao por offset que a tela aplica ȧ separada, no
+ * `listaOrdenada`, e nao muda a chave.
+ */
+export function cidadesDoSistema(): Cidade[] {
+  const zonas = zonasDoSistema();
+  if (!zonas.length) return [];
+  return zonas.map((zona) => ({ cidade: nomeDaZona(zona), zona }));
+}
+
+/** O valor de busca de uma cidade: nome + zona + pais, tudo minusculo. */
+export function textoDeBusca(c: Cidade): string {
+  return `${c.cidade} ${c.zona}`.toLowerCase();
+}
 
 const PARTES = new Map<string, Intl.DateTimeFormat>();
 
@@ -137,12 +221,51 @@ export function rotuloCidade(c: Cidade, data: Date = new Date()): string {
  *
  * Ordenar pela zona seria ordenar alfabeticamente e nao ajuda ninguem a achar
  * o proprio fuso. Desempate pelo nome, para a lista nao pular entre renders.
+ *
+ * MEDIDO (09/10/2026): duas zonas diferentes podem ter o MESMO nome vindo do
+ * `Intl` — "Brasilia" aparece em `America/Sao_Paulo` e em
+ * `America/Bahia`, e o operador veria duas linhas iguais sem saber qual ȁ a
+ * sua. Quando o nome repete, a ZONA entra entre parenteses: "Brasilia
+ * (America/Bahia)". A zona ȁ a chave e nao pode repetir; o nome e rotulo.
+ *
+ * Sem o `supportedValuesOf` (Safari antigo), devolve VAZIA: o seletor oferece
+ * so o `auto`. Uma lista vazia e honesta; uma lista de 18 cidades que nao
+ * cobre o mundo era a presuncao que o dono apontou.
  */
 export function listaOrdenada(data: Date = new Date()): Array<Cidade & { rotulo: string }> {
-  return CIDADES.map((c) => ({ ...c, rotulo: rotuloCidade(c, data) }))
+  const comNome = cidadesDoSistema().map((c) => ({ ...c, rotulo: rotuloCidade(c, data) }));
+
+  // Quantas vezes cada nome aparece: 2 ou mais, o nome precisa da zona.
+  const quantas = new Map<string, number>();
+  for (const c of comNome) quantas.set(c.cidade, (quantas.get(c.cidade) ?? 0) + 1);
+
+  const comDesempate = comNome.map((c) =>
+    (quantas.get(c.cidade) ?? 0) > 1
+      ? { ...c, cidade: `${c.cidade} (${c.zona})`, rotulo: `${c.rotulo} (${c.zona})` }
+      : c,
+  );
+
+  return comDesempate
     .map((c) => ({ ...c, offset: offsetMinutos(c.zona, data) }))
     .sort((a, b) => a.offset - b.offset || a.cidade.localeCompare(b.cidade, 'pt-BR'))
     .map(({ offset: _offset, ...resto }) => resto);
+}
+
+/**
+ * A lista FILTRADA pelo que o operador digita, ainda ordenada por offset.
+ *
+ * Casa no nome, no pais e na propria zona IANA: quem conhece o proprio fuso
+ * escreve `Manaus` ou `America/Manaus` e acha. Sem filtro, uma lista de 424
+ * itens ȧ pagina e meia de rolagem — pior que os 18.
+ */
+export function buscarCidades(
+  texto: string,
+  data: Date = new Date(),
+): Array<Cidade & { rotulo: string }> {
+  const agulha = texto.trim().toLowerCase();
+  const todas = listaOrdenada(data);
+  if (!agulha) return todas;
+  return todas.filter((c) => textoDeBusca(c).includes(agulha));
 }
 
 /** O fuso que o navegador resolveu, que e o padrao `auto` da XM. */
@@ -152,7 +275,7 @@ export function fusoAutomatico(): string {
 
 /** A zona esta no catalogo? `auto` nunca esta, e o que voce quer. */
 export function ehConhecida(zona: string): boolean {
-  return CIDADES.some((c) => c.zona === zona);
+  return cidadesDoSistema().some((c) => c.zona === zona);
 }
 
 /** `HH:MM:SS` NA ZONA ESCOLHIDA — o relogio da XM mostra o fuso escolhido. */

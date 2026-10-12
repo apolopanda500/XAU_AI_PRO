@@ -163,6 +163,49 @@ export function ehLinhaMovimentacao(deal: Deal): boolean {
   return TIPOS_MOVIMENTACAO.has(t) || (!t && ehMovimentacao(deal));
 }
 
+/**
+ * A COR DA OPERACAO — compra verde, venda vermelha, movimentacao amarela.
+ *
+ * O DEFEITO MEDIDO (09/10/2026)
+ * =============================
+ * O dono reportou: "quando tem sell fica verde e nao vermelho, e quando tem buy
+ * fica verde". MEDIDO no fonte: a celula do Tipo pintava TODA operacao de verde
+ * (`HistoryTab.tsx:524`):
+ *
+ *     <span className={`chip ${linha.movimentacao ? 'warn' : 'ok'}`}>
+ *
+ * O `else` do `movimentacao` cobria compra E venda com o mesmo `ok`. Uma venda
+ * aparecia verde — o operador lia uma saida como se fosse ganho, contando com a
+ * cor antes de ler o texto.
+ *
+ * E O MESMO VALOR EM DOIS LUGARES
+ * ===============================
+ * A aba do motor ja classificava o lado (`AutoEnginePanel.tsx:666`) com
+ * `buy -> ok`, `sell -> warn`, outro proprio. Amarelo nao e vermelho, e duas
+ * telas mostrando a mesma operacao em cores diferentes e o defeito da regra 5 do
+ * AGENTS.md: dois lados do mesmo dado que discordam.
+ *
+ * Agora os dois chamam esta funcao. A cor da operacao e UMA.
+ *
+ * `movimentacao` primeiro porque movimentacao de saldo NAO tem lado: um
+ * `CREDIT` nao e compra nem venda (regra 10 do AGENTS.md), e deixar o texto do
+ * tipo cair no teste de lado pintaria um deposito de vermelho.
+ */
+export function corDaOperacao(
+  lado: string | undefined,
+  movimentacao?: boolean,
+): 'ok' | 'danger' | 'warn' {
+  if (movimentacao) return 'warn';
+  const t = String(lado ?? '')
+    .trim()
+    .toUpperCase();
+  if (t.startsWith('SELL')) return 'danger';
+  if (t.startsWith('BUY')) return 'ok';
+  // Sem lado conhecido: amarelo, que diz "nao sei", e nao verde, que diria
+  // "compra". Cor que nao afirma nada e melhor que cor que afirma errado.
+  return 'warn';
+}
+
 /** `IN` / `OUT` normalizado. Vazio quando o deal nao diz. */
 function entradaDe(deal: Deal): '' | 'IN' | 'OUT' {
   const bruto = String(deal.entry ?? '').toUpperCase();

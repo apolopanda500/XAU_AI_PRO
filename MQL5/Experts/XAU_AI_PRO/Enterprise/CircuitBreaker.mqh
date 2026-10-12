@@ -153,6 +153,22 @@ public:
 // e o `GetMaxSpread` compara com `StringCompare` exato.
 // MEDIDO: BTCUSD tem o MENOR spread relativo da conta
 // (0,048%) e mesmo assim era o que mais disparava.
+//
+// --------------------------------------------------
+// ESTE DEFECTO FOI CORRIGIDO EM 08/10/2026 (ver Core/Config.mqh)
+// --------------------------------------------------
+// MEDIDO na conta 391773676 com o EA operando BTCUSD H4: 4 de 12 simbolos
+// bloqueados com spread NORMAL — BTCUSD, ETHUSD, USDSEK e o OURO, este por
+// 57 pontos contra o limite de 50.
+//
+// A CORRECAO: o limite virou PORCENTAGEM do preco (`MaxSpreadPct`, 0,6%), e o
+// `GetMaxSpread` deriva os PONTOS do preco e do `point` daquele simbolo. Os
+// seis leitores continuam comparando em pontos e nao mudaram uma linha. O `#`
+// saiu do mapa, porque `_Symbol` nunca teve sufixo.
+//
+// A `emergencySpread = GetMaxSpread(symbol)*10.0` abaixo continua sendo a
+// explosao EXTREMA — e agora esse 10x e sobre um numero ja convertido, que e o
+// que se pretendia.
 //==================================================
 
 #define CIRCUIT_LOG_MAX_SIMBOLOS 32

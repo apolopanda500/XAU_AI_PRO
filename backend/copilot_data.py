@@ -39,7 +39,8 @@ from typing import Any
 # 3s e suficiente para leitura local e evita travar a UI se o gateway estiver
 # ocupado com inferencia. Nao ha retry: repetir so pioraria a espera.
 TIMEOUT = 3.0
-BASE_PADRAO = "http://127.0.0.1:9001"
+from backend.mt5_gateway import _porta_gateway
+BASE_PADRAO = f"http://127.0.0.1:{_porta_gateway()}"
 
 # Token do gateway. O Tauri gera um token aleatorio POR SESSAO e o passa aos
 # filhos por variavel de ambiente (main.rs:431). Sem ele o gateway responde 401

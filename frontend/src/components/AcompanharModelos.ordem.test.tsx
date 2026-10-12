@@ -41,6 +41,9 @@ const estado = vi.hoisted(() => ({
    * que precisam do numero dizem `estado.alavancagem = 1000`.
    */
   alavancagem: null as number | null,
+  /** Sem candles NAO ha painel: o preco nao pode ser chute. Ver o caso
+   *  `PROVA NEGATIVA: sem candles nao ha painel`. */
+  semCandles: false,
 }));
 
 vi.mock('../hooks/queries', () => ({
@@ -58,9 +61,6 @@ vi.mock('./charts/PriceChart', () => ({
     <div data-testid="grafico">
       <span data-testid="modo-ordem">{String(Boolean(props.modoOrdem))}</span>
       <span data-testid="linhas">{JSON.stringify(props.ordem ?? [])}</span>
-      <button type="button" onClick={() => props.onArmarOrdem?.(85510.25)}>
-        simular clique no grafico
-      </button>
       <button type="button" onClick={() => props.onRemoverLinha?.('sl')}>
         simular x no stop
       </button>
@@ -79,23 +79,41 @@ function renderPainel() {
   );
 }
 
-/** O clique no grafico: o operador escolhe o preco. */
-const clicarNoGrafico = async () => {
-  fireEvent.click(screen.getByText('simular clique no grafico'));
+/**
+ * O ULTIMO FECHAMENTO, e nao um clique.
+ *
+ * MEDIDO em 08/10/2026 19:35, conta real 391773676: dois cliques no grafico
+ * criaram tres linhas de ordem a 75670,29 / 75470,29 / 75270,29 — a um clique
+ * do botao `Colocar ordem`. O dono mandou remover o caminho de 1-clique, e o
+ * guarda era so `modoOrdem`, que `AcompanharModelos` passa ligado.
+ *
+ * Entao o preco passou a vir do ULTIMO FECHAMENTO: um dado que a corretora ja
+ * mandou, e que nao precisa de clique nenhum. O operador continua escolhendo o
+ * NIVEL, arrastando a ponta do stop ou do alvo.
+ *
+ * Este arquivo mudou de `{candles: []}` para candles de verdade, e o
+ * "simular clique no grafico" saiu do duble — porque `onArmarOrdem` nao existe
+ * mais. Os 25 casos abaixo nao foram afrouxados: medem o mesmo painel, o mesmo
+ * corpo e o mesmo `request_id`. Mudou o que FAZ o painel aparecer, nao o que
+ * ele faz quando aparece.
+ */
+const CANDLES = [
+  { time: 1, open: 85_000, high: 86_000, low: 84_000, close: 85_510.25 },
+  { time: 2, open: 85_510.25, high: 86_200, low: 85_000, close: 85_510.25 },
+];
+
+const painelComPreco = async () => {
   await waitFor(() => expect(screen.getByText(/Colocar ordem a/)).toBeTruthy());
 };
 
 /**
- * O clique, e DEPOIS a ficha.
- *
- * O painel aparece assim que o clique arma, mas o nivel em dinheiro so existe
- * depois que `/api/universal/assets` devolve o `contract_size` — ate la o botao
- * esta desabilitado, com o motivo nomeado. E o comportamento certo: sem
- * contrato nao ha preco (AGENTS.md 3). Um teste que clicasse e mandasse nao
- * estaria medindo a tela, estaria medindo a corrida entre dois fetches.
+ * O painel aparece quando o ultimo fechamento chega, e o nivel em dinheiro so
+ * existe depois que `/api/universal/assets` devolve o `contract_size` — ate la o
+ * botao esta desabilitado, com o motivo nomeado. E o comportamento certo: sem
+ * contrato nao ha preco (AGENTS.md 3).
  */
 const clicarComFicha = async () => {
-  await clicarNoGrafico();
+  await painelComPreco();
   await waitFor(() => {
     const linhas = JSON.parse(screen.getByTestId('linhas').textContent ?? '[]');
     expect(linhas).toHaveLength(3);
@@ -167,8 +185,20 @@ beforeEach(() => {
           errors: [],
         }),
       };
-    return { ok: true, json: async () => ({ ok: true, candles: [], positions: [] }) };
-  });
+    return {
+      ok: true,
+      json: async () => ({
+        ok: true,
+        broker: 'mt5',
+        market: 'crypto-spot',
+        symbol: 'BTCUSD',
+        source: 'mt5_gateway',
+        received_at: '2026-10-08T14:00:00Z',
+candles: estado.semCandles ? [] : CANDLES,
+      positions: [],
+    }),
+  };
+});
 });
 
 afterEach(() => {
@@ -190,20 +220,42 @@ describe('o clique ARMA e NAO ENVIA', () => {
   it('nada vai para /api/trade/order ao clicar no grafico', async () => {
     renderPainel();
     await waitFor(() => expect(screen.getByTestId('modo-ordem').textContent).toBe('true'));
-    await clicarNoGrafico();
+    await painelComPreco();
     // ESTE e o teste que importa: se o clique mandasse, o caminho de 1-clique
     // que o dono mandou remover estaria vivo de novo.
     expect(envio()).toBeUndefined();
     expect(estado.chamadas.some((c) => c.url.includes('/api/trade/order'))).toBe(false);
   });
 
-  it('o painel so aparece DEPOIS do clique, e mostra o preco clicado', async () => {
+  it('o painel mostra o ULTIMO FECHAMENTO, sem clique nenhum', async () => {
+    /*
+    Este caso exigia que o painel NAO existisse antes do clique. A regra mudou
+    por decisao do dono em 08/10/2026: o preco vem do ultimo fechamento, que e
+    dado da corretora, e nao de um clique em qualquer pixel do grafico.
+
+    MEDIDO: em 08/10 19:35 dois cliques criaram tres linhas de ordem a
+    75670,29 / 75470,29 / 75270,29, a um clique do botao `Colocar ordem`.
+
+    O que este caso passa a garantir e mais forte: o painel aparece SO com o
+    dado, e o preco e o fechamento — nao um numero que o clique escolheria.
+    */
     renderPainel();
-    await waitFor(() => expect(screen.getByTestId('modo-ordem').textContent).toBe('true'));
-    expect(screen.queryByText(/Colocar ordem a/)).toBeNull();
-    await clicarNoGrafico();
-    // O preco no BOTAO, que e onde o operador decide enviar (medido na captura).
+    await painelComPreco();
     expect(screen.getByText('Colocar ordem a 85.510,25')).toBeTruthy();
+    // Sem nenhum clique: o duble do grafico nem tem botao de clique.
+    expect(screen.queryByText(/simular clique/)).toBeNull();
+  });
+
+  it('PROVA NEGATIVA: sem candles nao ha painel — o preco nao e chute', async () => {
+    estado.semCandles = true;
+    try {
+      renderPainel();
+      await waitFor(() => expect(screen.getByTestId('modo-ordem').textContent).toBe('true'));
+      // Um painel com preco inventado seria pior que nenhum painel.
+      expect(screen.queryByText(/Colocar ordem a/)).toBeNull();
+    } finally {
+      estado.semCandles = false;
+    }
   });
 
   it('as tres linhas seguem o preco clicado, com o rotulo em dinheiro', async () => {
@@ -320,8 +372,20 @@ describe('o botao envia com confirm e request_id', () => {
           status: 403,
           json: async () => ({ ok: false, error: 'confirm=true obrigatorio' }),
         };
-      return { ok: true, json: async () => ({ ok: true, candles: [], positions: [] }) };
-    });
+      return {
+        ok: true,
+        json: async () => ({
+          ok: true,
+          broker: 'mt5',
+          market: 'crypto-spot',
+          symbol: 'BTCUSD',
+          source: 'mt5_gateway',
+          received_at: '2026-10-08T14:00:00Z',
+candles: estado.semCandles ? [] : CANDLES,
+      positions: [],
+    }),
+  };
+});
     renderPainel();
     await waitFor(() => expect(screen.getByTestId('modo-ordem').textContent).toBe('true'));
     await clicarComFicha();
@@ -340,7 +404,7 @@ describe('o painel RECUSA COM MOTIVO NOMEADO', () => {
     estado.contrato = null;
     renderPainel();
     await waitFor(() => expect(screen.getByTestId('modo-ordem').textContent).toBe('true'));
-    await clicarNoGrafico();
+    await painelComPreco();
     // A ficha sem `contract_size` e a recusa CORRETA: um default de 1 daria
     // nivel 100.000 vezes errado em forex, e o numero sairia plausivel.
     await waitFor(() => expect(screen.getByText(/tamanho do contrato deste ativo/)).toBeTruthy());
@@ -352,7 +416,7 @@ describe('o painel RECUSA COM MOTIVO NOMEADO', () => {
     estado.contrato = null;
     renderPainel();
     await waitFor(() => expect(screen.getByTestId('modo-ordem').textContent).toBe('true'));
-    await clicarNoGrafico();
+    await painelComPreco();
     // Dois nivelestimados em forex seriam 100.000 vezes errados E plausiveis.
     expect(linhasDoGrafico().map((l) => l.papel)).toEqual(['entrada']);
   });
@@ -467,7 +531,7 @@ describe('o painel RECUSA COM MOTIVO NOMEADO', () => {
     */
     renderPainel();
     await waitFor(() => expect(screen.getByTestId('modo-ordem').textContent).toBe('true'));
-    await clicarNoGrafico();
+    await painelComPreco();
     fireEvent.change(screen.getByLabelText(/Quantidade em/i), { target: { value: '0.5' } });
     await waitFor(() => expect(screen.getByText(/acima do máximo aceito: 0,10/)).toBeTruthy());
     expect((screen.getByText(/Colocar ordem a/) as HTMLButtonElement).disabled).toBe(true);
@@ -477,7 +541,7 @@ describe('o painel RECUSA COM MOTIVO NOMEADO', () => {
     estado.contrato = null;
     renderPainel();
     await waitFor(() => expect(screen.getByTestId('modo-ordem').textContent).toBe('true'));
-    await clicarNoGrafico();
+    await painelComPreco();
     fireEvent.click(screen.getByText(/Colocar ordem a/));
     expect(envio()).toBeUndefined();
   });
@@ -486,8 +550,11 @@ describe('o painel RECUSA COM MOTIVO NOMEADO', () => {
     estado.contrato = null;
     renderPainel();
     await waitFor(() => expect(screen.getByTestId('modo-ordem').textContent).toBe('true'));
-    await clicarNoGrafico();
+    await painelComPreco();
     fireEvent.click(screen.getByText('Descartar'));
+    // Descartar tem de LEVAR o painel embora o preco ja venha pronto do
+    // ultimo fechamento: ele nao depende de clique no grafico para existir, e
+    // por isso que este caso so funciona esperando o painel sumir.
     await waitFor(() => expect(screen.queryByText(/Colocar ordem a/)).toBeNull());
     expect(envio()).toBeUndefined();
   });
@@ -514,7 +581,7 @@ describe('o requisito de margem bate com a conta', () => {
     estado.alavancagem = 1000;
     renderPainel();
     await waitFor(() => expect(screen.getByTestId('modo-ordem').textContent).toBe('true'));
-    await clicarNoGrafico();
+    await painelComPreco();
 
     await waitFor(() => expect(screen.getByText(/Requisito de margem/i)).toBeTruthy());
     // 0,01 x 1,0 x 85.510,25 = 855,1025 → 855,10. E 855,1025 / 1000 = 0,8551.
@@ -536,7 +603,7 @@ describe('o requisito de margem bate com a conta', () => {
     estado.alavancagem = null;
     renderPainel();
     await waitFor(() => expect(screen.getByTestId('modo-ordem').textContent).toBe('true'));
-    await clicarNoGrafico();
+    await painelComPreco();
 
     await waitFor(() => expect(screen.getByText(/indisponível/i)).toBeTruthy());
     expect(screen.getByText(/alavancagem da conta/i)).toBeTruthy();
@@ -561,7 +628,7 @@ describe('o requisito de margem bate com a conta', () => {
     estado.contrato = null;
     renderPainel();
     await waitFor(() => expect(screen.getByTestId('modo-ordem').textContent).toBe('true'));
-    await clicarNoGrafico();
+    await painelComPreco();
 
     await waitFor(() => expect(screen.getByText(/indisponível/i)).toBeTruthy());
     // `/tamanho do contrato/i` casaria TAMBEM com a recusa do botao ("A corretora
@@ -575,7 +642,7 @@ describe('o requisito de margem bate com a conta', () => {
     estado.alavancagem = 1000;
     renderPainel();
     await waitFor(() => expect(screen.getByTestId('modo-ordem').textContent).toBe('true'));
-    await clicarNoGrafico();
+    await painelComPreco();
     await waitFor(() => expect(screen.getByText('0.86 USD')).toBeTruthy());
 
     // 0,02 é o dobro de 0,01: 0,02 x 1,0 x 85.510,25 = 1.710,205, e

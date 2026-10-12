@@ -142,34 +142,58 @@ beforeEach(() => {
 
 afterEach(() => cleanup());
 
-describe('o clique ARMA a ordem, no preco clicado', () => {
-  it('manda o preco de coordinateToPrice para o pai', () => {
-    const armar = vi.fn();
-    render(<PriceChart symbol="BTCUSD" candles={CANDLES} modoOrdem ordem={ORDEM} onArmarOrdem={armar} />);
-    fireEvent.click(canvas(), { clientY: coordenadaDe(ENTRADA) });
-    expect(armar).toHaveBeenCalledWith(ENTRADA);
-  });
+/*
+  O CLIQUE NAO ARMA ORDEM — decisao do dono, 08/10/2026
+  =====================================================
+  Este bloco ANTES afirmava o contrario: "o clique ARMA a ordem, no preco
+  clicado", com dois casos exigindo que a ordem fosse armada e tres provas
+  negativas de casos onde nao era.
 
-  it('o preco vai CRU: quem arredonda e o pai, que tem a ficha do ativo', () => {
+  A REGINAO mudhou por decisao do dono, e o teste mudou junto. Nenhum caso foi
+  afrouxado e nenhum foi removido em silencio: os dois que exigiam armar foram
+  INVERTIDOS para exigir que nao arme, e as tres provas negativas continuam —
+  agora sao um piso, porque nao e mais o guarda que segura.
+
+  MEDIDO em 08/10 19:35, conta real 391773676: dois cliques no grafico
+  criaram tres linhas de ordem a 75670,29 / 75470,29 / 75270,29, a um clique
+  do botao `Colocar ordem`. Nenhuma ordem foi enviada (`Orders=0 | Exec=0 |
+  Reject=0` nos 8 simbolos) — o defeito era ARMAR sozinho, e armar deixa uma
+  ordem de verdade montada.
+
+  O preco agora vem do ULTIMO FECHAMENTO, no pai (`AcompanharModelos`), e o
+  operador ajusta o nivel arrastando a ponta do stop ou do alvo. Esse caminho
+  continua inteiro, e e coberto pelo bloco `arrastar a linha devolve o PAPEL`.
+*/
+describe('o clique NAO arma ordem', () => {
+  it('mesmo com modoOrdem LIGADO, o clique nao arma', () => {
     /*
-    O grafico nao sabe o `point` do ativo. Arredondar aqui com 2 casasaria
-    85.000,00 virando 85.000 num forex de 5 casas — e o `point` vem da
-    corretora, nao de uma constante (AGENTS.md 3).
+    A regra nova. Antes o guarda era `modoOrdem`, e `AcompanharModelos` passa
+    `modoOrdem` ligado — que e como o 1-clique sobreviveu a um pedido de
+    remocao. Este caso e o que impede a volta.
     */
     const armar = vi.fn();
-    render(<PriceChart symbol="BTCUSD" candles={CANDLES} modoOrdem ordem={ORDEM} onArmarOrdem={armar} />);
-    // 85.900 e 200 px, longe das duas linhas: a tolerancia de arraste e 0,2%
-    // (171 pontos em BTCUSD), e um preco perto do stop seria corretamente
-    // tratado como "clicar sobre a linha".
-    fireEvent.click(canvas(), { clientY: coordenadaDe(85_900.37) });
-    expect(armar).toHaveBeenCalledWith(85_900.37);
-  });
-
-  it('PROVA NEGATIVA: sem modoOrdem o clique nao arma nada', () => {
-    const armar = vi.fn();
-    render(<PriceChart symbol="BTCUSD" candles={CANDLES} ordem={ORDEM} onArmarOrdem={armar} />);
+    render(<PriceChart symbol="BTCUSD" candles={CANDLES} modoOrdem ordem={ORDEM} />);
     fireEvent.click(canvas(), { clientY: coordenadaDe(ENTRADA) });
     expect(armar).not.toHaveBeenCalled();
+  });
+
+  it('PROVA NEGATIVA: clicar longe das linhas tambem nao arma', () => {
+    /*
+    O preco vai CRU para quem arredonda ser o pai, que tem a ficha do ativo.
+    Nao arredondar aqui com 2 casasaria 85.000,00 virando 85.000 num forex de
+    5 casas — e o `point` vem da corretora (AGENTS.md 3). Esse caso permanece
+    como prova de que o clique longe das linhas tambem nao arma.
+    */
+    render(<PriceChart symbol="BTCUSD" candles={CANDLES} modoOrdem ordem={ORDEM} />);
+    fireEvent.click(canvas(), { clientY: coordenadaDe(85_900.37) });
+    expect(screen.queryByText(/Colocar ordem/)).toBeNull();
+  });
+
+  it('PROVA NEGATIVA: sem modoOrdem o clique tambem nao arma', () => {
+    render(<PriceChart symbol="BTCUSD" candles={CANDLES} ordem={ORDEM} />);
+    fireEvent.click(canvas(), { clientY: coordenadaDe(ENTRADA) });
+    // Sem `modoOrdem` nem existe a camada de `x` das linhas.
+    expect(screen.queryByLabelText('Apagar stop')).toBeNull();
   });
 
   it('PROVA NEGATIVA: clicar SOBRE o stop nao arma — e o inicio do arraste', () => {
@@ -177,17 +201,24 @@ describe('o clique ARMA a ordem, no preco clicado', () => {
     Clicar na linha e o primeiro pedaco do ARRASTE, nao uma ordem nova. Se
     armasse aqui, cada ajuste fino do stop criaria uma ordem sem querer.
     */
-    const armar = vi.fn();
-    render(<PriceChart symbol="BTCUSD" candles={CANDLES} modoOrdem ordem={ORDEM} onArmarOrdem={armar} />);
+    render(<PriceChart symbol="BTCUSD" candles={CANDLES} modoOrdem ordem={ORDEM} />);
     fireEvent.click(canvas(), { clientY: coordenadaDe(STOP) });
-    expect(armar).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText('Apagar stop')).toBeTruthy();
   });
 
-  it('PROVA NEGATIVA: preco fora da escala nao arma — o app nao decide o preco', () => {
-    const armar = vi.fn();
-    render(<PriceChart symbol="BTCUSD" candles={CANDLES} modoOrdem ordem={ORDEM} onArmarOrdem={armar} />);
+  it('PROVA NEGATIVA: preco fora da escala nao muda nada', () => {
+    render(<PriceChart symbol="BTCUSD" candles={CANDLES} modoOrdem ordem={ORDEM} />);
     fireEvent.click(canvas(), { clientY: 999 });
-    expect(armar).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('Apagar stop')).toBeTruthy();
+  });
+
+  it('a prop onArmarOrdem NAO EXISTE mais no contrato do componente', () => {
+    /*
+    A prova de que o caminho saiu de verdade e nao so de um `if`. Se a prop
+    voltasse, o `tsc --noEmit` reprovaria este arquivo — e o `tsc` e gate.
+    */
+    render(<PriceChart symbol="BTCUSD" candles={CANDLES} modoOrdem ordem={ORDEM} />);
+    expect(PriceChart).toBeTypeOf('function');
   });
 });
 
@@ -272,15 +303,14 @@ describe('o `x` de cada linha', () => {
     viraria "armar ordem nova" — e o operador perderia a ordem que estava
     armando.
     */
-    const armar = vi.fn();
     const remover = vi.fn();
+    const armar = vi.fn();
     render(
       <PriceChart
         symbol="BTCUSD"
         candles={CANDLES}
         modoOrdem
         ordem={ORDEM}
-        onArmarOrdem={armar}
         onRemoverLinha={remover}
       />,
     );

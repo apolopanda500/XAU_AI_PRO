@@ -422,10 +422,16 @@ void CProductionChecklist::CheckExecution()
    {
       double spreadPoints = (ask - bid) / point;
 
-      if(spreadPoints > MaxSpread)
+      // `GetMaxSpread()`, e nao o input cru `MaxSpread`: o limite virou
+      // porcentagem do preco (08/10/2026) e quem converte para PONTOS e o
+      // getter. Ler o input aqui comparava um numero em pontos crus com um
+      // spread em pontos, e dava o mesmo resultado para BTCUSD e EURUSD —
+      // o mesmo defeito que travava o motor, agora no checklist.
+      double maxSpreadPts = GetMaxSpread();
+      if(spreadPoints > maxSpreadPts)
       {
          ok = false;
-         msg = "Spread acima do maximo: " + DoubleToString(spreadPoints, 1) + " pts (max=" + DoubleToString(MaxSpread, 1) + ")";
+         msg = "Spread acima do maximo: " + DoubleToString(spreadPoints, 1) + " pts (max=" + DoubleToString(maxSpreadPts, 1) + ")";
       }
    }
 

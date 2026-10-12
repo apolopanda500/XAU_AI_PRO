@@ -68,7 +68,10 @@ vi.mock('../hooks/useAppStore', () => ({
  * O padrão é do projeto: ver `useAICommunication.test.ts`.
  */
 import painel from './OperacaoAutomatica?raw';
-const { default: OperacaoAutomatica } = await import('../components/OperacaoAutomatica');
+import { zerarIaLigada } from '../hooks/useIaLigada';
+const { default: OperacaoAutomatica, recusaDePlano } = await import(
+  '../components/OperacaoAutomatica'
+);
 const { default: RobotTabs } = await import('../components/RobotTabs');
 
 // Os dois blocos externos sês blocos externos são mockados: este arquivo testa a ESTRUTURA da
@@ -109,6 +112,40 @@ function ticketMontado() {
   );
 }
 
+/**
+ * O ticket montado E o padrao 1:1 já derivado do preço ao vivo.
+ *
+ * POR QUE ISTO EXISTE (10/10/2026)
+ * ================================
+ * MEDIDO: `sl_preco`/`tp_preco` no corpo do `/api/auto/config` vinham `undefined`
+ * de forma INTERMITENTE (1 em ~8 rodadas da suíte inteira), e a asserção
+ * `expect(cfg.body.sl_preco).toBeCloseTo(4136.46, 2)` reprovava com
+ * "expected undefined ... NaN". Não é produto quebrado: desde 07/10 o SL/TP é
+ * OPCIONAL, e `ligar()` só põe `sl_preco` no corpo quando `slN > 0` — se o
+ * preset 1:1 ainda não derivou, o corpo sai corretamente sem o campo.
+ *
+ * A cadeia é assíncrona e tem vários elos:
+ *   `/api/universal/quotes` -> `preco` -> `passo` (useMemo) -> `entrada`
+ *     -> `useEffect` do 1:1 -> `setSl`/`setTp`.
+ * O `ticketMontado()` espera só o BOTÃO existir, que acontece antes de o preço
+ * chegar. Clicar no AUTO nesse meio enviava o corpo sem `sl_preco`. Sob a
+ * suíte carregada (66 arquivos, event loop ocupado) o efeito do 1:1 atrasava e
+ * a corrida aparecia — a assinatura de teste que lê o instante errado.
+ *
+ * A SOLUÇÃO é esperar o efeito do 1:1 TER ACONTECIDO, não o botão existir.
+ * O `<p role="status">` só escreve "1:1 padrão · SL ... · TP ..." DEPOIS de
+ * `setSl`/`setTp` (mesma linha do `setStatus`, em `OperacaoAutomatica` ~457).
+ * Esperar por esse texto é esperar o estado que o caso declara que mede — e a
+ * trava não afrouxa: o corpo continua tendo de trazer 4136.46 / 4144.74.
+ */
+function ticketComPadrao11() {
+  return waitFor(() =>
+    expect(document.querySelector('[role="status"]')?.textContent ?? '').toMatch(
+      /1:1/,
+    ),
+  );
+}
+
 beforeEach(() => {
   estado.auto = { ativo: false, simbolo: 'GOLD', timeframe: 'H1' };
   estado.ws = true;
@@ -128,21 +165,70 @@ beforeEach(() => {
   });
 });
 
+/*
+  ZERA O INTERRUPTOR DA IA — NO `beforeEach`, E NAO SO NO `afterEach` (10/10/2026)
+  ==============================================================================
+  O `useIaLigada` ȁ store de MODULO e nao esta mockado neste arquivo — entao
+  ele ȁ o store real, compartilhado com o `useIaLigada.test.tsx` (e com
+  qualquer arquivo que renderize `OperacaoAutomatica`) no MESMO worker.
+
+  MEDIDO: o reset so no `afterEach` NAO fechava o vazamento. O `afterEach`
+  roda DEPOIS de cada teste, mas o PRIMEIRO teste deste arquivo ja podia
+  nascer com `ligada: true` deixado por outro arquivo que rodou antes — e o
+  teste "AUTO aplica o 1:1 PADRAO e liga o motor" reprovava. Era
+  INTERMITENTE (1 em 3 rodadas da suite inteira, medido em 10/10/2026: uma
+  rodada 873/874 com este arquivo falhando, a seguinte 874/874), que ȁ a
+  assinatura de estado compartilhado entre arquivos: depende da ordem que o
+  runner escolhe, nao de teste fraco.
+
+  A causa ȁ de PRODUTO? Nao. MEDIDO em `OperacaoAutomatica.tsx`: o handler do
+  AUTO (`ligar()`, linha ~592) nao le `iaLigada` — o interruptor da IA ȁ
+  inferencia, e o toggle AUTO ȁ o motor; sao independentes. O que vazava era
+  so o ESTADO DE TESTE.
+
+  Zerar no `beforeEach` ȁ o que fecha: cada teste comeca do estado que
+  DECLAROU, nao do que o arquivo anterior deixou. Quem precisa do interruptor
+  ligado dentro de um caso liga de novo — e ȁ o que o `useIaLigada.test.tsx`
+  faz. O `afterEach` continua, como rede para o que rodar depois.
+*/
+beforeEach(() => {
+  zerarIaLigada();
+});
+
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  zerarIaLigada();
 });
 
 describe('RobotTabs — a ordem que o dono pediu', () => {
-it('operacao automatica, grafico e miniterminal, nessa ordem', () => {
+  it('sub-abas com operacao, modelos, risco e operacoes', () => {
+      /*
+      SUB-ABAS (10/10/2026)
+      =====================
+      O dono pediu sub-abas na aba ROBÔ para separar Operação, Modelos, Risco
+      e Operações. A página agora tem uma nav de sub-abas no topo, seguida do
+      conteúdo da sub-aba ativa, seguido do gráfico (sempre visível).
+      */
+      const { container } = render(<RobotTabs />);
+      const nav = container.querySelector('.robo-sub-abas');
+      expect(nav).toBeTruthy();
+      const abas = Array.from(nav!.querySelectorAll('.robo-sub-aba')).map(
+        (b) => b.textContent,
+      );
+      expect(abas).toEqual(['Operação', 'Modelos', 'Risco', 'Operações']);
+    });
+
+  it('operacao automatica, grafico e miniterminal, nessa ordem', () => {
       /*
       O CABECALHO "OPERAÇÃO / ROBÔ" SAIU (06/10/2026)
       ================================================
-      Este teste contava QUATRO filhos e o primeiro era `<header>`. Agora sao
-      TRES, e o primeiro e o bloco de operação automática.
+      Este teste contava QUATRO filhos e o primeiro era `<header>`. Agora a
+      página tem sub-abas no topo, o conteúdo da sub-aba ativa, e o gráfico
+      sempre visível embaixo.
 
       O dono pediu para remover. E o motivo se sustenta: a barra lateral ja
-      escreve `ROBÔ` em todas as paginas, e o cabeçalho repetia o titulo mais
+      escreve `ROBÔ` em todas as paginas, e o cabecalho repetia o titulo mais
       uma frase explicando o que a tela logo abaixo faz sozinha. Alem do lugar
       ocupado, eram DOIS `h1` na mesma pagina — o titulo do cabecalho e o
       `h2`/`h1` da primeira seção — e dois `h1` sao ambiguidade para quem navega
@@ -154,15 +240,12 @@ it('operacao automatica, grafico e miniterminal, nessa ordem', () => {
       */
       const { container } = render(<RobotTabs />);
       const filhos = Array.from(container.querySelectorAll('.robo > *'));
-      // Os tres sao os blocos, cada um dentro da sua barreira de erro.
-      //
-      // O `aria-label` vem do `section` que CADA bloco declara. Os blocos
-      // mockados nao tem `aria-label` proprio, entao o teste confere a POSICAO
-      // deles, e nao o nome - e a ordem que importa aqui.
+      // O primeiro e a nav de sub-abas, o segundo e o conteúdo da sub-aba ativa
+      // (Operação), e o terceiro e o gráfico (sempre visível).
       expect(filhos).toHaveLength(3);
-      expect(filhos[0].getAttribute('aria-label')).toBe('Operação automática');
-      expect(filhos[1].getAttribute('data-testid')).toBe('painel-grafico');
-      expect(filhos[2].getAttribute('data-testid')).toBe('painel-mini');
+      expect(filhos[0].classList.contains('robo-sub-abas')).toBe(true);
+      expect(filhos[1].getAttribute('aria-label')).toBe('Operação automática');
+      expect(filhos[2].getAttribute('data-testid')).toBe('painel-grafico');
     });
 
     it('PROVA NEGATIVA: o cabecalho "ROBÔ" nao volta para a pagina', () => {
@@ -262,11 +345,14 @@ it('operacao automatica, grafico e miniterminal, nessa ordem', () => {
   it('o grafico vem antes do miniterminal', () => {
     // Quem opera configura, confere no grafico e so entao olha o que ficou
     // aberto. Inverter mostra a posicao antes do grafico que a justifica.
+    // O grafico mora na sub-aba Operacao (11/10/2026: um grafico so), e o
+    // mini terminal so aparece quando a sub-aba "Operações" está ativa.
     const { container } = render(<RobotTabs />);
-    const ordem = Array.from(container.querySelectorAll('[data-testid]')).map((n) =>
-      n.getAttribute('data-testid'),
-    );
-    expect(ordem.indexOf('painel-grafico')).toBeLessThan(ordem.indexOf('painel-mini'));
+    const grafico = container.querySelector('[data-testid="painel-grafico"]');
+    expect(grafico).toBeTruthy();
+    // A sub-aba padrao e a Operacao, e e nela que o grafico esta.
+    const subAbaAtiva = container.querySelector('.robo-sub-aba.ativa');
+    expect(subAbaAtiva?.textContent).toBe('Operação');
   });
 
   it('a pagina tem a classe robo e nao usa a antiga', () => {
@@ -295,17 +381,29 @@ describe('OperacaoAutomatica — as classes do ticket', () => {
     expect(painel).not.toMatch(/mesa-xm\.css/);
   });
 
-  it('o ticket tem as 6 areas do grid', () => {
-    // Preco, lote, valor no risco, protecao, presets e botao. Cada uma com
-    // `grid-area` propria: sem isso o `grid-template-areas` do CSS nao acha
-    // ninguem e a faixa desmorona.
+  it('o bloco do ticket NAO existe mais na tela', () => {
+    /*
+    DECISAO DO DONO, 08/10/2026: o bloco `Token(s)` / `Valor no risco (SL)` /
+    `Preco Quantidade` / `Stop Loss` / `Take Profit` / `passo 1:1..1:4` foi
+    REMOVIDO da aba ROBÔ.
+
+    MEDIDO na captura de 08/10 19:36 que motivou: `Stop loss (-2,00 USD) 2,00` e
+    `Alvo (+2,00 USD) 2,00` saiam com VALOR FIXO, e as tres linhas de ordem
+    sairam em 75670,29 / 75470,29 / 75270,29 — exatamente +200,00 e -200,00 em
+    volta do preco. Um painel que parece configuravel e escreve numero fixo.
+
+    Este caso nao e "o grid quebrou": e a REGRA nova. As seis areas do
+    `grid-template-areas` nao existem porque os seis controles nao existem. E
+    o `robo.css` ainda define as classes — uma folha com regra sem elemento e
+    sobra, e `test_robo_css.test.ts` mede isso pelo outro lado.
+    */
     renderPainel();
-    expect(document.querySelector('.robo-ticket')).toBeTruthy();
-    for (const area of ['preco', 'lote', 'volume', 'protecao', 'presets', 'enviar']) {
+    expect(document.querySelector('.robo-ticket')).toBeNull();
+    for (const area of ['lote', 'volume', 'protecao', 'presets']) {
       expect(
         document.querySelector(`.robo-ticket-${area}`),
-        `falta a area .robo-ticket-${area}`,
-      ).toBeTruthy();
+        `a area .robo-ticket-${area} nao deveria mais estar na tela`,
+      ).toBeNull();
     }
   });
 
@@ -338,14 +436,20 @@ describe('OperacaoAutomatica — a logica que ja funcionava', () => {
 
     O primeiro clique ja liga. E o valor preenchido fica VISIVEL no input — o
     app nao esconde o numero que vai mandar.
+
+    O QUE MUDOU EM 08/10/2026 (decisao do dono): o bloco do ticket saiu da tela,
+    entao nao ha mais input onde o valor fique visivel. Este caso deixou de
+    medir o input e passou a medir o CORPO — que e onde o numero realmente
+    viaja. E o preco: sem campo, o valor que o motor recebe deixa de ser
+    conferivel na tela, e isso fica registrado aqui, nao escondido.
     */
     renderPainel();
     await ticketMontado();
+    // Espera o preset 1:1 derivar o SL/TP do preço ao vivo ANTES de clicar —
+    // senão o corpo sai sem `sl_preco` (ver `ticketComPadrao11`). A trava não
+    // afrouxa: o corpo abaixo continua tendo de trazer 4136.46 / 4144.74.
+    await ticketComPadrao11();
     const auto = screen.getByRole('switch', { name: 'Operação automática' });
-    await waitFor(() =>
-      expect((screen.getByLabelText('Stop loss') as HTMLInputElement).value).toBe('4136.46'),
-    );
-    expect((screen.getByLabelText('Take profit') as HTMLInputElement).value).toBe('4144.74');
     fireEvent.click(auto);
     await waitFor(() =>
       expect(estado.chamadas.some((c) => c.url.includes('/api/auto/config'))).toBe(true),
@@ -361,18 +465,32 @@ describe('OperacaoAutomatica — a logica que ja funcionava', () => {
     expect(cfg.body.tp_preco).toBeCloseTo(4144.74, 2);
   });
 
-  it('o que o operador digitou NAO e sobrescrito pelo padrao', async () => {
+  it('o painel NAO tem onde o operador escrever o risco — e o padrao 1:1 manda', async () => {
     /*
-    O padrao so age em campo VAZIO. Um padrao que reescreve o risco escolhido
-    pelo dono e o app decidindo dinheiro por ele (AGENTS.md 9).
+    DECISAO DO DONO, 08/10/2026: o bloco do ticket saiu. Este caso exigia que o
+    que o operador digitasse NAO fosse sobrescrito pelo padrao.
+
+    Sem campo, nao ha o que sobrescrever. E o padrao continua mandando 1:1 — o
+    que o dono mediu como problema foi o painel PARECER configuravel e escrever
+    valor fixo, nao o padrao em si.
+
+    Este caso agora trava a REGRA nova: o padrao 1:1 vai no corpo, e nao existe
+    input para divergir dele.
     */
     renderPainel();
     await ticketMontado();
-    fireEvent.change(screen.getByLabelText('Stop loss'), { target: { value: '4130' } });
-    fireEvent.change(screen.getByLabelText('Take profit'), { target: { value: '4150' } });
-    await waitFor(() => expect(screen.getByText(/1:1 padrão/)).toBeTruthy());
-    expect((screen.getByLabelText('Stop loss') as HTMLInputElement).value).toBe('4130');
-    expect((screen.getByLabelText('Take profit') as HTMLInputElement).value).toBe('4150');
+    expect(screen.queryByLabelText('Stop loss')).toBeNull();
+    expect(screen.queryByLabelText('Take profit')).toBeNull();
+    // O corpo abaixo exige `sl_preco`/`tp_preco` derivados do 1:1, então o
+    // preset tem de ter rodado antes do clique (ver `ticketComPadrao11`).
+    await ticketComPadrao11();
+    fireEvent.click(screen.getByRole('switch', { name: 'Operação automática' }));
+    await waitFor(() =>
+      expect(estado.chamadas.some((c) => c.url.includes('/api/auto/config'))).toBe(true),
+    );
+    const cfg = estado.chamadas.find((c) => c.url.includes('/api/auto/config'))!;
+    expect(Number(cfg.body.sl_preco)).toBeCloseTo(4136.46, 2);
+    expect(Number(cfg.body.tp_preco)).toBeCloseTo(4144.74, 2);
   });
 
   it('sem preco ao vivo o AUTO nao manda SL zero — manda sem os campos', async () => {
@@ -405,12 +523,15 @@ describe('OperacaoAutomatica — a logica que ja funcionava', () => {
     expect((cfg!.body as Record<string, unknown>).simbolo).toBeTruthy();
   });
 
-  it('PROVA NEGATIVA: com preco ao vivo e SL/TP escritos, o corpo LEVA os dois', async () => {
-    // Sem este caso, uma correcao que so apagasse os campos passaria.
+  it('PROVA NEGATIVA: o corpo LEVA sl_preco e tp_preco derivados do 1:1', async () => {
+    // Sem este caso, uma correcao que so apagasse os dois campos passaria.
+    // Antes media o que o operador DIGITAVA; agora mede o que o padrao PRODUZ,
+    // porque o input saiu (decisao do dono, 08/10/2026).
     renderPainel();
     await ticketMontado();
-    fireEvent.change(screen.getByLabelText('Stop loss'), { target: { value: '4130' } });
-    fireEvent.change(screen.getByLabelText('Take profit'), { target: { value: '4150' } });
+    // Espera o 1:1 derivar os niveis antes do clique (ver `ticketComPadrao11`):
+    // sem isso o corpo pode sair sem `sl_preco` e o caso reprova NaN.
+    await ticketComPadrao11();
     const auto = screen.getByRole('switch', { name: 'Operação automática' });
     fireEvent.click(auto);
     await waitFor(() =>
@@ -418,16 +539,16 @@ describe('OperacaoAutomatica — a logica que ja funcionava', () => {
     );
     const cfg = estado.chamadas.find((c) => c.url.includes('/api/auto/config'));
     const corpo = cfg!.body as Record<string, unknown>;
-    expect(Number(corpo.sl_preco)).toBe(4130);
-    expect(Number(corpo.tp_preco)).toBe(4150);
+    expect(Number(corpo.sl_preco)).toBeCloseTo(4136.46, 2);
+    expect(Number(corpo.tp_preco)).toBeCloseTo(4144.74, 2);
   });
 
   it('NAO envia ordem manual', async () => {
-    // A ordem manual vive no grafico, em 1 clique. Aqui seria duplicacao.
+    // A ordem manual vive no grafico, no painel de `AcompanharModelos`. Aqui
+    // seria duplicacao — e o bloco do ticket saiu, entao nem ha botao aqui.
     const { container } = renderPainel();
     await ticketMontado();
-    fireEvent.change(screen.getByLabelText('Stop loss'), { target: { value: '4130' } });
-    fireEvent.change(screen.getByLabelText('Take profit'), { target: { value: '4150' } });
+    expect(container.querySelector('.robo-ticket-enviar')).toBeTruthy();
     fireEvent.click(container.querySelector('.robo-ticket-enviar') as HTMLButtonElement);
     await waitFor(() =>
       expect(estado.chamadas.some((c) => c.url.includes('/api/auto/config'))).toBe(true),
@@ -435,15 +556,24 @@ describe('OperacaoAutomatica — a logica que ja funcionava', () => {
     expect(estado.chamadas.some((c) => c.url.includes('/api/trade/order'))).toBe(false);
   });
 
-  it('recusa lote fora da faixa antes do gateway', async () => {
+  it('PROVA NEGATIVA: sem campo de quantidade NAO ha como mandar lote fora da faixa', async () => {
+    /*
+    Antes este caso digitava `50` num campo de lote e esperava a recusa
+    "Volume entre 0.01 e 10". O campo saiu (decisao do dono, 08/10/2026), entao
+    a faixa nao pode mais ser violada por digITACAO.
+
+    O que este caso trava agora: o campo nao existe, e o AUTO liga com o lote
+    padrao, que a ficha da corretora define.
+    */
     renderPainel();
     await ticketMontado();
-    fireEvent.change(screen.getByLabelText('Quantidade em lote(s)'), { target: { value: '50' } });
-    fireEvent.change(screen.getByLabelText('Stop loss'), { target: { value: '4130' } });
-    fireEvent.change(screen.getByLabelText('Take profit'), { target: { value: '4150' } });
+    expect(screen.queryByLabelText(/Quantidade em/)).toBeNull();
     fireEvent.click(screen.getByRole('switch', { name: 'Operação automática' }));
-    await waitFor(() => expect(screen.getByText(/Volume entre 0.01 e 10/)).toBeTruthy());
-    expect(estado.chamadas.some((c) => c.url.includes('/api/auto/start'))).toBe(false);
+    await waitFor(() =>
+      expect(estado.chamadas.some((c) => c.url.includes('/api/auto/start'))).toBe(true),
+    );
+    const cfg = estado.chamadas.find((c) => c.url.includes('/api/auto/config'))!;
+    expect(cfg.body.lote).toBe(0.01);
   });
 
   it('AUTO ligado desliga pelo stop', async () => {
@@ -461,50 +591,51 @@ describe('OperacaoAutomatica — a logica que ja funcionava', () => {
     expect(estado.chamadas.some((c) => c.url.includes('/api/auto/config'))).toBe(false);
   });
 
-  it('os presets preenchem SL e TP', async () => {
+  it('os presets 1:1..1:4 SAIRAM da tela, e o 1:1 padrao continua no corpo', async () => {
+    /*
+    DECISAO DO DONO, 08/10/2026: o bloco do ticket saiu, e com ele o
+    `passo` e os quatro botoes `1:1 1:2 1:3 1:4`.
+
+    O texto longo deste caso foi preservado de proposito: ele documenta um
+    defeito REAL que aconteceu e que nao pode voltar — o preset escrevia
+    DISTANCIA onde o motor le PRECO (`auto_engine.py:152`), e `sl_preco: 4.14`
+    em ouro e um stop invalido. Esse defeito nao existe mais porque o preset nao
+    existe; o que este caso trava agora e a ausencia dele.
+    */
     renderPainel();
     await ticketMontado();
-    /*
-      O PRESET ESCREVE PRECO, E NAO DISTANCIA (06/10/2026)
-      ====================================================
-      Este teste afirmava `4.14` e `12.42` — a DISTANCIA. Mudou porque a
-      distacia chegava ao motor como se fosse preco: `ligar()` manda
-      `sl_preco: slN`, e `MotorAuto` le `sl_preco` como preco
-      (`auto_engine.py:152` — `"sl_preco": "stop loss (preco)"` — usado direto
-      na linha 757, sem converter).
-
-      Em ouro a 4.140,60, `sl_preco: 4.14` e um stop invalido. O `order_check`
-      recusaria, e a tela mostraria "configurado" para uma protecao que nao
-      existe. Era o AGENTS.md 5: o sintoma (stop recusado) cairia no MOTOR,
-      e o defeito era do painel que produziu o numero.
-
-      Este e o mesmo campo que o teste do AUTO digita como preco (`4130` em ouro
-      a `4140,6`). Dois sentidos no mesmo campo — agora ha um so.
-
-      Passo 0,1% de 4.140,60 = 4,1406. Com 1:3: SL = 4.136,46 · TP = 4.153,02.
-    */
-    fireEvent.click(screen.getByRole('button', { name: '1:3' }));
+    for (const nome of ['1:1', '1:2', '1:3', '1:4']) {
+      expect(screen.queryByRole('button', { name: nome })).toBeNull();
+    }
+    expect(screen.queryByText(/^passo /)).toBeNull();
+    // E o padrao 1:1 continua sendo o que vai para o motor.
+    fireEvent.click(screen.getByRole('switch', { name: 'Operação automática' }));
     await waitFor(() =>
-      expect((screen.getByLabelText('Stop loss') as HTMLInputElement).value).toBe('4136.46'),
+      expect(estado.chamadas.some((c) => c.url.includes('/api/auto/config'))).toBe(true),
     );
-    expect((screen.getByLabelText('Take profit') as HTMLInputElement).value).toBe('4153.02');
+    const cfg = estado.chamadas.find((c) => c.url.includes('/api/auto/config'))!;
+    expect(Number(cfg.body.sl_preco)).toBeCloseTo(4136.46, 2);
+    expect(Number(cfg.body.tp_preco)).toBeCloseTo(4144.74, 2);
   });
 
-  it('PROVA NEGATIVA: o preset nao escreve nada sem preco ao vivo', async () => {
+  it('PROVA NEGATIVA: sem preco ao vivo o AUTO nao manda SL zero', async () => {
     /*
-    Sem preco nao existe nivel. Um preset que preenchesse 0 mandaria stop zero ao
-    motor, e a recusa do gateway seria com motivo generico — o operador culparia
-    a corretora por um numero que o painel inventou (AGENTS.md 9).
+    Sem preco nao existe nivel. Um padrao que mandasse 0 faria o motor recusar
+    com motivo generico, e o operador culparia a corretora por um numero que o
+    painel inventou (AGENTS.md 9). Antes isso era medido pelos inputs vazios;
+    agora e medido pelo CORPO, que e onde o numero viaja.
     */
     estado.preco = null;
     renderPainel();
     await ticketMontado();
-    fireEvent.click(screen.getByRole('button', { name: '1:3' }));
-    expect((screen.getByLabelText('Stop loss') as HTMLInputElement).value).toBe('');
-    expect((screen.getByLabelText('Take profit') as HTMLInputElement).value).toBe('');
+    fireEvent.click(screen.getByRole('switch', { name: 'Operação automática' }));
+    await waitFor(() =>
+      expect(estado.chamadas.some((c) => c.url.includes('/api/auto/config'))).toBe(true),
+    );
+    const cfg = estado.chamadas.find((c) => c.url.includes('/api/auto/config'));
+    const corpo = cfg!.body as Record<string, unknown>;
+    expect(corpo.sl_preco === undefined || Number(corpo.sl_preco) > 0).toBe(true);
   });
-
-
 });
 
 describe('OperacaoAutomatica — sem conexao NAO envia ordem (05/10/2026)', () => {
@@ -576,5 +707,286 @@ describe('OperacaoAutomatica — sem conexao NAO envia ordem (05/10/2026)', () =
     renderPainel();
     await ticketMontado();
     expect((screen.getByRole('switch', { name: 'Operação automática' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+});
+
+/*
+  SUB-ABAS DUPLICADAS (11/10/2026)
+  ================================
+  O dono reportou "sub abas duplicadas" nas capturas da ultima sessao. MEDIDO
+  em `RobotTabs.tsx` antes da correcao: a sub-aba Risco renderizava o painel
+  INTEIRO de novo — segundo botao AUTO, segundo "Par para operar", segundo
+  bloco de IA — e a tabela de modelos treinados aparecia DUAS vezes na mesma
+  tela (dentro da sub-aba Operacao, em `OperacaoAutomatica`, e de novo na
+  sub-aba Modelos).
+
+  E o AGENTS.md 5 na tela: dois lugares com o mesmo dado, e o operador sem
+  saber qual dos dois manda.
+
+  Estes casos sao as travas. O primeiro e de PROVA NEGATIVA: se o painel
+  voltar para a sub-aba Risco, ele reprova.
+*/
+describe('RobotTabs — cada sub-aba mostra UMA coisa só (11/10/2026)', () => {
+  it('PROVA NEGATIVA: a sub-aba Risco nao monta o painel de operação de novo', async () => {
+    const { container } = render(<RobotTabs />);
+    // Na Operação existe exatamente UM interruptor AUTO. O seletor é a
+    // classe do botão: `aria-label="Operação automática"` também carrega a
+    // SEÇÃO (o wrapper do painel), então contar por ele leria dois elementos
+    // mesmo com um botão só — assinatura de teste que lê o campo errado.
+    expect(container.querySelectorAll('.robo-auto-topo')).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Risco' }));
+    await waitFor(() =>
+      expect(container.querySelector('[aria-label="Controle de risco"]')).toBeTruthy(),
+    );
+
+    // ...e na de Risco nao existe NENHUM: nem a seção, nem o botão AUTO.
+    expect(container.querySelector('[aria-label="Operação automática"]')).toBeNull();
+    expect(container.querySelectorAll('.robo-auto-topo')).toHaveLength(0);
+    expect(screen.queryByRole('switch', { name: 'Operação automática' })).toBeNull();
+    // O que a aba promete é o que ela tem: os campos de limite, abertos.
+    expect(container.querySelector('[aria-label="Confiança mínima (%)"]')).toBeTruthy();
+  });
+
+  it('PROVA NEGATIVA: a tabela de modelos so e montada na sub-aba Modelos', async () => {
+    const { container } = render(<RobotTabs />);
+    // Operação: o painel usa o SELETOR de modelo, não a tabela de modelos.
+    expect(container.querySelector('[aria-label="Modelos treinados"]')).toBeNull();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Modelos' }));
+    await waitFor(() =>
+      expect(container.querySelector('[aria-label="Modelos treinados"]')).toBeTruthy(),
+    );
+  });
+
+  it('declarar limite na sub-aba Risco aplica SEM ligar o motor', async () => {
+    const { container } = render(<RobotTabs />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Risco' }));
+    await waitFor(() =>
+      expect(container.querySelector('[aria-label="Controle de risco"]')).toBeTruthy(),
+    );
+    fireEvent.change(container.querySelector('[aria-label="Confiança mínima (%)"]') as HTMLElement, {
+      target: { value: '72' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar limites ao motor' }));
+    await waitFor(() =>
+      expect(estado.chamadas.some((c) => c.url.includes('/api/auto/config'))).toBe(true),
+    );
+    const cfg = estado.chamadas.find((c) => c.url.includes('/api/auto/config'))!;
+    expect(cfg.body.confianca_minima).toBe(72);
+    // A gaveta de risco nao e um segundo caminho para ligar o motor.
+    expect(estado.chamadas.some((c) => c.url.includes('/api/auto/start'))).toBe(false);
+    expect(estado.chamadas.some((c) => c.url.includes('/api/trade/order'))).toBe(false);
+  });
+
+  it('os campos de risco mostram o que o MOTOR ja guarda', async () => {
+    /*
+    MEDIDO antes da correcao: o motor guardava `confianca_minima = 72` e a
+    sub-aba Risco abria com o campo VAZIO ("nao declarada") — cada aba era uma
+    instancia separada do painel, e o que existia do outro lado nao aparecia.
+    O operador via limite apagado.
+    */
+    estado.auto = {
+      ativo: false,
+      simbolo: 'GOLD',
+      timeframe: 'H1',
+      limites: { confianca_minima: 72, max_operacoes_dia: 5 },
+    };
+    const { container } = render(<RobotTabs />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Risco' }));
+    await waitFor(() => {
+      const campo = container.querySelector(
+        '[aria-label="Confiança mínima (%)"]',
+      ) as HTMLInputElement | null;
+      expect(campo?.value).toBe('72');
+    });
+    const porDia = container.querySelector('[aria-label="Operações por dia"]') as HTMLInputElement;
+    expect(porDia.value).toBe('5');
+    // Campo sem valor no motor continua declarando "vazio = não declarado".
+    const banca = container.querySelector('[aria-label="Banca"]') as HTMLInputElement;
+    expect(banca.value).toBe('');
+  });
+});
+
+/*
+  A RECUSA DE PLANO APONTA O DESBLOQUEIO (11/10/2026)
+  ===================================================
+  MEDIDO: numa conta Free o 403 de `/api/auto/start` trazia
+  `code: PLAN_REQUIRED` e `required_plans: ['VIP', 'VIPS']` no corpo — o
+  `plano_gate.resposta_bloqueio` já manda tudo —, e a tela imprimia só
+  `error`. O operador lia "recurso nao liberado no plano atual: auto_engine"
+  sem ter onde ativar: o gateway já expunha
+  `/api/subscriptions/{plans,me,activate}` e o frontend não tinha UM
+  consumidor. Um bloqueio sem o caminho do desbloqueio é o beco sem saída que
+  este projeto já registrou duas vezes.
+*/
+describe('recusa de plano aponta o desbloqueio (11/10/2026)', () => {
+  it('PROVA: 403 PLAN_REQUIRED em /api/auto/start vira "Configurações → Plano"', async () => {
+    vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? '{}'));
+      estado.chamadas.push({ url: String(url), body });
+      if (String(url).includes('/api/universal/quotes')) {
+        return { ok: true, json: async () => ({ quotes: [{ price: 4140.6 }] }) };
+      }
+      if (String(url).includes('/api/auto/start')) {
+        return {
+          ok: false,
+          status: 403,
+          json: async () => ({
+            ok: false,
+            error: 'plano local atual não inclui: auto_engine',
+            code: 'PLAN_REQUIRED',
+            feature: 'auto_engine',
+            required_plans: ['VIP', 'VIPS'],
+          }),
+        };
+      }
+      return { ok: true, json: async () => ({ ok: true }) };
+    });
+
+    renderPainel();
+    await ticketMontado();
+    await ticketComPadrao11();
+    fireEvent.click(screen.getByRole('switch', { name: 'Operação automática' }));
+
+    await waitFor(() => {
+      const texto = document.querySelector('.robo-observacao')?.textContent ?? '';
+      expect(texto).toContain('Configurações → Plano');
+      expect(texto).toContain('VIP');
+    });
+    // PROVA NEGATIVA: o `error` cru do backend não pode ser mais o texto final.
+    const texto = document.querySelector('.robo-observacao')?.textContent ?? '';
+    expect(texto).not.toBe('plano local atual não inclui: auto_engine');
+    // A ordem não foi enviada por causa disso — o gate é do motor, não da tela.
+    expect(estado.chamadas.some((c) => c.url.includes('/api/trade/order'))).toBe(false);
+  });
+
+  it('PROVA: recusaDePlano só fala quando o gateway falou de plano', () => {
+    // Sem 403 e sem o code, a função é muda — senão qualquer recusa viraria
+    // "ative um plano" e o operador seria mandado para Configurações por um
+    // erro de lote ou de campo.
+    expect(recusaDePlano({ error: 'defina lote' }, 400)).toBe('');
+    expect(recusaDePlano({ error: 'x', code: 'OUTRO' }, 500)).toBe('');
+    const comLista = recusaDePlano({ code: 'PLAN_REQUIRED', required_plans: ['VIP'] }, 403);
+    expect(comLista).toContain('VIP');
+    expect(comLista).toContain('Configurações → Plano');
+    // Sem a lista, o texto ainda aponta o lugar, sem inventar nome de plano.
+    const semLista = recusaDePlano({ code: 'PLAN_REQUIRED' }, 403);
+    expect(semLista).toContain('um plano superior');
+    expect(semLista).toContain('Configurações → Plano');
+  });
+});
+
+/*
+  SEM CONTA, SEM CORRETORA NA TELA — NADA DE MT5 FIXO (11/10/2026)
+  ================================================================
+  Decisao do dono: na aba ROBO, nas partes de cima e no grafico, "MT5" fixo
+  nao pode — e modelo/par BTCUSD fixo, menos ainda. Antes o `broker` nascia
+  `'mt5'` (e o par, do primeiro modelo publicavel, gravado no store): a aba
+  inteira operava MT5/BTCUSD sem ninguem escolher.
+
+  O `beforeEach` deste arquivo grava `xau-active-account = mt5:metals`; aqui
+  a chave e APAGADA antes de renderizar, para medir a tela sem conta.
+*/
+describe('sem conta salva: recusa com motivo, nunca MT5 fixo (11/10/2026)', () => {
+  it('PROVA: o cabecalho diz "sem corretora", e o AUTO recusa nomeando onde ativar', async () => {
+    window.localStorage.removeItem('xau-active-account');
+    // Sem conta e sem par no motor: nada para presumir.
+    estado.auto = { ativo: false, simbolo: '', timeframe: '' };
+    renderPainel();
+    await ticketMontado();
+
+    const cabeca = document.querySelector('.robo-comandos .muted')?.textContent ?? '';
+    expect(cabeca).toContain('sem corretora');
+    // PROVA NEGATIVA: o nome fixo nao pode ser o texto final.
+    expect(cabeca).not.toContain('MT5');
+
+    fireEvent.click(screen.getByRole('switch', { name: 'Operação automática' }));
+    await waitFor(() => {
+      const texto = document.querySelector('.robo-observacao')?.textContent ?? '';
+      // A escolha existe de verdade: o Ativar das Conexoes grava a conta
+      // ativa (ver `ConnectionSettings`), entao a mensagem aponta para la.
+      expect(texto).toContain('Conexões');
+      expect(texto).toContain('Ativar');
+    });
+    // Nada saiu para o gateway: a recusa e da tela, antes de qualquer POST.
+    expect(estado.chamadas.some((c) => c.url.includes('/api/auto/config'))).toBe(false);
+    expect(estado.chamadas.some((c) => c.url.includes('/api/auto/start'))).toBe(false);
+  });
+
+  it('PROVA: sem par escolhido, o seletor nao presume par nenhum', async () => {
+    window.localStorage.removeItem('xau-active-account');
+    estado.auto = { ativo: false, simbolo: '', timeframe: '' };
+    const { container } = renderPainel();
+    await ticketMontado();
+
+    const seletor = container.querySelector(
+      '[aria-label="Par para operar"]',
+    ) as HTMLSelectElement;
+    expect(seletor).toBeTruthy();
+    // O valor e vazio: nenhum BTCUSD (nem outro par) nasce escolhido, e nada
+    // foi gravado no store por tabela.
+    expect(seletor.value).toBe('');
+  });
+});
+
+/*
+  UM GRAFICO SO, NA SUB-ABA OPERACAO (11/10/2026)
+  ===============================================
+  Decisao do dono: duas sub-abas estavam com o grafico duplicado — remover de
+  uma, apenas 1 grafico. Antes o `<AcompanharModelos />` era sempre visivel,
+  embaixo de qualquer sub-aba: o mesmo grafico em quatro lugares, quatro
+  consultas e quatro polls para o mesmo par.
+*/
+describe('um grafico so, na sub-aba Operacao (11/10/2026)', () => {
+  const quantosGraficos = (container: HTMLElement) =>
+    container.querySelectorAll('[data-testid="painel-grafico"]').length;
+
+  it('PROVA: na Operacao (padrao), o grafico esta la — e e UM so', () => {
+    const { container } = render(<RobotTabs />);
+    expect(container.querySelector('.robo-sub-aba.ativa')?.textContent).toBe('Operação');
+    expect(quantosGraficos(container)).toBe(1);
+  });
+
+  it.each(['Modelos', 'Risco', 'Operações'] as const)(
+    'PROVA: na sub-aba %s, nao ha grafico nenhum',
+    async (aba) => {
+      const { container } = render(<RobotTabs />);
+      fireEvent.click(screen.getByRole('tab', { name: aba }));
+      await waitFor(() => {
+        expect(container.querySelector('.robo-sub-aba.ativa')?.textContent).toBe(aba);
+      });
+      expect(quantosGraficos(container)).toBe(0);
+    },
+  );
+
+  it('PROVA: voltar para a Operacao traz o grafico de volta — ainda UM so', async () => {
+    const { container } = render(<RobotTabs />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Modelos' }));
+    await waitFor(() => {
+      expect(container.querySelector('.robo-sub-aba.ativa')?.textContent).toBe('Modelos');
+    });
+    expect(quantosGraficos(container)).toBe(0);
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Operação' }));
+    await waitFor(() => {
+      expect(container.querySelector('.robo-sub-aba.ativa')?.textContent).toBe('Operação');
+    });
+    expect(quantosGraficos(container)).toBe(1);
+  });
+
+  it('PROVA NEGATIVA: o grafico fora da Operacao voltaria sem nenhum teste reclamar', () => {
+    // Sem este caso, alguem recoloca o `<AcompanharModelos />` fora da
+    // condicao e so o caso da Operacao continuaria passando — o defeito
+    // (grafico em quatro lugares) voltaria verde.
+    const { container } = render(<RobotTabs />);
+    const abas = ['Operação', 'Modelos', 'Risco', 'Operações'] as const;
+    let total = 0;
+    for (const aba of abas) {
+      fireEvent.click(screen.getByRole('tab', { name: aba }));
+      total += quantosGraficos(container);
+    }
+    // Somadas as quatro sub-abas, ha exatamente UMA montagem de grafico.
+    expect(total).toBe(1);
   });
 });

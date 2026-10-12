@@ -1,0 +1,122 @@
+; XAU_AI_PRO — PADRAO 6 | TP 6 USD | SL 6 USD
+; Gerado em 08/10/2026 a pedido do dono: risco em DINHEIRO, alvo simetrico.
+; RiskPerTradeUsd=6 e RewardRatio=1.0 dao TP = SL = 6 USD em qualquer
+; simbolo. A conversao para pontos e feita em tempo de execucao por
+; DistanciaPontosParaRiscoUSD: risco / (contrato x volume x point).
+;
+; MEDIDO nesta conta com 0,01 de lote:
+;   GOLD    200 pontos = US$ 2,00
+;   EURUSD  200 pontos = US$ 2,00
+;   USDJPY    2 pontos = US$ 2,00
+;   USDCNH   20 pontos = US$ 2,00
+;   BTCUSD 20000 pontos = US$ 2,00
+; `StopLossPoints`/`TakeProfitPoints` ficam no fim, apagados de proposito: sao o
+; caminho de fuga para quando RiskPerTradeUsd <= 0, e nao valem nada com o risco
+; em dolar ativo.
+;
+; ATENCAO no GOLD: com 6 dolares o stop e 600 pontos. A mediana de uma
+; vela M1 do ouro e 1,48 e de M5 e 3,53, entao um stop de 2 dolares e 0,68 da
+; mediana de M1 e vai ser tocado por ruido com frequencia. Forex e cripto dao
+; bem mais folga com o mesmo valor.
+
+AutoTrade=true
+MagicNumber=2026001
+TradeComment=XAU_AI_PRO
+
+UseRiskManagement=true
+LotSize=0.01
+RiskPercent=1.0
+RiskPerTradeUsd=6
+RewardRatio=1.0
+MaxDailyLossPercent=5.0
+MaxDrawdownPercent=15.0
+MinEquityPercent=10.0
+MinFreeMargin=10.0
+MaxTradesPerDay=20
+MaxOpenPositions=5
+AllowMinLotOverride=true
+
+; Spread por PORCENTAGEM do preco (corrigido 08/10/2026). Os nomes antigos
+; `MaxSpread`/`MaxSpreadBySymbol` nao existem mais.
+MaxSpreadPct=0.6
+MaxSpreadPctBySymbol=
+
+Slippage=5
+RetryMaxAttempts=5
+RetryBaseDelayMs=100
+RetryDelayMultiplier=2.0
+RetryMaxDelayMs=2000
+RetryMaxSlippage=50
+RetrySlippageIncrement=2
+
+; Caminho de fuga em pontos. Só vale com RiskPerTradeUsd <= 0.
+StopLossPoints=300
+TakeProfitPoints=600
+
+EnableBreakEven=true
+BreakEvenTrigger=80
+BreakEvenOffset=10
+EnableTrailingATR=true
+ATRMultiplier=1.2
+EnablePartialClose=true
+PartialTrigger=150
+PartialPercent=30.0
+
+EnableSpreadFilter=true
+EnableSessionFilter=false
+EnableTrendFilter=true
+EnableVolatilityFilter=false
+EnableADXFilter=true
+EnableMTFConfirmation=false
+EnableNewsFilter=false
+EnableAIFilter=true
+NewsCurrencies=
+NewsImpactThreshold=2
+NewsMinutesBefore=30
+NewsMinutesAfter=30
+
+MinAIConfidence=50.0
+RequireAIJSON=false
+KCI_VD_Period=14
+KCI_DX_BasePeriod=9
+KCI_DX_ZScorePeriod=30
+KCI_DX_Sensitivity=1.5
+KCI_DX_MainThreshold=30.0
+
+TradeStartHour=0
+TradeEndHour=24
+
+FastEMA=50
+SlowEMA=200
+RSIPeriod=14
+RSIPullbackBuy=45.0
+RSIPullbackSell=55.0
+ATRPeriod=14
+ADXPeriod=14
+MinimumADX=18.0
+
+EnableScheduler=true
+SchedulerIntervalSec=60
+EnableWeekendShutdown=true
+EnableDatabase=false
+DatabasePath=XAU_AI_PRO.db
+EnableTelemetry=true
+EnableDataset=true
+SaveDatasetCSV=true
+EnableBacktestLog=true
+EnableDashboard=true
+EnableLogs=true
+DebugTradeDecision=true
+
+EnableHealthMonitor=true
+HealthCheckInterval=60
+HealthWatchdogInterval=120
+EnableAuditLog=true
+EnableDiagnostics=true
+
+; `XAUUSD` saiu da lista de proposito: a XMGlobal nao oferece esse simbolo nesta
+; conta. O ouro dela e `GOLD`.
+EnableMultiSymbol=true
+Symbols=GOLD,EURUSD,GBPUSD,USDJPY,AUDUSD,NZDUSD,USDCAD,USDCHF,USDCNH,USDBRL,USDSEK,BTCUSD,ETHUSD
+
+EnableVerboseDebug=true

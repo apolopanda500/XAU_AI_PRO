@@ -3,9 +3,46 @@ import ReactDOM from 'react-dom/client';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { invoke } from '@tauri-apps/api/core';
 import { queryClient } from './hooks/queries';
-import { isMobileRuntime, sessionToken } from './lib/api';
+import { isMobileRuntime, sessionToken, apiBase } from './lib/api';
+import { definirBaseLocal, definirPortaWs, portaPadraoGateway } from './lib/portas';
 import { installGatewayAuth, installRemoteGatewayAuth, isTauri } from './lib/tauri';
-import App from './App';
+/*
+  `App` NAO E IMPORTADO AQUI (09/10/2026)
+  =========================================
+  MEDIDO, no app instalado, logo apos a correcao da porta: a aba **Sistema**
+  mostrava `GATEWAY OK`, e o **Historico** mostrava `mt5: Failed to fetch` — ao
+  mesmo tempo, na mesma janela, na mesma sessao.
+
+  A CAUSA, e ela e ordem de avaliacao
+  =====================================
+  Nove arquivos guardam a base no TOPO do modulo:
+
+      frontend/src/lib/historico.ts:305     const API = `${apiBase()}`
+      frontend/src/hooks/queries.ts:34      idem
+      frontend/src/components/UniversalLiveTerminal.tsx:17
+      ... e mais seis
+
+  `import` e hoisted: essas linhas rodam quando o modulo CARREGA, e um modulo
+  carrega antes de qualquer codigo deste arquivo executar. Com a porta resolvida
+  em tempo de BOOT, `apiBase()` devolvia 9001 — o padrao — e o `API` ficava
+  congelado em 9001 para sempre.
+
+  MEDIDO: nada escutava na 9001, e `Failed to fetch` e exatamente o erro de um
+  `fetch` para um soquete sem dono.
+
+  Por que Sistema funcionava: `SystemHealthOnly.tsx` chama `apiBase()` DENTRO da
+  funcao, em tempo de execucao, e le a base ja resolvida. Duas metades do mesmo
+  app medindo a mesma coisa em momentos diferentes — o AGENTS.md §5.
+
+  A CORRECAO
+  ==========
+  `App` passa a ser importado DENTRO do bootstrap, DEPOIS que a porta foi
+  resolvida. Isso corrige os nove de uma vez, sem editar nove arquivos.
+
+  E o texto sozinho nao segura: o proximo `const API = apiBase()` num arquivo
+  novo volta a congelar. Por isso `portas.test.ts` trava a ordem, e a base
+  continua resolvida por `lib/portas.ts` — a fonte unica.
+*/
 import './theme/global.css';
 import './theme/market.css';
 
@@ -63,7 +100,25 @@ async function waitForGateway() {
   for (let attempt = 0; attempt < 60; attempt += 1) {
     let retry = true;
     try {
-      const response = await fetch('http://127.0.0.1:9001/api/health', {
+      /*
+        A BASE VEM DE `apiBase()`, E NAO DE 'http://127.0.0.1:9001' (09/10/2026)
+        ====================================================================
+        MEDIDO: com `XAU_GATEWAY_PORT=9011`, o app instalado abria uma janela
+        PRETA com "Falha ao inicializar o ambiente local seguro", sem backend e
+        sem erro no console.
+
+        A CAUSA era esta linha: ela batia na 9001 — que e onde o `terminal64`
+        escuta por causa do `[MCP.MetaTrader]` do MT5 — e nunca recebia a
+        identidade do gateway. Depois de 60 tentativas o `waitForGateway`
+        lancava, e o `catch` abaixo pintava a tela preta.
+
+        A porta e uma MEDIDA: quem mede e o Tauri, que le `XAU_GATEWAY_PORT`
+        (`porta_gateway()` em `main.rs`). Aqui so se usa o valor que ele mandou
+        — o mesmo que o resto do app usa em `apiBase()`. Duas bases
+        diferentes no mesmo processo seria o AGENTS.md §5 de novo: o token
+        iria num endereco e o corpo em outro.
+      */
+      const response = await fetch(`${apiBase()}/api/health`, {
         signal: AbortSignal.timeout(2000),
       });
       if (response.status === 401) {
@@ -95,6 +150,33 @@ async function waitForGateway() {
 async function bootstrap() {
   const mobile = isMobileRuntime();
   if (isTauri() && !mobile) {
+    /*
+      A PORTA PRIMEIRO, O TOKEN DEPOIS (09/10/2026)
+      ==============================================
+      A ordem importa. `installGatewayAuth` decide o que e "gateway local"
+      comparando com a base resolvida (`lib/portas.ts`), e `waitForGateway`
+      consulta `apiBase()`. Perguntar a porta depois deixaria os dois medindo
+      9001 enquanto o gateway sobe em 9011 — e o sintoma seria 401 em tudo,
+      que e o AGENTS.md §5: servidor certo, cliente medindo a coisa errada.
+
+      A falha aqui NAO derruba o app: um Tauri antigo, sem o comando, devolve
+      um `invoke` que rejeita, e o padrao 9001 e o comportamento de antes da
+      mudanca. Um `catch` vazio aqui seria trocar uma tela preta por outra.
+    */
+    try {
+      const [porta, portaWs] = await Promise.all([
+        invoke<number>('porta_gateway_command'),
+        invoke<number>('porta_ws_command'),
+      ]);
+      if (Number.isInteger(porta) && porta > 0 && porta <= 65535) {
+        definirBaseLocal(`http://127.0.0.1:${porta}`);
+      }
+      definirPortaWs(portaWs);
+    } catch {
+      console.warn(
+        `[bootstrap] Tauri nao devolveu a porta do gateway; usando a padrao ${portaPadraoGateway()}`,
+      );
+    }
     const token = await invoke<string>('gateway_token_command');
     if (!/^[a-f0-9]{64}$/.test(token)) throw new Error('token de sessao invalido');
     installGatewayAuth(token);
@@ -109,6 +191,12 @@ async function bootstrap() {
     installRemoteGatewayAuth(sessionToken);
   }
   if (!root) throw new Error('elemento raiz indisponivel');
+  /*
+    O `App` entra AGORA, e nao no topo do arquivo. Ver o bloco de comentario la
+    em cima: nove modulos congelam `apiBase()` no carregamento, e a porta so
+    existe depois do `invoke`.
+  */
+  const { default: App } = await import('./App');
   ReactDOM.createRoot(root).render(
     <React.StrictMode>
       <QueryClientProvider client={queryClient}>
@@ -118,6 +206,46 @@ async function bootstrap() {
   );
 }
 
-void bootstrap().catch(() => {
-  if (root) root.textContent = 'Falha ao inicializar o ambiente local seguro.';
+/*
+  A TELA PRETA, E O QUE ELA DIZ (09/10/2026)
+  ===========================================
+  MEDIDO: `void bootstrap().catch(() => { root.textContent = 'Falha ao
+  inicializar o ambiente local seguro.' })`.
+
+  O `catch` ignorava o erro. Consequencias, todas medidas:
+
+  - a tela ficava PRETA, com uma frase e nada mais;
+  - o motivo nao ia para o console, porque nem era registrado;
+  - o operador via "falhou" e culparia o gateway, a corretora ou a conta.
+
+  O defeito real era UMA PALAVRA ERRADA na URL — a porta 9001 escrito à mão
+  em `main.tsx`, `api.ts` e `tauri.ts`, com o gateway em 9011. Levou um ciclo
+  inteiro para achar, e a maior parte dele foi caçar no servidor.
+
+  E o AGENTS.md §5: sintoma de recusa sem motivo faz o operador culpar a coisa
+  errada. Este `catch` é a forma exata disso.
+
+  AGORA
+  -----
+  O erro vai para o console, e a tela diz o que aconteceu e qual endereco foi
+  consultado. O dono ve o mesmo numero que o codigo mediu, e o proximo ciclo
+  comeca pelo lugar certo.
+*/
+void bootstrap().catch((erro: unknown) => {
+  const motivo = erro instanceof Error ? erro.message : String(erro);
+  console.error('[bootstrap] falha ao iniciar o ambiente local:', erro);
+  if (root) {
+    root.textContent = '';
+    const titulo = document.createElement('div');
+    titulo.textContent = 'Falha ao inicializar o ambiente local seguro.';
+    const detalhe = document.createElement('div');
+    detalhe.textContent = `Motivo: ${motivo}`;
+    const endereco = document.createElement('div');
+    try {
+      endereco.textContent = `Endereco consultado: ${apiBase()}`;
+    } catch {
+      endereco.textContent = 'Endereco consultado: (indisponivel)';
+    }
+    root.append(titulo, detalhe, endereco);
+  }
 });

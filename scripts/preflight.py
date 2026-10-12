@@ -54,6 +54,276 @@ ROOT = Path(__file__).resolve().parent.parent
 
 AUTORIZACOES_MQL5: dict[str, dict[str, str]] = {
     # ---------------------------------------------------------------------
+    # Limite de spread em porcentagem do preco (08/10/2026)
+    # ---------------------------------------------------------------------
+    "Core/Config.mqh": {
+        "commit": "pendente",
+        "motivo": (
+            "MEDIDO na conta 391773676 com o EA operando BTCUSD H4: 4 de 12 "
+            "simbolos bloqueados com spread NORMAL — BTCUSD (4000 pts), ETHUSD "
+            "(300), USDSEK (1579) e o OURO (57 contra o limite de 50). O limite "
+            "era em PONTOS CRUS e `point` varia mil vezes entre forex e BTCUSD: "
+            "'50 pontos' vale $5,00 no BTCUSD (spread real $40) e $0,0005 no "
+            "EURUSD (spread real $0,00019). Alem disso o mapa por simbolo nunca "
+            "acertava: os nomes tinham `#` e `_Symbol` nao tem. Agora o limite e "
+            "PORCENTAGEM do preco (0,6%) e o GetMaxSpread deriva os pontos do "
+            "preco e do point do simbolo — os seis leitores nao mudaram."
+        ),
+        "compilado": "ver o log deste ciclo",
+        "reanexado": "NAO - depende do dono reanexar o EA no grafico",
+    },
+    "Enterprise/CircuitBreaker.mqh": {
+        "commit": "pendente",
+        "motivo": (
+            "So o comentario que descrevia o defeito do limite de spread. "
+            "Nenhuma logica mudou: a `emergencySpread = GetMaxSpread()*10` "
+            "continua sendo a explosao extrema, agora sobre um numero ja "
+            "convertido."
+        ),
+        "compilado": "ver o log deste ciclo",
+        "reanexado": "NAO - depende do dono reanexar o EA no grafico",
+    },
+    "Monitoring/ProductionChecklist.mqh": {
+        "commit": "pendente",
+        "motivo": (
+            "Quarta instancia do mesmo defeito: comparava `spreadPoints` com o "
+            "INPUT cru `MaxSpread`, e nao com `GetMaxSpread()`. O input virou "
+            "porcentagem; quem converte para pontos e o getter. Sem isso o "
+            "checklist dava o mesmo veredito para BTCUSD e EURUSD."
+        ),
+        "compilado": "0 errors, 0 warnings",
+        "reanexado": "NAO - depende do dono reanexar o EA no grafico",
+    },
+    "Monitoring/ValidationChecklist.mqh": {
+        "commit": "pendente",
+        "motivo": (
+            "Mesma quarta instancia: `spreadPoints > MaxSpread` virou "
+            "`spreadPoints > GetMaxSpread()`, e a mensagem mostra o limite "
+            "convertido em vez do input cru."
+        ),
+        "compilado": "0 errors, 0 warnings",
+        "reanexado": "NAO - depende do dono reanexar o EA no grafico",
+    },
+    "FASE_FINAL_20_5.SYMBOLS_AMPLIADO.set": {
+        "commit": "pendente",
+        "motivo": (
+            "O preset carregava `MaxSpread=50` e "
+            "`MaxSpreadBySymbol=GOLD#:350,BTCUSD#:600,ETHUSD#:600` — nomes que "
+            "nao existem mais. Trocado por `MaxSpreadPct=0.6` e "
+            "`MaxSpreadPctBySymbol=` (vazio: a medicao mostrou que o fallback "
+            "de 0,6% ja da folga em todos os 12 simbolos). Sem trocar, o preset "
+            "carregaria nomes inexistentes e o EA usaria o default."
+        ),
+        "compilado": "nao compila - e .set",
+        "reanexado": "NAO - o dono escolhe qual preset carregar",
+    },
+    # ---------------------------------------------------------------------
+    # Perda diaria = perda REALIZADA, e uma unica medida (08/10/2026)
+    # ---------------------------------------------------------------------
+    "Enterprise/SafetyManager.mqh": {
+        "commit": "pendente",
+        "motivo": (
+            "MEDIDO na conta 391773676, conta REAL, com o AUTO ligado e uma "
+            "posicao USDCAD aberta: `P/L: -0.16` e `[TRADE BLOCK] SAFETY | "
+            "DD: 5.86%/5.00%`. O limite `MaxDailyLossPercent` diz LOSS; o codigo "
+            "entregava DRAWDOWN pico-para-vale, e o pico (21,32) vinha de uma "
+            "posicao recem-aberta com +6,90 de flutuante sobre saldo de 14,42. "
+            "A ida e a volta de UMA posicao contava como perda diaria sem a "
+            "conta ter perdido dinheiro. AGORA o numerador e o realizado do dia "
+            "e o denominador e o SALDO do inicio do dia. Segunda correcao no "
+            "mesmo dia: o gate ja usava a perda realizada mas `GetSafetySummary` "
+            "ainda imprimia `GetDrawdownPercent()`, entao a tela dizia 5,02% e o "
+            "operador procurava DD num bloqueio que era margem livre. Agora a "
+            "formula mora em `GetDailyLossPercent()` e gate e tela consomem a "
+            "mesma funcao, com o resumo nomeando as duas medidas: `PerdaDia` "
+            "(a que trava) e `Amplitude` (pico-vale, informativa). "
+            "`GetDrawdownPercent()` NAO foi mexido e continua servindo a "
+            "RiskCenter, RiskEngine, Telemetry e CircuitBreaker."
+        ),
+        "compilado": "0 errors, 0 warnings",
+        "reanexado": (
+            "SIM do gate - verificado no journal em 08/10 21:29+, onde "
+            "`[SAFETY] Daily DD limit` foi para 0 e `Daily loss limit` nunca "
+            "disparou. NAO da tela: o resumo com `PerdaDia`/`Amplitude` "
+            "depende do dono reanexar o EA no grafico."
+        ),
+    },
+    "Enterprise/BackupManager.mqh": {
+        "commit": "pendente",
+        "motivo": (
+            "MEDIDO 08/10/2026 22:14, conta REAL com o AUTO ligado: "
+            "`[BACKUP] Backup com problemas | copiados=64 | falhas=44`, com 44 "
+            "linhas `[BACKUP] Origem nao encontrada:` e o CAMINHO VAZIO depois "
+            "dos dois pontos. `ExpandPattern` escrevia sempre a partir de "
+            "`out[0]` e nao aceitava indice inicial, e o chamador a usava duas "
+            "vezes no mesmo array — uma para FILE_COMMON e outra para LOCAL — "
+            "somando os retornos em `found`. A segunda chamada sobrescrevia a "
+            "primeira e `found` contava as duas: 44 do COMMON + 64 do LOCAL = "
+            "108 posicoas percorridas com so 64 preenchidas; as 44 restantes "
+            "eram lixo, com `origPath` vazio. Agora ha `start` como indice "
+            "inicial e o retorno e a quantidade encontrada. Segunda correcao no "
+            "mesmo lugar: entrada sem caminho e contada e dita no relatorio "
+            "(`sem_caminho=`), em vez de virar copia de string vazia com erro "
+            "sem caminho — que e o que mandava o operador procurar arquivo "
+            "faltando em vez de indice faltando."
+        ),
+        "compilado": "0 errors, 0 warnings",
+        "reanexado": "NAO - depende do dono reanexar o EA no grafico",
+    },
+    "Release/v1.2.0/Config/XAU_AI_PRO.AUTOTRADE_ON.set": {
+        "commit": "pendente",
+        "motivo": (
+            "MinFreeMargin 20.0 -> 10.0. MEDIDO na conta 391773676: o balance "
+            "era 15,14 e a margem livre nunca passa do balance sem lucro "
+            "flutuante, entao um piso de 20,00 nao era folga — era bloqueio "
+            "permanente, e invertido: o EA so abria operacao quando a posicao "
+            "aberta estava ganhando e bloqueava quando estava perdendo. "
+            "Decisao do dono em 08/10/2026. Medido depois: 0,01 de GOLD custa "
+            "4,15 de margem e deixa 14,71 livres, acima do novo piso de 10,00; "
+            "com 20,00 nem 0,01 abria. Os tres presets (FASE_FINAL, AUTOTRADE_ON "
+            "e ENDURANCE) e o default de `Core/Config.mqh` foram para 10.0, e os "
+            "24 graficos com EA tambem, por `definir_input_ea`."
+        ),
+        "compilado": "nao compila - e .set",
+        "reanexado": "SIM - 24 graficos gravados com backup, expertmode preservado",
+    },
+    "Release/v1.2.0-ENDURANCE/Config/XAU_AI_PRO.ENDURANCE.set": {
+        "commit": "pendente",
+        "motivo": (
+            "Mesma mudanca e mesmo motivo de "
+            "`Release/v1.2.0/Config/XAU_AI_PRO.AUTOTRADE_ON.set`: "
+            "MinFreeMargin 20.0 -> 10.0, decisao do dono em 08/10/2026, porque "
+            "um piso de 20,00 era inalcancavel num balance de 15,14."
+        ),
+        "compilado": "nao compila - e .set",
+        "reanexado": "SIM - 24 graficos gravados com backup, expertmode preservado",
+    },
+    "Core/ExecutionEngine.mqh": {
+        "commit": "pendente",
+        "motivo": (
+            "Risco por operacao em DINHEIRO em vez de pontos crus (decisao do "
+            "dono, 08/10/2026). MEDIDO na conta 391773676: `StopLossPoints=300` "
+            "valia US$ 3,00 no GOLD e US$ 3,00 no EURUSD, US$ 20 no USDJPY e "
+            "US$ 0,03 no BTCUSD — um numero so, quatro riscos diferentes. E US$ "
+            "3,00 contra um orcamento diario de 5% de US$ 12,13 = US$ 0,61: uma "
+            "operacao estouraria o limite diario inteiro. Foi exatamente o que "
+            "aconteceu: SELL 0,01 GOLD @ 4152,43 com stop em 4155,43 (+3,00) e "
+            "alvo em 4146,43 (+6,00), tocado em ~1 minuto. Agora o risco vem de "
+            "`RiskPerTradeUsd` e o alvo de `RiskPerTradeUsd * RewardRatio`, "
+            "convertidos em pontos por `DistanciaPontosParaRiscoUSD`. "
+            "MEDIDO apos a conversao: US$ 2,00 de stop e US$ 2,00 de alvo em "
+            "GOLD, BTCUSD, ETHUSD, EURUSD, GBPUSD, USDJPY, USDCAD, USDCNH, "
+            "USDSEK, AUDUSD, NZDUSD e USDCHF, e nenhum viola o stop level da "
+            "corretora. Os inputs em PONTOS continuam como caminho de fuga "
+            "quando `RiskPerTradeUsd <= 0`, entao nenhum controle fica sem "
+            "consumidor."
+        ),
+        "compilado": "0 errors, 0 warnings",
+        "reanexado": "NAO - depende do dono reanexar o EA no grafico",
+    },
+    "Core/OrderManager.mqh": {
+        "commit": "pendente",
+        "motivo": (
+            "Mesma correcao de `Core/ExecutionEngine.mqh`, na copia Buy e na "
+            "copia Sell. Este arquivo estava com a formula de SL/TP DUPLICADA e "
+            "divergindo do `ExecutionEngine`; agora os dois consomem a mesma "
+            "funcao `DistanciaPontosParaRiscoUSD`. Registrado que "
+            "`InitOrderManager()` nao tem chamador: o bloco e codigo morto "
+            "hoje, e ficou corrigido justamente para nao ser a proxima "
+            "divergencia quando alguem ligar."
+        ),
+        "compilado": "0 errors, 0 warnings",
+        "reanexado": "NAO - depende do dono reanexar o EA no grafico",
+    },
+    "Padrao_02_TP2_SL2.set": {
+        "commit": "pendente",
+        "motivo": (
+                "Escada de setups padrao pedida pelo dono em 08/10/2026: montar meu setup ordens padrao, alvo 2 USD de TP com 2 USD de SL, padrao 2 com 3, padrao 3 com 4. Ou seja, TP = SL = N dolares. Este e o padrao 2, com `RiskPerTradeUsd=2` e `RewardRatio=1.0`, que da TP = SL = 2 USD em qualquer simbolo pela conversao `DistanciaPontosParaRiscoUSD`. MEDIDO com 0,01 de lote: GOLD 200 pontos, EURUSD 200 pontos, USDCNH 200 pontos, USDJPY 20 pontos e BTCUSD 20000 pontos, todos valendo US$ 2,00. O molde NAO foi o preset FASE_FINAL porque aquele ainda traz `MaxSpread` e `MaxSpreadBySymbol`, que nao existem mais, e inclui `XAUUSD`, simbolo que a XMGlobal nao oferece nesta conta. O ouro dela e `GOLD`."
+            ),
+            "compilado": "nao compila - e .set",
+            "reanexado": "NAO - o dono escolhe qual padrao carregar",
+    },
+    "Padrao_03_TP3_SL3.set": {
+        "commit": "pendente",
+        "motivo": (
+                "Escada de setups padrao pedida pelo dono em 08/10/2026: montar meu setup ordens padrao, alvo 2 USD de TP com 2 USD de SL, padrao 2 com 3, padrao 3 com 4. Ou seja, TP = SL = N dolares. Este e o padrao 3, com `RiskPerTradeUsd=3` e `RewardRatio=1.0`, que da TP = SL = 3 USD em qualquer simbolo pela conversao `DistanciaPontosParaRiscoUSD`. MEDIDO com 0,01 de lote: GOLD 300 pontos, EURUSD 300 pontos, USDCNH 300 pontos, USDJPY 30 pontos e BTCUSD 30000 pontos, todos valendo US$ 3,00. O molde NAO foi o preset FASE_FINAL porque aquele ainda traz `MaxSpread` e `MaxSpreadBySymbol`, que nao existem mais, e inclui `XAUUSD`, simbolo que a XMGlobal nao oferece nesta conta. O ouro dela e `GOLD`."
+            ),
+            "compilado": "nao compila - e .set",
+            "reanexado": "NAO - o dono escolhe qual padrao carregar",
+    },
+    "Padrao_04_TP4_SL4.set": {
+        "commit": "pendente",
+        "motivo": (
+                "Escada de setups padrao pedida pelo dono em 08/10/2026: montar meu setup ordens padrao, alvo 2 USD de TP com 2 USD de SL, padrao 2 com 3, padrao 3 com 4. Ou seja, TP = SL = N dolares. Este e o padrao 4, com `RiskPerTradeUsd=4` e `RewardRatio=1.0`, que da TP = SL = 4 USD em qualquer simbolo pela conversao `DistanciaPontosParaRiscoUSD`. MEDIDO com 0,01 de lote: GOLD 400 pontos, EURUSD 400 pontos, USDCNH 400 pontos, USDJPY 40 pontos e BTCUSD 40000 pontos, todos valendo US$ 4,00. O molde NAO foi o preset FASE_FINAL porque aquele ainda traz `MaxSpread` e `MaxSpreadBySymbol`, que nao existem mais, e inclui `XAUUSD`, simbolo que a XMGlobal nao oferece nesta conta. O ouro dela e `GOLD`."
+            ),
+            "compilado": "nao compila - e .set",
+            "reanexado": "NAO - o dono escolhe qual padrao carregar",
+    },
+    "Padrao_05_TP5_SL5.set": {
+        "commit": "pendente",
+        "motivo": (
+                "Escada de setups padrao pedida pelo dono em 08/10/2026: montar meu setup ordens padrao, alvo 2 USD de TP com 2 USD de SL, padrao 2 com 3, padrao 3 com 4. Ou seja, TP = SL = N dolares. Este e o padrao 5, com `RiskPerTradeUsd=5` e `RewardRatio=1.0`, que da TP = SL = 5 USD em qualquer simbolo pela conversao `DistanciaPontosParaRiscoUSD`. MEDIDO com 0,01 de lote: GOLD 500 pontos, EURUSD 500 pontos, USDCNH 500 pontos, USDJPY 50 pontos e BTCUSD 50000 pontos, todos valendo US$ 5,00. O molde NAO foi o preset FASE_FINAL porque aquele ainda traz `MaxSpread` e `MaxSpreadBySymbol`, que nao existem mais, e inclui `XAUUSD`, simbolo que a XMGlobal nao oferece nesta conta. O ouro dela e `GOLD`."
+            ),
+            "compilado": "nao compila - e .set",
+            "reanexado": "NAO - o dono escolhe qual padrao carregar",
+    },
+    "Padrao_06_TP6_SL6.set": {
+        "commit": "pendente",
+        "motivo": (
+                "Escada de setups padrao pedida pelo dono em 08/10/2026: montar meu setup ordens padrao, alvo 2 USD de TP com 2 USD de SL, padrao 2 com 3, padrao 3 com 4. Ou seja, TP = SL = N dolares. Este e o padrao 6, com `RiskPerTradeUsd=6` e `RewardRatio=1.0`, que da TP = SL = 6 USD em qualquer simbolo pela conversao `DistanciaPontosParaRiscoUSD`. MEDIDO com 0,01 de lote: GOLD 600 pontos, EURUSD 600 pontos, USDCNH 600 pontos, USDJPY 60 pontos e BTCUSD 60000 pontos, todos valendo US$ 6,00. O molde NAO foi o preset FASE_FINAL porque aquele ainda traz `MaxSpread` e `MaxSpreadBySymbol`, que nao existem mais, e inclui `XAUUSD`, simbolo que a XMGlobal nao oferece nesta conta. O ouro dela e `GOLD`."
+            ),
+            "compilado": "nao compila - e .set",
+            "reanexado": "NAO - o dono escolhe qual padrao carregar",
+    },
+    "Padrao_07_TP7_SL7.set": {
+        "commit": "pendente",
+        "motivo": (
+                "Escada de setups padrao pedida pelo dono em 08/10/2026: montar meu setup ordens padrao, alvo 2 USD de TP com 2 USD de SL, padrao 2 com 3, padrao 3 com 4. Ou seja, TP = SL = N dolares. Este e o padrao 7, com `RiskPerTradeUsd=7` e `RewardRatio=1.0`, que da TP = SL = 7 USD em qualquer simbolo pela conversao `DistanciaPontosParaRiscoUSD`. MEDIDO com 0,01 de lote: GOLD 700 pontos, EURUSD 700 pontos, USDCNH 700 pontos, USDJPY 70 pontos e BTCUSD 70000 pontos, todos valendo US$ 7,00. O molde NAO foi o preset FASE_FINAL porque aquele ainda traz `MaxSpread` e `MaxSpreadBySymbol`, que nao existem mais, e inclui `XAUUSD`, simbolo que a XMGlobal nao oferece nesta conta. O ouro dela e `GOLD`."
+            ),
+            "compilado": "nao compila - e .set",
+            "reanexado": "NAO - o dono escolhe qual padrao carregar",
+    },
+    "Padrao_08_TP8_SL8.set": {
+        "commit": "pendente",
+        "motivo": (
+                "Escada de setups padrao pedida pelo dono em 08/10/2026: montar meu setup ordens padrao, alvo 2 USD de TP com 2 USD de SL, padrao 2 com 3, padrao 3 com 4. Ou seja, TP = SL = N dolares. Este e o padrao 8, com `RiskPerTradeUsd=8` e `RewardRatio=1.0`, que da TP = SL = 8 USD em qualquer simbolo pela conversao `DistanciaPontosParaRiscoUSD`. MEDIDO com 0,01 de lote: GOLD 800 pontos, EURUSD 800 pontos, USDCNH 800 pontos, USDJPY 80 pontos e BTCUSD 80000 pontos, todos valendo US$ 8,00. O molde NAO foi o preset FASE_FINAL porque aquele ainda traz `MaxSpread` e `MaxSpreadBySymbol`, que nao existem mais, e inclui `XAUUSD`, simbolo que a XMGlobal nao oferece nesta conta. O ouro dela e `GOLD`."
+            ),
+            "compilado": "nao compila - e .set",
+            "reanexado": "NAO - o dono escolhe qual padrao carregar",
+    },
+    "Padrao_09_TP9_SL9.set": {
+        "commit": "pendente",
+        "motivo": (
+                "Escada de setups padrao pedida pelo dono em 08/10/2026: montar meu setup ordens padrao, alvo 2 USD de TP com 2 USD de SL, padrao 2 com 3, padrao 3 com 4. Ou seja, TP = SL = N dolares. Este e o padrao 9, com `RiskPerTradeUsd=9` e `RewardRatio=1.0`, que da TP = SL = 9 USD em qualquer simbolo pela conversao `DistanciaPontosParaRiscoUSD`. MEDIDO com 0,01 de lote: GOLD 900 pontos, EURUSD 900 pontos, USDCNH 900 pontos, USDJPY 90 pontos e BTCUSD 90000 pontos, todos valendo US$ 9,00. O molde NAO foi o preset FASE_FINAL porque aquele ainda traz `MaxSpread` e `MaxSpreadBySymbol`, que nao existem mais, e inclui `XAUUSD`, simbolo que a XMGlobal nao oferece nesta conta. O ouro dela e `GOLD`."
+            ),
+            "compilado": "nao compila - e .set",
+            "reanexado": "NAO - o dono escolhe qual padrao carregar",
+    },
+    "Padrao_10_TP10_SL10.set": {
+        "commit": "pendente",
+        "motivo": (
+                "Escada de setups padrao pedida pelo dono em 08/10/2026: montar meu setup ordens padrao, alvo 2 USD de TP com 2 USD de SL, padrao 2 com 3, padrao 3 com 4. Ou seja, TP = SL = N dolares. Este e o padrao 10, com `RiskPerTradeUsd=10` e `RewardRatio=1.0`, que da TP = SL = 10 USD em qualquer simbolo pela conversao `DistanciaPontosParaRiscoUSD`. MEDIDO com 0,01 de lote: GOLD 1000 pontos, EURUSD 1000 pontos, USDCNH 1000 pontos, USDJPY 100 pontos e BTCUSD 100000 pontos, todos valendo US$ 10,00. O molde NAO foi o preset FASE_FINAL porque aquele ainda traz `MaxSpread` e `MaxSpreadBySymbol`, que nao existem mais, e inclui `XAUUSD`, simbolo que a XMGlobal nao oferece nesta conta. O ouro dela e `GOLD`."
+            ),
+            "compilado": "nao compila - e .set",
+            "reanexado": "NAO - o dono escolhe qual padrao carregar",
+    },
+    "Core/RiskHub.mqh": {
+        "commit": "pendente",
+        "motivo": (
+            "Trabalho que existia so na arvore principal do terminal e de que o "
+            "repo precisa para compilar a correcao acima: `GetEffectiveDaily"
+            "TradesCount()` e `GetDailyHistoryTradesCount()`, que contam as "
+            "entradas EFETIVAMENTE executadas no historico do dia (filtrando por "
+            "magic e por DEAL_ENTRY_IN/INOUT) em vez de so o contador "
+            "persistente. O contador persistente continua sendo usado para cobrir "
+            "as ordens novas antes de o historico ficar disponivel. Portado do "
+            "terminal: a diferenca para o repo era de 43 linhas e ZERO linhas "
+            "exclusivas do repo, ou seja, nao ha trabalho local a perder."
+        ),
+        "compilado": "0 errors, 0 warnings",
+        "reanexado": "NAO - a arvore principal ja roda esta versao",
+    },
+    # ---------------------------------------------------------------------
     # Cooldown de margem
     # ---------------------------------------------------------------------
     "Enterprise/MarginChecker.mqh": {
@@ -218,6 +488,31 @@ DISCO_MINIMO_ANDROID_GB = 8.0
 # Portas do produto. Todas precisam estar livres antes de subir o app.
 PORTAS = {"gateway": 9001, "websocket": 9002, "core": 9003}
 
+PORTA_GATEWAY_PADRAO = 9001
+
+
+def porta_do_gateway() -> int:
+    """A porta em que o gateway DESTE ambiente escuta.
+
+    MEDIDO em 10/10/2026: com `XAU_GATEWAY_PORT=9011` no ambiente do usuario, o
+    app subiu o gateway em 9011 e o preflight mediu 9001 — que estava livre
+    justamente porque o processo escutava em outra porta — e deu `ok`. Duas
+    verdades do mesmo dado divergindo, que e a regra 5 do AGENTS.md: quem
+    media inventava um numero, e a resposta nao acusava nada.
+
+    A variavel de ambiente e a fonte. O frontend ja tinha aprendido isso em
+    `frontend/src/lib/portas.ts` (09/10/2026): o mesmo nome, lido pelo Tauri no
+    boot. O preflight ficou de fora e media a porta que ele mesmo escreveu.
+    """
+    bruta = (os.environ.get("XAU_GATEWAY_PORT") or "").strip()
+    try:
+        porta = int(bruta)
+    except ValueError:
+        return PORTA_GATEWAY_PADRAO
+    if 1024 <= porta <= 65535:
+        return porta
+    return PORTA_GATEWAY_PADRAO
+
 # Ferramentas obrigatorias por etapa. No Windows, `npm` e um .cmd e precisa ser
 # chamado pelo nome completo; `python` raramente esta no PATH porque o projeto
 # usa sempre .venv\Scripts\python.exe (ver checar_python_do_projeto).
@@ -348,15 +643,23 @@ def porta_livre(porta: int) -> bool:
 
 def checar_portas(esperar_livre: bool) -> list[Resultado]:
     resultados = []
-    for nome, porta in PORTAS.items():
+    portas = {**PORTAS, "gateway": porta_do_gateway()}
+    for nome, porta in portas.items():
         livre = porta_livre(porta)
-        if livre:
-            resultados.append(Resultado(f"porta {porta} ({nome})", ESTADOS["ok"], "livre"))
-        elif esperar_livre:
+        if esperar_livre:
+            if livre:
+                resultados.append(Resultado(f"porta {porta} ({nome})", ESTADOS["ok"], "livre"))
+            else:
                 resultados.append(
                     Resultado(f"porta {porta} ({nome})", ESTADOS["falha"], "ocupada",
                           "feche o app instalado ou o processo que segura a porta antes de subir outro")
                 )
+        elif livre:
+            resultados.append(
+                Resultado(f"porta {porta} ({nome})", ESTADOS["falha"], "livre",
+                      "a etapa app-rodando exige o processo escutando aqui: "
+                      "suba o app pelo atalho, ou confira XAU_GATEWAY_PORT se o gateway usa outra porta")
+            )
         else:
             resultados.append(
                 Resultado(f"porta {porta} ({nome})", ESTADOS["ok"], "ocupada (app em execucao)")

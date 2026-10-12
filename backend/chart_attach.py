@@ -58,6 +58,8 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import subprocess
+import sys
 import time
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
@@ -97,22 +99,79 @@ def _charts_dir() -> Path | None:
     return charts if charts.is_dir() else None
 
 
+def _processo_rodando(nome: str) -> bool:
+    """Existe processo com esse nome rodando agora?
+
+    MEDIDO em 08/10/2026, 22:0x: `terminal64.exe` PID 12860 rodando desde
+    13:59 e **ZERO** arquivos `lock*` na pasta de dados do terminal. A guarda
+    que dependia so do `lock*` devolvia `terminal_aberto() == False` com o
+    terminal ABERTO — e `anexar_ea` gravava o `.chr` num terminal vivo, que o
+    descarta ao sair. Exatamente o "trabalho perdido" que a docstring da
+    propria funcao descreve.
+
+    Nada de dependencia nova: `tasklist` no Windows, `/proc` no Linux e `ps`
+    como reserva. Se nenhuma das tres responder, devolvemos `False` e o
+    chamador decide; quem decide e o `terminal_aberto()`, que tambem checa o
+    `lock*`.
+    """
+    alvo = nome.lower()
+
+    if sys.platform.startswith("win"):
+        try:
+            saida = subprocess.run(
+                ["tasklist", "/FI", f"IMAGENAME eq {nome}", "/NH"],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            ).stdout or ""
+        except (OSError, subprocess.SubprocessError):
+            return False
+        # O tasklist imprime "INFO: No tasks are running" quando nao ha nada.
+        return alvo in saida.lower()
+
+    proc = Path("/proc")
+    if proc.is_dir():
+        for entrada in proc.iterdir():
+            try:
+                if (entrada / "comm").read_text().strip().lower() == alvo:
+                    return True
+            except (OSError, UnicodeDecodeError):
+                continue
+
+    try:
+        saida = subprocess.run(
+            ["ps", "-e", "-o", "comm="],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        ).stdout or ""
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return alvo in saida.lower()
+
+
 def terminal_aberto() -> bool:
     """O terminal esta em execucao?
 
     Se estiver, gravar perfil e trabalho perdido: o MT5 reescreve os .chr ao
-    sair. Verificamos por ANY / *.lock na pasta de dados do terminal, que o
-    MT5 cria e remove sozinho.
+    sair. Duas fontes, porque nenhuma das duas cobre esta instalacao sozinha:
+    o `*/lock*` na pasta de dados, que o MT5 cria e remove sozinho — e que
+    MEDIDO em 08/10/2026 nao existia com o terminal aberto —, e o processo
+    `terminal64.exe`, que MEDIDAMENTE estava vivo com zero `lock*`.
+
+    O `lock*` sozinho falhava ABERTO, que e o pior jeito de falhar: o app
+    acreditava poder gravar, gravava, e o terminal jogava fora.
     """
     root = _terminal_root()
-    if root is None:
-        return False
-    try:
-        for _ in root.glob("*/lock*"):
-            return True
-    except OSError:
-        pass
-    return False
+    if root is not None:
+        try:
+            for _ in root.glob("*/lock*"):
+                return True
+        except OSError:
+            pass
+    # Fora do `if`: mesmo sem raiz resolvida, um terminal vivo e motivo para
+    # nao gravar. Recusar e o comportamento correto; adivinhar nao.
+    return _processo_rodando("terminal64.exe")
 
 
 def listar_graficos() -> dict[str, Any]:
@@ -367,6 +426,107 @@ def anexar_ea(
         "autotrade": autotrade,
         "inputs": len(entradas or {}),
         "anexado_em": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def definir_input_ea(
+    arquivo_grafico: Path,
+    chave: str,
+    valor: str,
+) -> dict[str, Any]:
+    """Troca UM input do EA anexado, sem reescrever o resto do grafico.
+
+    POR QUE ISTO EXISTE E `anexar_ea` NAO BASTA
+    ============================================
+    MEDIDO em 08/10/2026 nos 24 graficos com EA deste terminal: `expertmode`
+    nao e uniforme — 11 graficos com **37** e 13 com **5**. `_montar_bloco_expert`
+    so sabe escrever `EXPERTMODE_AUTOTRADE` (4) ou `EXPERTMODE_MANUAL` (5), e a
+    API recebe `autotrade: bool`. Passar esses graficos por `anexar_ea`
+    reescreveria 37 como 5 — mudando o estado que pode ser o que mantem o Algo
+    Trading ligado, sem ninguem saber o que 37 significa.
+
+    Aqui so a linha `chave=valor` dentro de `<inputs>` e trocada. `expertmode`,
+    `path`, `symbol`, `period_size` e todos os outros inputs ficam intactos.
+
+    Backup e escrita atomica iguais aos de `anexar_ea`.
+    """
+    if os.getenv(VARIAVEL_PERMITE_ESCRITA) != "1":
+        return {
+            "ok": False,
+            "error": (
+                f"escrita de grafico desabilitada. Defina {VARIAVEL_PERMITE_ESCRITA}=1 "
+                "para permitir que o app anexe EAs a graficos."
+            ),
+            "read_only": True,
+        }
+    if not arquivo_grafico.exists():
+        return {"ok": False, "error": f"grafico inexistente: {arquivo_grafico}"}
+    if terminal_aberto():
+        return {
+            "ok": False,
+            "error": (
+                "terminal MT5 aberto: ele mantem os perfis em memoria e reescreve "
+                "os .chr ao sair, descartando a alteracao. Feche o MT5 e tente de novo."
+            ),
+            "terminal_aberto": True,
+        }
+    if not _CAMPO.match(chave):
+        return {"ok": False, "error": f"chave fora do padrao do terminal: {chave!r}"}
+
+    texto_bruto = arquivo_grafico.read_bytes()
+    codificacao = "utf-16" if texto_bruto[:2] in (b"\xff\xfe", b"\xfe\xff") else "utf-8"
+    try:
+        texto = texto_bruto.decode(codificacao)
+    except UnicodeDecodeError as exc:
+        return {"ok": False, "error": f"nao consegui ler o grafico: {exc}"}
+
+    m_bloco = re.search(r"<inputs>(.*?)</inputs>", texto, re.DOTALL)
+    if not m_bloco:
+        return {"ok": False, "error": "grafico sem bloco <inputs>: nenhum EA anexado"}
+
+    corpo = m_bloco.group(1)
+    padrao = re.compile(r"^[ \t]*" + re.escape(chave) + r"[ \t]*=.*$", re.MULTILINE)
+    achou = padrao.search(corpo)
+
+    if achou:
+        antes = achou.group(0).strip()
+        # Funcao no lugar de string: um valor com barra invertida (um caminho)
+        # seria interpretado como sequencia de escape pelo re.sub.
+        novo_corpo = padrao.sub(lambda _m: f"{chave}={valor}", corpo)
+        acao = "substituido"
+    else:
+        antes = None
+        fim = corpo.rstrip("\r\n")
+        sep = "\r\n" if "\r\n" in corpo else "\n"
+        novo_corpo = fim + sep + f"{chave}={valor}" + sep
+        acao = "incluido"
+
+    novo = texto[: m_bloco.start(1)] + novo_corpo + texto[m_bloco.end(1) :]
+
+    carimbo = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+    backup = arquivo_grafico.with_suffix(f".chr.bak-{carimbo}")
+    try:
+        shutil.copy2(arquivo_grafico, backup)
+    except OSError as exc:
+        return {"ok": False, "error": f"nao foi possivel criar backup: {exc}"}
+
+    temporario = arquivo_grafico.with_suffix(".chr.tmp")
+    try:
+        temporario.write_bytes(novo.encode(codificacao))
+        os.replace(temporario, arquivo_grafico)
+    except OSError as exc:
+        temporario.unlink(missing_ok=True)
+        return {"ok": False, "error": f"falha ao gravar o grafico: {exc}", "backup": str(backup)}
+
+    return {
+        "ok": True,
+        "arquivo": str(arquivo_grafico),
+        "backup": str(backup),
+        "chave": chave,
+        "antes": antes,
+        "depois": valor,
+        "acao": acao,
+        "expertmode_preservado": True,
     }
 
 

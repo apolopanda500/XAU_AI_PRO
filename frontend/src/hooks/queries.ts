@@ -516,3 +516,87 @@ export function useAllCryptoAccounts() {
     retry: 0,
   });
 }
+
+// ---------------------------------------------------------------------------
+// PLANO LOCAL (Free / VIP / VIPS) — o que destravou, e onde ativar.
+//
+// MEDIDO (11/10/2026): o 403 `PLAN_REQUIRED` do `/api/auto/start` chegava na
+// tela como "Configurado, mas não ligou: recurso nao liberado no plano atual:
+// auto_engine" — e o operador não tinha por onde seguir. O gateway já expunha
+// as três rotas (`/api/subscriptions/me`, `/plans` e `/activate`), mas o
+// frontend não tinha UM consumidor sequer: o bloqueio existia e o caminho do
+// desbloqueio não. É o mesmo beco sem saída das mensagens que mandavam para
+// uma aba já removida, só que do lado do plano.
+//
+// Regra que não muda (AGENTS.md 2): ativar plano aqui não destrava saque,
+// transferência nem execução real. `live_execution` e `withdrawals_enabled`
+// voltam `false` do gateway em TODAS as respostas, e a UI os mostra como
+// declaração, não como interruptor.
+// ---------------------------------------------------------------------------
+export type PlanoCatalogo = {
+  id?: string;
+  name?: string;
+  description?: string;
+  reference_price_monthly?: number;
+  currency?: string;
+  features?: string[];
+  entitlements?: Record<string, boolean>;
+};
+export type AssinaturaPlano = {
+  plan_id?: string;
+  effective_plan_id?: string;
+  status?: string;
+  active?: boolean;
+  source?: string;
+  plan?: PlanoCatalogo;
+  entitlements?: Record<string, boolean>;
+  integrity_status?: string;
+  integrity_verified?: boolean;
+  live_execution?: boolean;
+  withdrawals_enabled?: boolean;
+  billing_status?: string;
+};
+export function useAssinatura() {
+  return useQuery<{ ok?: boolean; subscription?: AssinaturaPlano }>({
+    queryKey: ['subscriptions-me'],
+    queryFn: () => get<{ ok?: boolean; subscription?: AssinaturaPlano }>('/api/subscriptions/me'),
+    refetchInterval: 30_000,
+    staleTime: 20_000,
+    retry: 1,
+  });
+}
+export function usePlanosCatalogo() {
+  return useQuery<{ ok?: boolean; plans?: PlanoCatalogo[] }>({
+    queryKey: ['subscriptions-plans'],
+    queryFn: () => get<{ ok?: boolean; plans?: PlanoCatalogo[] }>('/api/subscriptions/plans'),
+    staleTime: 600_000,
+    retry: 1,
+  });
+}
+export type ResultadoAtivacao = {
+  ok?: boolean;
+  error?: string;
+  subscription?: AssinaturaPlano;
+};
+/**
+ * Ativa um plano NESTE DISPOSITIVO. Não há cobrança, não há saque, não há
+ * transferência: `activate_local_plan` só grava o registro local com integridade.
+ * A recusa (422 para id inválido) volta como `{ ok: false, error }`, nunca throw.
+ */
+export async function ativarPlanoLocal(planId: string): Promise<ResultadoAtivacao> {
+  try {
+    const r = await fetch(`${apiBase()}/api/subscriptions/activate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plan_id: planId }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    const d = (await r.json().catch(() => ({}))) as ResultadoAtivacao;
+    if (!r.ok || d.ok === false) {
+      return { ok: false, error: d.error ?? `HTTP ${r.status}` };
+    }
+    return d;
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Gateway indisponível.' };
+  }
+}

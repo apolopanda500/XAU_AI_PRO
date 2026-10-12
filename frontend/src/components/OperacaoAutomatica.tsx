@@ -29,13 +29,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { apiBase } from '../lib/api';
 import { useAppStore } from '../hooks/useAppStore';
 import { useAutoState } from '../hooks/queries';
+import { useIaLigada } from '../hooks/useIaLigada';
 import { notify } from '../lib/notify';
 import { escopoAtivo as contaAtiva } from '../lib/escopoAtivo';
 import { unidadeDeVolume, fichaDoAtivo, faixaDoAtivo, rotuloQuantidade, mercadoDoAtivo } from '../lib/volumeUnidade';
 import { valorDoNivel, nivelParaValor, contratoUtilizavel, SEM_CONTRATO } from '../lib/risco';
 import { useCatalogoAtivos } from '../hooks/useCatalogoAtivos';
 import SeletorModelo from './SeletorModelo';
-import ListaModelos from './ListaModelos';
 import { useInferenciaIA } from '../hooks/useAICommunication';
 
 /**
@@ -148,14 +148,58 @@ import '../theme/robo.css';
 // forex, sem número fixo. O botão PREENCHE, não trava.
 const PRESETS: Array<{ nome: string; risco: number; alvo: number }> = [
   { nome: '1:1', risco: 1, alvo: 1 },
-  { nome: '1:2', risco: 1, alvo: 2 },
-  { nome: '1:3', risco: 1, alvo: 3 },
-  { nome: '1:4', risco: 1, alvo: 4 },
 ];
 
 const num = (v: string) => Number(String(v).replace(',', '.'));
 
-export default function OperacaoAutomatica() {
+/**
+ * AS DUAS VISOES DO PAINEL (11/10/2026)
+ * =====================================
+ * O dono pediu sub-abas na ROBÔ: Operação, Modelos, Risco, Operações. A
+ * primeira versão renderizava o painel INTEIRO em Operação e de novo em
+ * Risco — dois interruptores AUTO, dois blocos "Par para operar", a mesma
+ * tabela de modelos duas vezes. Era o mesmo dado em dois lugares, e o
+ * AGENTS.md 5 é o que diz o preço: o operador não sabe qual dos dois manda.
+ *
+ * Agora é UM componente com duas leituras:
+ *
+ *   `operacao` (default) — o que se usa para LIGAR: par, modelo e o botão.
+ *   `risco`             — o que se usa para LIMITAR: os campos de risco,
+ *                         abertos, com um botão que aplica sem ligar nada.
+ *
+ * A lista dos modelos treinados saiu daqui: ela vive na sub-aba `Modelos`
+ * (`RobotTabs`), que é o único lugar que a mostra.
+ */
+export type VisaoOperacao = 'operacao' | 'risco';
+
+/*
+  A RECUSA DE PLANO APONTA O DESBLOQUEIO (11/10/2026)
+  ===================================================
+  MEDIDO: ligar o motor numa conta Free recebia 403 de `/api/auto/start` com
+  o corpo `plano_gate.resposta_bloqueio` — `code: PLAN_REQUIRED` e
+  `required_plans` já no payload —, e a tela imprimia só `error`
+  ("recurso nao liberado no plano atual: auto_engine"). O operador sabia o que
+  faltava e não onde resolver: o caminho do desbloqueio estava fora da tela.
+
+  A função é PURA e exportada para ser medida em teste: a mensagem nasce do
+  payload que o gateway mandou (`required_plans` vem do catálogo real, via
+  `planos_que_liberam`), não de nome de plano escrito à mão aqui.
+*/
+export function recusaDePlano(
+  payload: { error?: string; code?: string; required_plans?: string[] },
+  status: number,
+): string {
+  const ehPlano = status === 403 || payload?.code === 'PLAN_REQUIRED';
+  if (!ehPlano) return '';
+  const planos = (payload.required_plans ?? []).map((p) => String(p).trim()).filter(Boolean);
+  const lista = planos.length ? planos.join(' ou ') : 'um plano superior';
+  return `O motor automático exige ${lista} — ative em Configurações → Plano.`;
+}
+
+export default function OperacaoAutomatica({
+  visao = 'operacao',
+}: { visao?: VisaoOperacao } = {}) {
+  const risco = visao === 'risco';
   const autoQ = useAutoState();
   const wsConnected = useAppStore((s) => s.wsConnected);
   const parEscolhido = useAppStore((s) => s.selectedSymbol);
@@ -208,13 +252,55 @@ export default function OperacaoAutomatica() {
   const [preco, setPreco] = useState<number | null>(null);
   const [limites, setLimites] = useState<Record<string, string>>({});
   /*
-    INTERRUPTOR DA IA (05/10/2026).
+    O QUE O MOTOR JA TEM, escrito nos campos (11/10/2026)
+    ======================================================
+    MEDIDO: a sub-aba Risco montava com os campos VAZIOS mesmo com o motor
+    guardando `confianca_minima = 72` — cada aba era uma instância do painel,
+    e o que se digitava numa não passava pra outra. O operador via "não
+    declarada" e concluía que o limite tinha sumido.
 
-    Começa DESLIGADA de propósito: inferência consome CPU e escreve estado, e
-    fazer isso sem o operador pedir é decidir por ele. Ligar é um clique, e o
-    botão diz o que a ligação faz — "IA ligada" não é "ordem liberada".
+    Preenche SÓ o campo que está vazio, e SÓ com número real (`0` no motor
+    significa ausente, é o que `LimitesAuto` chama de não declarado). Quem já
+    digitou alguma coisa não tem o valor reescrito — o efeito não decide pelo
+    operador, ele só mostra o que já está guardado do outro lado.
   */
-  const [iaLigada, setIaLigada] = useState(false);
+  useEffect(() => {
+    const doMotor = (auto?.limites ?? null) as Record<string, unknown> | null;
+    if (!doMotor) return;
+    setLimites((atual) => {
+      const proximo = { ...atual };
+      let mudou = false;
+      for (const item of LIMITES) {
+        if ((proximo[item.chave] ?? '').trim() !== '') continue;
+        const valor = doMotor[item.chave];
+        if (typeof valor !== 'number' || !Number.isFinite(valor) || valor === 0) continue;
+        proximo[item.chave] = String(valor);
+        mudou = true;
+      }
+      // Sem mudança, devolve o MESMO objeto: `auto/state` refaz a cada 5s, e
+      // um objeto novo a cada poll seria um re-render sem motivo.
+      return mudou ? proximo : atual;
+    });
+  }, [auto]);
+  /*
+    INTERRUPTOR DA IA — NO STORE DA SESSAO, E NAO AQUI (09/10/2026)
+    ===============================================================
+    MEDIDO: era `useState(false)` NESTE componente, e a aba ROBÔ monta e
+    desmonta este componente inteiro. Sair e voltar zerava o interruptor — o
+    dono reportou: "quando desligo e volto novamente ele desliga". E nao era so
+    a tela: `useInferenciaIA` usa este valor para decidir se chama o gateway,
+    entao a inferencia PARAVA de rodar sem o operador pedir.
+
+    Continua comecando DESLIGADA, e agora por decisao de ESCOPO: `useIaLigada`
+    nao persiste no `localStorage`, entao sessao nova comeca desligada —
+    inferencia consome CPU e escreve estado, e ligar sozinho e decidir pelo
+    operador — e a troca de aba nao perde a escolha.
+
+    O interruptor do MOTOR nao passa por aqui: ele vem de `useAutoState()`,
+    que consulta `/api/auto/state` com cache no root, e esse ja sobrevivia.
+  */
+  const iaLigada = useIaLigada((s) => s.ligada);
+  const setIaLigada = useIaLigada((s) => s.setLigada);
   const { ativar: ativarIA } = useInferenciaIA(timeframe, iaLigada);
   const [ocupado, setOcupado] = useState(false);
   const [status, setStatus] = useState('');
@@ -260,7 +346,13 @@ export default function OperacaoAutomatica() {
     mercado seria a presuncao que a regra proibe.
   */
   const { broker: brokerSalvo, market: marketSalvo } = contaAtiva();
-  const broker = String(auto?.broker || brokerSalvo || 'mt5').toLowerCase();
+  /*
+    SEM CORRETORA MEDIDA, SEM CORRETORA NA TELA (11/10/2026, decisao do dono:
+    nada de MT5 fixo). Era `|| 'mt5'` — e o cabecalho nascia "MT5" antes de o
+    operador escolher qualquer corretora. Vazio e vazio: o cabecalho diz
+    "sem corretora" e o ligar recusa nomeando a barra inferior.
+  */
+  const broker = String(auto?.broker || brokerSalvo || '').toLowerCase();
 
   /*
     O CATALOGO ANTES DO MERCADO, E POR QUE ISSO NAO E CIRCULAR
@@ -362,7 +454,10 @@ export default function OperacaoAutomatica() {
   // último: serve para calcular a distância dos presets e para o operador ver o
   // número antes de ligar.
   useEffect(() => {
-    if (!simbolo) return undefined;
+    // SEM CORRETORA, SEM CONSULTA (11/10/2026): pedir quotes com `broker=`
+    // vazio e consultar para receber erro — e o preco nulo que voltaria ja e
+    // o estado inicial. A recusa com motivo esta no ligar e no cabecalho.
+    if (!simbolo || !broker) return undefined;
     let vivo = true;
     const ler = async () => {
       try {
@@ -489,8 +584,68 @@ export default function OperacaoAutomatica() {
     return saida;
   };
 
+  /*
+    APLICAR OS LIMITES SEM LIGAR O MOTOR (11/10/2026)
+    ==================================================
+    A sub-aba Risco existe para declarar quanto se aceita perder. Se o único
+    caminho fosse apertar AUTO, declarar limite arriscaria dinheiro — e um
+    campo de risco que só serve junto com o botão de operar é o controle
+    decorativo que o AGENTS.md 9 proíbe.
+
+    `/api/auto/config` NÃO é rota de plano (`_ROTAS_POST` tem só start e
+    tick), então isto funciona também no Free: o plano decide se o motor
+    RODA, não se o operador pode declarar o próprio limite.
+
+    O corpo são SÓ os campos declarados. `MotorAuto.configurar` faz merge —
+    o que não veio continua valendo — e o campo vazio não vai no payload
+    (mesma regra de `limitesNumericos` acima).
+  */
+  const aplicarLimites = async () => {
+    if (ocupado) return;
+    const corpo = limitesNumericos();
+    if (Object.keys(corpo).length === 0) {
+      setStatus('Nenhum limite declarado para aplicar.');
+      return;
+    }
+    setOcupado(true);
+    try {
+      const r = await fetch(`${apiBase()}/api/auto/config`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(corpo),
+        signal: AbortSignal.timeout(10000),
+      });
+      const d = (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      const ok = r.ok && d.ok !== false;
+      setStatus(
+        ok
+          ? 'Limites aplicados ao motor.'
+          : `Limites recusados: ${d.error ?? `HTTP ${r.status}`}`,
+      );
+      notify(
+        ok ? 'Limites aplicados' : 'Limites recusados',
+        ok ? 'O motor já usa estes valores.' : String(d.error ?? ''),
+      );
+    } catch (e) {
+      setStatus(`Gateway indisponível: ${e instanceof Error ? e.message : 'erro'}`);
+    } finally {
+      setOcupado(false);
+    }
+  };
+
   const ligar = async () => {
     if (ocupado) return;
+    if (!broker) {
+      // SEM CORRETORA, SEM LIGAR (11/10/2026, decisao do dono: nada de MT5
+      // fixo). Antes o `broker` nascia `'mt5'` e o ligar mandava a config para
+      // uma corretora que ninguem escolheu. A escolha esta em Configuracoes →
+      // Conexoes (o botao Ativar grava a conta ativa) — a mensagem aponta para
+      // la, como a do par aponta para o seletor desta mesma tela.
+      setStatus(
+        'Escolha a conta em Configurações → Conexões (botão Ativar da conexão) antes de ligar o AUTO.',
+      );
+      return;
+    }
     if (!simbolo) {
       // NUNCA "vá para outra aba".
       //
@@ -614,10 +769,19 @@ export default function OperacaoAutomatica() {
         body: JSON.stringify(corpo),
         signal: AbortSignal.timeout(10000),
       });
-      const dCfg = (await cfg.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      const dCfg = (await cfg.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        code?: string;
+        required_plans?: string[];
+      };
       if (!cfg.ok || dCfg.ok === false) {
-        setStatus(String(dCfg.error ?? `HTTP ${cfg.status}`));
-        notify('Configuração recusada', String(dCfg.error ?? ''));
+        // `/api/auto/config` NÃO é rota de plano hoje (`_ROTAS_POST` tem só
+        // start e tick), mas se virar, a mensagem já aponta o desbloqueio em
+        // vez de repetir o `error` cru.
+        const plano = recusaDePlano(dCfg, cfg.status);
+        setStatus(plano || String(dCfg.error ?? `HTTP ${cfg.status}`));
+        notify('Configuração recusada', plano || String(dCfg.error ?? ''));
         return;
       }
       const ini = await fetch(`${apiBase()}/api/auto/start`, {
@@ -626,12 +790,22 @@ export default function OperacaoAutomatica() {
         body: '{}',
         signal: AbortSignal.timeout(10000),
       });
-      const dIni = (await ini.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      const dIni = (await ini.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        code?: string;
+        required_plans?: string[];
+      };
       const ok = ini.ok && dIni.ok !== false;
-      setStatus(ok ? 'Motor ligado.' : `Configurado, mas não ligou: ${dIni.error ?? ''}`);
+      // 403 PLAN_REQUIRED: o bloqueio tem de apontar o DESBLOQUEIO. O payload
+      // já traz `required_plans`; a tela agora o lê.
+      const plano = ok ? '' : recusaDePlano(dIni, ini.status);
+      setStatus(
+        ok ? 'Motor ligado.' : plano || `Configurado, mas não ligou: ${dIni.error ?? ''}`,
+      );
       notify(
         ok ? 'Motor ligado' : 'Não ligou',
-        ok ? `Operando ${simbolo}.` : String(dIni.error ?? ''),
+        ok ? `Operando ${simbolo}.` : plano || String(dIni.error ?? ''),
       );
     } catch (e) {
       setStatus(`Gateway indisponível: ${e instanceof Error ? e.message : 'erro'}`);
@@ -668,15 +842,53 @@ export default function OperacaoAutomatica() {
     void (autoAtivo ? parar() : ligar());
   };
 
+  /*
+    A GRADE DOS LIMITES, em um lugar só.
+    Ela é a MESMA nos dois modos: na operação dentro do `<details>`, na de
+    risco em bloco aberto. Duplicar o JSX das oito entradas era ter dois
+    lugares para o campo sair de sincronia — que é o mesmo defeito das sub-abas
+    duplicadas, em escala menor.
+  */
+  const gradeDeLimites = (
+    <div className="robo-limites-grade">
+      {LIMITES.map((item) => (
+        <label className="field" key={item.chave}>
+          <span title={item.ajuda}>{item.rotulo}</span>
+          <input
+            type="number"
+            step={item.passo}
+            min={item.minimo}
+            value={limites[item.chave] ?? ''}
+            placeholder={item.zerado}
+            onChange={(e) =>
+              setLimites((atual) => ({ ...atual, [item.chave]: e.target.value }))
+            }
+            aria-label={item.rotulo}
+          />
+        </label>
+      ))}
+    </div>
+  );
+
   return (
-    <section className="card robo-comandos" aria-label="Operação automática">
+    <section
+      className="card robo-comandos"
+      aria-label={risco ? 'Controle de risco' : 'Operação automática'}
+    >
       <div className="section-head">
         <div>
-          <h2>Operação automática</h2>
+          <h2>{risco ? 'Controle de risco' : 'Operação automática'}</h2>
           <span className="muted">
-            {simbolo ? `${simbolo} ${timeframe}`.trim() : 'Sem par escolhido'} · {broker.toUpperCase()}
+            {simbolo ? `${simbolo} ${timeframe}`.trim() : 'Sem par escolhido'} · {broker ? broker.toUpperCase() : 'sem corretora'}
           </span>
         </div>
+        {/* O INTERRUPTOR E A IA FICAM SÓ NA VISÃO DE OPERAÇÃO. Na de risco
+            eles apareceriam como o segundo botão AUTO da página — o dono
+            reportou "sub abas duplicadas" e era isto: dois painéis idênticos,
+            um dentro de cada sub-aba, cada um com o seu próprio AUTO. Os
+            chips de estado (linha, motor ligado) continuam, porque informar
+            não duplica controle. */}
+        {!risco && (
         <div className="btn-row">
           {/*
             O AUTO SUBIU PARA O TOPO (06/10/2026)
@@ -763,6 +975,17 @@ export default function OperacaoAutomatica() {
             {autoAtivo ? 'Ligado' : 'Parado'}
           </span>
         </div>
+        )}
+        {risco && (
+        <div className="btn-row">
+          <span className={`chip ${wsConnected ? 'ok' : 'warn'}`}>
+            {wsConnected ? 'Tempo real' : 'Reconectando…'}
+          </span>
+          <span className={`chip ${autoAtivo ? 'ok' : 'neutral'}`}>
+            {autoAtivo ? 'Ligado' : 'Parado'}
+          </span>
+        </div>
+        )}
       </div>
 
       {/*
@@ -774,18 +997,30 @@ export default function OperacaoAutomatica() {
         automático é ligado — não numa seção que o operador precisa achar.
 
         O PAR foi para a barra inferior; aqui ele é apenas LIDO.
-      */}
-      <SeletorModelo />
 
-      {/*
-        A LISTA DOS MODELOS TREINADOS (05/10/2026).
-
-        O dono pediu: "tem que ter lista dos modelos treinados, eles vão operar
-        automáticos". MEDIDO: 39 modelos, 28 publicáveis. O par vem do catálogo
-        da corretora; o MODELO que decide por ele vem daqui — e é esta lista
-        que diz ao operador com que acerto e que edge ele vai operar.
+        Ele NÃO aparece na visão de risco: lá não se escolhe o que operar, se
+        declara o que se aceita perder, e os dois controles no mesmo lugar é
+        o caminho para trocar o modelo achando que estava mudando o limite.
       */}
-      <ListaModelos />
+      {!risco && (
+        <>
+          <SeletorModelo />
+
+          {/*
+            A LISTA DOS MODELOS TREINADOS SAIU DESTE PAINEL (11/10/2026)
+            ===========================================================
+            O dono pediu (05/10/2026): "tem que ter lista dos modelos
+            treinados, eles vão operar automáticos". Ela continua existindo —
+            agora na sub-aba `Modelos` da ROBÔ (`RobotTabs`), que é o único
+            lugar que a monta.
+
+            MEDIDO antes de tirar: a tabela aparecia DUAS VEZES na mesma tela,
+            uma na sub-aba Operação (dentro deste painel) e outra na sub-aba
+            Modelos, com o mesmo conteúdo. "Sub abas duplicadas" é o sintoma,
+            e a causa é este `<ListaModelos />`.
+          */}
+        </>
+      )}
 
       {/* TICKET DE COMANDOS — uma faixa, na ordem em que se opera.
           Preço e lote à esquerda (o que se olha e o que se decide), proteção no
@@ -811,229 +1046,81 @@ export default function OperacaoAutomatica() {
         VAZIO = "nao declarado" no motor, e a validacao do backend aceita. Nao
         preenchemos nada aqui: numero inventado no painel vira limite real.
       */}
-      <details className="robo-limites">
-        <summary>
-          Limites de risco{' '}
-          <span className="muted">(confianca, posicoes por dia, perda maxima)</span>
-        </summary>
-        <div className="robo-limites-grade">
-          {LIMITES.map((item) => (
-            <label className="field" key={item.chave}>
-              <span title={item.ajuda}>{item.rotulo}</span>
-              <input
-                type="number"
-                step={item.passo}
-                min={item.minimo}
-                value={limites[item.chave] ?? ''}
-                placeholder={item.zerado}
-                onChange={(e) =>
-                  setLimites((atual) => ({ ...atual, [item.chave]: e.target.value }))
-                }
-                aria-label={item.rotulo}
-              />
-            </label>
-          ))}
-        </div>
-        <p className="hint">
-          Campo vazio = nao declarado, e o motor usa o limite proprio do risk_gate.
-          Preencher e declarar quanto voce aceita perder.
-        </p>
-      </details>
+      {/*
+        NO MODO RISCO, A GAVETA ABRE: este bloco é o motivo de a sub-aba
+        existir, e esconder em `<details>` o conteúdo da própria aba seria o
+        operador ter de clicar duas vezes para chegar onde veio parar.
 
-      <div className="robo-ticket">
-        <div className="robo-ticket-preco" role="status" aria-live="polite" title="Preço ao vivo">
-          {preco != null ? preco : '--'}
-        </div>
-
-        <label className="field robo-ticket-lote" style={{ marginBottom: 0 }}>
-          <span>
-            {unidade ?? 'Lote'}{faixaVolume.assumido ? '*' : ''}
-          </span>
-          <input
-            type="number"
-            step={faixaVolume.passo}
-            min={faixaVolume.minimo}
-            max={faixaVolume.maximo}
-            value={lote}
-            onChange={(e) => setLote(e.target.value)}
-            aria-label={rotuloQuantidade(unidade, faixaVolume.passo)}
-            title={
-              faixaVolume.assumido
-                ? 'Faixa assumida: a corretora nao devolveu volume_min/volume_max para este ativo'
-                : `min ${faixaVolume.minimo} · max ${faixaVolume.maximo} · passo ${faixaVolume.passo} (da corretora)`
-            }
-          />
-        </label>
-
-        {/*
-          O RISCO EM DINHEIRO (05/10/2026)
-          ================================
-          MEDIDO: esta tela calculava `preco * lote * distancia`. Com BTCUSD a
-          85.865,35, lote 0,01 e distancia 8,45, devolvia 7.255,62 USD quando o
-          risco real e 0,08 USD — exagero de 85.865x, que era exatamente o preco.
-          Numa conta de 13,25 USD a tela afirmava risco de 7.255 USD.
-
-          A conta certa e `distancia * volume * contract_size`, e o
-          `contract_size` e o que separa crypto de forex: 1 em BTCUSD, 100.000 em
-          EURUSD. Sem ele, "lote" nao significa nada de dinheiro.
-
-          Sem contrato, o campo mostra "depende do contrato" e nao um numero.
-        */}
-        <label className="field robo-ticket-volume" style={{ marginBottom: 0 }}>
-          <span>Valor no risco (SL)</span>
-          <input
-            value={valorRisco ?? ''}
-            readOnly
-            placeholder={preco && num(sl) > 0 ? SEM_CONTRATO : 'depende do SL'}
-            aria-label="Valor da perda se o stop for tocado"
-            title={
-              valorRisco === null && preco && num(sl) > 0
-                ? 'A corretora nao devolveu o tamanho do contrato deste ativo: nao da para dizer o valor em dinheiro.'
-                : 'Distancia ate o SL x volume x tamanho do contrato.'
-            }
-          />
-        </label>
-
-        {/*
-          AS DUAS ABAS DA XM (05/10/2026)
-          ===============================
-          `Preco` e o que existia. `Quantidade` e o que o dono pediu: o valor em
-          dinheiro e do operador, e o preco e derivado, se recalculando a cada
-          tick para o dinheiro continuar sendo o mesmo.
-
-          O botao `Quantidade` fica desabilitado sem `contract_size`: sem o
-          tamanho do contrato nao ha conversao possivel, e oferecer o campo e
-          oferecer uma conta que da numero errado.
-        */}
-        <div className="robo-ticket-modo" role="group" aria-label="Como definir a protecao">
-          <button
-            type="button"
-            className={`btn sm ${modoProtecao === 'preco' ? 'primary' : 'ghost'}`}
-            aria-pressed={modoProtecao === 'preco'}
-            onClick={() => setModoProtecao('preco')}
-          >
-            Preco
-          </button>
-          <button
-            type="button"
-            className={`btn sm ${modoProtecao === 'quantidade' ? 'primary' : 'ghost'}`}
-            aria-pressed={modoProtecao === 'quantidade'}
-            onClick={() => setModoProtecao('quantidade')}
-            disabled={contratoUtilizavel(ficha) === null}
-            title={
-              contratoUtilizavel(ficha) === null
-                ? 'A corretora nao devolveu o tamanho do contrato deste ativo: dinheiro e preco nao converte'
-                : 'Definir o risco e o alvo em dinheiro; o preco e derivado'
-            }
-          >
-            Quantidade
-          </button>
-        </div>
-
-        <div className="robo-ticket-protecao">
-          <label className="field" style={{ marginBottom: 0 }}>
-            <span>Stop Loss</span>
-            <input
-              value={sl}
-              onChange={(e) => setSl(e.target.value)}
-              placeholder="preço ou distância"
-              aria-label="Stop loss"
-            />
-          </label>
-          <label className="field" style={{ marginBottom: 0 }}>
-            <span>Take Profit</span>
-            <input
-              value={tp}
-              onChange={(e) => setTp(e.target.value)}
-              placeholder="preço ou distância"
-              aria-label="Take profit"
-            />
-          </label>
-        </div>
-
-        {/* Presets 1:1 a 1:4 preenchem os campos. O passo sai da escala do
-            ativo: um "10" fixo seria 0,2% no ouro e 900% no EURUSD. */}
-        <div className="robo-presets robo-ticket-presets" role="group" aria-label="Presets de distância SL TP">
-          <span className="robo-presets-passo" title="Passo da distância: 0,1% do preço ao vivo">
-            passo {passo > 0 ? passo : '--'}
-          </span>
-          {PRESETS.map((p) => (
+        E o botão de APLICAR fica aqui, e não junto do AUTO: declarar limite
+        não pode depender de apertar o botão que liga o motor.
+      */}
+      {risco ? (
+        <div className="robo-limites">
+          {gradeDeLimites}
+          <p className="hint">
+            Campo vazio = nao declarado, e o motor usa o limite proprio do risk_gate.
+            Preencher e declarar quanto voce aceita perder.
+          </p>
+          <div className="robo-limites-acoes">
             <button
-              key={p.nome}
               type="button"
-              className="btn sm ghost"
-              onClick={() => aplicarPreset(p)}
-              title={`SL ${p.risco}x passo · TP ${p.alvo}x passo`}
+              className="btn"
+              onClick={() => void aplicarLimites()}
+              disabled={ocupado}
+              title="Grava os limites declarados no motor. Nao liga a operação."
             >
-              {p.nome}
+              {ocupado ? 'Aplicando.' : 'Aplicar limites ao motor'}
             </button>
-          ))}
-        </div>
-
-        {modoProtecao === 'quantidade' && (
-          <div className="robo-ticket-dinheiro">
-            <label className="field" style={{ marginBottom: 0 }}>
-              <span>Valor do stop loss</span>
-              <input
-                type="number"
-                min={0}
-                step={0.01}
-                value={valorSl}
-                onChange={(e) => setValorSl(e.target.value)}
-                aria-label="Valor do stop loss em dinheiro"
-                title="Quanto voce aceita perder. O preco do stop e derivado."
-              />
-            </label>
-            <label className="field" style={{ marginBottom: 0 }}>
-              <span>Valor do alvo</span>
-              <input
-                type="number"
-                min={0}
-                step={0.01}
-                value={valorTp}
-                onChange={(e) => setValorTp(e.target.value)}
-                aria-label="Valor do alvo em dinheiro"
-                title="Quanto voce espera ganhar. O preco do alvo e derivado."
-              />
-            </label>
-
-            {/*
-              OS NIVEIS DERIVADOS, dos dois lados.
-
-              Este painel nao sabe o lado: o proprio botao diz "a direcao e do
-              modelo", e o preco que chega e um so, sem bid/ask. Por isso os DOIS
-              niveis aparecem. O que NAO aparece e um nivel unico escolhido por
-              conta propria — seria mostrar o stop de uma venda no campo de stop
-              de uma compra, e o operador nao teria como saber qual dos dois o
-              motor vai usar.
-            */}
-            <div className="robo-ticket-niveis" role="status" aria-live="polite">
-              {(slValorN === null || tpValorN === null) && (
-                <span className="muted">Informe o valor do stop e do alvo.</span>
-              )}
-              {slValorN !== null && (
-                <span className="mono">
-                  Stop {slValorN}:{' '}
-                  <b>{slAbaixo === null ? '—' : slAbaixo.toPrecision(8)}</b> abaixo
-                  {' · '}
-                  <b>{slAcima === null ? '—' : slAcima.toPrecision(8)}</b> acima
-                </span>
-              )}
-              {tpValorN !== null && (
-                <span className="mono">
-                  Alvo {tpValorN}:{' '}
-                  <b>{tpAbaixo === null ? '—' : tpAbaixo.toPrecision(8)}</b> abaixo
-                  {' · '}
-                  <b>{tpAcima === null ? '—' : tpAcima.toPrecision(8)}</b> acima
-                </span>
-              )}
-              <span className="muted">
-                Os niveis acompanham o preco de {preco ?? '—'}; o valor em dinheiro e o que voce definiu.
-              </span>
-            </div>
           </div>
-        )}
-      </div>
+        </div>
+      ) : (
+        <details className="robo-limites">
+          <summary>
+            Limites de risco{' '}
+            <span className="muted">(confianca, posicoes por dia, perda maxima)</span>
+          </summary>
+          {gradeDeLimites}
+          <p className="hint">
+            Campo vazio = nao declarado, e o motor usa o limite proprio do risk_gate.
+            Preencher e declarar quanto voce aceita perder.
+          </p>
+        </details>
+      )}
+
+      {/*
+        O BLOCO DO TICKET SAIU — decisao do dono, 08/10/2026
+        =======================================================
+        O QUE ESTAVA AQUI, e o que era o unico consumidor de cada coisa:
+
+          Token(s)/Lote        -> `lote`     -> `/api/auto/config` -> `LimitesAuto.lote`
+          Stop Loss            -> `sl`       -> `/api/auto/config` -> `LimitesAuto.sl_preco`
+          Take Profit          -> `tp`       -> `/api/auto/config` -> `LimitesAuto.tp_preco`
+          Valor no risco (SL)  -> LEITURA    -> `distancia * volume * contract_size`
+          Preco / Quantidade   -> `modoProtecao`
+          passo + 1:1..1:4     -> `aplicarPreset`
+
+        O QUE O DONO DISSE: "nao esta bom", e o motivo medido na captura de
+        08/10 19:36: `Stop loss (-2,00 USD) 2,00` e `Alvo (+2,00 USD) 2,00` sao
+        VALOR FIXO, e as tres linhas de ordem sairam em 75670,29 / 75470,29 /
+        75270,29 — exatamente +200,00 e -200,00 em volta do preco. Um painel
+        que parece configuravel e escreve numero fixo e pior que nenhum painel.
+
+        O QUE CAI, E PRECISO QUE SEJA CONSCIENTE:
+        -----------------------------------------
+        Este era o UNICO caminho de tela para `/api/auto/config`. MEDIDO em
+        `backend/fastapi_gateway.py:484`, `/api/auto/start` diz "Exige limites
+        validos", e `backend/auto_engine.py:256` `LimitesAuto.completo()` exige
+        `lote > 0 AND sl_preco > 0 AND tp_preco > 0`.
+
+        Entao: os limites que o motor esta usando AGORA continuam valendo — sao
+        memoria do processo do gateway, nao disco (medido: nenhum JSON de
+        limites em %APPDATA%). Remover a tela NAO desliga o AUTO e NAO apaga o
+        que esta rodando.
+
+        Mas depois de um reinicio do gateway, `/api/auto/config` deixa de ter
+        interface: o motor sobe com o que a IA sugerir, ou nao sobe. Se o dono
+        quiser voltar a definir limites pela tela, este e o lugar.
+      */}
 
       {status && (
         <p className="robo-observacao" role="status">

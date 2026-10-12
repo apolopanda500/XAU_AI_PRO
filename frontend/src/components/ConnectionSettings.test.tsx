@@ -64,6 +64,9 @@ beforeEach(() => {
   M.terminal = { login: '391773676', server: 'XMGlobal-MT5 14', name: 'Henrique' };
   M.salvas = [];
   M.acoes = [];
+  // Sem isto, a conta gravada por um caso vazaria para o seguinte — e o caso
+  // "sincronizar grava" passaria mesmo sem gravar nada.
+  window.localStorage.removeItem('xau-active-account');
 });
 
 afterEach(() => {
@@ -183,5 +186,60 @@ describe('ConnectionSettings — salvar NÃO envia ordem', () => {
     await waitFor(() => expect(M.acoes.length).toBeGreaterThan(0));
     // Todas as ações disparadas são de LEITURA/estado de conexão.
     for (const acao of M.acoes) expect(['test', 'activate', 'deactivate']).toContain(acao.comando);
+  });
+});
+
+/*
+  SINCRONIZAR/ATIVAR TAMBEM ESCOLHE A CONTA (11/10/2026)
+  ======================================================
+  MEDIDO no app instalado: "Sem corretora escolhida" em toda a ROBO com o MT5
+  conectado e sessao detectada — e NADA no app gravava `xau-active-account`
+  (`definirEscopoAtivo` nao tinha um chamador sequer). A recusa mandava
+  "escolher a conta" para telas onde a escolha nao existia: beco sem saida.
+
+  Agora a escolha e real: sincronizar/validar e Ativar gravam a conta ativa, e
+  Desativar a conta escolhida limpa.
+*/
+describe('ConnectionSettings — escolher a conta grava a conta ativa', () => {
+  it('PROVA: sincronizar o MT5 grava mt5 como conta ativa', async () => {
+    render(<ConnectionSettings />);
+    await waitFor(() => expect(botaoSalvar().disabled).toBe(false));
+    fireEvent.click(botaoSalvar());
+    await waitFor(() => expect(M.salvas).toHaveLength(1));
+    await waitFor(() =>
+      expect(window.localStorage.getItem('xau-active-account')).toBe('mt5:metals'),
+    );
+  });
+
+  it('PROVA: Ativar na tabela grava a conta da linha', async () => {
+    M.conexoes = [{ id: 'mexc:crypto-spot:principal', broker: 'mexc', market: 'crypto-spot', active: false }];
+    render(<ConnectionSettings />);
+    const ativar = await screen.findByRole('button', { name: 'Ativar' });
+    fireEvent.click(ativar);
+    await waitFor(() =>
+      expect(window.localStorage.getItem('xau-active-account')).toBe('mexc:crypto-spot'),
+    );
+  });
+
+  it('PROVA: Desativar a conta escolhida LIMPA a conta ativa', async () => {
+    window.localStorage.setItem('xau-active-account', 'mt5:forex');
+    M.conexoes = [{ id: 'mt5:forex:terminal', broker: 'mt5', market: 'forex', active: true }];
+    render(<ConnectionSettings />);
+    const desativar = await screen.findByRole('button', { name: 'Desativar' });
+    fireEvent.click(desativar);
+    await waitFor(() =>
+      expect(window.localStorage.getItem('xau-active-account')).toBeNull(),
+    );
+  });
+
+  it('PROVA NEGATIVA: Desativar OUTRA conta nao limpa a escolhida', async () => {
+    window.localStorage.setItem('xau-active-account', 'mt5:forex');
+    M.conexoes = [{ id: 'mexc:crypto-spot:reserva', broker: 'mexc', market: 'crypto-spot', active: true }];
+    render(<ConnectionSettings />);
+    const desativar = await screen.findByRole('button', { name: 'Desativar' });
+    fireEvent.click(desativar);
+    await waitFor(() => expect(M.acoes.some((a) => a.comando === 'deactivate')).toBe(true));
+    // A escolhida continua: desativar a reserva nao apaga a ativa.
+    expect(window.localStorage.getItem('xau-active-account')).toBe('mt5:forex');
   });
 });

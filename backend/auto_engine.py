@@ -34,7 +34,7 @@ import json
 import os
 import threading
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -379,6 +379,40 @@ class LimitesAuto:
 # ------------------------------------------------------------------- estado
 
 
+def _declarado_impossivel(
+    declarados: dict[str, float],
+    rotulos: dict[str, str],
+) -> str:
+    """Um campo que o painel PREENCHEU com valor impossivel. "" quando nao ha.
+
+    MEDIDO (09/10/2026): `valido()` comeca com `if self.lote > 0: return True`
+    — o atalho do modo simples. Um pedido com `max_posicoes: 0` e lote
+    preenchido passava por ele como se o limite estivesse apenas AUSENTE, e o
+    motor seguia ligado com limite zero, recusando todo ciclo com
+    "ja ha 0 posicoes (max 0)".
+
+    `valido()` nao pode julgar isso: para ele, zero quer dizer ausente, e
+    ausente e um estado legitimo no modo simples. Quem sabe a diferenca entre
+    "nao mandei" e "mandei zero" e quem le o PEDIDO — e so o `configurar` le o
+    pedido. Por isso esta julgadora vive aqui, e nao no `LimitesAuto`.
+    """
+    impossiveis = [
+        rotulos.get(nome, nome)
+        for nome, valor in declarados.items()
+        if valor < 0 or (nome in ("max_posicoes", "max_operacoes_dia") and valor < 1)
+    ]
+    if impossiveis:
+        return (
+            "valor impossivel em "
+            + ", ".join(impossiveis)
+            + " — escolhido zero, e zero aqui e ausencia de limite"
+        )
+    confianca = declarados.get("confianca_minima")
+    if confianca is not None and confianca != 0 and not 0 < confianca <= 100:
+        return "confianca minima tem de estar entre 0 e 100"
+    return ""
+
+
 @dataclass
 class Decisao:
     """Por que o motor fez (ou nao fez) o que fez. Tudo fica registrado."""
@@ -551,14 +585,50 @@ class MotorAuto:
             # ------------------------------------------------------------------
             campos_limite = set(asdict(self.limites))
             mexeu_limite = any(campo in payload and payload[campo] is not None for campo in campos_limite)
-            for campo in campos_limite:
-                if campo in payload and payload[campo] is not None:
-                    try:
-                        setattr(self.limites, campo, type(getattr(self.limites, campo))(payload[campo]))
-                    except (TypeError, ValueError):
-                        return {"ok": False, "error": f"valor invalido para {campo}"}
+
             if mexeu_limite:
-                ok, motivo = self.limites.valido()
+                # VALIDAR NA COPIA, E SO DEPOIS GRAVAR (09/10/2026)
+                # ===================================================
+                # MEDIDO: este bloco GRAVAVA cada campo do pedido e so depois
+                # chamava `valido()`. Quando `valido()` recusava, a resposta
+                # dizia `ok: False` — mas o valor invalido JA ESTAVA DENTRO do
+                # motor.
+                #
+                # E o defeito que a captura de 20:15 mostra: motor LIGADO,
+                # `max_posicoes = 0`, e um MOTIVO que nao explicava nada. O
+                # caminho era: os limites estavam validos e o motor rodava; o
+                # painel mandou um pedido com um limite zerado; a resposta
+                # recusou; o operador seguiu — e o motor passou a recusar TODOS
+                # os ciclos com "ja ha 0 posicoes (max 0)". Recusar o pedido e
+                # aplicar o pedido nao aconteciam juntas.
+                #
+                # Agora a copia e julgada primeiro, e `self.limites` so recebe
+                # a copia quando ela e valida. O pedido que nao presta nao
+                # entra, e o motor que estava de pe continua de pe.
+                #
+                # E ha uma SEGUNDA julgadora, que so existe aqui: a dos campos
+                # que o pedido DECLAROU. `valido()` nao pode faze-la, porque
+                # zero nele quer dizer AUSENTE — e no modo simples (`lote > 0`
+                # -> `return True`) um `max_posicoes: 0` passaria como ausente.
+                # MEDIDO: foi exatamente isso que aconteceu. Quem sabe o que foi
+                # declarado e quem le o pedido, e so o `configurar` le o pedido.
+                campos_copia = {campo: getattr(self.limites, campo) for campo in campos_limite}
+                declarados: dict[str, float] = {}
+                for campo in campos_limite:
+                    if campo in payload and payload[campo] is not None:
+                        try:
+                            valor = type(getattr(self.limites, campo))(payload[campo])
+                        except (TypeError, ValueError):
+                            return {"ok": False, "error": f"valor invalido para {campo}"}
+                        campos_copia[campo] = valor
+                        declarados[campo] = valor
+
+                impossivel = _declarado_impossivel(declarados, self.limites.ROTULOS)
+                if impossivel:
+                    return {"ok": False, "error": impossivel}
+
+                copia = replace(self.limites, **campos_copia)
+                ok, motivo = copia.valido()
                 if not ok:
                     # O par e o periodo JA foram gravados: a resposta diz o que
                     # foi aplicado e o que ainda falta, para a tela nao parecer
@@ -570,6 +640,7 @@ class MotorAuto:
                         "timeframe": self.timeframe,
                         "aplicado": True,
                     }
+                self.limites = copia
             # NAO mexeram nos limites? Entao NAO ha o que julgar.
             #
             # MEDIDO (05/10/2026): a barra inferior manda `{timeframe}` ao
@@ -819,11 +890,38 @@ class MotorAuto:
 
         # 4. Limites de exposicao vindos do risk_gate (modo avancado; no
         # simples o risk_gate do gateway continua valendo no envio).
-        if not simples and int(risco.get("open_positions", 0)) >= int(limites["max_posicoes"]):
-            return self._registrar(Decisao(
-                agora, simbolo, timeframe, False,
-                f"ja ha {risco.get('open_positions')} posicoes (max {limites['max_posicoes']})",
-                sinal, confianca, edge, modelo=modelo_ciclo))
+        if not simples:
+            limite_posicoes = int(limites["max_posicoes"])
+
+            # MOTIVO ERRADO MEDIDO (09/10/2026)
+            # ===================================
+            # A mensagem era uma so, para dois problemas diferentes:
+            #
+            #     f"ja ha {open} posicoes (max {limite_posicoes})"
+            #
+            # Com `max_posicoes = 0` e NENHUMA posicao aberta, ela dizia
+            # "ja ha 0 posicoes (max 0)" — que o operador le como "o motor
+            # contou as posicoes e ja estou no limite". Ele ia olhar as
+            # posicoes, via que nao tinha nenhuma, e nao tinha o que fazer.
+            #
+            # E a regra 5 do AGENTS.md, pelo lado mais caro: onde dois lados do
+            # mesmo dado discordam, o sintoma e uma RECUSA COM MOTIVO ERRADO, e
+            # o operador culpa a coisa errada. Aqui o defeito era o LIMITE NAO
+            # DECLARADO, e a mensagem mandava olhar as POSICOES.
+            #
+            # Limite nao declarado e limite atingido sao dois motivos, e cada
+            # um diz o que o operador tem de fazer.
+            if limite_posicoes < 1:
+                return self._registrar(Decisao(
+                    agora, simbolo, timeframe, False,
+                    "limite de posicoes nao declarado: defina o maximo no painel "
+                    "de risco antes de ligar o motor",
+                    sinal, confianca, edge, modelo=modelo_ciclo))
+            if int(risco.get("open_positions", 0)) >= limite_posicoes:
+                return self._registrar(Decisao(
+                    agora, simbolo, timeframe, False,
+                    f"ja ha {risco.get('open_positions')} posicoes (max {limite_posicoes})",
+                    sinal, confianca, edge, modelo=modelo_ciclo))
         if not simples and int(risco.get("daily_trades", 0)) >= int(limites["max_operacoes_dia"]):
             return self._registrar(Decisao(
                 agora, simbolo, timeframe, False,

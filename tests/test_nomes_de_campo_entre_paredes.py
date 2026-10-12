@@ -165,9 +165,34 @@ class TestNomeDeCampoDoPainelParaOMotor:
 
     def test_so_um_painel_oferece_o_modo_dinheiro(self) -> None:
         # Se dois arquivos oferecessem o modo dinheiro, o operador veria o mesmo
-        # campo em duas telas com nomes diferentes — e uma das duas ia mandar
+        # campo em duas telas com nomes diferentes - e uma das duas ia mandar
         # o campo errado. E o sintoma de nome que este arquivo existe para pegar.
-        assert len(PAINEL) == 1, f"painel de dinheiro em mais de um arquivo: {[p.name for p in PAINEL]}"
+        #
+        # DECISAO DO DONO, 08/10/2026: o bloco do ticket saiu da aba ROBO, e com
+        # ele os campos `Valor do stop loss` e `Valor do alvo`. Entao hoje NAO ha
+        # painel que ofereca o modo dinheiro — `PAINEL` esta vazio.
+        #
+        # O limite virou "no maximo um", e nao "exatamente um": o defeito que
+        # este arquivo caça e DOIS painéis, nao zero. E o caso de zero precisa
+        # ser DICITO no proximo teste, porque um `@parametrize` com lista vazia
+        # nao reprova — ele simplesmente nao roda, e a suite fica verde sem ter
+        # medido nada (AGENTS.md 6).
+        assert len(PAINEL) <= 1, (
+            f"painel de dinheiro em mais de um arquivo: {[p.name for p in PAINEL]}"
+        )
+
+    def test_nenhum_painel_oferece_o_modo_dinheiro_hoje(self) -> None:
+        """O estado MEDIDO, dito em vez de decorator vazio.
+
+        Se um dia um painel voltar a oferecer SL/TP em dinheiro, este teste
+        reprova e obriga a decidir de novo — em vez de o arquivo inteiro voltar
+        a rodar sozinho e sem ninguem olhar o que ele mede.
+        """
+        assert PAINEL == [], (
+            "um painel voltou a oferecer o modo dinheiro: "
+            f"{[p.name for p in PAINEL]}. O bloco saiu da aba ROBO por decisao "
+            "do dono em 08/10/2026; se voltou, e por um motivo novo."
+        )
 
     @pytest.mark.parametrize("arquivo", PAINEL, ids=lambda p: p.name)
     def test_o_motor_aceita_o_nome_do_dinheiro(self, arquivo: Path) -> None:

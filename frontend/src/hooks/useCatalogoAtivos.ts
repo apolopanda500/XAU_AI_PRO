@@ -16,6 +16,15 @@ import type { Broker } from '../lib/connections';
 export function useCatalogoAtivos(broker: Broker, market: string): AssetRow[] {
   const [ativos, setAtivos] = useState<AssetRow[]>([]);
   useEffect(() => {
+    // SEM CORRETORA, SEM CONSULTA (11/10/2026, decisao do dono: nada de MT5
+    // fixo). Pedir `/api/universal/assets?broker=` seria consultar com
+    // identidade vazia para receber "corretora não suportada" — uma recusa
+    // que o operador leria como defeito do servidor. Vazio aqui e "escolha
+    // a corretora", e a lista vazia e a recusa com motivo.
+    if (!String(broker || '').trim()) {
+      setAtivos([]);
+      return undefined;
+    }
     // MERCADO VAZIO NAO IMPEDE A CONSULTA.
     //
     // MEDIDO em 07/10/2026, conta 391773676 (XMGlobal-MT5 14), com o motor

@@ -84,7 +84,33 @@ describe('SeletorFuso', () => {
 
   it('escolher uma cidade tira do `auto` e passa a valer a zona dela', () => {
     abrir();
-    fireEvent.click(screen.getByRole('option', { name: /Londres/ }));
+    /*
+      MEDIDO (09/10/2026): o teste procurava a opcao pelo nome "Londres", que
+      era a string da lista de 18 cidades escrita no codigo. O catalogo agora
+      vem do `Intl` do sistema, e o `Intl` escreve "London" para
+      `Europe/London` — a mesma zona, o nome proprio do fuso.
+
+      Prender o nome no teste seria a mesma presuncao que o AGENTS.md §3 probe
+      para o ativo. O que se trava ȁ a ZONA, que ȁ a chave e nao muda.
+
+      E a busca e o caminho agora: com mais de 400 zonas, achar Londres por
+      posicao nao ȁ viavel.
+    */
+    fireEvent.change(screen.getByLabelText('Buscar cidade, país ou zona'), {
+      target: { value: 'Europe/London' },
+    });
+    /*
+      MEDIDO (09/10/2026): a busca por zona IANA filtrava certo, mas o item nao
+      mostrava a zona em lugar nenhum — `textContent` tinha so "London UTC+1".
+      Quem digitou "Europe/London" via o resultado e nao tinha como conferir que
+      era a zona que queria.
+
+      A zona entrou no `title` e no `aria-label` do item. E o teste passa a
+      medir por ela, que ȁ a chave.
+    */
+    const opcao = screen.getByTitle('Europe/London');
+    expect(opcao, 'a zona Europe/London nao apareceu na busca').toBeTruthy();
+    fireEvent.click(opcao);
     const st = useFuso.getState();
     expect(st.auto).toBe(false);
     expect(st.zona).toBe('Europe/London');

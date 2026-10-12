@@ -89,13 +89,28 @@ describe('useCatalogoAtivos', () => {
     PROVA NEGATIVA. Com o `if (!market) { setAtivos([]); return undefined; }`
     que existia antes, `fetchMock` NUNCA era chamado e `result.current` ficava
     vazio para sempre. Este caso reprova naquela versao.
+
+    POR QUE O `length` ENTRA NUM `waitFor` (10/10/2026)
+    ===================================================
+    MEDIDO: a asserção do `length` era SINCRONA, depois do `waitFor` do fetch.
+    O fetch ser chamado (linha do `toHaveBeenCalled`) e o `setAtivos` acontecer
+    são dois momentos diferentes: o `setAtivos` roda na resolução da Promise,
+    UM microtask depois. Uma asserção síncrona do `length` ali corria entre os
+    dois — e, com a suíte inteira carregada (66 arquivos, event loop ocupado),
+    lia `result.current` ainda em `[]`. Falha INTERMITENTE (medido: 1 em 8
+    rodadas da suíte, neste caso), que é a assinatura de teste que mede o
+    instante errado, não de produto quebrado — o hook está correto.
+
+    Os outros quatro casos deste arquivo já esperavam o `length` num `waitFor`;
+    só este media no seco. Agora espera também, e a trava não afrouxa: continua
+    exigindo `length === 2` e o fetch chamado.
   */
   it('PROVA NEGATIVA: sem a correcao o catalogo nunca era consultado', async () => {
     const { result } = renderHook(() => useCatalogoAtivos('mt5', ''));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     expect(fetchMock.mock.calls.length).toBeGreaterThan(0);
-    expect(result.current.length).toBe(2);
+    await waitFor(() => expect(result.current.length).toBe(2));
   });
 
   it('cada mudanca de mercado refaz a consulta', async () => {

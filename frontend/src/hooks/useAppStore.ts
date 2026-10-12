@@ -20,8 +20,8 @@ export type TabType =
 
 export type ThemeName =
   | 'dark'
-  | 'xau_dark'
-  | 'btc_dark'
+  | 'dourado_dark'
+  | 'laranja_dark'
   | 'light'
   | 'ocean_dark'
   | 'emerald_dark'
@@ -205,7 +205,9 @@ const quoteKey = (quote: Quote): string =>
 export const DEFAULT_SETTINGS: Settings = {
   pinEnabled: false,
   pinCode: '',
-  theme: 'xau_dark',
+  // O padrao continua sendo o tema DOURADO — so o nome mudou (10/10/2026), porque
+  // o ID antigo tinha nome de ativo (`xau_dark`). A cor e a mesma.
+  theme: 'dourado_dark',
   animations: true,
   soundEnabled: true,
   notifications: true,

@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import pytest
 
+from dataclasses import asdict
+
 from backend.auto_engine import LimitesAuto, MotorAuto
 from backend import ai_inference as ai
 
@@ -852,3 +854,107 @@ class TestProvedorDaFicha:
         assert original is None or callable(original)
         # o caminho de leitura invalida e coberto pelo `> 0` no provedor
         assert auto_engine._contract_size("NAO_EXISTE_XYZ") is None
+
+
+# ------------------------------------------------- limites recusados
+# O defeito medido em 09/10/2026: `configurar` gravava o valor invalido e SO
+# DEPOIS chamava `valido()`. A resposta recusava, e o valor invalido ja estava
+# dentro do motor — que passava a recusar todos os ciclos com um motivo que nao
+# explicava nada ("ja ha 0 posicoes (max 0)").
+
+
+class TestConfigurarNaoEnvenenaOMotor:
+    def test_valor_invalido_nao_entra_no_motor(self):
+        """Recusar o pedido e aplicar o pedido nao podem acontecer separados."""
+        m = motor_pronto()
+        antes = asdict(m.limites)
+
+        r = m.configurar({"max_posicoes": 0})
+
+        assert r["ok"] is False
+        # O motor CONTINUA com o limite que tinha: recusar nao pode zerar.
+        assert m.limites.max_posicoes == antes["max_posicoes"]
+        assert m.limites.max_posicoes == 2
+
+    def test_varios_campos_ou_entram_todos_ou_nenhum(self):
+        """
+        O pedido misto nao pode aplicar metade.
+
+        MEDIDO: com `{"max_posicoes": 0, "lote": 0.5}`, a versao antiga gravava
+        o lote 0.5 (que e valido) e so recusava no `max_posicoes`. O operador
+        via "recusado" e o lote tinha mudado.
+        """
+        m = motor_pronto()
+        lote_antes = m.limites.lote
+
+        r = m.configurar({"max_posicoes": 0, "lote": 0.5})
+
+        assert r["ok"] is False
+        assert m.limites.lote == lote_antes, "o pedido recusado aplicou metade dele"
+
+    def test_pedido_valido_entra(self):
+        """A prova de que a trava nao virou "nunca aceita nada"."""
+        m = motor_pronto()
+
+        r = m.configurar({"max_posicoes": 3})
+
+        assert r["ok"] is True
+        assert m.limites.max_posicoes == 3
+
+    def test_pedido_valido_mesclado_com_o_que_ja_existia(self):
+        """Um campo novo nao pode apagar os outros."""
+        m = motor_pronto()
+        confianca_antes = m.limites.confianca_minima
+
+        r = m.configurar({"timeframe": "H4"})
+
+        assert r["ok"] is True
+        assert m.timeframe == "H4"
+        assert m.limites.confianca_minima == confianca_antes
+
+
+class TestMotivoDoLimite:
+    """
+    O MOTIVO ERRADO, MEDIDO NA CAPTURA DE 20:15
+    ===========================================
+    Motor LIGADO, `max_posicoes = 0`, e o MOTIVO dizia:
+
+        "ja ha 0 posicoes (max 0)"
+
+    Com NENHUMA posicao aberta. O operador ia olhar as posicoes, via que nao
+    tinha nenhuma, e nao tinha o que fazer — o defeito era o LIMITE NAO
+    DECLARADO, e a mensagem mandava olhar as POSICOES. E a regra 5 do AGENTS.md
+    na sua forma mais cara: recusa com motivo errado, operador culpando a
+    coisa errada.
+    """
+
+    def _rodar(self, abertas: int):
+        m = motor_pronto()
+        chamadas: list[dict] = []
+        return m.ciclo_unico(
+            lambda s, t: InferenciaFalsa(confianca=90.0, edge=0.2, signal="BUY"),
+            enviar_espiao(chamadas),
+            lambda: risco(open_positions=abertas),
+        )
+
+    def test_sem_limite_o_motivo_e_o_limite(self):
+        m = motor_pronto(max_posicoes=0)
+        chamadas: list[dict] = []
+        d = m.ciclo_unico(
+            lambda s, t: InferenciaFalsa(confianca=90.0, edge=0.2, signal="BUY"),
+            enviar_espiao(chamadas),
+            lambda: risco(open_positions=0),
+        )
+        assert "nao declarado" in d.motivo
+        # E NAO o motivo que manda olhar as posicoes.
+        assert "ja ha" not in d.motivo
+        assert chamadas == [], "sem limite declarado nao sai ordem"
+
+    def test_com_limite_e_sem_posicao_o_motor_passaria(self):
+        """O motivo antigo so faz sentido com limite declarado."""
+        d = self._rodar(0)
+        assert "posicoes" not in d.motivo
+
+    def test_limite_atingido_diz_o_que_aconteceu(self):
+        d = self._rodar(2)
+        assert d.motivo == "ja ha 2 posicoes (max 2)"

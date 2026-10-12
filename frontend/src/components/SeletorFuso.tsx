@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { listaOrdenada, rotuloOffset, offsetMinutos, fusoAutomatico } from '../lib/fuso';
+import {
+  buscarCidades,
+  listaOrdenada,
+  rotuloOffset,
+  offsetMinutos,
+  fusoAutomatico,
+} from '../lib/fuso';
 import { useFuso, zonaAtual } from '../hooks/useFuso';
 
 /*
@@ -24,6 +30,7 @@ import { useFuso, zonaAtual } from '../hooks/useFuso';
 export function SeletorFuso({ onEscolher }: { onEscolher?: (zona: string) => void }) {
   const { auto, zona, usarAuto, escolher } = useFuso();
   const [aberto, setAberto] = useState(false);
+  const [busca, setBusca] = useState('');
   const [agora, setAgora] = useState(() => new Date());
   const raizRef = useRef<HTMLDivElement>(null);
 
@@ -50,7 +57,16 @@ export function SeletorFuso({ onEscolher }: { onEscolher?: (zona: string) => voi
     };
   }, [aberto]);
 
-  const lista = useMemo(() => listaOrdenada(agora), [agora]);
+  const todas = useMemo(() => listaOrdenada(agora), [agora]);
+  /**
+   * A lista FILTRADA pelo texto, e nao as 424 zonas de uma vez.
+   *
+   * MEDIDO (09/10/2026): com o catalogo completo do sistema, a lista virou
+   * pagina e meia de rolagem — pior que as 18 cidades de antes, que era a
+   * reclamacao. A busca e o que torna o catalogo completo utilizavel: casa no
+   * nome da cidade, no pais e na propria zona IANA.
+   */
+  const lista = useMemo(() => buscarCidades(busca, agora), [busca, agora]);
   const deteccao = fusoAutomatico();
   const atual = zonaAtual();
 
@@ -58,6 +74,10 @@ export function SeletorFuso({ onEscolher }: { onEscolher?: (zona: string) => voi
     if (nova === '__auto__') usarAuto();
     else escolher(nova);
     setAberto(false);
+    // A busca some junto: reabrir o menu com o filtro do ultimo uso ȁ menu
+    // que parece ter pouca coisa, e o operador nao entende por que a cidade
+    // que ele quer nao esta la.
+    setBusca('');
     onEscolher?.(nova);
   };
 
@@ -99,6 +119,34 @@ export function SeletorFuso({ onEscolher }: { onEscolher?: (zona: string) => voi
 
           <div className="fuso-divisor" role="separator" />
 
+          {/*
+            A BUSCA. Fica no topo da lista, antes de qualquer item, porque e o
+            primeiro lugar que o olho vai quando o menu abre — e sem ela, o
+            catalogo completo seria 423 itens para rolar.
+
+            `autoFocus` porque o menu inteiro existe para isso.
+          */}
+          <div className="fuso-busca">
+            <input
+              type="search"
+              className="fuso-busca-campo"
+              placeholder="Buscar cidade, país ou zona"
+              aria-label="Buscar cidade, país ou zona"
+              value={busca}
+              autoFocus
+              onChange={(e) => setBusca(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+
+          {lista.length === 0 && (
+            <p className="fuso-vazio">
+              {busca.trim()
+                ? `Nenhum fuso com "${busca.trim()}".`
+                : 'Este navegador não informa a lista de fusos — use "auto".'}
+            </p>
+          )}
+
           {lista.map((c) => {
             const escolhido = !auto && zona === c.zona;
             return (
@@ -108,6 +156,20 @@ export function SeletorFuso({ onEscolher }: { onEscolher?: (zona: string) => voi
                 role="option"
                 aria-selected={escolhido}
                 className={`fuso-item${escolhido ? ' ativo' : ''}`}
+                /*
+                  A ZONA no `title` e no `aria-label`.
+                  ======================================
+                  MEDIDO (09/10/2026): com mais de 400 zonas e a busca por zona
+                  IANA funcionando, o item filtrava mas nao mostrava POR QUE ele
+                  tinha aparecido. Quem digitou "Europe/London" ve so "London" e
+                  nao tem como conferir que achou a zona que queria — e varias
+                  cidades do mundo se chamam London.
+
+                  A zona ȁ a chave e fica disponivel para o operador conferir,
+                  sem entrar na linha (que j᭠tem cidade + offset).
+                */
+                title={c.zona}
+                aria-label={`${c.cidade} ${c.zona}`}
                 onClick={() => escolherZona(c.zona)}
               >
                 <span className="fuso-tick">{escolhido ? '\u2713' : ''}</span>

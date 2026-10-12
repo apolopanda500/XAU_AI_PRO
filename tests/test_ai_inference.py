@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """Testes da inferencia real (backend/ai_inference.py).
 
 O ponto central destes testes e a AUSENCIA DE FALLBACK. O sinal antigo
@@ -415,3 +415,61 @@ class TestNenhumAtivoRealFicaPreso:
         assert _RE_SIMBOLO.match("A" * maior), f"nome real de {maior} chars nao cabe"
         # E o nome completo do artefato, que e o que vira arquivo.
         assert _nome_de_artefato("MULTI_METALS", "H1") == "MULTI_METALS_H1"
+
+
+# --------------------------------------------- modelos multi-classe
+# MEDIDO em 09/10/2026: os tres artefatos de classe (`MULTI_METALS`,
+# `MULTI_FIAT`, `MULTI_CRYPTO`) nao tem underscore no nome, e o laco de
+# `listar_modelos` comecava com `if "_" not in nome: continue`. Os tres
+# desapareciam da lista sem erro nenhum — e o `MULTI_METALS` e o de MAIOR edge
+# do catalogo (0.2497, 67.678 amostras). A captura do dono de 20:28 mostrava
+# "28 de 28 modelos" e nenhum dos tres.
+
+
+class TestModelosMultiClasseAparecem:
+    def test_os_tres_multi_estao_na_lista(self):
+        ms = ai.listar_modelos()
+        simbolos = {m["symbol"] for m in ms}
+        for nome in ("MULTI_METALS", "MULTI_FIAT", "MULTI_CRYPTO"):
+            assert nome in simbolos, f"{nome} sumiu da lista"
+
+    def test_multi_vira_uma_linha_por_periodo_que_cobre(self):
+        """O meta do MULTI_METALS tem `timeframes` com quatro periodos."""
+        linhas = [m for m in ai.listar_modelos() if m["symbol"] == "MULTI_METALS"]
+        assert len(linhas) == 4, f"esperava 4 periodos, veio {len(linhas)}"
+        assert {m["timeframe"] for m in linhas} == {"M5", "M15", "H1", "H4"}
+
+    def test_a_ordena_por_edge(self):
+        """O maior edge do catalogo tem de estar entre os primeiros."""
+        ms = ai.listar_modelos()
+        comEdge = [m for m in ms if m["edge"] is not None]
+        assert comEdge, "nenhum modelo com edge"
+        assert max(comEdge, key=lambda m: m["edge"])["symbol"] == "MULTI_METALS"
+
+    def test_cada_linha_tem_o_seu_periodo_no_label(self):
+        """Sem isso a tabela mostra quatro linhas iguais — o defeito do dono."""
+        linhas = [m for m in ai.listar_modelos() if m["symbol"] == "MULTI_FIAT"]
+        assert len({m["label"] for m in linhas}) == len(linhas)
+
+
+class TestTabelaNaoRepeteOMesmoNome:
+    """
+    O que o dono apontou na captura de 20:28: `MULTI_METALS | MULTI_METALS |
+    METALS` — a coluna Modelo e a coluna Par mostrando o mesmo valor.
+
+    MEDIDO: a coluna Modelo mostrava `m.id` (nome do arquivo = o proprio
+    simbolo, no caso dos multi) e a coluna Par mostrava `m.symbol`.
+    """
+
+    def test_id_e_label_diferem_quando_o_nome_do_arquivo_e_o_simbolo(self):
+        ms = ai.listar_modelos()
+        multi = [m for m in ms if m["symbol"].startswith("MULTI")]
+        assert multi, "nenhum multi na lista"
+        for m in multi:
+            assert m["label"] != m["symbol"], "label repete o simbolo"
+            # O rotulo usa a forma curta ("5M"), que e o que a tela le.`r`n            assert any(t in m["label"] for t in (m["timeframe"], ai._ROTULO_TF.get(m["timeframe"], ""))), "o periodo tem de estar no label"
+
+    def test_modelo_single_mantem_o_label_com_periodo(self):
+        ms = [m for m in ai.listar_modelos() if m["symbol"] == "AUDUSD"]
+        assert ms, "AUDUSD sumiu da lista"
+        assert all("AUDUSD" in m["label"] and m["timeframe"][1:] in m["label"] for m in ms)

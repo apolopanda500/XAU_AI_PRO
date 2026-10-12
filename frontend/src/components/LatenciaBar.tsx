@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { apiBase } from '../lib/api';
+import { IconeRelogio, IconeSinal } from './Icones';
 import '../theme/latencia-bar.css';
 
 type Medicao = {
@@ -157,7 +158,10 @@ export default function LatenciaBar({ ativa }: { ativa?: string }) {
     return (
       <div className="latencia-rodape">
         <span className="latencia-item latencia-off" title="Gateway sem resposta para medir latência">
-          <span aria-hidden="true">📡</span> sem medição
+          {/* `📡` e emoji: cor e dois caracteres de largura, ao lado de icones
+              monocromaticos do mesmo painel. */}
+          <IconeSinal />
+          sem medição
         </span>
       </div>
     );
@@ -198,7 +202,7 @@ export default function LatenciaBar({ ativa }: { ativa?: string }) {
     return (
       <div className="latencia-rodape">
         <span className="latencia-item latencia-off" title={f.titulo}>
-          <span aria-hidden="true">◷</span> {f.texto}
+          <IconeRelogio /> {f.texto}
         </span>
       </div>
     );

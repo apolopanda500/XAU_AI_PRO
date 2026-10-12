@@ -24,6 +24,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { apiBase } from '../lib/api';
 import { notify } from '../lib/notify';
 import { useAutoState } from '../hooks/queries';
+import { corDaOperacao } from '../lib/historicoMt5';
 import { BROKERS, MARKETS_BY_BROKER, MARKET_LABELS, compatibleMarket } from '../lib/brokerCatalog';
 import '../theme/auto-engine.css';
 
@@ -662,9 +663,18 @@ const [limites, setLimites] = useState<Limites>({ ...ZERO });
                     <strong>{d.simbolo ?? '--'}</strong>
                   </td>
                   <td>
-                    <span
-                      className={`chip ${/buy|compra/i.test(String(d.side)) ? 'ok' : /sell|venda/i.test(String(d.side)) ? 'warn' : ''}`}
-                    >
+                    {/*
+                      A COR DA OPERACAO e a MESMA do historico
+                      (`corDaOperacao`), e nao uma segunda regra aqui.
+
+                      MEDIDO (09/10/2026): aqui era
+                      `buy -> ok`, `sell -> warn`, qualquer outra coisa -> ''.
+                      Amarelo nao e vermelho, e a mesma venda aparecia VERMELHA
+                      no historico e AMARELA nesta tabela — dois lados do mesmo
+                      dado com cores diferentes, que e o defeito da regra 5 do
+                      AGENTS.md.
+                    */}
+                    <span className={`chip ${corDaOperacao(String(d.side ?? d.acao ?? ''))}`}>
                       {d.side ?? d.acao ?? '--'}
                     </span>
                   </td>

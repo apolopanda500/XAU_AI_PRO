@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo } from 'react';
 import { useAppStore } from '../hooks/useAppStore';
 import { useEaRuntime } from '../hooks/queries';
-import QuantumClock from './QuantumClock';
 
 // A navegacao vive em Sidebar.tsx (ITEMS). Este arquivo usava declarar um
 // TABS proprio com 4 entradas que nunca eram renderizadas — uma terceira lista
@@ -59,7 +58,6 @@ export default function TopNav() {
         </span>
         <span className="status">🤖 AI: {aiStatus}</span>
         <span className="status">EA: {robotStatus}</span>
-        <QuantumClock compact showSeconds={false} showDate={false} />
       </div>
     </header>
   );

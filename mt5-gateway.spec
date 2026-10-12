@@ -89,6 +89,30 @@ a = Analysis(
         # "agenda indisponivel" — sem excecao, sem log, so a tela vazia.
         'backend.economic_calendar_publica',
         'backend.planos.economic_calendar',
+        # ASSINATURAS E SOCIAL PAPER (2026-10-11)
+        #
+        # MEDIDO no app instalado, aba Configuracoes -> Plano:
+        #
+        #     Assinatura indisponível: Failed to fetch
+        #     Catálogo de planos indisponível: Failed to fetch
+        #
+        # `backend.planos.subscriptions` (e `caminhos`, `social_paper`) nunca
+        # entraram aqui: nenhum import de topo os alcanca — o `__init__.py`
+        # do pacote e vazio e todos os imports sao DENTRO de funcao
+        # (`mt5_gateway` importa `list_plans`/`get_subscription`/
+        # `activate_local_plan` dentro dos handlers, `plano_gate` importa
+        # `list_plans`/`has_entitlement` dentro das funcoes, e `social_paper`
+        # importa os dois irmaos no topo MAS ele mesmo so entra por import
+        # dentro de funcao). No `.exe` congelado a rota cai a conexao sem
+        # resposta, e a tela le TypeError em vez de 401/422 — enquanto todo
+        # o resto funciona, e o defeito parece "so da aba Plano".
+        #
+        # O teste `test_nenhum_modulo_do_planos_fica_de_fora_do_bundle`
+        # varre `backend/planos/*.py` para este buraco nao reabrir quando o
+        # proximo modulo do pacote nascer.
+        'backend.planos.subscriptions',
+        'backend.planos.caminhos',
+        'backend.planos.social_paper',
         # METAS E TRAVAS DO VIP (2026-10-02)
         #
         # Estes dois NAO entram sozinhos pelo mesmo motivo acima: o
@@ -174,6 +198,7 @@ a = Analysis(
         'backend.third_party_ea',
         'backend.ea_map',
         'backend.ea_manager',
+        'backend.ea_deploy',
         'Python.model_registry',
         'Python.ai.train_v2',
         'pandas', 'sklearn', 'joblib', 'requests',

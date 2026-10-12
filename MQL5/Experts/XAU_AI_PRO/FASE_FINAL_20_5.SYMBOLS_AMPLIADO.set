@@ -22,13 +22,13 @@ RiskPercent=1.0
 MaxDailyLossPercent=5.0
 MaxDrawdownPercent=15.0
 MinEquityPercent=10.0
-MinFreeMargin=20.0
+MinFreeMargin=10.0
 MaxTradesPerDay=20
 MaxOpenPositions=5
 AllowMinLotOverride=true
 
-MaxSpread=50
-MaxSpreadBySymbol=GOLD#:350,BTCUSD#:600,ETHUSD#:600
+MaxSpreadPct=0.6
+MaxSpreadPctBySymbol=
 Slippage=5
 RetryMaxAttempts=5
 RetryBaseDelayMs=100

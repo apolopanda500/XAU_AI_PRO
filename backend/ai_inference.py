@@ -630,15 +630,25 @@ def _nome_do_modelo(symbol: str, timeframe: str, meta: dict[str, Any]) -> str:
     par = rotulo_modelo(symbol, timeframe)
     if not algoritmo:
         return par
-    # `RandomForestClassifier` -> "Floresta" fica ilegivel para o operador;
-    # `random_forest` e o nome tecnico curto que ele reconhece.
+    # O NOME E O ATIVO E O PERIODO. O ALGORITMO FICA NO CAMPO `algorithm`.
     #
-    # `rotulo_modelo()` ja devolve "MODELO XAUUSD 1H". Com o prefixo do algoritmo
-    # antes, a tela mostrava "Floresta MODELO XAUUSD 1H" - a palavra MODELO no
-    # meio, entre o nome e o timeframe. O operador pediu nome limpo e curto, sem
-    # sublinhado: o timeframe ja vem legivel de `rotulo_modelo`, e o algoritmo
-    # continua disponivel em `algorithm` no payload, entao nada se perde.
-    return f"{_ROTULO_ALGORITMO.get(algoritmo, algoritmo)} · {rotulo_modelo(symbol, timeframe, comPrefixo=False)}"
+    # MEDIDO na captura de 20:17 (09/10/2026), pedido do dono: o terminal
+    # mostrava `MODELO Floresta · BTCUSD 1H`, e a tabela de modelos treinados
+    # mostrava o mesmo nome na coluna MODELO **e** na coluna PAR — o mesmo par
+    # duas vezes na mesma linha.
+    #
+    # "Floresta" e a traducao de `RandomForestClassifier` que existe para quem
+    # precisa do nome tecnico. O operador nao precisa: ele precisa saber QUAL
+    # ativo e QUAL periodo, porque e isso que ele compara com a ordem que esta
+    # montando. Um algoritmo nao diz se o stop cai no lugar certo.
+    #
+    # O `algorithm` continua no payload, entao nada se perde — quem precisar do
+    # nome tecnico le o campo, e nao o rotulo.
+    #
+    # Este e o AGENTS.md §9: formatação de numero e nome e configuração, nao
+    # enfeite. E a forma como o nome aparecia era ruido entre o operador e o
+    # dado que ele precisa.
+    return rotulo_modelo(symbol, timeframe, comPrefixo=False)
 
 
 #: Rotulo legivel por algoritmo. Sem esta tabela, a tela mostraria
@@ -804,44 +814,87 @@ def listar_modelos() -> list[dict[str, Any]]:
         return saida
     for meta_path in sorted(MODELOS_DIR.glob("*.meta.json")):
         nome = meta_path.name[: -len(".meta.json")]
-        if "_" not in nome:
-            continue
-        simbolo, tf = nome.rsplit("_", 1)
         try:
             with meta_path.open(encoding="utf-8") as f:
                 m = json.load(f)
         except Exception:
             continue
-        metricas = m.get("metrics", {})
-        folds = metricas.get("folds") or []
-        edges = [fo["edge"] for fo in folds if isinstance(fo, dict) and "edge" in fo]
-        rotulo_simbolo = str(m.get("symbol") or simbolo).upper()
-        rotulo_tf = str(m.get("timeframe") or tf).upper()
-        saida.append({
-            "id": nome,
-            # `label` e o texto para a tela. `id` continua sendo o nome do
-            # arquivo, porque e ele que localiza o `.pkl` no disco.
-            "label": rotulo_modelo(rotulo_simbolo, rotulo_tf),
-            "symbol": rotulo_simbolo,
-            "timeframe": rotulo_tf,
-            "publicable": bool(m.get("publicable")),
-            "reason": m.get("publish_reason", ""),
-            "accuracy": metricas.get("accuracy"),
-            "f1": metricas.get("f1_score"),
-            "baseline": metricas.get("baseline"),
-            "edge": metricas.get("edge"),
-            "edge_min": m.get("min_edge"),
-            "edge_folds": edges,
-            "edge_mean": float(np.mean(edges)) if edges else None,
-            "edge_std": float(np.std(edges)) if edges else None,
-            "train_samples": metricas.get("train_samples"),
-            "test_samples": metricas.get("test_samples"),
-            "purged": metricas.get("purged"),
-            "train_date": m.get("train_date"),
-            "feature_version": m.get("feature_version"),
-            "feature_hash": m.get("feature_hash"),
-            "algorithm": m.get("algorithm"),
-            "pkl_present": (MODELOS_DIR / f"{nome}.pkl").exists(),
-            "cpu_threads": cpu_threads(),
-        })
+
+        # O NOME DO ARQUIVO NAO E `SIMBOLO_TF` NOS MULTI (09/10/2026)
+        # =============================================================
+        # MEDIDO: os tres artefatos de classe se chamam `MULTI_METALS`,
+        # `MULTI_FIAT`, `MULTI_CRYPTO` — SEM underscore. Eles treinam sobre a
+        # uniao de varios pares e valem para varios periodos (o
+        # `MULTI_METALS.meta.json` tem `"timeframes": ["M5","M15","H1","H4"]`).
+        #
+        # Este laco os DESCARTAVA: `if "_" not in nome: continue`. O resultado
+        # apareceu na captura de 20:28 do dono como "28 de 28 modelos" e uma
+        # lista sem os tres de maior edge do catalogo — o `MULTI_METALS` tem
+        # edge 0.2497 e 67.678 amostras, o maior de todos. Tres modelos SOMEM
+        # da tela sem erro nenhum, e o contador repete o numero que a lista
+        # devolveu.
+        #
+        # Agora o nome e lido do proprio `symbol`, que e o que o modelo GRAVOU
+        # no treino, e o periodo tambem. Sem `_`, o modelo e de CLASSE, e os
+        # periodos dele sao os que o meta disser.
+        simbolo = str(m.get("symbol") or "").strip().upper()
+        if not simbolo:
+            continue
+        timeframes_do_modelo = m.get("timeframes")
+        if isinstance(timeframes_do_modelo, list) and timeframes_do_modelo:
+            # Modelo de classe: UMA linha por periodo que ele cobre, para a
+            # tabela nao mentir sobre "um nome, um periodo". O `id` continua
+            # sendo o nome do arquivo — e ele que localiza o `.pkl` no disco.
+            for tf_do_meta in [str(t).upper() for t in timeframes_do_modelo]:
+                saida.append(_linha_do_modelo(m, nome, simbolo, tf_do_meta))
+            continue
+
+        tf = str(m.get("timeframe") or "").strip().upper()
+        if not tf and "_" in nome:
+            # Formato antigo, `SIMBOLO_TF`: o nome do arquivo ainda decide.
+            _, tf = nome.rsplit("_", 1)
+            tf = tf.upper()
+        saida.append(_linha_do_modelo(m, nome, simbolo, tf))
     return saida
+
+
+def _linha_do_modelo(
+    m: dict[str, Any],
+    nome: str,
+    simbolo: str,
+    tf: str,
+) -> dict[str, Any]:
+    """Uma linha da lista de modelos, do que o `.meta.json` GRAVOU.
+
+    Separada do laco porque o mesmo artefato agora pode virar VARIAS linhas (o
+    modelo de classe cobre varios periodos), e repetir os 20 campos dentro do
+    laco seria copiar o mesmo bloco tres vezes.
+    """
+    metricas = m.get("metrics", {})
+    folds = metricas.get("folds") or []
+    edges = [fo["edge"] for fo in folds if isinstance(fo, dict) and "edge" in fo]
+    return {
+        "id": nome,
+        "label": rotulo_modelo(simbolo, tf),
+        "symbol": simbolo,
+        "timeframe": tf,
+        "publicable": bool(m.get("publicable")),
+        "reason": m.get("publish_reason", ""),
+        "accuracy": metricas.get("accuracy"),
+        "f1": metricas.get("f1_score"),
+        "baseline": metricas.get("baseline"),
+        "edge": metricas.get("edge"),
+        "edge_min": m.get("min_edge"),
+        "edge_folds": edges,
+        "edge_mean": float(np.mean(edges)) if edges else None,
+        "edge_std": float(np.std(edges)) if edges else None,
+        "train_samples": metricas.get("train_samples"),
+        "test_samples": metricas.get("test_samples"),
+        "purged": metricas.get("purged"),
+        "train_date": m.get("train_date"),
+        "feature_version": m.get("feature_version"),
+        "feature_hash": m.get("feature_hash"),
+        "algorithm": m.get("algorithm"),
+        "pkl_present": (MODELOS_DIR / f"{nome}.pkl").exists(),
+        "cpu_threads": cpu_threads(),
+    }
