@@ -33,6 +33,9 @@ vi.mock('../hooks/queries', () => ({
   useJournal: () => ({ data: { lines: estado.journal }, isFetching: false }),
   useAllCryptoAccounts: () => ({ data: [] }),
   useAutoState: () => ({ data: null }),
+  useUniversalOverview: () => ({ data: { connections: [] } }),
+  useUniversalAccount: () => ({ data: {} }),
+  useUniversalPositions: () => ({ data: { positions: [] } }),
 }));
 
 import UniversalLiveTerminal from './UniversalLiveTerminal';

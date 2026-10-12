@@ -73,7 +73,8 @@ const estado = vi.hoisted(() => ({
 vi.mock('../hooks/queries', () => ({
   useAutoState: () => ({ data: estado.auto }),
   usePositions: () => ({ data: { positions: [] }, refetch: vi.fn() }),
-  useAccount: () => ({ data: { leverage: 1000 } }),
+  useUniversalPositions: () => ({ data: { positions: [] }, refetch: vi.fn() }),
+  useUniversalAccount: () => ({ data: { account: { leverage: 1000 } } }),
 }));
 vi.mock('../hooks/useSinaisModelo', () => ({
   useSinaisModelo: () => ({ sinais: [], idadeSeg: null }),

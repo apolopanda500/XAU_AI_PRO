@@ -990,3 +990,46 @@ describe('um grafico so, na sub-aba Operacao (11/10/2026)', () => {
     expect(total).toBe(1);
   });
 });
+
+/*
+  UM PAINEL DE RISCO SO, NA SUB-ABA RISCO (12/10/2026)
+  =====================================================
+  Decisao do dono: o painel de risco estava em duas sub-abas — a grade aberta
+  na Risco e a mesma grade numa gaveta `<details>` na Operacao, com estados
+  SEPARADOS (cada visao e uma instancia). Declarar num lugar e ligar no outro
+  mandava limites diferentes sem o operador ver.
+*/
+describe('um painel de risco so, na sub-aba Risco (12/10/2026)', () => {
+  it('PROVA: na Operacao nao ha grade de risco nenhuma', async () => {
+    const { container } = render(<RobotTabs />);
+    await ticketMontado();
+    expect(container.querySelector('.robo-limites')).toBeNull();
+    expect(screen.queryByText(/Limites de risco/)).toBeNull();
+  });
+
+  it('PROVA: na Risco a grade esta aberta, com o botao Aplicar', async () => {
+    const { container } = render(<RobotTabs />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Risco' }));
+    await waitFor(() => {
+      expect(container.querySelector('[aria-label="Controle de risco"]')).toBeTruthy();
+    });
+    expect(container.querySelector('.robo-limites')).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: 'Aplicar limites ao motor' }),
+    ).toBeTruthy();
+  });
+
+  it('PROVA NEGATIVA: a gaveta de risco na Operacao voltaria sem reclamar', () => {
+    // Sem este caso, a gaveta `<details>` voltava para a Operacao e o unico
+    // sintoma seria visual: dois painéis de risco com estados separados.
+    const { container } = render(<RobotTabs />);
+    const abas = ['Operação', 'Modelos', 'Risco', 'Operações'] as const;
+    let total = 0;
+    for (const aba of abas) {
+      fireEvent.click(screen.getByRole('tab', { name: aba }));
+      total += container.querySelectorAll('.robo-limites').length;
+    }
+    // Somadas as quatro sub-abas, ha exatamente UMA grade de risco.
+    expect(total).toBe(1);
+  });
+});

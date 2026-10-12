@@ -1054,7 +1054,20 @@ export default function OperacaoAutomatica({
         E o botão de APLICAR fica aqui, e não junto do AUTO: declarar limite
         não pode depender de apertar o botão que liga o motor.
       */}
-      {risco ? (
+      {/*
+        UM PAINEL DE RISCO SO, NA SUB-ABA RISCO (12/10/2026)
+        =====================================================
+        Decisao do dono: o painel de risco estava em duas sub-abas — a grade
+        aberta aqui (visao `risco`) e a mesma grade numa gaveta `<details>` na
+        Operacao. Duas telas para os mesmos limites, com estados SEPARADOS
+        (cada visao e uma instancia): declarar num lugar e ligar no outro
+        mandava limites diferentes sem o operador ver.
+
+        Agora a grade mora SO na sub-aba Risco, com o botao Aplicar. Nesta
+        visao (`operacao`) nao ha bloco de risco: o `ligar` manda lote/par e o
+        que o motor ja guarda (declarado na Risco ou padrao do risk_gate).
+      */}
+      {risco && (
         <div className="robo-limites">
           {gradeDeLimites}
           <p className="hint">
@@ -1073,18 +1086,6 @@ export default function OperacaoAutomatica({
             </button>
           </div>
         </div>
-      ) : (
-        <details className="robo-limites">
-          <summary>
-            Limites de risco{' '}
-            <span className="muted">(confianca, posicoes por dia, perda maxima)</span>
-          </summary>
-          {gradeDeLimites}
-          <p className="hint">
-            Campo vazio = nao declarado, e o motor usa o limite proprio do risk_gate.
-            Preencher e declarar quanto voce aceita perder.
-          </p>
-        </details>
       )}
 
       {/*

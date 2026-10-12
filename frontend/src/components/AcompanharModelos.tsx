@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { apiBase } from '../lib/api';
-import { useAutoState, usePositions } from '../hooks/queries';
+import { useAutoState, useUniversalPositions, usePositions } from '../hooks/queries';
 import { useAppStore } from '../hooks/useAppStore';
 import { useSinaisModelo } from '../hooks/useSinaisModelo';
 import { getCandles, type MarketCandle } from '../lib/marketApi';
@@ -11,7 +11,7 @@ import PriceChart from './charts/PriceChart';
 import { nivelDoValor, linhasDaOrdem, rotuloDoBotao } from '../lib/ordemGrafico';
 import { fichaDoAtivo, faixaDoAtivo, mercadoDoAtivo, requisitoDeMargem, unidadeDeVolume, rotuloQuantidade } from '../lib/volumeUnidade';
 import { useCatalogoAtivos } from '../hooks/useCatalogoAtivos';
-import { useAccount } from '../hooks/queries';
+import { useUniversalAccount } from '../hooks/queries';
 import { escopoAtivo as contaAtiva } from '../lib/escopoAtivo';
 import { TIMEFRAMES } from './charts/PriceChart';
 
@@ -264,7 +264,6 @@ const [periodoDoGrafico, setPeriodoDoGrafico] = useState<string>('');
     grafico.
   */
   const positionsQ = usePositions();
-  const posicoes = Array.isArray(positionsQ.data?.positions) ? positionsQ.data.positions : [];
   const [verEma, setVerEma] = useState(true);
 
   /*
@@ -320,6 +319,19 @@ const [periodoDoGrafico, setPeriodoDoGrafico] = useState<string>('');
   */
   const market = String(mercadoDaFicha ?? auto?.market ?? '').toLowerCase();
   const configurado = Boolean(broker && market && simbolo);
+
+  /*
+    POSIÇÕES DA CORRETORA ATIVA, SEM MT5 FIXO (12/10/2026).
+    MEDIDO nas capturas MT5 do dia: posição sell 0.01 com SL/TP desenhados
+    no gráfico e faixa de conta embaixo. O hook legado (`/api/positions`)
+    só responde com o terminal aberto; o universal responde pela corretora
+    do escopo (MT5 aberto ou não). A lista usada é a que tem dado; com as
+    duas respondendo, o universal da conta ativa vence, sem duplicar linha.
+  */
+  const uniPositionsQ = useUniversalPositions(String(broker || ''), String(market || ''));
+  const uniLista = Array.isArray(uniPositionsQ.data?.positions) ? uniPositionsQ.data!.positions! : [];
+  const legadoLista = Array.isArray(positionsQ.data?.positions) ? positionsQ.data.positions : [];
+  const posicoes = (uniLista.length ? uniLista : legadoLista) as Array<Record<string, unknown>>;
 
   /*
     A ORDEM ARMADA (06/10/2026)
@@ -382,8 +394,8 @@ const [periodoDoGrafico, setPeriodoDoGrafico] = useState<string>('');
     margem livre muda a cada tique. Um percentual guardado no painel seria um
     numero que muda sozinho sem ninguem ler.
   */
-  const contaQ = useAccount();
-  const conta = (contaQ.data ?? null) as { leverage?: number | null } | null;
+  const contaQ = useUniversalAccount(String(broker || ''), String(market || ''));
+  const conta = (contaQ.data?.account ?? null) as { leverage?: number | null } | null;
 
   const contrato = ficha?.contractSize;
   const contratoOk = typeof contrato === 'number' && Number.isFinite(contrato) && contrato > 0;

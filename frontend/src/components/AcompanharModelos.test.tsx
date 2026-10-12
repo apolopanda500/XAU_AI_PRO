@@ -37,14 +37,15 @@ const { useAutoStateMock, usePositionsMock, useSinaisMock, getCandlesMock } = vi
 vi.mock('../hooks/queries', () => ({
   useAutoState: useAutoStateMock,
   usePositions: usePositionsMock,
+  useUniversalPositions: usePositionsMock,
   /*
-    `useAccount` entra no painel pelo requisito de margem (06/10/2026), que
+    `useUniversalAccount` entra no painel pelo requisito de margem (06/10/2026), que
     precisa da alavancagem da conta. Este arquivo mede o botao do EMA, e nao o
     requisito — por isso `leverage: null`, que e o caso em que o painel escreve
     "indisponivel". O medido esta em `AcompanharModelos.ordem.test.tsx` e em
     `requisitoMargem.test.ts`.
   */
-  useAccount: () => ({ data: { leverage: null } }),
+  useUniversalAccount: () => ({ data: { account: { leverage: null } } }),
 }));
 
 vi.mock('../hooks/useSinaisModelo', () => ({ useSinaisModelo: useSinaisMock }));

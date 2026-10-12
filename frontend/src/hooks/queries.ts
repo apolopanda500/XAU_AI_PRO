@@ -471,6 +471,20 @@ export type CryptoAccount = {
   balance: number | null;
   currency: string;
   assets: string[];
+  /*
+    O MOTIVO DA FALHA, e nao so o `ok: false` (12/10/2026).
+    ========================================================
+    MEDIDO nas capturas do dono: a faixa do terminal mostrava "MEXC / Spot
+    indisponível" e "BINANCE / Futuros indisponível" — e nada dizia POR QUE.
+    Chave invalida, IP bloqueado, sem permissao de leitura e gateway fora do
+    ar produziam a MESMA linha, e o operador nao tinha por onde comecar.
+
+    O gateway devolve o motivo (`{ ok: false, error }` ou HTTP com corpo); o
+    `catch` abaixo o engolia e a tela recebia um `ok: false` mudo. Agora o
+    motivo viaja junto, e quem mostra e o terminal (ver
+    `UniversalLiveTerminal`).
+  */
+  error?: string | null;
 };
 export function useAllCryptoAccounts() {
   return useQuery<CryptoAccount[]>({
@@ -479,8 +493,20 @@ export function useAllCryptoAccounts() {
       Promise.all(
         (['mexc', 'binance'] as const).flatMap((broker) =>
           (['crypto-spot', 'crypto-futures'] as const).map(async (market) => {
+            const falha = (motivo: string): CryptoAccount => ({
+              broker,
+              market,
+              ok: false,
+              balance: null,
+              currency: 'USDT',
+              assets: [] as string[],
+              error: motivo,
+            });
             try {
               const d = await get<Json>(`/api/universal/account?broker=${broker}&market=${market}`);
+              if (d.ok === false) {
+                return falha(String((d as Json).error ?? 'recusado pelo gateway'));
+              }
               const acct = (d.account ?? {}) as Json;
               const rawAssets = Array.isArray(d.assets)
                 ? d.assets
@@ -493,20 +519,13 @@ export function useAllCryptoAccounts() {
               return {
                 broker,
                 market,
-                ok: d.ok !== false,
+                ok: true,
                 balance: Number(acct.balance ?? acct.totalWalletBalance ?? acct.equity ?? 0),
                 currency: String(acct.currency ?? 'USDT'),
                 assets,
               };
-            } catch {
-              return {
-                broker,
-                market,
-                ok: false,
-                balance: null,
-                currency: 'USDT',
-                assets: [] as string[],
-              };
+            } catch (e) {
+              return falha(e instanceof Error ? e.message : 'Gateway indisponível.');
             }
           }),
         ),
@@ -514,6 +533,116 @@ export function useAllCryptoAccounts() {
     refetchInterval: 30_000,
     staleTime: 25_000,
     retry: 0,
+  });
+}
+
+export type ConnectionStatus = 'conectada' | 'offline' | 'indisponivel' | 'desativada' | 'code_only';
+
+export interface OverviewRow {
+  id?: string;
+  broker: string;
+  market: string;
+  active?: boolean;
+  status?: ConnectionStatus | string;
+  account?: Json;
+  positions?: Array<Record<string, unknown>>;
+  pnl?: { value?: number | null; available?: boolean };
+  error?: string | null;
+  source?: string;
+}
+
+export interface UniversalOverview {
+  ok?: boolean;
+  mt5_required?: boolean;
+  connections?: OverviewRow[];
+  connected?: number;
+  source?: string;
+}
+
+/**
+ * Visão geral das contas conectadas, sem exigir MT5 aberto.
+ *
+ * MEDIDO nas capturas MT5 de 12/10/2026 (conta 391773676, XMGlobal-MT5 14):
+ * o terminal mostra `Observação do Mercado`, gráfico BTCUSD M15, `Caixa de
+ * ferramentas` com posição sell 0.01 e faixa `Saldo 11.47 / Capital 16.53 /
+ * Margem 0.83 / Livre 15.70 / Nível 1991.57%`. O app lia tudo por
+ * `/api/account` + `/api/positions` (MT5 fixo): com o terminal fechado a
+ * tela apagava, mesmo com Binance/MEXC conectadas.
+ *
+ * Esta query lê `/api/universal/overview`, que responde `mt5_required:
+ * false` e lista cada conexão com `status` próprio: MT5 pode estar
+ * `offline` e a exchange `conectada` na mesma resposta. O gráfico e o
+ * terminal usam esta lista como fonte de conta/posição; as rotas MT5
+ * antigas ficam só como reserva legada.
+ */
+export function useUniversalOverview() {
+  return useQuery<UniversalOverview>({
+    queryKey: ['universal-overview'],
+    queryFn: () => get<UniversalOverview>('/api/universal/overview'),
+    refetchInterval: 15_000,
+    staleTime: 10_000,
+    retry: 1,
+  });
+}
+
+export interface UniversalAccount {
+  ok?: boolean;
+  broker?: string;
+  market?: string;
+  account_id?: string;
+  account?: Json;
+  error?: string;
+  status?: string;
+}
+
+export interface UniversalPositions {
+  ok?: boolean;
+  broker?: string;
+  market?: string;
+  account_id?: string;
+  positions?: Array<Record<string, unknown>>;
+  error?: string;
+  status?: string;
+}
+
+/**
+ * Conta da corretora ATIVA (qualquer uma), sem MT5 fixo.
+ *
+ * Sem escopo, sem consulta: pedir `/api/universal/account?broker=` seria
+ * consultar com identidade vazia para receber "corretora não suportada" —
+ * uma recusa que o operador leria como defeito do servidor (mesma regra
+ * do `useCatalogoAtivos`). Vazio aqui é "escolha a corretora".
+ */
+export function useUniversalAccount(broker: string, market: string, accountId = '') {
+  const b = String(broker || '').trim().toLowerCase();
+  const m = String(market || '').trim().toLowerCase();
+  return useQuery<UniversalAccount>({
+    queryKey: ['universal-account', b, m, accountId],
+    queryFn: () => {
+      const qs = `/api/universal/account?broker=${encodeURIComponent(b)}&market=${encodeURIComponent(m)}${accountId ? `&account_id=${encodeURIComponent(accountId)}` : ''}`;
+      return get<UniversalAccount>(qs);
+    },
+    enabled: Boolean(b && m),
+    refetchInterval: 10_000,
+    staleTime: 9_000,
+    retry: 1,
+  });
+}
+
+/** Posições da corretora ATIVA (qualquer uma), sem MT5 fixo. */
+export function useUniversalPositions(broker: string, market: string, accountId = '') {
+  const b = String(broker || '').trim().toLowerCase();
+  const m = String(market || '').trim().toLowerCase();
+  return useQuery<UniversalPositions>({
+    queryKey: ['universal-positions', b, m, accountId],
+    queryFn: () => {
+      const qs = `/api/universal/positions?broker=${encodeURIComponent(b)}&market=${encodeURIComponent(m)}${accountId ? `&account_id=${encodeURIComponent(accountId)}` : ''}`;
+      return get<UniversalPositions>(qs);
+    },
+    enabled: Boolean(b && m),
+    refetchInterval: 10_000,
+    staleTime: 9_000,
+    retry: 1,
   });
 }
 

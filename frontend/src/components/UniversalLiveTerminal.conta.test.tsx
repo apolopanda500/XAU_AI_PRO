@@ -70,15 +70,21 @@ const contaDaCaptura = {
   margin_level: 0,
 };
 
-const estado = vi.hoisted(() => ({ conta: {} as Record<string, unknown> }));
+const estado = vi.hoisted(() => ({
+  conta: {} as Record<string, unknown>,
+  criptos: [] as Array<Record<string, unknown>>,
+}));
 
 vi.mock('../hooks/queries', () => ({
   useCoreStatus: () => ({ data: { pronto: true, ligado: false } }),
   useAccount: () => ({ data: estado.conta }),
   usePositions: () => ({ data: { positions: [] } }),
   useJournal: () => ({ data: { lines: [] }, isFetching: false }),
-  useAllCryptoAccounts: () => ({ data: [] }),
+  useAllCryptoAccounts: () => ({ data: estado.criptos }),
   useAutoState: () => ({ data: null }),
+  useUniversalOverview: () => ({ data: { connections: [] } }),
+  useUniversalAccount: () => ({ data: {} }),
+  useUniversalPositions: () => ({ data: { positions: [] } }),
 }));
 
 import UniversalLiveTerminal from './UniversalLiveTerminal';
@@ -249,5 +255,55 @@ describe('a margem livre vem da chave que o PRODUTOR manda', () => {
     estado.conta = { ...contaDaCaptura, margin_free: 0, margin: 0 };
     const { container } = render(<UniversalLiveTerminal />);
     expect(celula(container, 'Livre'), 'zero lido virou nao-lido').toBe('0,00');
+  });
+});
+
+/*
+  A LINHA DE CONTA FALHA DIZ O MOTIVO (12/10/2026)
+  =================================================
+  MEDIDO nas capturas do dono (Operacoes): quatro linhas WARN — "MEXC / Spot
+  indisponível", "MEXC / Futuros indisponível", e o mesmo para BINANCE — sem
+  dizer POR QUE. Chave invalida, IP bloqueado, sem permissao e gateway fora
+  produziam a mesma linha, e o operador nao tinha por onde comecar (a rede,
+  medida do repo, responde 200 nas duas — nao e conectividade).
+
+  O gateway devolve o motivo; o `catch` do `useAllCryptoAccounts` o engolia.
+  Agora ele viaja em `error` e a linha o mostra, cortado em 90.
+*/
+describe('a conta de exchange que falha diz o motivo na linha', () => {
+  beforeEach(() => {
+    estado.conta = { ...contaDaCaptura };
+    estado.criptos = [];
+  });
+  afterEach(cleanup);
+
+  it('PROVA: falha COM motivo mostra o motivo na linha', () => {
+    estado.criptos = [
+      { broker: 'mexc', market: 'crypto-spot', ok: false, balance: null, currency: 'USDT', assets: [], error: 'API key invalida (401)' },
+    ];
+    const { container } = render(<UniversalLiveTerminal />);
+    const corpo = container.textContent ?? '';
+    expect(corpo).toContain('Spot indisponível');
+    expect(corpo).toContain('API key invalida (401)');
+  });
+
+  it('PROVA: falha SEM motivo mantem o texto antigo, sem dois-pontos solto', () => {
+    estado.criptos = [
+      { broker: 'binance', market: 'crypto-futures', ok: false, balance: null, currency: 'USDT', assets: [] },
+    ];
+    const { container } = render(<UniversalLiveTerminal />);
+    const corpo = container.textContent ?? '';
+    expect(corpo).toContain('Futuros indisponível');
+    expect(corpo).not.toContain('Futuros indisponível:');
+  });
+
+  it('PROVA NEGATIVA: motivo longo e cortado — a linha continua sendo uma linha', () => {
+    estado.criptos = [
+      { broker: 'mexc', market: 'crypto-spot', ok: false, balance: null, currency: 'USDT', assets: [], error: `x`.repeat(200) },
+    ];
+    const { container } = render(<UniversalLiveTerminal />);
+    const corpo = container.textContent ?? '';
+    expect(corpo).toContain('Spot indisponível: ' + 'x'.repeat(90));
+    expect(corpo).not.toContain('x'.repeat(91));
   });
 });
