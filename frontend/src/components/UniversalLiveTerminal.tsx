@@ -12,29 +12,32 @@
  * NUNCA traders diretamente - apenas leitura e exibição. Execução fica por conta do motor.
  */
 
+import { useMemo } from 'react';
+import { apiBase } from '../lib/api';
+import {
+  useCoreStatus,
+  useAccount,
+  usePositions,
+  useJournal,
+  useAllCryptoAccounts,
+  useAutoState,
+  useUniversalOverview,
+  useUniversalAccount,
+  useUniversalPositions,
+} from '../hooks/queries';
+import { fmtNum, clsPnl, sideOfPosition, extractSymbol, requestId } from '../lib/format';
+import { notify } from '../lib/notify';
+import { classificarJournal } from '../lib/journalKind';
+import '../theme/mini-terminal.css';
+import '../theme/mt5-terminal.css';
+
 const API = `${apiBase()}`;
 
-// Hooks universais - dados preferenciais (backend API publicas)
-const { ok: universalOverviewOk, conexoes = [], moedas = [], simbolos = [] } = useUniversalOverview();
-const { ok: universalAccountOk, balance, equity, currency, margin_used } = useUniversalAccount();
-const { ok: universalPositionsOk, positions: universalPositions = [] } = useUniversalPositions();
+/* Hooks fora do componente: removidos (12/10/2026). O que liam vive dentro do componente. */
 
-// Fallback para legado MT5 se hooks universais falharem ou retornarem sem dados
-const { ok: legacyAccountOk, balance: legacyBalance, equity: legacyEquity, currency: legacyCurrency } = useAccount();
-const { ok: legacyPositionsOk, positions: legacyPositions = [] } = usePositions();
-
-// Dados ativos: prefere universal, cai para MT5 se necessario
-const resolvedPositions = useMemo(() => {
-  if (universalPositionsOk && universalPositions.length > 0) return universalPositions;
-  if (legacyPositionsOk && legacyPositions.length > 0) return legacyPositions;
-  return [];
-}, [universalPositionsOk, universalPositions, legacyPositionsOk, legacyPositions]);
-
-const resolvedAccount = useMemo(() => {
-  if (universalAccountOk) return { ok: true, broker: 'universal', ...useUniversalAccount() };
-  if (legacyAccountOk) return { ok: true, broker: 'MT5', ...useAccount() };
-  return { ok: false };
-}, [universalAccountOk]);
+/* resolvedAccount fora do componente: removido (12/10/2026, hook fora de componente). */
+/* `type Position = {` restaurado: a edicao anterior tinha apagado o cabecalho. */
+type Position = {
   ticket?: number | string;
   symbol?: string;
   type?: number | string;
@@ -208,6 +211,37 @@ export default function UniversalLiveTerminal() {
       Array.isArray(positionsQ.data?.positions) ? (positionsQ.data.positions as Position[]) : [],
     [positionsQ.data],
   );
+  /*
+    POSICOES RESOLVIDAS: universal primeiro, legado MT5 como reserva (12/10/2026).
+    As linhas universais usam outros nomes (`quantity`, `entry_price`,
+    `mark_price`, `unrealized_pnl`, `stop_loss`, `take_profit`, `side`); a
+    tabela e o `closePosition` leem os legados (`volume`, `open_price`,
+    `price_current`, `profit`, `sl`, `tp`, `type`). Traduzir aqui, e nao nos
+    dois lugares que leem, para nao duplicar o mapa de nomes (AGENTS.md 5).
+    Primeira lista nao-vazia vence; vazio dos dois lados e "sem posicao".
+  */
+  const resolvedPositions: Position[] = useMemo(() => {
+    const uni = uniPositionsQ.data?.positions;
+    if (Array.isArray(uni) && uni.length > 0) {
+      const texto = (v: unknown): string | undefined =>
+        typeof v === 'string' || typeof v === 'number' ? String(v) : undefined;
+      const numero = (v: unknown): number | undefined =>
+        typeof v === 'number' && Number.isFinite(v) ? v : undefined;
+      return uni.map((r) => ({
+        ticket: texto(r.ticket),
+        symbol: texto(r.symbol),
+        type: texto(r.side),
+        volume: numero(r.quantity),
+        open_price: numero(r.entry_price),
+        price_current: numero(r.mark_price),
+        sl: numero(r.stop_loss),
+        tp: numero(r.take_profit),
+        profit: numero(r.unrealized_pnl),
+        swap: undefined,
+      }));
+    }
+    return positions;
+  }, [uniPositionsQ.data, positions]);
 
   const events = useMemo(() => {
     const now = new Date();
