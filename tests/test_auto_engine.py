@@ -586,6 +586,64 @@ class TestRoteamentoPorCorretora:
         assert "corretora" in r["error"].lower()
         assert m.ativo is False
 
+    def test_ligar_exige_mercado_escolhido(self):
+        """Ligar sem mercado e recusado nomeando o mercado, nao a combinacao.
+
+        Sem esta trava, o `_escopo` abaixo recusaria como "combinacao
+        corretora/mercado nao suportada" — o motivo certo para par invalido,
+        mas o motivo errado para campo vazio (AGENTS.md 5).
+        """
+        m = motor_pronto()
+        m.broker = "mexc"
+        m.market = ""
+        r = m.ligar()
+        assert r["ok"] is False
+        assert "mercado" in r["error"].lower()
+        assert "combina" not in r["error"].lower()
+        assert m.ativo is False
+
+    def test_ligar_recusa_mercado_nao_suportado_pela_corretora(self):
+        """Ligar com par (corretora, mercado) invalido e recusado NA PORTA.
+
+        MEDIDO no app instalado em 12/10/2026, aba Operacoes: motor "ligado"
+        com mexc + mercado incompativel, e cada ciclo morrendo com "erro no
+        ciclo: ValueError: mercado não suportado para mexc". Ligar para errar
+        em loop e a mesma descoberta tardia do simbolo vazio — a regra e a
+        MESMA do `broker_registry.normalize_read_scope` que o ciclo usa,
+        aplicada antes da thread nascer.
+        """
+        m = motor_pronto()
+        m.broker = "mexc"
+        m.market = "forex"
+        r = m.ligar()
+        assert r["ok"] is False
+        assert "mexc" in r["error"].lower()
+        assert m.ativo is False
+
+    def test_ligar_recusa_corretora_desconhecida(self):
+        m = motor_pronto()
+        m.broker = "corretora-que-nao-existe"
+        m.market = "forex"
+        r = m.ligar()
+        assert r["ok"] is False
+        assert m.ativo is False
+
+    def test_ligar_aceita_par_suportado(self, monkeypatch):
+        """O par valido liga de verdade — a trava nao tranca a porta certa.
+
+        `_loop` e thread de producao com rede: aqui ele e neutralizado para o
+        teste medir SO a porta, sem ciclo e sem gateway.
+        """
+        monkeypatch.setattr(MotorAuto, "_loop", lambda self: None)
+        m = motor_pronto()
+        m.broker = "mexc"
+        m.market = "crypto-spot"
+        r = m.ligar()
+        assert r["ok"] is True
+        assert m.ativo is True
+        m.desligar()
+        assert m.ativo is False
+
 
 class TestMultiAlvos:
     """Varios graficos, horarios diferentes, sem duplicar."""

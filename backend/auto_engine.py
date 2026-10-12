@@ -761,6 +761,33 @@ class MotorAuto:
                 "error": "escolha a corretora antes de ligar a operacao automatica: "
                          "nenhuma corretora e caminho padrao",
             }
+        # Mercado tambem e obrigatorio, pelo mesmo motivo da corretora: sem ele
+        # o `_escopo` abaixo recusaria como "combinacao nao suportada", que
+        # e o motivo certo para par invalido mas o motivo errado para campo
+        # vazio. Vazio e "escolha o mercado", nao combinacao.
+        if not str(self.market or "").strip():
+            return {
+                "ok": False,
+                "error": "escolha o mercado antes de ligar a operacao automatica: "
+                         "nenhum mercado e padrao",
+            }
+        # O PAR (CORRETORA, MERCADO) TAMBEM E VALIDADO NA PORTA (12/10/2026).
+        # MEDIDO no app instalado, aba Operacoes: motor "ligado" com mexc e
+        # mercado incompativel, e cada ciclo morrendo com "erro no ciclo:
+        # ValueError: mercado não suportado para mexc". Ligar para errar em
+        # loop e a mesma descoberta tardia do simbolo vazio: a mesma regra do
+        # `broker_registry.normalize_read_scope` que o ciclo usa, aplicada
+        # antes da thread nascer. Import tardio de proposito (ver o comentario
+        # em `_ficha_do_ativo`): `mt5_gateway` importa este modulo.
+        try:
+            from backend.broker_registry import normalize_read_scope as _escopo
+            _escopo(self.broker, self.market or "")
+        except ValueError as exc:
+            return {
+                "ok": False,
+                "error": f"combinação corretora/mercado não suportada "
+                         f"({self.broker}/{self.market or '—'}): {exc}",
+            }
         with self._lock:
             if self._thread is not None and self._thread.is_alive():
                 return {"ok": True, "status": "ja ligado"}
