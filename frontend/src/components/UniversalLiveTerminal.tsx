@@ -1,24 +1,40 @@
-import { useMemo } from 'react';
-import { apiBase } from '../lib/api';
-import {
-  useCoreStatus,
-  useAccount,
-  usePositions,
-  useJournal,
-  useAllCryptoAccounts,
-  useAutoState,
-  useUniversalOverview,
-  useUniversalAccount,
-  useUniversalPositions,
-} from '../hooks/queries';
-import { fmtNum, clsPnl, sideOfPosition, extractSymbol, requestId } from '../lib/format';
-import { notify } from '../lib/notify';
-import { classificarJournal } from '../lib/journalKind';
-import '../theme/mini-terminal.css';
-import '../theme/mt5-terminal.css';
+/**
+ * UniversalLiveTerminal - Componente terminal que exibe contas, posições e journal
+ * usando hooks universais (backend API) com fallback legacy MT5.
+ * 
+ * Fluxo:
+ * 1. useUniversalOverview() -> lista de conexões ativas (brokers)
+ * 2. useUniversalAccount() -> dados agregados da conta  
+ * 3. useUniversalPositions() -> posições abertas agregadas
+ * 4. Se falhar ou estiver vazio, fallback para legacy useAccount/usePositions (MT5)
+ * 5. Layout: tabela de posições + journal + controles de risco
+ * 
+ * NUNCA traders diretamente - apenas leitura e exibição. Execução fica por conta do motor.
+ */
 
 const API = `${apiBase()}`;
-type Position = {
+
+// Hooks universais - dados preferenciais (backend API publicas)
+const { ok: universalOverviewOk, conexoes = [], moedas = [], simbolos = [] } = useUniversalOverview();
+const { ok: universalAccountOk, balance, equity, currency, margin_used } = useUniversalAccount();
+const { ok: universalPositionsOk, positions: universalPositions = [] } = useUniversalPositions();
+
+// Fallback para legado MT5 se hooks universais falharem ou retornarem sem dados
+const { ok: legacyAccountOk, balance: legacyBalance, equity: legacyEquity, currency: legacyCurrency } = useAccount();
+const { ok: legacyPositionsOk, positions: legacyPositions = [] } = usePositions();
+
+// Dados ativos: prefere universal, cai para MT5 se necessario
+const resolvedPositions = useMemo(() => {
+  if (universalPositionsOk && universalPositions.length > 0) return universalPositions;
+  if (legacyPositionsOk && legacyPositions.length > 0) return legacyPositions;
+  return [];
+}, [universalPositionsOk, universalPositions, legacyPositionsOk, legacyPositions]);
+
+const resolvedAccount = useMemo(() => {
+  if (universalAccountOk) return { ok: true, broker: 'universal', ...useUniversalAccount() };
+  if (legacyAccountOk) return { ok: true, broker: 'MT5', ...useAccount() };
+  return { ok: false };
+}, [universalAccountOk]);
   ticket?: number | string;
   symbol?: string;
   type?: number | string;
@@ -640,7 +656,7 @@ const flutuanteDoMt5 = account?.profit;
             </tr>
           </thead>
           <tbody>
-            {positions.map((p) => (
+            {resolvedPositions.map((p) => (
               <tr key={String(p.ticket)}>
                 <td className="mono">{p.ticket ?? '--'}</td>
                 <td>
@@ -669,7 +685,7 @@ const flutuanteDoMt5 = account?.profit;
                 </td>
               </tr>
             ))}
-            {!positions.length && (
+            {!resolvedPositions.length && (
               <tr>
                 <td colSpan={11} className="mt-empty">
                   {positionsQ.isFetching ? 'Carregando…' : 'Nenhuma posição aberta.'}
