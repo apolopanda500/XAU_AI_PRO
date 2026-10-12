@@ -114,3 +114,8 @@ EconomicCalendar, pré-existentes); tsc limpo; diff-check limpo.
 - O commit 5822a26 levou, junto com a deduplicacao do risco (meu), o trabalho em andamento de outro agente: AcompanharModelos.tsx (posicoes/conta universais por escopo), UniversalLiveTerminal.*, queries.ts (useUniversalAccount, useUniversalPositions) e testes espelho. Snapshot verde (tsc + vitest).
 - Arquivos dele (nao tocar): AcompanharModelos.*, UniversalLiveTerminal.*, PriceChart*, charts/*, queries.ts.
 - Meus desde entao: OperacaoAutomatica.tsx, RobotTabs.*, SeletorModelo.tsx, ConnectionSettings.*, RobotMarketBar.tsx, Sidebar.*, escopoAtivo.*, MenuGrafico.tsx, market.css, global.css, Icones.*, PlanoConfig.*, mt5-gateway.spec, uto_engine.py, 	est_auto_engine.py, 	est_spec_gateway.py, scripts/capturar_tela.ps1.
+
+## Adendo 12/10 16:40 — bloqueado pelo outro agente
+
+- Outro agente commitou ec2de29 (desacoplamento MT5) com queries.ts duplicado (UniversalOverview/Account/Positions 2x, linhas 71-133 e 627+). 4 suites falham no transform; build falharia junto. Nao toco, nao compilo, nao instalo por cima.
+- Minha lane verde e pushed. Validacao global 10/10 travada nele, com prova.
