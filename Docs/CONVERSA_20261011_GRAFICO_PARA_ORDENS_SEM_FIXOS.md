@@ -108,3 +108,9 @@ EconomicCalendar, pré-existentes); tsc limpo; diff-check limpo.
 - WARN 'Spot/Futuros indisponivel' agora traz o motivo (CryptoAccount.error, cortado em 90) — rede OK (mexc/binance ping 200), falta a credencial valer.
 - Instalacao: NSIS /S com mesma versao pode DESINSTALAR em vez de instalar (pasta sumiu); reinstalado do zero, hash igual.
 - Commit 1f76d93 push origin/develop. Validacao: pytest 1336/0, vitest 857+10 pre-existentes, tsc limpo.
+
+## Adendo 12/10 — trabalho compartilhado (AGENTS §11)
+
+- O commit 5822a26 levou, junto com a deduplicacao do risco (meu), o trabalho em andamento de outro agente: AcompanharModelos.tsx (posicoes/conta universais por escopo), UniversalLiveTerminal.*, queries.ts (useUniversalAccount, useUniversalPositions) e testes espelho. Snapshot verde (tsc + vitest).
+- Arquivos dele (nao tocar): AcompanharModelos.*, UniversalLiveTerminal.*, PriceChart*, charts/*, queries.ts.
+- Meus desde entao: OperacaoAutomatica.tsx, RobotTabs.*, SeletorModelo.tsx, ConnectionSettings.*, RobotMarketBar.tsx, Sidebar.*, escopoAtivo.*, MenuGrafico.tsx, market.css, global.css, Icones.*, PlanoConfig.*, mt5-gateway.spec, uto_engine.py, 	est_auto_engine.py, 	est_spec_gateway.py, scripts/capturar_tela.ps1.
