@@ -54,7 +54,9 @@ vi.mock('../hooks/useAppStore', () => ({
     }),
 }));
 
-vi.mock('./LatenciaBar', () => ({ default: () => <div data-testid="latencias" /> }));
+vi.mock('./LatenciaBar', () => ({
+  default: (p: { ativa?: string }) => <div data-testid="latencias" data-ativa={p.ativa ?? ''} />,
+}));
 
 const { default: StatusBar } = await import('./StatusBar');
 
@@ -229,5 +231,51 @@ describe('StatusBar — o ponto de conexao', () => {
     const conexao = container.querySelector('.status-conexao') as HTMLElement;
     expect(conexao.className).toContain('is-warn');
     expect(conexao.getAttribute('title')).toContain('Reconectando');
+  });
+});
+
+describe('StatusBar � o par da barra configura o motor', () => {
+  it('PROVA: Enter com par novo avisa o motor com SO o simbolo', async () => {
+    // MEDIDO na captura (par EURUSD na barra, grafico em BTCUSD): a barra
+    // gravava so a tela. Agora o gesto configura, e `configurar` mescla �
+    // lote, SL, TP e timeframe ficam como estao.
+    render(<StatusBar />);
+    await abrir();
+    const campo = document.getElementById('status-ativo-campo') as HTMLInputElement;
+    fireEvent.change(campo, { target: { value: 'ethusd' } });
+    fireEvent.keyDown(campo, { key: 'Enter' });
+    await waitFor(() => {
+      const cfg = chamadas.find((c) => String(c.url).includes('/api/auto/config'));
+      expect(cfg?.body).toEqual({ simbolo: 'ETHUSD' });
+    });
+    expect(estado.simbolo).toBe('ETHUSD');
+  });
+
+  it('PROVA NEGATIVA: par igual ao atual nao chama o gateway', async () => {
+    render(<StatusBar />);
+    await abrir();
+    const campo = document.getElementById('status-ativo-campo') as HTMLInputElement;
+    fireEvent.change(campo, { target: { value: 'GOLD' } });
+    fireEvent.keyDown(campo, { key: 'Enter' });
+    await waitFor(() => expect(document.querySelector('.status-tf-lista')).toBeNull());
+    expect(chamadas.length).toBe(0);
+  });
+});
+
+describe('StatusBar — o ms e o da conta ativa', () => {
+  it('PROVA: com conta MEXC ativa, a latencia recebe mexc', () => {
+    window.localStorage.setItem('xau-active-account', 'mexc:crypto-spot');
+    const { container } = render(<StatusBar />);
+    expect(container.querySelector('[data-testid="latencias"]')?.getAttribute('data-ativa')).toBe(
+      'mexc',
+    );
+  });
+
+  it('PROVA NEGATIVA: sem conta ativa, segue a melhor (sem valor)', () => {
+    window.localStorage.removeItem('xau-active-account');
+    const { container } = render(<StatusBar />);
+    expect(container.querySelector('[data-testid="latencias"]')?.getAttribute('data-ativa')).toBe(
+      '',
+    );
   });
 });

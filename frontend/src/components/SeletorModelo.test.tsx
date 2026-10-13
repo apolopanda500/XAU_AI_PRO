@@ -16,6 +16,7 @@ const M = vi.hoisted(() => ({
   simbolo: 'BTCUSD',
   chamadas: [] as Array<{ url: string; body: unknown }>,
   configResposta: { ok: true } as Record<string, unknown>,
+  catalogo: [] as Array<{ symbol: string; modelSymbol?: string | null }>,
 }));
 
 vi.mock('../lib/api', () => ({ apiBase: () => 'http://127.0.0.1:9000' }));
@@ -32,7 +33,7 @@ vi.mock('../hooks/queries', () => ({
   useAutoState: () => ({ data: { simbolo: 'BTCUSD', timeframe: 'H1' } }),
 }));
 vi.mock('../hooks/useCatalogoAtivos', () => ({
-  useCatalogoAtivos: () => [],
+  useCatalogoAtivos: () => M.catalogo,
 }));
 
 const { default: SeletorModelo } = await import('./SeletorModelo');
@@ -46,6 +47,7 @@ beforeEach(() => {
   M.simbolo = 'BTCUSD';
   M.chamadas = [];
   M.configResposta = { ok: true };
+  M.catalogo = [];
   window.localStorage.setItem('xau-active-account', 'binance:crypto-spot');
   vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
     const corpo = init?.body ? JSON.parse(String(init.body)) : null;
@@ -111,5 +113,45 @@ describe('SeletorModelo — escolher o modelo configura par E periodo', () => {
     fireEvent.change(campoPar, { target: { value: '' } });
     // Sem par nao ha modelo: nenhuma configuracao sai sem os dois.
     expect(M.chamadas.some((c) => c.url.includes('/api/auto/config'))).toBe(false);
+  });
+});
+
+describe('SeletorModelo — GOLD acha os modelos de XAUUSD', () => {
+  const OURO = [
+    { id: 'XAUUSD_H1', symbol: 'XAUUSD', timeframe: 'H1', accuracy: 0.465, edge: 0.132, pkl_present: true, publicable: true },
+  ];
+
+  beforeEach(() => {
+    vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+      const corpo = init?.body ? JSON.parse(String(init.body)) : null;
+      M.chamadas.push({ url: String(url), body: corpo });
+      if (String(url).includes('/api/ai/trained')) {
+        return { ok: true, json: async () => ({ models: OURO }) };
+      }
+      if (String(url).includes('/api/auto/config')) {
+        return { ok: true, json: async () => M.configResposta };
+      }
+      return { ok: true, json: async () => ({ ok: true }) };
+    });
+  });
+
+  it('PROVA: com GOLD no catalogo apontando para XAUUSD, os modelos aparecem', async () => {
+    M.simbolo = 'GOLD';
+    M.catalogo = [{ symbol: 'GOLD', modelSymbol: 'XAUUSD' }];
+    render(<SeletorModelo />);
+    await waitFor(() => expect(campoModelo()?.options.length).toBeGreaterThan(1));
+    const opcoes = Array.from(campoModelo().options).map((o) => o.textContent);
+    expect(opcoes.join(' ')).toContain('H1');
+  });
+
+  it('PROVA NEGATIVA: sem o apelido no catalogo, GOLD continua sem modelo', async () => {
+    // O apelido vem do CATALOGO, nunca de regra de nome: sem a linha que
+    // declara, nada e inventado — GOLD sem modelo continua sem modelo.
+    M.simbolo = 'GOLD';
+    M.catalogo = [{ symbol: 'GOLD' }];
+    render(<SeletorModelo />);
+    await waitFor(() =>
+      expect(document.body.textContent).toContain('Nenhum modelo'),
+    );
   });
 });

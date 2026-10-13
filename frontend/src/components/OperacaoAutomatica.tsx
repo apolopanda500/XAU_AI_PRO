@@ -25,7 +25,7 @@
 //    não usa mais nenhuma classe `mesa-`: as classes são `robo-` e vivem em
 //    `theme/robo.css`, que ESTE arquivo importa. Nada depende de outro
 //    componente carregar a folha.
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { apiBase } from '../lib/api';
 import { useAppStore } from '../hooks/useAppStore';
 import { useAutoState } from '../hooks/queries';
@@ -660,9 +660,31 @@ export default function OperacaoAutomatica({
     }
   };
 
+    /*
+    IA SEMPRE VIVA (13/10/2026, pedido do dono).
+    ==================================================
+    Com par + conta e TODOS os campos vazios, a sugestao chega sozinha ao
+    trocar de cenario — uma vez por cenario (par, periodo, corretora,
+    mercado). Nunca sobrescreve o que o operador digitou: so dispara com
+    tudo vazio. E so dispara na visao de risco (onde os campos estao): na
+    visao de operacao nao ha campo para preencher. Aplicar continua sendo
+    gesto do operador — preencher nao e aplicar.
+  */
+  const chaveAutoIA = useRef('');
+  useEffect(() => {
+    if (!risco || !simbolo || !broker || ocupado) return;
+    const vazios = Object.values(limites).every((v) => !String(v ?? '').trim());
+    if (!vazios) return;
+    const chave = `${simbolo}|${timeframe}|${broker}|${market}`;
+    if (chaveAutoIA.current === chave) return;
+    chaveAutoIA.current = chave;
+    void sugerirPelaIA();
+  });
+
   const aplicarLimites = async () => {
     if (ocupado) return;
     const corpo = limitesNumericos();
+
     if (Object.keys(corpo).length === 0) {
       setStatus('Nenhum limite declarado para aplicar.');
       return;

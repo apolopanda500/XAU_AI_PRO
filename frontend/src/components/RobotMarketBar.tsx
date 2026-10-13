@@ -23,7 +23,6 @@ const REFRESH_MS = 2_000;
 
 export default function RobotMarketBar() {
   const selectedSymbol = useAppStore((state) => state.selectedSymbol);
-  const setSelectedSymbol = useAppStore((state) => state.setSelectedSymbol);
   const escopo = escopoAtivo();
   /*
     SEM ESCOPO, SEM FONTE (11/10/2026, decisao do dono: nada de MT5 fixo). Era
@@ -106,19 +105,24 @@ export default function RobotMarketBar() {
       aria-label="Mercado do ativo selecionado"
     >
       <div className="rmb-top">
-        <button
-          type="button"
+        {/*
+          O SIMBOLO NAO TROCA AQUI (13/10/2026, menos duplicatas).
+          ==========================================================
+          Este botao abria um `window.prompt` para trocar o par — o mesmo gesto
+          que a barra inferior (StatusBar, com lista e campo) e o seletor da
+          operacao automatica ja fazem, os dois gravando no motor. Tres
+          controles para o mesmo par e o caminho para discordarem. O prompt,
+          alem de duplicado, e bloqueante e some atras da janela.
+
+          A faixa segue mostrando o preco do par; a troca e na barra inferior.
+        */}
+        <span
           className="rmb-symbol"
-          onClick={() => {
-            // O prompt sugere o que JA esta escolhido, e nao um ativo do
-            // codigo: sem escolha ele vem vazio.
-            const next = window.prompt('Ativo para operar', simbolo);
-            if (next?.trim()) setSelectedSymbol(next.trim().toUpperCase());
-          }}
-          title="Clique para trocar o ativo"
+          title="Troque o par na barra inferior"
+          aria-label={`Ativo operado: ${simbolo || 'nenhum'}`}
         >
           {simbolo || '—'}
-        </button>
+        </span>
         <span className="muted">
           {source
             ? `${brokerLabel(source.broker)} · ${MARKET_LABELS[source.market] ?? source.market}`

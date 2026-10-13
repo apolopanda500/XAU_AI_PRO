@@ -1144,3 +1144,62 @@ describe('IA sugere limites, operador grava (12/10/2026)', () => {
     expect(screen.queryByTestId('ia-base')).toBeNull();
   });
 });
+
+describe('IA sempre viva (13/10/2026)', () => {
+  const sugestaoViva = {
+    ok: true,
+    limites: { confianca_minima: 50, edge_minimo: 0.142, risco_por_trade_pct: 0.5, max_posicoes: 2, max_operacoes_dia: 5, perda_diaria_max_pct: 2, intervalo_minutos: 60 },
+    base: { confianca_minima: 'confianca atual do modelo: 47%' },
+    serie: { velas: 600, atr_pct: 0.624, edge: 0.142, confianca: 46.7 },
+  };
+
+  function stubSugestao() {
+    vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+      estado.chamadas.push({ url: String(url), body: JSON.parse(String(init?.body ?? '{}')) });
+      if (String(url).includes('/api/auto/sugerir-limites')) {
+        return { ok: true, json: async () => sugestaoViva };
+      }
+      return { ok: true, json: async () => ({ ok: true }) };
+    });
+  }
+
+  function naRisco() {
+    const { container } = render(<RobotTabs />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Risco' }));
+    return container;
+  }
+
+  it('PROVA: com par+conta e campos vazios, a sugestao chega sem clique', async () => {
+    stubSugestao();
+    estado.auto = { ativo: false, simbolo: 'GOLD', timeframe: 'H1', broker: 'mt5', market: 'metals' };
+    const container = naRisco();
+    await waitFor(() => {
+      expect(container.querySelector('[aria-label="Controle de risco"]')).toBeTruthy();
+    });
+    await new Promise((r) => setTimeout(r, 500));
+    expect(
+      estado.chamadas.map((c) => String(c.url)),
+      'quais URLs sairam?',
+    ).toContain('http://127.0.0.1:9001/api/auto/sugerir-limites');
+  });
+
+  it('PROVA NEGATIVA: o que o operador digitou nao e sobrescrito', async () => {
+    stubSugestao();
+    estado.auto = { ativo: false, simbolo: 'GOLD', timeframe: 'H1', broker: 'mt5', market: 'metals' };
+    const container = naRisco();
+    await waitFor(() => {
+      expect(container.querySelector('[aria-label="Controle de risco"]')).toBeTruthy();
+    });
+    await new Promise((r) => setTimeout(r, 500));
+    expect(
+      estado.chamadas.map((c) => String(c.url)),
+      'quais URLs sairam no teste 2?',
+    ).toContain('http://127.0.0.1:9001/api/auto/sugerir-limites');
+    const chamadasAposAuto = estado.chamadas.length;
+    const campo = container.querySelector('[aria-label="Confiança mínima (%)"]') as HTMLInputElement;
+    fireEvent.change(campo, { target: { value: '99' } });
+    await new Promise((r) => setTimeout(r, 300));
+    expect(estado.chamadas.length).toBe(chamadasAposAuto);
+    expect(campo.value).toBe('99');
+  });
+});

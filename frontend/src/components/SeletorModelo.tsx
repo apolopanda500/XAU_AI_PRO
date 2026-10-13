@@ -168,7 +168,22 @@ export default function SeletorModelo() {
   // Os pares que o operador pode escolher são os do CATÁLOGO, e não os que têm
   // modelo. Filtrar por `temModelo` esconderia o par inteiro da corretora.
   const simbolos = useMemo(() => catalogo.map((a) => a.symbol), [catalogo]);
-  const comModelo = useMemo(() => new Set(modelos.map((m) => m.symbol)), [modelos]);
+  /*
+    GOLD CONTA COMO "COM MODELO" (13/10/2026). O par da corretora herda os
+    modelos do apelido: sem isso GOLD aparecia sem marca e sumia da lista
+    curta, embora o XAUUSD tenha modelo.
+  */
+  const comModelo = useMemo(() => {
+    const base = new Set(modelos.map((m) => String(m.symbol || '').toUpperCase()));
+    for (const a of catalogo) {
+      const nome = String(a.symbol || '').toUpperCase();
+      const modelo = String(a.modelSymbol || '').toUpperCase();
+      if (!modelo) continue;
+      if (base.has(modelo)) base.add(nome);
+      if (base.has(nome)) base.add(modelo);
+    }
+    return base;
+  }, [modelos, catalogo]);
   /*
     SEM CATALOGO, OS MODELOS SAO A LISTA (12/10/2026).
     ==================================================
@@ -218,12 +233,12 @@ export default function SeletorModelo() {
   const [mostrarTodos, setMostrarTodos] = useState(false);
   const [recusaModelo, setRecusaModelo] = useState('');
   const simbolosComModelo = useMemo(() => {
-    const comModeloOrdenados = paresElegiveis.filter((s) => comModelo.has(s));
+    const comModeloOrdenados = paresElegiveis.filter((s) => comModelo.has(String(s).toUpperCase()));
     if (mostrarTodos) return paresElegiveis;
     return comModeloOrdenados;
   }, [paresElegiveis, comModelo, mostrarTodos]);
   const totalSemModelo = useMemo(
-    () => simbolos.length - simbolos.filter((s) => comModelo.has(s)).length,
+    () => simbolos.length - simbolos.filter((s) => comModelo.has(String(s).toUpperCase())).length,
     [simbolos, comModelo],
   );
 
@@ -248,10 +263,33 @@ export default function SeletorModelo() {
     return '';
   }, [selectedSymbol, paresElegiveis]);
 
-  const visiveis = useMemo(
-    () => modelos.filter((m) => m.symbol === simbolo),
-    [modelos, simbolo],
-  );
+  const visiveis = useMemo(() => {
+    /*
+      APELIDOS DO PAR (13/10/2026, "não tem GOLD como ativo").
+      =========================================================
+      MEDIDO: a XM publica `GOLD` (com `modelSymbol: XAUUSD`) e os modelos
+      treinados chamam `XAUUSD`. Escolher GOLD filtrava `m.symbol === 'GOLD'`
+      — zero modelos — e a tela dizia "nenhum modelo carregável", embora o
+      modelo do MESMO metal existisse como XAUUSD.
+
+      O apelido vem do CATALOGO (`modelSymbol`), nunca de regra de nome, nos
+      dois sentidos (GOLD acha XAUUSD, XAUUSD acha GOLD). Configurar manda o
+      simbolo DO MODELO (o que o motor resolve); o par da tela continua o que
+      o operador escolheu (o que a corretora cota).
+    */
+    const par = String(simbolo || '').toUpperCase();
+    const apelidos = new Set<string>();
+    for (const a of catalogo) {
+      const nome = String(a.symbol || '').toUpperCase();
+      const modelo = String(a.modelSymbol || '').toUpperCase();
+      if (!modelo) continue;
+      if (nome === par) apelidos.add(modelo);
+      if (modelo === par) apelidos.add(nome);
+    }
+    return modelos.filter(
+      (m) => String(m.symbol || '').toUpperCase() === par || apelidos.has(String(m.symbol || '').toUpperCase()),
+    );
+  }, [modelos, simbolo, catalogo]);
 
   /*
     O MODELO ESCOLHIDO SEGUE O PERIODO DO MOTOR.

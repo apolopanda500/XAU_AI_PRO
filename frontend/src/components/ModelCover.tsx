@@ -118,6 +118,26 @@ export default function ModelCover({
   */
   const classe = classeDe(modelo.assetClass);
   const paleta = PALETA[classe];
+  /*
+    A SIGLA TOLERA O PLURAL DO TREINO (13/10/2026).
+    =================================================
+    MEDIDO: os cards MULTI_CRYPTO nasciam sem sigla — `classeDe` devolve
+    `cripto` (o nome em portugues da paleta) e o mapa de siglas so conhece
+    `crypto` (o que a corretora escreve). `assetIcon` direto no original
+    tambem falha para `metals`. A ordem e: original, depois o nome da
+    paleta traduzido de volta. Sem sigla continua sem selo (neutro honesto).
+  */
+  const sigla =
+    assetIcon(modelo.assetClass) || assetIcon(classe === 'cripto' ? 'crypto' : classe);
+  /*
+    A ARTE DO FUNDO (13/10/2026, "efeitos nos cards").
+    ===================================================
+    Cada modelo ganha um matiz proprio, derivado do `id` — decoracao
+    deterministica, NAO informacao: nao diz classe, periodo nem qualidade
+    (isso esta no nome, no topo e nas metricas). Dois modelos diferentes nunca
+    dividem a mesma cara, e nenhum dado e inventado para isso.
+  */
+  const matiz = [...String(modelo.id ?? '')].reduce((a, c) => a + c.charCodeAt(0), 0) % 360;
   const tf =
     TF_CURTO[String(modelo.timeframe || '').toUpperCase()] ??
     String(modelo.timeframe || '').toUpperCase();
@@ -127,14 +147,21 @@ export default function ModelCover({
 
     `assetIcon` agora recebe SO a classe — ele nem ve o nome do ativo, e por isso
     nao tem como adivinhar. Sem classe conhecida nao vem sigla, e o selo nao e
-    desenhado: o topo da capa fica so com o periodo.
+    desenhado: o topo da capa fica so com o periodo. Ver `sigla` acima (tolerancia
+    ao plural do treino).
   */
-  const sigla = assetIcon(classe);
   const edge = modelo.edge;
   const temEdge = edge !== null && edge !== undefined && Number.isFinite(edge) && edge > 0;
 
   const conteudo = (
     <>
+      <span
+        className="mc-arte"
+        aria-hidden="true"
+        style={{
+          background: `linear-gradient(135deg, hsl(${matiz} 60% 22%) 0%, hsl(${(matiz + 40) % 360} 65% 12%) 60%, transparent 100%)`,
+        }}
+      />
       <span className="mc-topo" style={{ background: paleta.base, borderColor: paleta.borda }}>
         {sigla && (
           <span className="mc-glifo" style={{ color: paleta.glifo }} aria-hidden="true">

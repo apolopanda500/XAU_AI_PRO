@@ -65,6 +65,7 @@ import { useEffect, useRef, useState } from 'react';
 import { apiBase } from '../lib/api';
 import { useAppStore } from '../hooks/useAppStore';
 import { useAutoState } from '../hooks/queries';
+import { escopoAtivo } from '../lib/escopoAtivo';
 import LatenciaBar from './LatenciaBar';
 import '../theme/status-bar.css';
 
@@ -98,6 +99,16 @@ export default function StatusBar() {
   const simbolo = String(autoQ.data?.simbolo || selectedSymbol || '').toUpperCase();
   const timeframe = String(autoQ.data?.timeframe || '').toUpperCase();
 
+  /*
+    O MS É O DA CONTA ATIVA (13/10/2026, "ms fora da tela, corrigir medição").
+    ==========================================================================
+    A barra mostrava o `ms` da MELHOR medição (`ativa` sem valor): com a conta
+    MEXC ativa e a Binance mais rápida, o número na tela era o da Binance — a
+    medição de outra corretora no lugar da que opera. Sem conta ativa, segue a
+    melhor (o comportamento de antes).
+  */
+  const contaAtiva = escopoAtivo();
+
   const [listaAberta, setListaAberta] = useState(false);
   const [ocupado, setOcupado] = useState(false);
   const [erro, setErro] = useState('');
@@ -122,15 +133,61 @@ export default function StatusBar() {
   }, [listaAberta]);
 
   /**
-   * Trocar o timeframe chama `/api/auto/config` com SÓ o timeframe.
-   *
-   * `configurar()` no backend mescla campo a campo: o que não vem no payload
-   * fica como está. Então enviar apenas `{timeframe}` muda o timeframe do motor
-   * e não toca em lote, SL, TP, ativo nem corretora.
-   *
-   * Isso é o que faz o seletor do rodapé valer para o APP INTEIRO: o gráfico,
-   * o motor e a leitura da escada leem o mesmo `timeframe` do estado.
-   */
+    * Trocar o PAR grava na tela E no motor (13/10/2026).
+    * =====================================================
+    * MEDIDO na captura do dono: par EURUSD na barra, grafico em BTCUSD. A
+    * barra gravava so o `selectedSymbol` (a tela); o motor e o grafico liam o
+    * par do estado do motor — dois pares no mesmo app. Igual ao campo de
+    * modelo (`SeletorModelo.escolherModelo`), o gesto configura: `configurar`
+    * mescla campo a campo, entao `{simbolo}` so troca o par.
+    */
+  const gravarPar = async (valor: string, fechar: boolean) => {
+    const par = valor.trim().toUpperCase();
+    if (!par) {
+      if (fechar) setListaAberta(false);
+      return;
+    }
+    setSelectedSymbol(par);
+    /*
+      Fechar so no Enter. No `blur` (clique num timeframe da mesma lista), a
+      lista tem de continuar aberta: fechar aqui desmontaria o botao antes do
+      clique chegar, e a troca de timeframe morreria sem mensagem.
+    */
+    if (fechar) setListaAberta(false);
+    if (par === simbolo) return;
+    if (ocupado) return;
+    setOcupado(true);
+    setErro('');
+    try {
+      const r = await fetch(`${apiBase()}/api/auto/config`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ simbolo: par }),
+        signal: AbortSignal.timeout(10_000),
+      });
+      const d = (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      if (!r.ok || d.ok === false) {
+        setErro(String(d.error ?? `HTTP ${r.status}`));
+        return;
+      }
+      void autoQ.refetch();
+    } catch (e) {
+      setErro(`Gateway indisponível: ${e instanceof Error ? e.message : 'erro'}`);
+    } finally {
+      setOcupado(false);
+    }
+  };
+
+  /**
+    * Trocar o timeframe chama `/api/auto/config` com SÓ o timeframe.
+    *
+    * `configurar()` no backend mescla campo a campo: o que não vem no payload
+    * fica como está. Então enviar apenas `{timeframe}` muda o timeframe do motor
+    * e não toca em lote, SL, TP, ativo nem corretora.
+    *
+    * Isso é o que faz o seletor do rodapé valer para o APP INTEIRO: o gráfico,
+    * o motor e a leitura da escada leem o mesmo `timeframe` do estado.
+    */
   const escolherTimeframe = async (proximo: string) => {
     setListaAberta(false);
     if (proximo === timeframe) return;
@@ -230,15 +287,12 @@ export default function StatusBar() {
                   autoFocus
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
-                      const valor = e.currentTarget.value.trim().toUpperCase();
-                      if (valor) setSelectedSymbol(valor);
-                      setListaAberta(false);
+                      void gravarPar(e.currentTarget.value, true);
                     }
                     if (e.key === 'Escape') setListaAberta(false);
                   }}
                   onBlur={(e) => {
-                    const valor = e.currentTarget.value.trim().toUpperCase();
-                    if (valor) setSelectedSymbol(valor);
+                    void gravarPar(e.currentTarget.value, false);
                   }}
                 />
               </div>
@@ -303,7 +357,7 @@ export default function StatusBar() {
         </span>
         {/* A latência fica no lado direito, como no MT5: é informação de
             rodapé, e o operador lê sem clicar. */}
-        <LatenciaBar />
+        <LatenciaBar ativa={contaAtiva.broker || undefined} />
       </div>
     </footer>
   );

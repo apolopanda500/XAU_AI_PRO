@@ -356,3 +356,23 @@ describe('diaDoTreino \u2014 o card mostra o dia, nao o ISO cru', () => {
     expect(texto).not.toContain('03:08:41');
   });
 });
+
+describe('capas — sigla por classe e arte decorativa', () => {
+  it('MULTI_CRYPTO mostra a sigla CRY (plural do treino tolerado)', async () => {
+    M.modelos = [
+      modelo({ id: 'MULTI_CRYPTO', symbol: 'MULTI_CRYPTO', timeframe: 'H1', label: 'MODELO MULTI_CRYPTO 1H' }),
+    ];
+    render(<ListaModelos />);
+    await waitFor(() => expect(linhas()).toHaveLength(1));
+    expect(linhas()[0].querySelector('.mc-glifo')?.textContent).toBe('CRY');
+  });
+
+  it('sem classe a capa nao inventa sigla, mas tem a arte', async () => {
+    M.modelos = [modelo({})];
+    render(<ListaModelos />);
+    await waitFor(() => expect(linhas()).toHaveLength(1));
+    const card = linhas()[0];
+    expect(card.querySelector('.mc-glifo')).toBeNull();
+    expect(card.querySelector('.mc-arte')).toBeTruthy();
+  });
+});
