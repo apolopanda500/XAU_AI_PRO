@@ -119,6 +119,16 @@ export interface AssetRow {
    * isso seria dizer que todo par tem modelo, e a lista de modelos mentiria.
    */
   modelSymbol?: string | null;
+  /**
+   * A CORRETORA DIZ QUE TEM MODELO (13/10/2026).
+   *
+   * O gateway publica `has_model` por linha (MEDIDO: `GOLD` vem com
+   * `has_model: true`). Antes o frontend descartava o campo e deduzia "tem
+   * modelo" so pelo nome — e um par com modelo declarado sumia da lista
+   * curta quando o nome do modelo diferia do nome da corretora. Declarado
+   * e declarado: quem sabe se tem modelo e quem publicou a linha.
+   */
+  hasModel?: boolean;
 }
 
 /** Extrai o catálogo real devolvido por /api/universal/assets. */
@@ -148,6 +158,7 @@ export function parseAssetCatalog(payload: unknown): AssetRow[] {
       swapShort: typeof row.swap_short === 'number' ? row.swap_short : null,
       assetClass: typeof row.asset_class === 'string' && row.asset_class ? row.asset_class : null,
       modelSymbol: typeof row.model_symbol === 'string' && row.model_symbol ? row.model_symbol : null,
+      hasModel: row.has_model === true,
     });
   }
   return rows;

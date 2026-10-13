@@ -178,6 +178,8 @@ export default function SeletorModelo() {
     for (const a of catalogo) {
       const nome = String(a.symbol || '').toUpperCase();
       const modelo = String(a.modelSymbol || '').toUpperCase();
+      // Declarado pela corretora vale por si: `has_model: true` na linha.
+      if (a.hasModel) base.add(nome);
       if (!modelo) continue;
       if (base.has(modelo)) base.add(nome);
       if (base.has(nome)) base.add(modelo);

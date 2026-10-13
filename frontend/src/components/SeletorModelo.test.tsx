@@ -155,3 +155,16 @@ describe('SeletorModelo â€” GOLD acha os modelos de XAUUSD', () => {
     );
   });
 });
+
+describe('SeletorModelo — GOLD declarado com modelo aparece na lista', () => {
+  it('has_model true poe o GOLD na lista curta mesmo sem model_symbol', async () => {
+    M.simbolo = '';
+    M.catalogo = [{ symbol: 'GOLD', modelSymbol: null, hasModel: true } as never];
+    render(<SeletorModelo />);
+    await waitFor(() => {
+      const campo = document.querySelector('[aria-label="Par para operar"]') as HTMLSelectElement | null;
+      const opcoes = campo ? Array.from(campo.options).map((o) => o.value) : [];
+      expect(opcoes).toContain('GOLD');
+    });
+  });
+});
