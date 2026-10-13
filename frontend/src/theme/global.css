@@ -4347,3 +4347,26 @@ input:focus-visible {
   white-space: nowrap;
   border: 0;
 }
+
+/*
+  LETRAS QUE SUMIAM NO TEMA CLARO (12/10/2026, pedido do dono: "modo claro nao
+  aparece algumas letras").
+  ============================================================================
+  MEDIDO: tres regras com `color: #cbd5e1` (cinza-claro de texto pensado para
+  fundo escuro) aplicadas sobre painel BRANCO no tema claro:
+
+  1. `.chip.neutral` — os chips "pode operar" dos cards de modelo sumiam;
+  2. `.strategy-rule-grid span` — o texto das regras sumia;
+  3. `.history-tab .tbl-wrap::before` — a ajuda do historico sumia.
+
+  Nos temas escuros o `#cbd5e1` continua certo (fundo escuro), por isso o
+  corretivo e SOBREPOSICAO so no claro, com `var(--text)`, e nao troca da regra
+  original. Fica no FIM da folha para vencer por ordem tambem, nao so por
+  especificidade. Se um dia aparecer outro texto fixo claro, ele entra NESTE
+  bloco.
+*/
+[data-theme='light'] .chip.neutral,
+[data-theme='light'] .strategy-rule-grid span,
+[data-theme='light'] .history-tab .tbl-wrap::before {
+  color: var(--text);
+}

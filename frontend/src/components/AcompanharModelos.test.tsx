@@ -50,7 +50,12 @@ vi.mock('../hooks/queries', () => ({
 
 vi.mock('../hooks/useSinaisModelo', () => ({ useSinaisModelo: useSinaisMock }));
 
-vi.mock('../lib/marketApi', () => ({ getCandles: getCandlesMock }));
+vi.mock('../lib/marketApi', () => ({
+  // Espelha o modulo (12/10/2026): o componente importa `LIMITE_VELAS_GRAFICO`
+  // de la, e duble sem ele entrega `undefined` no lugar do numero real.
+  LIMITE_VELAS_GRAFICO: 1000,
+  getCandles: getCandlesMock,
+}));
 
 vi.mock('../lib/notify', () => ({ notify: vi.fn() }));
 

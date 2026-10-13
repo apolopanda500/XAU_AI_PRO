@@ -20,6 +20,9 @@ const createHistogramSeries = vi.fn(() => ({ setData: seriesSetData }));
 let fitContent = vi.fn();
 
 vi.mock('lightweight-charts', () => ({
+  // O enum real: Magnet = 0, Normal = 1. O componente usa `CrosshairMode.Normal`
+  // (mouse livre, 12/10/2026) — sem esta exportacao o mock quebra na importacao.
+  CrosshairMode: { Normal: 1, Magnet: 0, Hidden: 2, MagnetOHLC: 3 },
   createChart: vi.fn(() => ({
     addLineSeries: createLineSeries,
     addHistogramSeries: createHistogramSeries,

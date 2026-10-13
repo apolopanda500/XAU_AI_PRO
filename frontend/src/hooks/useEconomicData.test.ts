@@ -144,10 +144,23 @@ describe('useEconomicData â€” o caminho inteiro do payload a tela', () => {
   });
 
   it('`divulgado` vem do horario, e um evento futuro nao aparece ja divulgado', async () => {
+    /*
+      BOMBA-RELOGIO DESARMADA (13/10/2026). O "futuro" era `SEM_FUSO`
+      (`2026-10-13T12:00`, fixo) — e hoje 13/10/2026 passou das 12:00 UTC, entao
+      o evento virou passado e `divulgado` ficou `true`. O teste media o
+      CALENDARIO, nao o codigo. Agora o futuro e relativo a `Date.now()` (+2
+      dias, formato local sem deslocamento, como a agenda manda) — continua
+      futuro em qualquer data que o suite rode.
+    */
+    const daqui2Dias = new Date(Date.now() + 2 * 86400000);
+    const p = (n: number) => String(n).padStart(2, '0');
+    const futuroLocal =
+      `${daqui2Dias.getFullYear()}-${p(daqui2Dias.getMonth() + 1)}-${p(daqui2Dias.getDate())}` +
+      `T${p(daqui2Dias.getHours())}:${p(daqui2Dias.getMinutes())}`;
     responderPayload({
       events: [
         eventoApi({ id: 'passado', when_utc: '2026-10-01T10:00:00+00:00' }),
-        eventoApi({ id: 'futuro', when_utc: SEM_FUSO }),
+        eventoApi({ id: 'futuro', when_utc: futuroLocal }),
       ],
       fontes: {},
     });
@@ -155,7 +168,7 @@ describe('useEconomicData â€” o caminho inteiro do payload a tela', () => {
     const { result } = renderHook(() => useEconomicData(FILTRO));
     await waitFor(() => expect(result.current.eventos).toHaveLength(2));
 
-    // Ordenado por horario: o de 01/10 ja passou, o de 13/10 nao.
+    // Ordenado por horario: o de 01/10 ja passou, o de daqui a 2 dias nao.
     const ordenados = [...result.current.eventos].sort(
       (a, b) => a.horario.getTime() - b.horario.getTime(),
     );

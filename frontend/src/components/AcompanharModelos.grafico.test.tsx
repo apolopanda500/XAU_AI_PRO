@@ -102,6 +102,13 @@ vi.mock('../hooks/useCatalogoAtivos', () => ({
   useCatalogoAtivos: () => estado.catalogo,
 }));
 vi.mock('../lib/marketApi', () => ({
+  /*
+    O DUBLE ESPELHA O MODULO (12/10/2026). Sem `LIMITE_VELAS_GRAFICO` aqui, o
+    componente importa `undefined` do modulo dublado — e o numero de velas
+    pedidas deixa de ser o que o codigo real pede. Duble que diverge do
+    modulo mede a coisa errada (AGENTS.md 5/6).
+  */
+  LIMITE_VELAS_GRAFICO: 1000,
   getCandles: async (identidade: { symbol: string; market: string }, timeframe: string) => {
     estado.pedidos.push({
       symbol: String(identidade?.symbol ?? ''),
