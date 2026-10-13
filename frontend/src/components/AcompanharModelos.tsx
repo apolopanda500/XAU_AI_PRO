@@ -3,7 +3,7 @@ import { apiBase } from '../lib/api';
 import { useAutoState, useUniversalPositions, usePositions } from '../hooks/queries';
 import { useAppStore } from '../hooks/useAppStore';
 import { useSinaisModelo } from '../hooks/useSinaisModelo';
-import { getCandles, type MarketCandle } from '../lib/marketApi';
+import { getCandles, getCandlesLivres, type MarketCandle } from '../lib/marketApi';
 import { notify } from '../lib/notify';
 import { requestId } from '../lib/format';
 import { useEffect, useState, useRef } from 'react';
@@ -471,7 +471,23 @@ const [periodoDoGrafico, setPeriodoDoGrafico] = useState<string>('');
   */
   const semStop = riscoNum <= 0 || !Number.isFinite(riscoNum);
   const semAlvo = alvoNum <= 0 || !Number.isFinite(alvoNum);
+  /*
+    DE ONDE VIERAM AS VELAS DA TELA (12/10/2026, grafico sempre vivo).
+    Declarado AQUI (e nao junto do efeito que preenche, la embaixo) porque
+    o `motivoRecusa` logo abaixo ja le `velasPublicas` — e o TypeScript barra
+    uso antes da declaracao. Ver o comentario completo junto das velas.
+  */
+  const [fonteVelas, setFonteVelas] = useState<string | null>(null);
+  const [velasPublicas, setVelasPublicas] = useState(false);
   const motivoRecusa = useMemo(() => {
+    /*
+      PRECO PUBLICO NAO ARMA ORDEM (12/10/2026, grafico sempre vivo). E a
+      regra do modulo de fonte publica: preco de terceiro nao vira execucao.
+      Sem esta guarda, o preco do ultimo fechamento publico armaria a ordem
+      e o operador enviaria sobre um numero que a corretora dele nao tem.
+    */
+    if (velasPublicas)
+      return 'Preço de fonte pública (sem execução): escolha a conta em Configurações → Conexões para operar.';
     if (precoArmado === null) return '';
     if (!simbolo) return 'Sem par configurado no motor. O símbolo vazio é recusa, nunca um ativo padrão.';
     if (!contratoOk)
@@ -479,7 +495,7 @@ const [periodoDoGrafico, setPeriodoDoGrafico] = useState<string>('');
     if (!Number.isFinite(volumeNum) || volumeNum <= 0) return 'Informe a quantidade.';
     if (volumeNum > 0.1) return `Quantidade ${volumeNum} acima do máximo aceito: 0,10.`;
     return '';
-  }, [precoArmado, simbolo, contratoOk, volumeNum]);
+  }, [velasPublicas, precoArmado, simbolo, contratoOk, volumeNum]);
 
   const enviarOrdem = async () => {
     if (motivoRecusa) {
@@ -532,17 +548,7 @@ const [periodoDoGrafico, setPeriodoDoGrafico] = useState<string>('');
   const { sinais, idadeSeg } = useSinaisModelo(simbolo, tempoEscolhido, configurado);
   const [candles, setCandles] = useState<MarketCandle[] | undefined>(undefined);
   const [erroVelas, setErroVelas] = useState('');
-  /*
-    DE ONDE VIERAM AS VELAS DA TELA (12/10/2026, grafico sempre vivo).
-    ===================================================================
-    Com a corretora fora, o gateway preenche com fonte publica e DECLARA
-    (`fonte`, `fallback_publico`, `execucao: False`) — mas a tela escrevia o
-    nome da CORRETORA no cabecalho. A referencia viaja junto das velas (mesmo
-    motivo do `candlesRef` acima: o closure nao pode ler o estado), zera na
-    troca de identidade, e o rotulo abaixo escolhe o nome verdadeiro.
-  */
-  const [fonteVelas, setFonteVelas] = useState<string | null>(null);
-  const [velasPublicas, setVelasPublicas] = useState(false);
+  /* `fonteVelas`/`velasPublicas` declarados acima, junto do `motivoRecusa`. */
   /*
     A REFERÊNCIA DOS CANDLE QUE JÁ ESTÃO NA TELA (11/10/2026)
     =========================================================
@@ -595,6 +601,53 @@ const [periodoDoGrafico, setPeriodoDoGrafico] = useState<string>('');
   }, [broker, market, simbolo, tempoEscolhido, configurado]);
 
   /*
+    VELAS LIVRES SEM CORRETORA (12/10/2026, grafico sempre vivo).
+    ==============================================================
+    Decisao do dono: sem MT5 e sem chave, o grafico continua vivo com valores
+    reais de fonte publica. Quando ha corretora, o efeito acima manda (dado
+    da conta); sem ela, este pede `/api/publico/ohlc` — que nao recebe broker
+    e declara `fonte` + `execucao: False`.
+
+    O PRECO PUBLICO NUNCA ARMA ORDEM: `precoArmado` continua `null` (ver o
+    guarda no efeito do preco e no `motivoRecusa`), entao o painel mostra os
+    niveis derivados? NAO — sem preco armado nao ha `slPreco`/`tpPreco`, e o
+    envio recusa nomeando a conta. Ver grafico e uma coisa; operar e outra.
+  */
+  useEffect(() => {
+    if (broker || !simbolo) return undefined;
+    let vivo = true;
+    // Saiu a corretora no meio da sessao: o que esta na tela e dela, e dado
+    // publico por cima de dado de conta seria o AGENTS.md 5 (mesma regra do
+    // zera da troca de par, acima).
+    candlesRef.current = [];
+    setCandles(undefined);
+    setFonteVelas(null);
+    setVelasPublicas(false);
+    const carregar = async () => {
+      try {
+        const r = await getCandlesLivres(simbolo, tempoEscolhido, 300);
+        if (vivo) {
+          candlesRef.current = r.candles;
+          setCandles(r.candles);
+          setErroVelas('');
+          setFonteVelas(r.fonte);
+          setVelasPublicas(true);
+        }
+      } catch (e) {
+        if (!vivo) return;
+        const motivo = e instanceof Error ? e.message : 'Candles indisponíveis.';
+        setErroVelas(erroDeVelas(motivo, candlesRef.current.length > 0));
+      }
+    };
+    void carregar();
+    const t = window.setInterval(carregar, 30_000);
+    return () => {
+      vivo = false;
+      window.clearInterval(t);
+    };
+  }, [broker, simbolo, tempoEscolhido]);
+
+  /*
     TROCOU O PAR, VOLTA AO PERIODO DO MODELO DESTE PAR (09/10/2026)
     ================================================================
     Sem isto, o operador escolhe BTCUSD em M15, troca para EURUSD — e o grafico
@@ -630,12 +683,16 @@ const [periodoDoGrafico, setPeriodoDoGrafico] = useState<string>('');
   */
   useEffect(() => {
     if (precoArmado !== null || descartado) return;
+    // Sem preco publico armado (12/10/2026): o motivoRecusa ja barra o envio,
+    // mas o preco nem pode NASCER de vela publica — senao o painel mostraria
+    // stop/alvo "prontos" sobre um numero que nao executa.
+    if (velasPublicas) return;
     const ultimo = candles?.[candles.length - 1];
     if (!ultimo) return;
     const fechamento = Number(ultimo.close);
     if (!Number.isFinite(fechamento) || fechamento <= 0) return;
     setPrecoArmado(arredondar(fechamento));
-  }, [candles, precoArmado, descartado]);
+  }, [candles, precoArmado, descartado, velasPublicas]);
 
   // Mudou o par ou o periodo: o gesto de Descartar valeu para AQUele ativo.
   useEffect(() => {

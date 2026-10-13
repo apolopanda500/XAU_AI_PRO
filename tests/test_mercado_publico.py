@@ -209,6 +209,21 @@ class TestNormalizacao:
         assert r["diario"] is True
         assert r["candles"][-1]["close"] == pytest.approx(1.1204)
 
+    def test_w1_mn1_tem_intervalo_nas_duas_fontes(self) -> None:
+        # Grafico sempre vivo, em qualquer periodo (12/10/2026): W1/MN1 nao
+        # estavam nos mapas, e o publico recusava justo os periodos longos.
+        # Sem rede aqui: mapa ausente retorna None ANTES de qualquer fetch.
+        assert mp._INTERVALO_BINANCE["W1"] == "1w"
+        assert mp._INTERVALO_BINANCE["MN1"] == "1M"
+        assert mp._INTERVALO_YAHOO["W1"] == "1wk"
+        assert mp._INTERVALO_YAHOO["MN1"] == "1mo"
+
+    def test_timeframe_sem_equivalente_nao_consulta(self) -> None:
+        # PROVA NEGATIVA: intervalo fora do mapa nao pode sair pedindo — um
+        # fetch com intervalo inventado voltaria dado do periodo errado.
+        assert mp._binance("BTCUSD", "XYZ", 5) is None
+        assert mp._yahoo("XAUUSD", "XYZ", 5) is None
+
 
 # ----------------------------------------------------------------------
 # POR QUE NAO HÁ TESTE CONTRA A API REAL AQUI

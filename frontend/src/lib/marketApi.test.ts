@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getCapabilities, getCandles, getDepth, getQuotes, getStats24h, MarketApiError } from './marketApi';
+import { getCapabilities, getCandles, getCandlesLivres, getDepth, getQuotes, getStats24h, MarketApiError } from './marketApi';
 
 const values = new Map<string, string>();
 Object.defineProperty(window, 'localStorage', {
@@ -191,5 +191,53 @@ describe('marketApi — procedencia da fonte publica', () => {
     expect(result.fonte ?? null).toBeNull();
     expect(result.fallback_publico ?? false).toBe(false);
     expect(result.execucao ?? null).toBeNull();
+  });
+});
+
+/*
+  VELAS LIVRES, SEM CORRETORA (12/10/2026, grafico sempre vivo)
+  ===============================================================
+  Decisao do dono: sem MT5 e sem chave, o grafico continua vivo com valores
+  reais de fonte publica. `getCandlesLivres` le `/api/publico/ohlc` (sem
+  broker) e devolve velas + fonte + `execucao: false` — e simbolo vazio e
+  recusa, nunca busca generica.
+*/
+describe('marketApi — velas livres sem corretora', () => {
+  const velaPublica = (time: number) => ({
+    time,
+    open: 85000,
+    high: 85100,
+    low: 84900,
+    close: 85050,
+    volume: 12,
+  });
+
+  it('PROVA: sem broker, voltam velas com fonte e execucao falsa', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      response({
+        ok: true,
+        source: 'mt5_gateway',
+        received_at: '2026-10-12T00:00:00.000Z',
+        candles: [velaPublica(1788000000), velaPublica(1788003600)],
+        fonte: 'binance',
+        observacao: 'Binance BTCUSDT 15m — exchange, 1m real',
+        execucao: false,
+      }),
+    );
+    const result = await getCandlesLivres('BTCUSD', 'M15', 300, { fetcher });
+    expect(result.candles).toHaveLength(2);
+    expect(result.fonte).toBe('binance');
+    expect(result.execucao).toBe(false);
+    expect(result.symbol).toBe('BTCUSD');
+    // A URL nao leva broker nem market: e a rota livre.
+    const [url] = fetcher.mock.calls[0];
+    expect(String(url)).toContain('/api/publico/ohlc');
+    expect(String(url)).not.toContain('broker=');
+  });
+
+  it('PROVA NEGATIVA: simbolo vazio recusa antes de qualquer fetch', async () => {
+    const fetcher = vi.fn();
+    await expect(getCandlesLivres('   ', 'M5', 300, { fetcher })).rejects.toThrow();
+    expect(fetcher).not.toHaveBeenCalled();
   });
 });

@@ -105,6 +105,9 @@ _ALIAS_BINANCE = {
 }
 
 #: Intervalo da app -> intervalo da fonte.
+#: W1/MN1 (12/10/2026, grafico sempre vivo): faltavam, e o publico recusava
+#: justo os periodos longos — Yahoo tem 1wk/1mo, Binance 1w/1M. Sem eles,
+#: sem conta + W1 == grafico morto num par que as tres fontes cobrem.
 _INTERVALO_YAHOO = {
     "M1": "1m",
     "M5": "5m",
@@ -113,6 +116,8 @@ _INTERVALO_YAHOO = {
     "H1": "1h",
     "H4": "4h",
     "D1": "1d",
+    "W1": "1wk",
+    "MN1": "1mo",
 }
 
 _INTERVALO_BINANCE = {
@@ -123,6 +128,8 @@ _INTERVALO_BINANCE = {
     "H1": "1h",
     "H4": "4h",
     "D1": "1d",
+    "W1": "1w",
+    "MN1": "1M",
 }
 
 #: Classes que so o Frankfurter cobre, e so como COTACAO DIARIA.

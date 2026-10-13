@@ -131,6 +131,42 @@ vi.mock('../lib/marketApi', () => ({
       received_at: '2026-10-07T00:33:00Z',
     };
   },
+  /*
+    VELAS LIVRES (12/10/2026, grafico sempre vivo). Sem este duble, o efeito
+    de livres chamaria o `getCandlesLivres` REAL (fora do mock) — e o teste
+    do caminho sem corretora mediria a rede, nao o componente.
+  */
+  getCandlesLivres: async (symbol: string, timeframe: string) => {
+    estado.pedidos.push({
+      symbol: String(symbol ?? ''),
+      market: 'livre',
+      timeframe: String(timeframe ?? ''),
+    });
+    if (estado.falhaCandles) throw new Error(estado.falhaCandles);
+    return {
+      candles: [
+        {
+          time: 1788000000 + 3600,
+          open: 85500,
+          high: 85600,
+          low: 85400,
+          close: 85520,
+          volume: 1,
+          broker: '',
+          market: 'other',
+          symbol: String(symbol ?? ''),
+          source: 'publica',
+          received_at: '2026-10-07T00:33:00Z',
+          provider_timestamp: null,
+        },
+      ],
+      symbol: String(symbol ?? ''),
+      timeframe: String(timeframe ?? ''),
+      fonte: 'binance',
+      observacao: 'duble de fonte publica',
+      execucao: false,
+    };
+  },
 }));
 vi.mock('./charts/PriceChart', () => ({
   /*
@@ -736,6 +772,65 @@ describe('o rotulo diz a fonte real das velas (12/10/2026)', () => {
 });
 
 /*
+  VELAS LIVRES SEM CORRETORA (12/10/2026, grafico sempre vivo)
+  ==============================================================
+  Decisao do dono: sem MT5 e sem chave, o grafico continua vivo com valores
+  reais de fonte publica. Sem escopo, o efeito pede `/api/publico/ohlc` (rota
+  sem broker) em vez de recusar — e o preco publico NUNCA arma ordem.
+*/
+describe('velas livres sem corretora (12/10/2026)', () => {
+  it('PROVA: sem escopo, o grafico pede a rota livre e mostra com fonte', async () => {
+    estado.escopo = { broker: '', market: '' };
+    estado.parDaTela = 'BTCUSD';
+    estado.catalogo = [{ symbol: 'BTCUSD', assetClass: 'crypto', contractSize: 1 }];
+    render(<AcompanharModelos />);
+
+    await waitFor(() => expect(screen.getByTestId('candles').textContent).toBe('1'));
+    expect(estado.pedidos.some((p) => p.market === 'livre')).toBe(true);
+    // Nenhuma consulta com identidade de corretora: sem escopo nao ha quem
+    // assinar, e consultar como MT5 seria a presuncao proibida.
+    expect(estado.pedidos.some((p) => p.market !== 'livre')).toBe(false);
+    const rotulo = screen.getByTestId('fonte').textContent ?? '';
+    expect(rotulo).toContain('binance');
+    expect(rotulo).toContain('públicos');
+  });
+
+  it('PROVA: preco publico nao arma ordem — sem painel, sem botao', async () => {
+    estado.escopo = { broker: '', market: '' };
+    estado.parDaTela = 'BTCUSD';
+    estado.catalogo = [{ symbol: 'BTCUSD', assetClass: 'crypto', contractSize: 1 }];
+    render(<AcompanharModelos />);
+
+    await waitFor(() => expect(screen.getByTestId('candles').textContent).toBe('1'));
+    // O grafico desenha (dado publico), mas a ordem nao existe: sem preco
+    // armado nao ha painel ("Sem a ordem armada nao ha painel"), e sem
+    // painel nao ha botao que envie sobre numero de terceiro.
+    expect(screen.queryByLabelText('Ordem armada')).toBeNull();
+    const botoes = Array.from(document.querySelectorAll('button')).map((b) => b.textContent ?? '');
+    expect(botoes.some((t) => /Colocar ordem a /.test(t))).toBe(false);
+    // E o motivo esta na tela, no aviso da corretora — nao some Junto com o painel.
+    const corpo = document.body.textContent ?? '';
+    expect(corpo).toContain('Sem corretora escolhida');
+  });
+
+  it('PROVA NEGATIVA: sem o gate, a ordem armaria sobre preco publico', async () => {
+    // Sem este caso, remover o `if (velasPublicas)` do motivo faria o preco
+    // do ultimo fechamento publico armar a ordem — e o teste acima passaria
+    // igual, porque o texto sumiria Junto com a protecao.
+    estado.escopo = { broker: '', market: '' };
+    estado.parDaTela = 'BTCUSD';
+    estado.catalogo = [{ symbol: 'BTCUSD', assetClass: 'crypto', contractSize: 1 }];
+    render(<AcompanharModelos />);
+
+    await waitFor(() => expect(screen.getByTestId('candles').textContent).toBe('1'));
+    // Com velas publicas na tela, NENHUM preco pode estar armado: o painel
+    // mostra niveis derivados so com preco de corretora.
+    const botoes = Array.from(document.querySelectorAll('button')).map((b) => b.textContent ?? '');
+    expect(botoes.some((t) => /Colocar ordem a /.test(t))).toBe(false);
+  });
+});
+
+/*
   SEM CONTA, SEM GRAFICO DE OUTRA CORRETORA (11/10/2026)
   ======================================================
   Decisao do dono: nada de MT5 fixo. Antes o `broker` caia em `'mt5'` e o
@@ -751,8 +846,10 @@ describe('sem conta salva: o grafico nao consulta, e diz o que falta', () => {
     render(<AcompanharModelos />);
 
     await waitFor(() => expect(screen.getByTestId('grafico')).toBeTruthy());
-    // Nenhuma consulta: sem corretora nao ha identidade para consultar.
-    expect(estado.pedidos).toHaveLength(0);
+    // Nenhuma consulta COM IDENTIDADE DE CORRETORA: sem escopo nao ha quem
+    // assinar, e consultar como MT5 seria a presuncao proibida. (A rota
+    // livre, sem broker, e outro caminho — ver o describe proprio.)
+    expect(estado.pedidos.some((p) => p.market !== 'livre')).toBe(false);
     const corpo = document.body.textContent ?? '';
     expect(corpo).toContain('Sem corretora escolhida');
     // PROVA NEGATIVA: o grafico vazio nao pode culpar a fonte.
