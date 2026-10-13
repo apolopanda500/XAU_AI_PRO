@@ -39,6 +39,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { apiBase } from '../lib/api';
 import { useAppStore } from '../hooks/useAppStore';
 import { useAutoState } from '../hooks/queries';
+import ModelCover from './ModelCover';
 import '../theme/robo.css';
 
 export type ModeloTreinado = {
@@ -273,111 +274,96 @@ const escolher = async (m: ModeloTreinado) => {
       ) : null}
 
       {ordenados.length > 0 && (
-        <div className="table-scroll robo-modelos-lista">
-          <table className="tbl compact-table robo-modelos-tabela">
-            <thead>
-              <tr>
-                <th>Modelo</th>
-                <th>Par</th>
-                <th>Período</th>
-                <th className="num">Acerto</th>
-                <th className="num">Edge</th>
-                <th className="num">F1</th>
-                <th className="num">Testes</th>
-                <th>Estado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ordenados.map((m) => {
-                const podeOperar = m.publicable && m.pkl_present;
-                const emUso =
-                  m.symbol.toUpperCase() === simboloMotor &&
-                  m.timeframe.toUpperCase() === tfMotor;
-                return (
-                  <tr
-                    /*
-                      A CHAVE E O PAR + O PERIODO, E NAO SO O `id` (09/10/2026)
-                      ==========================================================
-                      MEDIDO: os tres modelos de CLASSE (`MULTI_METALS`,
-                      `MULTI_FIAT`, `MULTI_CRYPTO`) cobrem QUATRO periodos cada, e o
-                      `id` deles e o nome do arquivo — o MESMO para os quatro. Com
-                      `key={m.id}` o React via quatro linhas com a mesma chave e
-                      reaproveitava o no da primeira: o periodo mostrado era o da
-                      primeira, e clicar na linha do H1 selecionava o M5.
+        <div className="robo-modelos-grade">
+          {/*
+            UM CARD POR MODELO (12/10/2026, decisao do dono).
+            ==================================================
+            A tabela virou grade de cartoes: cada modelo tem cara (capa com
+            classe, periodo e metricas), mini informacoes (par, algoritmo,
+            testes, treino, motivo) e estado. Clicar opera o par no periodo,
+            como a linha fazia — o gesto nao mudou, so a leitura.
 
-                      Nao dava erro no console, so comportamento errado.
-                    */
-                    key={`${m.id}|${m.timeframe}`}
-                    className={`robo-modelo${emUso ? ' em-uso' : ''}${
-                      podeOperar ? '' : ' reprovado'
-                    }`}
-                    onClick={() => void escolher(m)}
-                    title={
-                      podeOperar
-                        ? `${m.symbol} em ${m.timeframe} — clique para operar este par neste período`
-                        : (m.reason ?? 'modelo reprovado no treino')
-                    }
-                  >
-                    {/*
-                      A COLUNA MODELO mostra o que o operador le, e a coluna PAR
-                      mostra o simbolo. Antes as duas mostravam `MULTI_METALS` — o
-                      mesmo nome duas vezes, porque o `id` do artefato de classe e
-                      o proprio simbolo.
-
-                      MEDIDO na captura de 20:28 do dono: `MULTI_METALS |
-                      MULTI_METALS | METALS`, tres colunas onde duas diziam a
-                      mesma coisa. Duas colunas iguais nao informam nada e ocupam
-                      o lugar de uma que informaria.
-
-                      Agora o rotulo (`MODELO MULTI_METALS 5M`) carrega o nome do
-                      artefato com o prefixo que a coluna ja diz, e o Par mostra a
-                      classe — que e a informacao que faltava e que o meta tem em
-                      `class`.
-                    */}
-                    {/*
-                      Como o operador le. O `label` vem pronto do
-                      `rotulo_modelo`; se o gateway nao mandar, o nome do
-                      arquivo continua sendo a resposta — nunca `undefined` na
-                      tela.
-                    */}
-                    <td>
-                      <code>{m.label ?? m.id}</code>
-                    </td>
-                    <td>
+            A classe da capa vem do `id` MULTI_* (o nome do treino, estruturado)
+            ou fica vazia (cinza honesto) — nunca adivinhada do simbolo.
+          */}
+          {ordenados.map((m) => {
+            const podeOperar = m.publicable && m.pkl_present;
+            const emUso =
+              m.symbol.toUpperCase() === simboloMotor &&
+              m.timeframe.toUpperCase() === tfMotor;
+            const classe = m.id.startsWith('MULTI_')
+              ? m.id.slice('MULTI_'.length).toLowerCase()
+              : undefined;
+            return (
+              <article
+                key={`${m.id}|${m.timeframe}`}
+                className={`robo-modelo robo-modelo-card${emUso ? ' em-uso' : ''}${
+                  podeOperar ? '' : ' reprovado'
+                }`}
+                title={
+                  podeOperar
+                    ? `${m.symbol} em ${m.timeframe} — clique para operar este par neste período`
+                    : (m.reason ?? 'modelo reprovado no treino')
+                }
+                role="button"
+                tabIndex={0}
+                aria-label={`${m.label ?? m.id} — ${podeOperar ? (emUso ? 'no motor agora' : 'pode operar') : 'reprovado'}`}
+                onClick={() => void escolher(m)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    void escolher(m);
+                  }
+                }}
+              >
+                <ModelCover
+                  modelo={{
+                    id: m.id,
+                    label: m.label,
+                    symbol: m.id.startsWith('MULTI_') ? rotuloClasseMulti(m.id) : m.symbol,
+                    timeframe: m.timeframe,
+                    accuracy: m.accuracy,
+                    edge: m.edge,
+                    f1: m.f1,
+                    publicable: m.publicable,
+                    pklPresent: m.pkl_present,
+                    assetClass: classe ?? null,
+                  }}
+                  selecionado={emUso}
+                />
+                <dl className="robo-modelo-mini">
+                  <div>
+                    <dt>Par</dt>
+                    <dd>
                       <strong>
-                        {m.id.startsWith('MULTI_')
-                          ? rotuloClasseMulti(m.id)
-                          : m.symbol}
+                        {m.id.startsWith('MULTI_') ? rotuloClasseMulti(m.id) : m.symbol}
                       </strong>
-                    </td>
-                    <td>{m.timeframe}</td>
-                    <td className="num">{pct(m.accuracy)}</td>
-                    <td className="num">{pct(m.edge)}</td>
-                    <td className="num">{pct(m.f1)}</td>
-                    <td className="num">{m.test_samples ?? '—'}</td>
-                    <td>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Período</dt>
+                    <dd>{m.timeframe}</dd>
+                  </div>
+                  <div>
+                    <dt>Testes</dt>
+                    <dd className="num">{m.test_samples ?? '—'}</dd>
+                  </div>
+                  <div>
+                    <dt>F1</dt>
+                    <dd className="num">{pct(m.f1)}</dd>
+                  </div>
+                  <div>
+                    <dt>Algoritmo</dt>
+                    <dd>{m.algorithm ?? '—'}</dd>
+                  </div>
+                  <div>
+                    <dt>Treino em</dt>
+                    <dd>{m.train_date ?? '—'}</dd>
+                  </div>
+                  <div>
+                    <dt>Estado</dt>
+                    <dd>
                       {podeOperar ? (
-                        /*
-                          O ROTULO ESTAVA INVERTIDO (medido no app instalado)
-                          ================================================
-                          Era `emUso ? 'no motor' : 'pode operar'`. `emUso`
-                          significa que o modelo ESTA no motor — e a tela escrevia
-                          "no motor". O modelo que o operador acabara de escolher
-                          aparecia dizendo que NAO estava no motor, e a linha de
-                          baixo (o que o motor usa) aparecia dizendo que podia
-                          operar.
-
-                          Pior com o cabecalho: "28 de 28 podem operar" ao lado de
-                          uma linha que afirma "no motor". Um numero e um rotulo
-                          que se contradizem, e o operador nao tem como saber qual
-                          dos dois ler — e o AGENTS.md 9: controle que o
-                          operador acredita ter e nao tem.
-
-                          Agora os dois textos dizem a verdade: o que esta no motor
-                          diz "no motor agora", e o que pode operar diz "pode
-                          operar". Os dois sao positivos, e nenhum contradiz o
-                          cabecalho.
-                        */
                         <span className={`chip ${emUso ? 'ok' : 'neutral'}`}>
                           {emUso ? 'no motor agora' : 'pode operar'}
                         </span>
@@ -386,12 +372,18 @@ const escolher = async (m: ModeloTreinado) => {
                           {m.pkl_present ? 'reprovado' : 'sem artefato'}
                         </span>
                       )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                    </dd>
+                  </div>
+                  {!podeOperar && m.reason ? (
+                    <div className="robo-modelo-motivo">
+                      <dt>Motivo</dt>
+                      <dd>{m.reason}</dd>
+                    </div>
+                  ) : null}
+                </dl>
+              </article>
+            );
+          })}
         </div>
       )}
     </div>

@@ -142,14 +142,15 @@ describe('ListaModelos — o inventario real aparece inteiro', () => {
 });
 
 describe('ListaModelos — o que a tela mostra é do TREINO, não previsão', () => {
-  it('as colunas dizem acerto e edge, e o cabeçalho é TREINADO', async () => {
+  it('o card mostra acerto e edge, e o cabeçalho é TREINADO', async () => {
     render(<ListaModelos />);
     await waitFor(() => expect(linhas()).toHaveLength(3));
-    const cabecalhos = Array.from(document.querySelectorAll('.robo-modelos-tabela th')).map(
-      (n) => n.textContent,
-    );
-    expect(cabecalhos).toContain('Acerto');
-    expect(cabecalhos).toContain('Edge');
+    // O card nao tem colunas: as metricas estao na capa (`acc`/`edge`) e nas
+    // mini informacoes. O que esta travado e o VOCABULARIO — acerto e edge do
+    // treino, nunca promessa.
+    const card = linhas()[0];
+    expect(card.textContent).toMatch(/acc/i);
+    expect(card.textContent).toMatch(/edge/i);
     expect(document.body.textContent).toContain('Modelos treinados');
     // A palavra "previsão" não aparece: seria prometer resultado.
     expect(document.body.textContent).not.toMatch(/previs[ãa]o/i);
@@ -246,8 +247,15 @@ describe('ListaModelos — escolher o modelo move par E período', () => {
    selecionava o M5 quando o operador clicava no H1.
    ========================================================================= */
 describe('os modelos multi-classe tem chave propria e rotulo que nao repete', () => {
-  const linhasDaTela = () =>
-    Array.from(document.querySelectorAll('tbody tr'));
+  const cartoes = () =>
+    Array.from(document.querySelectorAll('article.robo-modelo'));
+
+  /** O valor do par nas mini informacoes do card (o `dd` do `dt` "Par"). */
+  const parDe = (card: Element) => {
+    const blocos = Array.from(card.querySelectorAll('.robo-modelo-mini > div'));
+    const par = blocos.find((d) => d.querySelector('dt')?.textContent === 'Par');
+    return (par?.querySelector('dd')?.textContent ?? '').trim();
+  };
 
   const multi = (tf: string) =>
     modelo({
@@ -285,16 +293,16 @@ describe('os modelos multi-classe tem chave propria e rotulo que nao repete', ()
     expect(corpo.simbolo).toBe('MULTI_METALS');
   });
 
-  it('a coluna MODELO nao repete a coluna PAR', async () => {
+  it('o nome no card nao repete o par', async () => {
     // Mede a redundancia que o dono apontou: duas colunas com o mesmo texto.
+    // No card, o nome da capa (`MODELO MULTI_METALS 1H`) nao pode ser igual ao
+    // par das mini informacoes (`classe METALS`).
     M.modelos = [multi('H1')];
     render(<ListaModelos />);
     await waitFor(() => expect(linhas()).toHaveLength(1));
 
-    const colunas = Array.from(linhas()[0].querySelectorAll('td')).map((td) =>
-      (td.textContent ?? '').trim(),
-    );
-    expect(colunas[0], 'Modelo').toBe('MODELO MULTI_METALS 1H');
+    const card = cartoes()[0];
+    const nome = card.querySelector('.mc-nome')?.textContent?.trim() ?? '';
     // A CLASSE NAO E UM ATIVO (11/10/2026)
     // =====================================
     // MEDIDO na captura do dono (12:26): a coluna PAR dizia `MULTI_METALS` — o
@@ -306,10 +314,12 @@ describe('os modelos multi-classe tem chave propria e rotulo que nao repete', ()
     // ERRADO (variante do §6: a trava mediu MODELO != PAR, nao "a classe
     // precisa aparecer como classe"). Agora ela mede o que a tela precisa
     // dizer: o operador lê `classe METALS`, e nunca um ativo inventado.
-    expect(colunas[1], 'Par').toContain('classe METALS');
-    expect(colunas[1], 'nunca um simbolo cru da classe').not.toBe('METALS');
-    expect(colunas[1], 'nunca o id cru do artefato').not.toBe('MULTI_METALS');
-    expect(colunas[0]).not.toBe(colunas[1]);
+    expect(nome, 'Nome').toBe('MODELO MULTI_METALS 1H');
+    const par = parDe(card);
+    expect(par, 'Par').toContain('classe METALS');
+    expect(par, 'nunca um simbolo cru da classe').not.toBe('METALS');
+    expect(par, 'nunca o id cru do artefato').not.toBe('MULTI_METALS');
+    expect(nome).not.toBe(par);
   });
 
   it('o contador fala em artefatos E em periodos', async () => {

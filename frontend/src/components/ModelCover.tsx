@@ -146,7 +146,10 @@ export default function ModelCover({
         </span>
       </span>
       <span className="mc-corpo">
-        <span className="mc-nome">{modelo.symbol}</span>
+        {/* O nome que o operador le: o rotulo do treino, nao o simbolo. O
+            simbolo ja esta no Par e no `alt` da imagem; repetir aqui era a
+            redundancia MODELO == PAR que o dono apontou. */}
+        <span className="mc-nome">{modelo.label ?? modelo.id}</span>
         <span className="mc-metricas">
           <span title="Acurácia no treino">
             acc <b className="num">{pct(modelo.accuracy)}</b>
