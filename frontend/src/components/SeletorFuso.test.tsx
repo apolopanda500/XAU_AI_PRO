@@ -152,3 +152,57 @@ describe('SeletorFuso', () => {
     await waitFor(() => expect(screen.getByRole('button', { expanded: false }).textContent).toContain('manual'));
   });
 });
+
+/*
+  O MENU ABRE PARA O LADO QUE TEM ESPACO (12/10/2026)
+  ===================================================
+  MEDIDO pelo dono: o botao UTC-3 ficava fora da tela algumas vezes. O menu
+  abre para baixo com ate 320px — e o rodape do grafico vive no fim da pagina.
+*/
+describe('SeletorFuso — o menu nao sai da tela', () => {
+  const originalRect = Element.prototype.getBoundingClientRect;
+  const originalHeight = window.innerHeight;
+  afterEach(() => {
+    Element.prototype.getBoundingClientRect = originalRect;
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: originalHeight });
+  });
+  const retangulo = (top: number) =>
+    ({ top, left: 0, width: 60, height: 20, right: 60, bottom: top + 20, x: 0, y: top, toJSON: () => ({}) }) as DOMRect;
+
+  it('PROVA: sem espaco embaixo, abre para cima', () => {
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 });
+    Element.prototype.getBoundingClientRect = function () {
+      return retangulo(700);
+    };
+    render(<SeletorFuso />);
+    fireEvent.click(screen.getByRole('button', { expanded: false }));
+    expect(screen.getByRole('listbox').className).toContain('para-cima');
+  });
+
+  it('PROVA: com espaco embaixo, abre para baixo como sempre', () => {
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 });
+    Element.prototype.getBoundingClientRect = function () {
+      return retangulo(100);
+    };
+    render(<SeletorFuso />);
+    fireEvent.click(screen.getByRole('button', { expanded: false }));
+    expect(screen.getByRole('listbox').className).not.toContain('para-cima');
+  });
+
+  it('PROVA NEGATIVA: sem a medida, o menu abriria para baixo no fim da pagina', () => {
+    // Sem este caso, apagar o `useLayoutEffect` passaria — e o menu voltaria
+    // a vazar para fora da janela sem nenhum teste reclamar.
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 });
+    Element.prototype.getBoundingClientRect = function () {
+      return retangulo(790);
+    };
+    render(<SeletorFuso />);
+    fireEvent.click(screen.getByRole('button', { expanded: false }));
+    const menu = screen.getByRole('listbox');
+    expect(menu.className).toContain('para-cima');
+    // E continua sendo o mesmo menu: busca e opcoes presentes.
+    expect(
+      menu.querySelector('input[placeholder*="Buscar cidade"]'),
+    ).toBeTruthy();
+  });
+});

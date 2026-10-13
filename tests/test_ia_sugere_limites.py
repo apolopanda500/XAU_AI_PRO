@@ -1,0 +1,123 @@
+# -*- coding: utf-8 -*-
+"""A IA sugere limites; o operador grava (`/api/auto/sugerir-limites`).
+
+Decisao do dono (12/10/2026): botao de IA no controle de risco para a IA
+estudar o momento e configurar os riscos sozinha — MAS com o botao e a tabela
+continuando: a IA preenche, o operador ajusta, o Aplicar grava.
+
+Por isso `sugerir_limites` NUNCA grava: devolve numeros + o motivo de cada
+um (`base`). Sem motivo por campo, a sugestao seria numero magico — e numero
+magico em tela de risco e o operador confiando no que nao entende.
+"""
+from __future__ import annotations
+
+import pandas as pd
+
+from backend import auto_engine
+
+
+def _velas(n: int = 100, preco: float = 100.0, amplitude: float = 1.0) -> pd.DataFrame:
+    feast = [preco + (i % 5) * 0.1 for i in range(n)]
+    return pd.DataFrame({
+        "Time": list(range(n)),
+        "Open": feast,
+        "High": [p + amplitude / 2 for p in feast],
+        "Low": [p - amplitude / 2 for p in feast],
+        "Close": feast,
+        "Volume": [10.0] * n,
+    })
+
+
+class _Inferencia:
+    def __init__(self, confianca: float, edge: float) -> None:
+        self.confianca = confianca
+        self.edge = edge
+
+
+def _cenario(monkeypatch, confianca: float = 82.0, edge: float = 0.12, n: int = 100, amplitude: float = 1.0) -> None:
+    monkeypatch.setattr(
+        "backend.market_access.candles",
+        lambda broker, market, symbol, timeframe, limit=600: _velas(n, amplitude=amplitude),
+    )
+    monkeypatch.setattr(
+        "backend.ai_inference.inferir",
+        lambda symbol, df, timeframe="H1": _Inferencia(confianca, edge),
+    )
+
+
+def test_sugestao_traz_limites_e_motivos(monkeypatch) -> None:
+    _cenario(monkeypatch)
+    r = auto_engine.sugerir_limites("EURUSD", "H1", "mt5", "forex")
+
+    assert r["ok"] is True
+    assert r["simbolo"] == "EURUSD"
+    esperados = {
+        "confianca_minima", "edge_minimo", "risco_por_trade_pct",
+        "max_posicoes", "max_operacoes_dia", "perda_diaria_max_pct",
+        "intervalo_minutos",
+    }
+    assert esperados <= set(r["limites"])
+    # Cada numero tem o motivo: sem ele, a tabela receberia magia.
+    assert esperados <= set(r["base"])
+    assert r["limites"]["confianca_minima"] == 82
+    assert r["limites"]["edge_minimo"] == 0.12
+    assert r["serie"]["velas"] == 100
+
+
+def test_banca_nunca_vem_sugerida(monkeypatch) -> None:
+    """PROVA NEGATIVA: dinheiro do operador nao e chutado pela IA."""
+    _cenario(monkeypatch)
+    r = auto_engine.sugerir_limites("EURUSD", "H1", "mt5", "forex")
+
+    assert r["ok"] is True
+    assert "banca" not in r["limites"]
+    assert "banca" not in r["base"]
+
+
+def test_sem_par_recusa_com_motivo() -> None:
+    r = auto_engine.sugerir_limites("", "H1", "mt5", "forex")
+    assert r["ok"] is False
+    assert r["error"]
+
+
+def test_sem_periodo_recusa_com_motivo() -> None:
+    r = auto_engine.sugerir_limites("EURUSD", "", "mt5", "forex")
+    assert r["ok"] is False
+    assert r["error"]
+
+
+def test_par_incompativel_recusa_na_porta() -> None:
+    r = auto_engine.sugerir_limites("EURUSD", "H1", "mexc", "forex")
+    assert r["ok"] is False
+    assert "mexc" in r["error"].lower()
+
+
+def test_serie_curta_recusa_em_vez_de_chutar(monkeypatch) -> None:
+    _cenario(monkeypatch, n=10)
+    r = auto_engine.sugerir_limites("EURUSD", "H1", "mt5", "forex")
+    assert r["ok"] is False
+    assert "30" in r["error"]
+
+
+def test_modelo_mudo_recusa_com_motivo(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "backend.market_access.candles", lambda *a, **k: _velas(100),
+    )
+
+    def _muda(*a, **k):
+        raise RuntimeError("modelo sem resposta")
+
+    monkeypatch.setattr("backend.ai_inference.inferir", _muda)
+    r = auto_engine.sugerir_limites("EURUSD", "H1", "mt5", "forex")
+    assert r["ok"] is False
+    assert r["error"]
+
+
+def test_volatilidade_alta_pede_risco_menor(monkeypatch) -> None:
+    """A regra e direcional: mais volatilidade, menos risco por trade."""
+    _cenario(monkeypatch, amplitude=0.2)
+    calmo = auto_engine.sugerir_limites("EURUSD", "H1", "mt5", "forex")
+    _cenario(monkeypatch, amplitude=5.0)
+    agitado = auto_engine.sugerir_limites("EURUSD", "H1", "mt5", "forex")
+    assert calmo["ok"] is True and agitado["ok"] is True
+    assert agitado["limites"]["risco_por_trade_pct"] < calmo["limites"]["risco_por_trade_pct"]

@@ -3,7 +3,7 @@ import { apiBase } from '../lib/api';
 import { useAutoState, useUniversalPositions, usePositions } from '../hooks/queries';
 import { useAppStore } from '../hooks/useAppStore';
 import { useSinaisModelo } from '../hooks/useSinaisModelo';
-import { getCandles, getCandlesLivres, type MarketCandle } from '../lib/marketApi';
+import { getCandles, getCandlesLivres, LIMITE_VELAS_GRAFICO, type MarketCandle } from '../lib/marketApi';
 import { notify } from '../lib/notify';
 import { requestId } from '../lib/format';
 import { useEffect, useState, useRef } from 'react';
@@ -578,7 +578,7 @@ const [periodoDoGrafico, setPeriodoDoGrafico] = useState<string>('');
     setVelasPublicas(false);
     const carregar = async () => {
       try {
-        const r = await getCandles({ broker: broker as never, market: market as never, symbol: simbolo }, tempoEscolhido, 300);
+        const r = await getCandles({ broker: broker as never, market: market as never, symbol: simbolo }, tempoEscolhido, LIMITE_VELAS_GRAFICO);
         if (vivo) {
           candlesRef.current = r.candles;
           setCandles(r.candles);
@@ -635,7 +635,7 @@ const [periodoDoGrafico, setPeriodoDoGrafico] = useState<string>('');
     setVelasPublicas(false);
     const carregar = async () => {
       try {
-        const r = await getCandlesLivres(simbolo, tempoEscolhido, 300);
+        const r = await getCandlesLivres(simbolo, tempoEscolhido, LIMITE_VELAS_GRAFICO);
         if (vivo) {
           candlesRef.current = r.candles;
           setCandles(r.candles);

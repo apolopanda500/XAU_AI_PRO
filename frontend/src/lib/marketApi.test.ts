@@ -241,3 +241,31 @@ describe('marketApi — velas livres sem corretora', () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 });
+
+/*
+  SEM LIMITE DE 300 (12/10/2026, grafico desbloqueado)
+  =====================================================
+  Decisao do dono: o grafico mostra o maximo que as fontes entregam (1000 e
+  o teto das venues publicas). Um numero so (`LIMITE_VELAS_GRAFICO`), lido
+  pelos tres lugares que pedem vela — dois `300` escritos a mao em arquivos
+  diferentes e divergencia esperando acontecer.
+*/
+describe('limite de velas do grafico', () => {
+  async function lerFonte(relativo: string): Promise<string> {
+    // @ts-expect-error `node:fs` nao tem tipagem neste projeto (sem @types/node)
+    const { readFileSync } = await import('node:fs');
+    // @ts-expect-error `node:url` nao tem tipagem neste projeto (sem @types/node)
+    const { fileURLToPath } = await import('node:url');
+    const aqui = fileURLToPath(import.meta.url).replace(/\\/g, '/');
+    const pasta = aqui.slice(0, aqui.lastIndexOf('/'));
+    return String(readFileSync(`${pasta}/${relativo}`, 'utf-8'));
+  }
+
+  it('PROVA: os tres pedidos de vela usam a constante, nunca 300 fixo', async () => {
+    const pai = await lerFonte('../components/AcompanharModelos.tsx');
+    expect(pai).toContain('LIMITE_VELAS_GRAFICO');
+    expect(pai).not.toMatch(/getCandles(Livres)?\([^)]*,\s*300\s*[,)]/);
+    const grafico = await lerFonte('../components/charts/PriceChart.tsx');
+    expect(grafico).toContain('LIMITE_VELAS_GRAFICO');
+  });
+});

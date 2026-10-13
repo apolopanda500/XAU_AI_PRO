@@ -1420,5 +1420,131 @@ def _asset_digits(simbolo: str) -> int | None:
     return int(valor) if isinstance(valor, int) and 0 <= valor <= 8 else None
 
 
+#: Intervalo entre avaliacoes sugerido por timeframe. Nao e estrategia: e o
+#: passo minimo para nao reavaliar o mesmo candle varias vezes.
+INTERVALO_POR_TIMEFRAME = {
+    "M1": 5, "M5": 15, "M15": 30, "M30": 60, "H1": 60, "H4": 240,
+    "D1": 1440, "W1": 10080, "MN1": 43200,
+}
+
+
+def sugerir_limites(simbolo: str, timeframe: str, broker: str, market: str) -> dict[str, Any]:
+    """Limites de risco SUGERIDOS pela IA a partir do cenario atual.
+
+    O botao "IA" da sub-aba Risco chama isto: o modelo estuda as velas
+    atuais (edge e confianca reais da inferencia + volatilidade medida na
+    serie) e devolve numeros para os campos — NAO grava nada. Quem grava e
+    o operador, pelo "Aplicar", depois de ajustar. A tabela continua sendo
+    o lugar do manual.
+
+    Cada numero vem com o `base[campo]` dizendo de onde saiu. As faixas sao
+    iniciais e conservadoras, documentadas abaixo — e o operador as ajusta
+    na tabela, que e para isso que ela continua existindo.
+
+    `banca` NUNCA vem sugerida: dinheiro do operador nao e chutado.
+    """
+    alvo = str(simbolo or "").strip().upper()
+    if not alvo:
+        return {"ok": False, "error": "escolha o par antes de pedir sugestao a IA"}
+    periodo = str(timeframe or "").strip().upper()
+    if not periodo:
+        return {"ok": False, "error": "escolha o timeframe antes de pedir sugestao a IA"}
+    try:
+        from backend.broker_registry import normalize_read_scope as _escopo
+
+        escopo = _escopo(str(broker or ""), str(market or ""))
+    except ValueError as exc:
+        return {"ok": False, "error": f"combinação corretora/mercado não suportada: {exc}"}
+    try:
+        from backend.market_access import SemCaminhoError
+        from backend.market_access import candles as velas_da_corretora
+        from backend import ai_inference
+    except Exception as exc:  # noqa: BLE001 - dependencias acessorias
+        return {"ok": False, "error": f"IA indisponivel: {type(exc).__name__}"}
+    try:
+        linhas = velas_da_corretora(escopo["broker"], escopo["market"], alvo, periodo, 600)
+    except SemCaminhoError as exc:
+        return {"ok": False, "error": str(exc)}
+    except Exception as exc:  # noqa: BLE001 - leitura quebrou no meio
+        return {"ok": False, "error": f"sem serie para estudar: {type(exc).__name__}: {exc}"}
+    import pandas as pd
+
+    df = linhas if hasattr(linhas, "empty") else pd.DataFrame(linhas)
+    if df is None or getattr(df, "empty", True) or len(df) < 30:
+        return {"ok": False, "error": f"serie curta para estudar ({0 if df is None or getattr(df, 'empty', True) else len(df)} velas, minimo 30)"}
+    try:
+        inf = ai_inference.inferir(alvo, df, periodo)
+    except Exception as exc:  # noqa: BLE001 - modelo sem resposta
+        return {"ok": False, "error": f"modelo sem resposta para {alvo} {periodo}: {exc}"}
+    try:
+        conf = float(getattr(inf, "confianca", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        conf = 0.0
+    try:
+        edge = float(getattr(inf, "edge", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        edge = 0.0
+    try:
+        amplitude = (df["High"] - df["Low"]).abs()
+        fechamento = df["Close"].abs().replace(0, float("nan"))
+        atr_pct = float((amplitude / fechamento).mean() * 100.0)
+    except Exception:  # noqa: BLE001 - serie sem colunas esperadas
+        return {"ok": False, "error": "serie sem colunas OHLC para medir volatilidade"}
+    if not (atr_pct >= 0):
+        return {"ok": False, "error": "volatilidade nao medida na serie"}
+
+    def _faixa(valor: float, minimo: float, maximo: float) -> float:
+        return max(minimo, min(maximo, valor))
+
+    # Faixas iniciais (conservadoras). Cada uma tem o motivo em `base`, e a
+    # tabela permite ajustar — o padrao da IA e ponto de partida, nao trava.
+    if atr_pct < 0.5:
+        risco = 1.0
+    elif atr_pct < 1.5:
+        risco = 0.5
+    elif atr_pct < 3.0:
+        risco = 0.3
+    else:
+        risco = 0.2
+    risco = _faixa(risco, 0.1, 2.0)
+    if edge >= 0.15:
+        posicoes, por_dia, perda_dia = 3, 8, 3.0
+    elif edge >= 0.08:
+        posicoes, por_dia, perda_dia = 2, 5, 2.0
+    else:
+        posicoes, por_dia, perda_dia = 1, 3, 1.0
+    limites = {
+        "confianca_minima": _faixa(round(conf), 50, 90),
+        "edge_minimo": round(edge, 4) if edge > 0 else 0,
+        "risco_por_trade_pct": risco,
+        "max_posicoes": posicoes,
+        "max_operacoes_dia": por_dia,
+        "perda_diaria_max_pct": perda_dia,
+        "intervalo_minutos": INTERVALO_POR_TIMEFRAME.get(periodo, 30),
+    }
+    base = {
+        "confianca_minima": f"confianca atual do modelo: {conf:.0f}%",
+        "edge_minimo": f"edge medido: {edge:.4f}",
+        "risco_por_trade_pct": f"volatilidade {atr_pct:.2f}% na serie ({len(df)} velas)",
+        "max_posicoes": f"faixa por edge {edge:.4f}",
+        "max_operacoes_dia": f"faixa por edge {edge:.4f}",
+        "perda_diaria_max_pct": f"faixa por edge {edge:.4f}",
+        "intervalo_minutos": f"passo do periodo {periodo}",
+    }
+    return {
+        "ok": True,
+        "simbolo": alvo,
+        "timeframe": periodo,
+        "limites": limites,
+        "base": base,
+        "serie": {
+            "velas": len(df),
+            "atr_pct": round(atr_pct, 3),
+            "edge": round(edge, 4),
+            "confianca": round(conf, 1),
+        },
+    }
+
+
 # Instancia unica do processo.
 motor = MotorAuto(contract_size=_contract_size, asset_digits=_asset_digits)

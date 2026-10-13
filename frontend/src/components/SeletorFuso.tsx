@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   buscarCidades,
   listaOrdenada,
@@ -33,6 +33,24 @@ export function SeletorFuso({ onEscolher }: { onEscolher?: (zona: string) => voi
   const [busca, setBusca] = useState('');
   const [agora, setAgora] = useState(() => new Date());
   const raizRef = useRef<HTMLDivElement>(null);
+  /*
+    O MENU ABRE PARA O LADO QUE TEM ESPACO (12/10/2026).
+    =====================================================
+    MEDIDO pelo dono: o botao UTC-3 ficava fora da tela algumas vezes. O menu
+    abre para BAIXO (`top: 100%`) com ate 320px — e o rodape do grafico vive
+    no fim da pagina. Sem espaco embaixo, os itens de baixo sumiam para fora
+    da janela sem rolagem possivel.
+
+    Mede na abertura (layout, antes de pintar): topo do botao + 324px alem da
+    janela = abre para cima. O mesmo padrao do `MenuGrafico` ("nao sai da
+    tela"), so que vertical.
+  */
+  const [paraCima, setParaCima] = useState(false);
+  useLayoutEffect(() => {
+    if (!aberto) return;
+    const topo = raizRef.current?.getBoundingClientRect().top ?? 0;
+    setParaCima(topo + 324 > window.innerHeight);
+  }, [aberto]);
 
   useEffect(() => {
     const t = setInterval(() => setAgora(new Date()), 60_000);
@@ -96,7 +114,11 @@ export function SeletorFuso({ onEscolher }: { onEscolher?: (zona: string) => voi
       </button>
 
       {aberto && (
-        <div className="fuso-menu" role="listbox" aria-label="Fuso horario">
+        <div
+          className={`fuso-menu${paraCima ? ' para-cima' : ''}`}
+          role="listbox"
+          aria-label="Fuso horario"
+        >
           {/*
             `auto` SEPARADO no topo. Itens que podem ser escolhidos ficam com
             `role="option"`: misturar um item de acao com itens de escolha e o

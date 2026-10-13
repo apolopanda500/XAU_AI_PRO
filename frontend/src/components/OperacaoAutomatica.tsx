@@ -600,6 +600,66 @@ export default function OperacaoAutomatica({
     o que não veio continua valendo — e o campo vazio não vai no payload
     (mesma regra de `limitesNumericos` acima).
   */
+  /*
+    A IA SUGERE, O OPERADOR GRAVA (12/10/2026).
+    ==================================================
+    Decisao do dono: botao de IA no controle de risco para a IA estudar o
+    momento e configurar os riscos sozinha — MAS com o botao (automatico) E
+    a tabela (manual). A sugestao PREENCHE os campos e mostra o motivo de
+    cada numero (`base`); o operador ajusta os padroes e grava pelo Aplicar.
+    Nada aqui liga o motor e nada grava sozinho: preencher nao e aplicar.
+  */
+  const [baseIA, setBaseIA] = useState<Record<string, string> | null>(null);
+  const sugerirPelaIA = async () => {
+    if (ocupado) return;
+    if (!simbolo) {
+      setStatus('Escolha o par antes de pedir sugestão à IA.');
+      return;
+    }
+    if (!broker) {
+      setStatus('Escolha a conta em Configurações → Conexões antes de pedir sugestão à IA.');
+      return;
+    }
+    setOcupado(true);
+    try {
+      const r = await fetch(`${apiBase()}/api/auto/sugerir-limites`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ simbolo, timeframe, broker, market }),
+        signal: AbortSignal.timeout(30000),
+      });
+      const d = (await r.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        limites?: Record<string, number>;
+        base?: Record<string, string>;
+        serie?: { velas?: number; atr_pct?: number; edge?: number; confianca?: number };
+      };
+      if (!r.ok || d.ok === false || !d.limites) {
+        setStatus(`IA sem sugestão: ${d.error ?? `HTTP ${r.status}`}`);
+        notify('IA sem sugestão', String(d.error ?? ''));
+        return;
+      }
+      const preenchidos: Record<string, string> = {};
+      for (const [campo, valor] of Object.entries(d.limites)) {
+        if (typeof valor === 'number' && Number.isFinite(valor)) preenchidos[campo] = String(valor);
+      }
+      setLimites((atual) => ({ ...atual, ...preenchidos }));
+      setBaseIA(d.base ?? null);
+      const s = d.serie;
+      setStatus(
+        `IA sugeriu pelos ${s?.velas ?? '?'} candles de ${simbolo} ${timeframe || ''}: ` +
+          `edge ${s?.edge ?? '?'}, confiança ${s?.confianca ?? '?'}%, volatilidade ${s?.atr_pct ?? '?'}%. ` +
+          `Confira, ajuste e aplique.`,
+      );
+      notify('IA sugeriu limites', 'Confira os valores e o motivo de cada um antes de aplicar.');
+    } catch (e) {
+      setStatus(`Gateway indisponível: ${e instanceof Error ? e.message : 'erro'}`);
+    } finally {
+      setOcupado(false);
+    }
+  };
+
   const aplicarLimites = async () => {
     if (ocupado) return;
     const corpo = limitesNumericos();
@@ -1077,6 +1137,15 @@ export default function OperacaoAutomatica({
           <div className="robo-limites-acoes">
             <button
               type="button"
+              className="btn primary"
+              onClick={() => void sugerirPelaIA()}
+              disabled={ocupado}
+              title="A IA estuda o momento (velas, edge, confiança, volatilidade) e preenche os campos. Não grava e não liga: confira, ajuste e aplique."
+            >
+              {ocupado ? 'Estudando…' : 'IA sugere limites'}
+            </button>
+            <button
+              type="button"
               className="btn"
               onClick={() => void aplicarLimites()}
               disabled={ocupado}
@@ -1085,6 +1154,21 @@ export default function OperacaoAutomatica({
               {ocupado ? 'Aplicando.' : 'Aplicar limites ao motor'}
             </button>
           </div>
+          {/*
+            O MOTIVO DE CADA NUMERO (12/10/2026). A IA devolve `base[campo]` e
+            a tela mostra — sem isso a sugestao seria numero magico, e numero
+            magico em tela de risco e o operador confiando no que nao entende.
+            E aqui que ele ajusta "os padroes da IA": edita o campo e aplica.
+          */}
+          {baseIA && Object.keys(baseIA).length > 0 && (
+            <ul className="hint robo-ia-base" data-testid="ia-base">
+              {Object.entries(baseIA).map(([campo, motivo]) => (
+                <li key={campo}>
+                  <b>{campo}</b>: {motivo}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 

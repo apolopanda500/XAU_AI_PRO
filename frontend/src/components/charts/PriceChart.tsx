@@ -19,6 +19,7 @@ import {
 import { clsPnl } from '../../lib/format';
 import {
   getCandles,
+  LIMITE_VELAS_GRAFICO,
   type MarketBroker,
   type MarketCandle,
   type MarketKind,
@@ -883,7 +884,15 @@ const activeMarket = mercadoParaConsulta(market, broker);
       timeScale: { timeVisible: true, secondsVisible: false, borderVisible: false },
       rightPriceScale: { borderVisible: false },
       crosshair: {
-        mode: CrosshairMode.Magnet,
+        /*
+          MOUSE LIVRE EM TODA PARTE (12/10/2026, decisao do dono).
+          ==========================================================
+          Era `CrosshairMode.Magnet`: o cursor grudava no candle mais proximo
+          e so andava solto no vazio a frente — "o mouse so e livre onde nao
+          tem vela". `Normal` anda em toda parte; a legenda continua seguindo
+          (ela ja trata ponto ausente, ver `aoMirar`).
+        */
+        mode: CrosshairMode.Normal,
         vertLine: { color: 'rgba(139,147,167,.4)', labelBackgroundColor: '#4f7cff' },
         horzLine: { color: 'rgba(139,147,167,.4)', labelBackgroundColor: '#4f7cff' },
       },
@@ -1055,7 +1064,7 @@ useEffect(() => {
         const result = await getCandles(
           { broker, market: activeMarket, symbol: symbol.toUpperCase() },
           activeTimeframe,
-          300,
+          LIMITE_VELAS_GRAFICO,
           { signal: controller.signal },
         );
         if (active) {

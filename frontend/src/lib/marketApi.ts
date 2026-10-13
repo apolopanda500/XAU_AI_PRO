@@ -13,6 +13,17 @@ export const MARKET_ENDPOINTS = {
   publicOhlc: '/api/publico/ohlc',
 } as const;
 
+/*
+  QUANTAS VELAS O GRAFICO PEDE (12/10/2026, grafico desbloqueado).
+  =================================================================
+  Decisao do dono: sem limite de 300 — o grafico mostra o maximo que as
+  fontes entregam. 1000 e o teto das venues publicas (Binance/MEXC limitam
+  em 1000 por chamada; Yahoo limita por `range=5d`; o MT5 aceita 2000). Um
+  numero so, num lugar so: tres chamadas com tres numeros e divergencia
+  esperando acontecer.
+*/
+export const LIMITE_VELAS_GRAFICO = 1000;
+
 export type MarketBroker = 'mt5' | 'binance' | 'mexc' | 'bybit' | 'okx';
 export type MarketKind =
   | 'forex'

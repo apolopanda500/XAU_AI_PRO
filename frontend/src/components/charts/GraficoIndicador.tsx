@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { createChart, type IChartApi, type ISeriesApi, type UTCTimestamp } from 'lightweight-charts';
+import { createChart, CrosshairMode, type IChartApi, type ISeriesApi, type UTCTimestamp } from 'lightweight-charts';
 import type { MarketCandle } from '../../lib/marketApi';
 import { rsiValores, macdValores } from './PriceChart';
 
@@ -58,7 +58,9 @@ export function GraficoIndicador({ candles, indicador, altura = 132 }: Props) {
       },
       rightPriceScale: { borderVisible: false },
       timeScale: { borderVisible: false, visible: false },
-      crosshair: { mode: 0 },
+      // Mouse livre tambem no painel do indicador (12/10/2026, mesma decisao
+      // do grafico: `0` e Magnet, `1` e Normal).
+      crosshair: { mode: CrosshairMode.Normal },
       handleScale: { axisPressedMouseMove: false },
     });
     chartRef.current = chart;

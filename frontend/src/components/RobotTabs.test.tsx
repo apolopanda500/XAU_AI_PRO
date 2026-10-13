@@ -1033,3 +1033,114 @@ describe('um painel de risco so, na sub-aba Risco (12/10/2026)', () => {
     expect(total).toBe(1);
   });
 });
+
+/*
+  A IA SUGERE, O OPERADOR GRAVA (12/10/2026)
+  ==========================================
+  Decisao do dono: botao de IA no controle de risco para estudar o momento e
+  configurar os riscos — com o botao (automatico) E a tabela (manual). A
+  sugestao preenche os campos e mostra o motivo de cada numero; quem grava e
+  o Aplicar, depois de ajustar.
+*/
+describe('IA sugere limites, operador grava (12/10/2026)', () => {
+  const sugestao = {
+    ok: true,
+    limites: {
+      confianca_minima: 82,
+      edge_minimo: 0.12,
+      risco_por_trade_pct: 0.5,
+      max_posicoes: 2,
+      max_operacoes_dia: 5,
+      perda_diaria_max_pct: 2,
+      intervalo_minutos: 60,
+    },
+    base: {
+      confianca_minima: 'confianca atual do modelo: 82%',
+      risco_por_trade_pct: 'volatilidade 1.10% na serie (100 velas)',
+    },
+    serie: { velas: 100, atr_pct: 1.1, edge: 0.12, confianca: 82 },
+  };
+
+  function naRisco() {
+    const { container } = render(<RobotTabs />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Risco' }));
+    return container;
+  }
+
+  async function abaRiscoAberta(container: HTMLElement) {
+    await waitFor(() => {
+      expect(container.querySelector('[aria-label="Controle de risco"]')).toBeTruthy();
+    });
+  }
+
+  it('PROVA: "IA sugere limites" preenche os campos e mostra o motivo', async () => {
+    vi.stubGlobal(
+      'fetch',
+      async (url: string, init?: RequestInit) => {
+        estado.chamadas.push({ url: String(url), body: JSON.parse(String(init?.body ?? '{}')) });
+        if (String(url).includes('/api/auto/sugerir-limites')) {
+          return { ok: true, json: async () => sugestao };
+        }
+        return { ok: true, json: async () => ({ ok: true }) };
+      },
+    );
+    estado.auto = { ativo: false, simbolo: 'GOLD', timeframe: 'H1', broker: 'mt5', market: 'metals' };
+    const container = naRisco();
+    await abaRiscoAberta(container);
+
+    fireEvent.click(screen.getByRole('button', { name: 'IA sugere limites' }));
+    await waitFor(() => {
+      const campo = container.querySelector(
+        '[aria-label="Confiança mínima (%)"]',
+      ) as HTMLInputElement | null;
+      expect(campo?.value).toBe('82');
+    });
+    // O motivo de cada numero esta na tela — sem ele seria numero magico.
+    const base = screen.getByTestId('ia-base').textContent ?? '';
+    expect(base).toContain('confianca atual do modelo');
+    // E nada foi gravado sozinho: sugerir preenche, Aplicar grava.
+    expect(estado.chamadas.some((c) => c.url.includes('/api/auto/config'))).toBe(false);
+  });
+
+  it('PROVA: a sugestao leva par, periodo, corretora e mercado', async () => {
+    let corpo: Record<string, unknown> = {};
+    vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+      if (String(url).includes('/api/auto/sugerir-limites')) {
+        corpo = JSON.parse(String(init?.body ?? '{}'));
+        return { ok: true, json: async () => sugestao };
+      }
+      return { ok: true, json: async () => ({ ok: true }) };
+    });
+    estado.auto = { ativo: false, simbolo: 'GOLD', timeframe: 'H1', broker: 'mt5', market: 'metals' };
+    const container = naRisco();
+    await abaRiscoAberta(container);
+
+    fireEvent.click(screen.getByRole('button', { name: 'IA sugere limites' }));
+    await waitFor(() => expect(corpo.simbolo).toBe('GOLD'));
+    expect(corpo.timeframe).toBe('H1');
+    expect(corpo.broker).toBe('mt5');
+  });
+
+  it('PROVA NEGATIVA: IA sem resposta nao preenche nem apaga nada', async () => {
+    vi.stubGlobal('fetch', async (url: string) => {
+      if (String(url).includes('/api/auto/sugerir-limites')) {
+        return { ok: false, status: 503, json: async () => ({ ok: false, error: 'sem serie para estudar' }) };
+      }
+      return { ok: true, json: async () => ({ ok: true }) };
+    });
+    estado.auto = { ativo: false, simbolo: 'GOLD', timeframe: 'H1', broker: 'mt5', market: 'metals' };
+    const container = naRisco();
+    await abaRiscoAberta(container);
+
+    fireEvent.click(screen.getByRole('button', { name: 'IA sugere limites' }));
+    await waitFor(() => {
+      const texto = document.querySelector('.robo-observacao')?.textContent ?? '';
+      expect(texto).toContain('sem serie');
+    });
+    const campo = container.querySelector(
+      '[aria-label="Confiança mínima (%)"]',
+    ) as HTMLInputElement | null;
+    expect(campo?.value).toBe('');
+    expect(screen.queryByTestId('ia-base')).toBeNull();
+  });
+});

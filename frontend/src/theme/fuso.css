@@ -53,6 +53,16 @@
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
 }
 
+/*
+  MENU PARA CIMA (12/10/2026). Sem espaco embaixo do botao (rodape no fim da
+  pagina), o menu abre para cima em vez de vazar para fora da janela. A
+  decisao e do componente (`paraCima`), que mede na abertura.
+*/
+.fuso-menu.para-cima {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+
 .fuso-item {
   display: grid;
   grid-template-columns: 14px 1fr auto;

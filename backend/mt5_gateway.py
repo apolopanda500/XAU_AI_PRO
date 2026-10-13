@@ -3759,7 +3759,7 @@ class Handler(BaseHTTPRequestHandler):
         # com o gateway local (9001, ver `apiBase()`): apertar "Ligar" devolvia
         # 404 e a operacao automatica NUNCA era ligada pelo app. A ordem continua
         # indo para `mt5.order_send()` — o mercado e real, em conta DEMO.
-        if parsed.path in ("/api/auto/config", "/api/auto/start", "/api/auto/stop", "/api/auto/tick"):
+        if parsed.path in ("/api/auto/config", "/api/auto/start", "/api/auto/stop", "/api/auto/tick", "/api/auto/sugerir-limites"):
             length = int(self.headers.get("Content-Length", "0") or 0)
             try:
                 corpo = json.loads(self.rfile.read(length) or b"{}") if length else {}
@@ -3777,6 +3777,19 @@ class Handler(BaseHTTPRequestHandler):
                     self._send(200, m.ligar()); return
                 if parsed.path == "/api/auto/stop":
                     self._send(200, m.desligar()); return
+
+                # /api/auto/sugerir-limites: a IA estuda o cenario e SUGERE.
+                # Nao grava nada e nao liga nada: quem grava e o operador pelo
+                # "Aplicar". E leitura com corpo (par+periodo+escopo), por isso
+                # POST — e sem gate de plano, pelo mesmo motivo do `config`:
+                # declarar/sugerir nao executa.
+                if parsed.path == "/api/auto/sugerir-limites":
+                    self._send(200, auto_engine.sugerir_limites(
+                        str(corpo.get("simbolo") or ""),
+                        str(corpo.get("timeframe") or ""),
+                        str(corpo.get("broker") or ""),
+                        str(corpo.get("market") or ""),
+                    )); return
 
                 # /api/auto/tick: UM ciclo sob demanda, sem depender da thread.
                 import pandas as pd

@@ -163,6 +163,24 @@ export default function SeletorModelo() {
   // modelo. Filtrar por `temModelo` esconderia o par inteiro da corretora.
   const simbolos = useMemo(() => catalogo.map((a) => a.symbol), [catalogo]);
   const comModelo = useMemo(() => new Set(modelos.map((m) => m.symbol)), [modelos]);
+  /*
+    SEM CATALOGO, OS MODELOS SAO A LISTA (12/10/2026).
+    ==================================================
+    MEDIDO no app instalado: sem corretora escolhida, o catalogo vem vazio e
+    os dois `<select>` nasciam DESABILITADOS e vazios — "nao tem como clicar
+    em nada". A lista de MODELOS (`/api/ai/trained`) nao precisa de corretora,
+    e cada modelo tem par: sem catalogo, os pares dos modelos treinados sao
+    opcoes reais (tem artefato, tem periodo), marcadas como tal. Nada e
+    presumido: continua sem escolha ate o operador clicar.
+  */
+  const simbolosDosModelos = useMemo(
+    () => [...new Set(modelos.map((m) => String(m.symbol || '').toUpperCase()).filter(Boolean))],
+    [modelos],
+  );
+  const paresElegiveis = useMemo(() => {
+    const vistos = new Set(simbolos);
+    return [...simbolos, ...simbolosDosModelos.filter((s) => !vistos.has(s))];
+  }, [simbolos, simbolosDosModelos]);
 
   /*
     A LISTA DE PARES: SO OS QUE TEM MODELO, E O RESTO A UM CLIQUE (09/10/2026)
@@ -193,10 +211,10 @@ export default function SeletorModelo() {
   */
   const [mostrarTodos, setMostrarTodos] = useState(false);
   const simbolosComModelo = useMemo(() => {
-    const comModeloOrdenados = simbolos.filter((s) => comModelo.has(s));
-    if (mostrarTodos) return simbolos;
+    const comModeloOrdenados = paresElegiveis.filter((s) => comModelo.has(s));
+    if (mostrarTodos) return paresElegiveis;
     return comModeloOrdenados;
-  }, [simbolos, comModelo, mostrarTodos]);
+  }, [paresElegiveis, comModelo, mostrarTodos]);
   const totalSemModelo = useMemo(
     () => simbolos.length - simbolos.filter((s) => comModelo.has(s)).length,
     [simbolos, comModelo],
@@ -204,8 +222,9 @@ export default function SeletorModelo() {
 
   const simbolo = useMemo(() => {
     const atual = (selectedSymbol || '').toUpperCase();
-    // O par já escolhido vence, desde que ainda exista no catálogo.
-    if (atual && simbolos.includes(atual)) return atual;
+    // O par já escolhido vence, desde que ainda exista nas opcoes (catalogo
+    // ou modelos — ver `paresElegiveis`).
+    if (atual && paresElegiveis.includes(atual)) return atual;
 
     /*
       SEM ESCOLHA, SEM PAR (11/10/2026, decisao do dono: nada de BTCUSD fixo).
@@ -220,7 +239,7 @@ export default function SeletorModelo() {
       da tela recusa nomeando este seletor.
     */
     return '';
-  }, [selectedSymbol, simbolos]);
+  }, [selectedSymbol, paresElegiveis]);
 
   const visiveis = useMemo(
     () => modelos.filter((m) => m.symbol === simbolo),
