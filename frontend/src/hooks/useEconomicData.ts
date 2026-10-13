@@ -11,7 +11,7 @@ import type { ImpactLevel } from '../types';
 import { categoriaEvento, eventoTraduzido, traduzirEvento } from '../components/tabs/traduzirEvento';
 import { zonaAtual } from './useFuso';
 
-const API = `${apiBase()}`;
+// Base resolvida por chamada (13/10/2026), nunca congelada no topo do modulo.
 /** Chave para cache no localStorage */
 const CACHE_KEY = 'xau_ai_pro_calendario_cache';
 /** Tempo de validade do cache: 5 minutos */
@@ -261,7 +261,7 @@ export function useEconomicData(
       // 200 e o teto que a propria rota aplica (`min(limit, 200)`), e cabe a
       // janela de 14 dias com folga. Um numero pequeno aqui nao economiza nada:
       // esconde dados que a rota ja pagou para buscar.
-      const resposta = await fetch(`${API}/api/economic/calendar?limit=200&days=14&tz=${zonaAtual()}`, {
+      const resposta = await fetch(`${apiBase()}/api/economic/calendar?limit=200&days=14&tz=${zonaAtual()}`, {
         method: 'GET',
         signal: AbortSignal.timeout(8000),
       });

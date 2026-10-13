@@ -374,18 +374,30 @@ describe('a base e resolvida ANTES de qualquer modulo que a congele', () => {
     }
   });
 
-  it('PROVA: os nove modulos que congelam a baseexistam, e a base e a resolvida', async () => {
+  it('PROVA: nenhum modulo congela mais a base — a contagem zerou em 13/10/2026', async () => {
     /*
-      A lista e medida, nao lembrada: se um arquivo parar de congelar a base,
-      esta contagem muda e o proximo ciclo sabe ler o numero em vez de
-      procurar o defeito de novo.
+      NENHUM `const API = apiBase()` NO TOPO (13/10/2026).
+      =====================================================
+      MEDIDO nas capturas do dono (12:12, MT5 fechado): a aba Plano mostrava
+      "Assinatura indisponível: Failed to fetch" e o journal "Spot/Futuros
+      indisponível: Failed to fetch" — enquanto o grafico (que resolve a base
+      por chamada) lia candles normalmente, na mesma janela, na mesma sessao.
 
-      MEDIDO: 9 arquivos com `const <algo>API = `${apiBase()}`` no topo.
+      A CAUSA era esta lista: dez modulos congelavam `apiBase()` no
+      carregamento, antes de o bootstrap resolver a porta. Com a base congelada
+      na 9001 padrao — que e onde o terminal64 do MT5 escuta — o sintoma
+      dependia do MT5: fechado, conexao recusada ("Failed to fetch"); aberto,
+      outra resposta. O operador culpava o MT5 pelo que era ordem de
+      carregamento do frontend (AGENTS.md 5).
+
+      O corretivo: todos os dez resolvem `apiBase()` POR CHAMADA. Esta lista
+      continua medida, nao lembrada: se um arquivo voltar a congelar, a
+      contagem sai de zero e o teste reprova nomeando o arquivo.
     */
     // @ts-expect-error `node:fs` nao tem tipagem neste projeto
     const { readFileSync } = await import('node:fs');
 
-    const congelam = [
+    const suspeitos = [
       '../hooks/queries.ts',
       '../hooks/useAICommunication.ts',
       '../hooks/useEconomicData.ts',
@@ -395,14 +407,18 @@ describe('a base e resolvida ANTES de qualquer modulo que a congele', () => {
       '../components/CopilotPanel.tsx',
       '../components/SeletorModelo.tsx',
       '../components/UniversalLiveTerminal.tsx',
+      '../components/tabs/PortfolioHomeSafe.tsx',
     ];
     const achados: string[] = [];
-    for (const arquivo of congelam) {
+    for (const arquivo of suspeitos) {
       const codigo = semComentarios(String(readFileSync(new URL(arquivo, import.meta.url), 'utf-8')));
-      if (/const\s+\w*[Aa][Pp][Ii]\w*\s*=/.test(codigo)) achados.push(arquivo);
+      // O padrao exato do defeito: `const API = `${apiBase()}``. O regex
+      // antigo (`const ...Api... =`) dava falso positivo em `const dadosApi`
+      // (o payload do calendario) — media o NOME, nao o congelamento.
+      if (/const\s+\w+\s*=\s*`\$\{apiBase\(\)\}`/.test(codigo)) achados.push(arquivo);
     }
     // A contagem e medida: se mudar, o numero do comentario precisa mudar.
-    expect(achados.length, `congelam a base: ${achados.join(', ')}`).toBe(9);
+    expect(achados.length, `voltaram a congelar a base: ${achados.join(', ')}`).toBe(0);
 
     // E, com a porta resolvida ANTES do import, a base deles e a nova.
     definir('http://127.0.0.1:9011');

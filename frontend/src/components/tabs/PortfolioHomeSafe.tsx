@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { apiBase } from '../../lib/api';
 import { brokerLabel, MARKET_LABELS } from '../../lib/brokerCatalog';
 
-const API = `${apiBase()}`;
+// Base resolvida por chamada (13/10/2026), nunca congelada no topo do modulo.
 
 /**
  * Fontes do patrimonio, derivadas do catalogo de corretoras.
@@ -56,10 +56,10 @@ async function loadPortfolio(): Promise<Row[]> {
     sources.map(async ([name, market, qm, broker]) => {
       try {
         const [a, p] = await Promise.all([
-          fetch(`${API}/api/universal/account?broker=${broker}&market=${qm}`, {
+          fetch(`${apiBase()}/api/universal/account?broker=${broker}&market=${qm}`, {
             signal: AbortSignal.timeout(8000),
           }),
-          fetch(`${API}/api/universal/positions?broker=${broker}&market=${qm}`, {
+          fetch(`${apiBase()}/api/universal/positions?broker=${broker}&market=${qm}`, {
             signal: AbortSignal.timeout(8000),
           }),
         ]);

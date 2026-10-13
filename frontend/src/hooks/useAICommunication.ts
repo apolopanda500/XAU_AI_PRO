@@ -27,7 +27,7 @@ import { useCallback, useState } from 'react';
 import { apiBase } from '../lib/api';
 import { useAppStore } from './useAppStore';
 
-const API = `${apiBase()}`;
+// Base resolvida por chamada (13/10/2026), nunca congelada no topo do modulo.
 
 export type DirecaoSinal = 'BUY' | 'SELL' | 'NEUTRAL';
 
@@ -111,7 +111,7 @@ async function pedirPrevisao(
   timeframe: string,
   signal?: AbortSignal,
 ): Promise<ResultadoInferencia> {
-  const url = `${API}/api/ai/predict?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}`;
+  const url = `${apiBase()}/api/ai/predict?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}`;
   let r: Response;
   try {
     r = await fetch(url, { signal: signal ?? AbortSignal.timeout(20000) });
@@ -176,7 +176,7 @@ export async function buscarModelosTreinados(
   signal?: AbortSignal,
 ): Promise<{ modelos: ModeloTreinado[]; cpuThreads: number; erro: string }> {
   try {
-    const r = await fetch(`${API}/api/ai/trained`, {
+    const r = await fetch(`${apiBase()}/api/ai/trained`, {
       signal: signal ?? AbortSignal.timeout(10000),
     });
     if (!r.ok) return { modelos: [], cpuThreads: 0, erro: `HTTP ${r.status}` };

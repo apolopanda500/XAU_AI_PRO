@@ -1,6 +1,6 @@
 import { apiBase } from './api';
 
-const API = `${apiBase()}`;
+// Base resolvida por chamada (13/10/2026), nunca congelada no topo do modulo.
 
 /**
  * Corretoras que aceitam API key.
@@ -79,7 +79,7 @@ export function isExchange(broker: Broker): broker is Exchange {
 }
 
 export async function requestConnection(path: string, method = 'GET', payload?: object) {
-  const response = await fetch(`${API}${path}`, {
+  const response = await fetch(`${apiBase()}${path}`, {
     method,
     signal: AbortSignal.timeout(20000),
     ...(payload

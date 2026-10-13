@@ -33,7 +33,7 @@ import { escopoAtivo } from '../lib/escopoAtivo';
 import { useAutoState } from '../hooks/queries';
 import type { Broker } from '../lib/connections';
 
-const API = `${apiBase()}`;
+// Base resolvida por chamada (13/10/2026), nunca congelada no topo do modulo.
 
 type Modelo = {
   id: string;
@@ -141,7 +141,7 @@ export default function SeletorModelo() {
 
   useEffect(() => {
     const controller = new AbortController();
-    void fetch(`${API}/api/ai/trained`, { signal: controller.signal })
+    void fetch(`${apiBase()}/api/ai/trained`, { signal: controller.signal })
       .then((r) => r.json())
       .then((d: { models?: Modelo[] }) => {
         if (controller.signal.aborted) return;

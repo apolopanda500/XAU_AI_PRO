@@ -302,7 +302,7 @@ export function resumir(deals: readonly Deal[]): Resumo {
   };
 }
 
-const API = `${apiBase()}`;
+// Base resolvida por chamada (13/10/2026), nunca congelada no topo do modulo.
 
 /** Corretoras consultadas. MT5 e as cripto; o resto e derivado. */
 const BROKERS = ['mt5', 'mexc', 'binance'] as const;
@@ -465,7 +465,7 @@ export function useHistorico(options: HistoricoOptions = {}): HistoricoState {
             days,
           });
           if (symbol.trim()) params.set('symbol', symbol.trim());
-          const resposta = await fetch(`${API}/api/universal/history?${params}`, {
+          const resposta = await fetch(`${apiBase()}/api/universal/history?${params}`, {
             signal: AbortSignal.timeout(15000),
           });
           /*

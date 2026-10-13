@@ -28,7 +28,7 @@ import { corDaOperacao } from '../lib/historicoMt5';
 import { BROKERS, MARKETS_BY_BROKER, MARKET_LABELS, compatibleMarket } from '../lib/brokerCatalog';
 import '../theme/auto-engine.css';
 
-const API = `${apiBase()}`;
+// Base resolvida por chamada (13/10/2026), nunca congelada no topo do modulo.
 
 // Os CAMPOS QUE O BACKEND EXIGE (2026-10-04).
 //
@@ -179,7 +179,7 @@ const [limites, setLimites] = useState<Limites>({ ...ZERO });
 
   useEffect(() => {
     const controller = new AbortController();
-    void fetch(`${API}/api/ai/trained`, { signal: controller.signal })
+    void fetch(`${apiBase()}/api/ai/trained`, { signal: controller.signal })
       .then((r) => r.json())
       .then((d: { models?: Modelo[] }) => {
         if (controller.signal.aborted) return;
@@ -294,7 +294,7 @@ const [limites, setLimites] = useState<Limites>({ ...ZERO });
     setOcupado(true);
     setStatus('Enviando…');
     try {
-      const r = await fetch(`${API}${caminho}`, {
+      const r = await fetch(`${apiBase()}${caminho}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(corpo ?? {}),
@@ -343,7 +343,7 @@ const [limites, setLimites] = useState<Limites>({ ...ZERO });
     if (ocupado || ativo) return;
     setOcupado(true);
     try {
-      const cfg = await fetch(`${API}/api/auto/config`, {
+      const cfg = await fetch(`${apiBase()}/api/auto/config`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...limites, simbolo, timeframe, broker, market }),
@@ -369,7 +369,7 @@ const [limites, setLimites] = useState<Limites>({ ...ZERO });
       // antigo enquanto o motor usava o novo.
       setPendente(false);
       hidratouRef.current = true;
-      const ini = await fetch(`${API}/api/auto/start`, {
+      const ini = await fetch(`${apiBase()}/api/auto/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: '{}',

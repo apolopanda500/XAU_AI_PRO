@@ -31,7 +31,7 @@ import { classificarJournal } from '../lib/journalKind';
 import '../theme/mini-terminal.css';
 import '../theme/mt5-terminal.css';
 
-const API = `${apiBase()}`;
+// Base resolvida por chamada (13/10/2026), nunca congelada no topo do modulo.
 
 /* Hooks fora do componente: removidos (12/10/2026). O que liam vive dentro do componente. */
 
@@ -379,7 +379,7 @@ export default function UniversalLiveTerminal() {
     )
       return;
     try {
-      const r = await fetch(`${API}/api/ea/close`, {
+      const r = await fetch(`${apiBase()}/api/ea/close`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

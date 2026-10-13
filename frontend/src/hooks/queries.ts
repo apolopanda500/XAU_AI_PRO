@@ -31,9 +31,11 @@ export function useCoreHealth() {
 }
 
 type Json = Record<string, unknown>;
-const API = `${apiBase()}`;
+// A base e resolvida POR CHAMADA via `apiBase()` (13/10/2026): congelar num
+// `const` de modulo quebrava planos e journal quando o modulo carregava antes
+// do bootstrap ("Failed to fetch" sem o MT5, que escuta na 9001 padrao).
 const get = async <T>(path: string, timeoutMs = 8000): Promise<T> => {
-  const r = await fetch(`${API}${path}`, { signal: AbortSignal.timeout(timeoutMs) });
+  const r = await fetch(`${apiBase()}${path}`, { signal: AbortSignal.timeout(timeoutMs) });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.json() as Promise<T>;
 };
@@ -287,7 +289,7 @@ export function useCommand(route: string, timeoutMs = 15000) {
       if (busy) return null;
       setBusy(true);
       try {
-        const r = await fetch(`${API}${route}`, {
+        const r = await fetch(`${apiBase()}${route}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
@@ -328,7 +330,7 @@ export function useReconcile() {
     if (busy) return;
     setBusy(true);
     try {
-      const r = await fetch(`${API}/api/intents/reconcile`, {
+      const r = await fetch(`${apiBase()}/api/intents/reconcile`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
