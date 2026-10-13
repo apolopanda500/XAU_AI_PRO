@@ -608,17 +608,27 @@ const [periodoDoGrafico, setPeriodoDoGrafico] = useState<string>('');
     da conta); sem ela, este pede `/api/publico/ohlc` — que nao recebe broker
     e declara `fonte` + `execucao: False`.
 
-    O PRECO PUBLICO NUNCA ARMA ORDEM: `precoArmado` continua `null` (ver o
+    A CONDICAO E `!configurado`, E NAO `!broker` (12/10/2026, 0 candles).
+    =======================================================================
+    MEDIDO no app instalado, MT5 fechado: par escolhido, corretora escolhida
+    (`mt5`), mas `market === ''` — sem catalogo (o terminal nao lista ativos
+    fechado) nao ha ficha, sem ficha nao ha mercado, sem mercado o
+    `configurado` e falso. O efeito com conta pulava (sem mercado) E este
+    pulava (com broker): par + corretora e ZERO consultas — "0 candles" sem
+    erro e sem aviso. Dois guardas que juntos cobriam tudo menos o caso real.
+
+    Agora: configurado manda; sem configuracao e com par, o livre manda. O
+    PRECO PUBLICO NUNCA ARMA ORDEM: `precoArmado` continua `null` (ver o
     guarda no efeito do preco e no `motivoRecusa`), entao o painel mostra os
     niveis derivados? NAO — sem preco armado nao ha `slPreco`/`tpPreco`, e o
     envio recusa nomeando a conta. Ver grafico e uma coisa; operar e outra.
   */
   useEffect(() => {
-    if (broker || !simbolo) return undefined;
+    if (configurado || !simbolo) return undefined;
     let vivo = true;
-    // Saiu a corretora no meio da sessao: o que esta na tela e dela, e dado
-    // publico por cima de dado de conta seria o AGENTS.md 5 (mesma regra do
-    // zera da troca de par, acima).
+    // Saiu a configuracao no meio da sessao: o que esta na tela era dela, e
+    // dado publico por cima de dado de conta seria o AGENTS.md 5 (mesma regra
+    // do zera da troca de par, acima).
     candlesRef.current = [];
     setCandles(undefined);
     setFonteVelas(null);
@@ -645,7 +655,7 @@ const [periodoDoGrafico, setPeriodoDoGrafico] = useState<string>('');
       vivo = false;
       window.clearInterval(t);
     };
-  }, [broker, simbolo, tempoEscolhido]);
+  }, [broker, market, simbolo, tempoEscolhido, configurado]);
 
   /*
     TROCOU O PAR, VOLTA AO PERIODO DO MODELO DESTE PAR (09/10/2026)

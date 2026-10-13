@@ -283,8 +283,11 @@ describe('o grafico existe com o MOTOR DESLIGADO', () => {
     render(<AcompanharModelos />);
 
     await waitFor(() => expect(screen.getByTestId('grafico')).toBeTruthy());
-    // Nenhuma consulta com mercado inventado.
-    expect(estado.pedidos).toHaveLength(0);
+    // Nenhuma consulta com mercado inventado: o que pode sair e a rota
+    // livre, sem broker (ver o describe proprio). Se o componente pedir como
+    // MT5/forex aqui, e palpite — e este teste reprova.
+    await waitFor(() => expect(estado.pedidos.length).toBeGreaterThan(0));
+    expect(estado.pedidos.every((p) => p.market === 'livre')).toBe(true);
   });
 });
 
@@ -347,7 +350,9 @@ it('PROVA: BTCUSD (crypto) e EURUSD (forex) nao recebem o mesmo mercado', async 
     render(<AcompanharModelos />);
 
     await waitFor(() => expect(screen.getByTestId('grafico')).toBeTruthy());
-    expect(estado.pedidos).toHaveLength(0);
+    // Mesmo caso do teste acima, com ficha sem classe: nada com identidade
+    // de corretora; a rota livre pode ir (ela nao leva mercado nenhum).
+    expect(estado.pedidos.every((p) => p.market === 'livre')).toBe(true);
   });
 });
 
@@ -827,6 +832,30 @@ describe('velas livres sem corretora (12/10/2026)', () => {
     // mostra niveis derivados so com preco de corretora.
     const botoes = Array.from(document.querySelectorAll('button')).map((b) => b.textContent ?? '');
     expect(botoes.some((t) => /Colocar ordem a /.test(t))).toBe(false);
+  });
+
+  it('PROVA: corretora sem mercado (MT5 fechado, sem ficha) tambem cai no livre', async () => {
+    /*
+      O BURACO DO "0 CANDLES" (12/10/2026, MT5 fechado, app instalado).
+      ===================================================================
+      MEDIDO: par escolhido, corretora escolhida (`mt5`), mas `market === ''`
+      — sem catalogo (o terminal nao lista ativos fechado) nao ha ficha, sem
+      ficha nao ha mercado, sem mercado o `configurado` e falso. O efeito com
+      conta pulava (sem mercado) E o livre pulava (com broker): par + corretora
+      e ZERO consultas — "0 candles" sem erro e sem aviso. Dois guardas que
+      juntos cobriam tudo menos o caso real.
+
+      A condicao do livre e `!configurado`, nao `!broker`.
+    */
+    estado.escopo = { broker: 'mt5', market: 'forex' };
+    estado.parDaTela = 'BTCUSD';
+    estado.catalogo = [];
+    render(<AcompanharModelos />);
+
+    await waitFor(() => expect(screen.getByTestId('candles').textContent).toBe('1'));
+    expect(estado.pedidos.some((p) => p.market === 'livre')).toBe(true);
+    const rotulo = screen.getByTestId('fonte').textContent ?? '';
+    expect(rotulo).toContain('binance');
   });
 });
 
