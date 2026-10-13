@@ -533,6 +533,17 @@ const [periodoDoGrafico, setPeriodoDoGrafico] = useState<string>('');
   const [candles, setCandles] = useState<MarketCandle[] | undefined>(undefined);
   const [erroVelas, setErroVelas] = useState('');
   /*
+    DE ONDE VIERAM AS VELAS DA TELA (12/10/2026, grafico sempre vivo).
+    ===================================================================
+    Com a corretora fora, o gateway preenche com fonte publica e DECLARA
+    (`fonte`, `fallback_publico`, `execucao: False`) — mas a tela escrevia o
+    nome da CORRETORA no cabecalho. A referencia viaja junto das velas (mesmo
+    motivo do `candlesRef` acima: o closure nao pode ler o estado), zera na
+    troca de identidade, e o rotulo abaixo escolhe o nome verdadeiro.
+  */
+  const [fonteVelas, setFonteVelas] = useState<string | null>(null);
+  const [velasPublicas, setVelasPublicas] = useState(false);
+  /*
     A REFERÊNCIA DOS CANDLE QUE JÁ ESTÃO NA TELA (11/10/2026)
     =========================================================
     O intervalo de 30s precisa saber se AINDA HÁ dado em mãos quando a
@@ -557,6 +568,8 @@ const [periodoDoGrafico, setPeriodoDoGrafico] = useState<string>('');
     */
     candlesRef.current = [];
     setCandles(undefined);
+    setFonteVelas(null);
+    setVelasPublicas(false);
     const carregar = async () => {
       try {
         const r = await getCandles({ broker: broker as never, market: market as never, symbol: simbolo }, tempoEscolhido, 300);
@@ -564,6 +577,8 @@ const [periodoDoGrafico, setPeriodoDoGrafico] = useState<string>('');
           candlesRef.current = r.candles;
           setCandles(r.candles);
           setErroVelas('');
+          setFonteVelas(r.fonte ?? null);
+          setVelasPublicas(r.fallback_publico === true);
         }
       } catch (e) {
         if (!vivo) return;
@@ -873,13 +888,20 @@ const [periodoDoGrafico, setPeriodoDoGrafico] = useState<string>('');
         }}
         error={erroVelas}
         /*
-          SEM CORRETORA, SEM ROTULO DE FONTE (11/10/2026, nada de MT5 fixo).
-          MEDIDO na captura do dono (Risco, 20:37): "Candles OHLC reais · ·
-          sinais do modelo" — o `broker.toUpperCase()` vazio com o resto da
-          frase em volta. `undefined` aqui deixa o `PriceChart` esconder a
-          linha da fonte inteira (ver `fonteDoGrafico`).
+          O NOME E DE QUEM MANDOU AS VELAS (12/10/2026, grafico sempre vivo).
+          Com fallback publico, `fonteVelas` traz a venue real ("binance",
+          "yahoo") e o rotulo diz "dados publicos (sem execucao)" — porque
+          preco de terceiro nao arma ordem. Sem fallback, o rotulo e o de
+          sempre (corretora + sinais do modelo). Sem corretora, `undefined`
+          esconde a linha (ver `fonteDoGrafico` no PriceChart).
         */
-        sourceLabel={broker ? `${broker.toUpperCase()} · sinais do modelo` : undefined}
+        sourceLabel={
+          velasPublicas && fonteVelas
+            ? `${fonteVelas} · dados públicos (sem execução)`
+            : broker
+              ? `${broker.toUpperCase()} · sinais do modelo`
+              : undefined
+        }
         /*
           COMPRAR E VENDER PELO MENU DO BOTAO DIREITO (09/10/2026)
           ==========================================================

@@ -1115,7 +1115,28 @@ def _universal_candles(broker: str, market: str, symbol: str, timeframe: str = "
     client = _exchange_client(broker, market)
     if not hasattr(client, "klines"):
         return canonical_unavailable(broker=broker, market=market, source=f"{broker}_api", reason="candles não implementados", symbol=symbol, candles=[], count=0)
-    return _cached_market(key, lambda: _candles_from_raw(broker, market, symbol, client.klines(symbol, interval=timeframe, limit=limit), timeframe))
+
+    def _leitura_exchange() -> dict:
+        # A LEITURA DA EXCHANGE NAO PODE DERRUBAR A ROTA (12/10/2026, grafico
+        # sempre vivo). Se `klines` lancar (fora do ar, par suspenso,
+        # timeout), a resposta carrega o motivo e cai no fallback publico
+        # abaixo — nunca excecao para o handler, nunca grafico morto sem
+        # motivo. A leitura fica DENTRO do loader para o cache de 1s continuar
+        # valendo: fora dele, cada chamada bateria na API mesmo com cache.
+        try:
+            brutas = client.klines(symbol, interval=timeframe, limit=limit)
+        except Exception as exc:  # noqa: BLE001 - qualquer falha de leitura vira motivo
+            brutas = []
+            motivo_exchange = f"{broker} não respondeu: {exc}"
+        else:
+            motivo_exchange = ""
+        resposta = _candles_from_raw(broker, market, symbol, brutas, timeframe)
+        if motivo_exchange and not resposta.get("candles"):
+            resposta["error"] = motivo_exchange
+        return resposta
+
+    resposta = _cached_market(key, _leitura_exchange)
+    return _com_fallback_publico(resposta, symbol, timeframe, limit)
 
 
 #: Prefixo das fontes publicas na tela. A procedencia viaja JUNTO do dado.

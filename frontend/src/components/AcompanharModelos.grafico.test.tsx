@@ -68,6 +68,11 @@ const estado = vi.hoisted(() => ({
    * 12:24, MT5 fechado).
    */
   falhaCandles: null as string | null,
+  /**
+   * A procedencia que o `getCandles` devolve junto das velas. `null` e a
+   * corretora mesma; preenchido, e fallback publico declarado.
+   */
+  fonte: null as null | { fonte: string; fallback_publico: boolean },
 }));
 
 vi.mock('../hooks/queries', () => ({
@@ -121,6 +126,7 @@ vi.mock('../lib/marketApi', () => ({
           provider_timestamp: null,
         },
       ],
+      ...(estado.fonte ?? {}),
       source: 'mt5_gateway',
       received_at: '2026-10-07T00:33:00Z',
     };
@@ -147,6 +153,12 @@ vi.mock('./charts/PriceChart', () => ({
         (sem dado) e "atualização falhou" (com dado em mão).
       */}
       <span data-testid="erro">{String(props.error ?? '')}</span>
+      {/*
+        A FONTE QUE O PAI LEU (12/10/2026). Sem esta linha o duble escondia o
+        rotulo de procedencia — e nao havia como provar que dado publico nao
+        e apresentado com nome de corretora.
+      */}
+      <span data-testid="fonte">{String(props.sourceLabel ?? '')}</span>
       {/*
         Os botoes do periodo, como o `PriceChart` real tem.
 
@@ -189,6 +201,7 @@ beforeEach(() => {
   estado.pedidos = [];
   estado.catalogo = [];
   estado.falhaCandles = null;
+  estado.fonte = null;
   estado.escopo = { broker: 'mt5', market: 'forex' };
 });
 
@@ -681,6 +694,44 @@ describe('a atualizacao que falha nao chama o grafico de indisponivel', () => {
     const antigo = (motivo: string) => motivo;
     expect(antigo('sem sessão')).not.toBe(erroDeVelas('sem sessão', true));
     expect(antigo('sem sessão')).toBe(erroDeVelas('sem sessão', false));
+  });
+});
+
+/*
+  O NOME E DE QUEM MANDOU AS VELAS (12/10/2026, grafico sempre vivo)
+  ===================================================================
+  MEDIDO no app instalado: com a corretora fora, o gateway preenchia com
+  fonte publica — e a tela escrevia o nome da CORRETORA no cabecalho, porque
+  so lia `source`. Dado publico com nome de corretora e o operador achando
+  que opera naquele preco.
+*/
+describe('o rotulo diz a fonte real das velas (12/10/2026)', () => {
+  it('PROVA: fallback publico mostra a venue e avisa que nao opera', async () => {
+    estado.escopo = { broker: 'mt5', market: 'other' };
+    estado.parDaTela = 'BTCUSD';
+    estado.catalogo = [{ symbol: 'BTCUSD', assetClass: 'crypto', contractSize: 1 }];
+    estado.fonte = { fonte: 'binance', fallback_publico: true };
+    render(<AcompanharModelos />);
+
+    await waitFor(() => expect(screen.getByTestId('candles').textContent).toBe('1'));
+    const rotulo = screen.getByTestId('fonte').textContent ?? '';
+    expect(rotulo).toContain('binance');
+    expect(rotulo).toContain('públicos');
+    // PROVA NEGATIVA: o nome da corretora nao pode batizar dado de terceiro.
+    expect(rotulo).not.toContain('MT5');
+  });
+
+  it('PROVA: sem fallback, o rotulo continua corretora + sinais', async () => {
+    estado.escopo = { broker: 'mt5', market: 'other' };
+    estado.parDaTela = 'BTCUSD';
+    estado.catalogo = [{ symbol: 'BTCUSD', assetClass: 'crypto', contractSize: 1 }];
+    estado.fonte = null;
+    render(<AcompanharModelos />);
+
+    await waitFor(() => expect(screen.getByTestId('candles').textContent).toBe('1'));
+    const rotulo = screen.getByTestId('fonte').textContent ?? '';
+    expect(rotulo).toContain('MT5');
+    expect(rotulo).toContain('sinais do modelo');
   });
 });
 

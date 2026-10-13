@@ -99,3 +99,67 @@ def test_conta_ainda_exige_credencial(monkeypatch):
     cliente = gw._exchange_client("mexc", "crypto-spot", private=True)
     assert chamadas, "caminho privado nao consultou o cofre"
     assert cliente.account_id == ""
+
+
+def _publico_com_candles(monkeypatch):
+    """Fonte publica que responde (formato de `ohlc_publico`)."""
+    def _responde(symbol, timeframe="M5", limit=300):
+        return {
+            "candles": [
+                {"time": 1_769_000_000 + i * 900, "open": 1.0, "high": 1.1, "low": 0.9, "close": 1.05, "volume": 3.0}
+                for i in range(3)
+            ],
+            "fonte": "publica-teste",
+            "fonte_url": "https://exemplo",
+            "execucao": False,
+            "observacao": "duble de fonte publica",
+        }
+
+    monkeypatch.setattr("backend.mercado_publico.ohlc_publico", _responde)
+
+
+def test_exchange_vazia_cai_no_publico_e_declara(monkeypatch, sem_cofre):
+    """A exchange voltou vazia: o grafico recebe o publico, DECLARADO."""
+    monkeypatch.setattr(
+        "backend.mexc_client.MexcClient.klines", lambda self, *a, **k: []
+    )
+    _publico_com_candles(monkeypatch)
+
+    resposta = gw._universal_candles("mexc", "crypto-spot", "BTCUSDT", "M15", 50)
+
+    assert resposta["candles"], "sem fallback, o grafico morre sem motivo"
+    assert resposta.get("fallback_publico") is True
+    assert resposta.get("execucao") is False
+    assert resposta.get("fonte") == "publica-teste"
+
+
+def test_exchange_que_explode_nao_derruba_a_rota(monkeypatch, sem_cofre):
+    """`klines` lancando: motivo na resposta, publico na tela, sem excecao."""
+    def _explode(self, *a, **k):
+        raise TimeoutError("venue calada")
+
+    monkeypatch.setattr("backend.mexc_client.MexcClient.klines", _explode)
+    _publico_com_candles(monkeypatch)
+
+    resposta = gw._universal_candles("mexc", "crypto-spot", "BTCUSDT", "M15", 50)
+
+    assert resposta["candles"]
+    assert "mexc" in str(resposta.get("error") or "").lower()
+    assert resposta.get("fallback_publico") is True
+
+
+def test_tudo_falhando_devolve_motivo_sem_excecao(monkeypatch, sem_cofre):
+    """Exchange e publico falhando: resposta intacta, com motivo, sem crash."""
+    def _explode(self, *a, **k):
+        raise ConnectionError("sem rota")
+
+    monkeypatch.setattr("backend.mexc_client.MexcClient.klines", _explode)
+    monkeypatch.setattr(
+        "backend.mercado_publico.ohlc_publico",
+        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("sem rede")),
+    )
+
+    resposta = gw._universal_candles("mexc", "crypto-spot", "BTCUSDT", "M15", 50)
+
+    assert resposta["candles"] == []
+    assert str(resposta.get("error") or ""), "falha sem motivo e grafico morto sem nome"

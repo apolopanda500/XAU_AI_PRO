@@ -37,6 +37,22 @@ export interface Provenance {
   source: string;
   received_at: string;
   provider_timestamp: string | null;
+  /*
+    DE ONDE VIERAM AS VELAS, QUANDO NAO E DA CORRETORA (12/10/2026).
+    ==================================================================
+    MEDIDO no app instalado: com a corretora fora, o gateway preenche com
+    fonte publica (`_com_fallback_publico`: `fonte`, `fallback_publico`,
+    `execucao: False`) — e a tela continuava escrevendo o nome da CORRETORA
+    no cabecalho, porque a procedencia so lia `source` (quem montou a
+    resposta). Operador lendo "MT5" em cima de dado do Yahoo.
+
+    `source` NAO muda (e identidade do gateway: `main.tsx` e roteamento
+    dependem dela). `fonte` viaja ao lado, e quem mostra e o cabecalho do
+    grafico (ver `AcompanharModelos`).
+  */
+  fonte?: string | null;
+  fallback_publico?: boolean;
+  execucao?: boolean | null;
 }
 
 export interface MarketAsset extends Provenance {
@@ -448,7 +464,14 @@ function sourceFor(raw: Record<string, unknown>, fallback: string, receivedAt: s
   );
   const receivedTimestamp =
     readTimestamp(firstDefined(raw.received_at, raw.receivedAt, raw.received)) ?? receivedAt;
-  return { source, received_at: receivedTimestamp, provider_timestamp: providerTimestamp };
+  return {
+    source,
+    received_at: receivedTimestamp,
+    provider_timestamp: providerTimestamp,
+    fonte: readString(raw.fonte),
+    fallback_publico: raw.fallback_publico === true,
+    execucao: typeof raw.execucao === 'boolean' ? (raw.execucao as boolean) : null,
+  };
 }
 
 function responseSource(

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getCapabilities, getDepth, getQuotes, getStats24h, MarketApiError } from './marketApi';
+import { getCapabilities, getCandles, getDepth, getQuotes, getStats24h, MarketApiError } from './marketApi';
 
 const values = new Map<string, string>();
 Object.defineProperty(window, 'localStorage', {
@@ -130,5 +130,66 @@ describe('marketApi', () => {
     expect(String(url)).toContain('limit=7');
     expect(init.method).toBe('GET');
     expect(init.body).toBeUndefined();
+  });
+});
+
+/*
+  A PROCEDENCIA PUBLICA VIAJA ATE A TELA (12/10/2026)
+  ===================================================
+  MEDIDO no app instalado: com a corretora fora, o gateway preenchia com
+  fonte publica (`fonte`, `fallback_publico`, `execucao: False`) — e a tela
+  continuava escrevendo o nome da CORRETORA no cabecalho, porque a
+  procedencia so lia `source` (quem montou a resposta). `source` nao muda
+  (identidade do gateway); `fonte` viaja ao lado para o cabecalho mostrar.
+*/
+describe('marketApi — procedencia da fonte publica', () => {
+  const vela = (time: number) => ({
+    time,
+    open: 85000,
+    high: 85100,
+    low: 84900,
+    close: 85050,
+    volume: 12,
+  });
+
+  it('PROVA: `fonte`, `fallback_publico` e `execucao` chegam em getCandles', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      response({
+        ...base,
+        symbol: 'BTCUSDT',
+        candles: [vela(1788000000), vela(1788003600)],
+        fonte: 'binance',
+        fallback_publico: true,
+        execucao: false,
+      }),
+    );
+    const result = await getCandles(
+      { broker: 'binance', market: 'crypto-spot', symbol: 'BTCUSDT' },
+      'M15',
+      300,
+      { fetcher },
+    );
+    expect(result.candles).toHaveLength(2);
+    expect(result.fonte).toBe('binance');
+    expect(result.fallback_publico).toBe(true);
+    expect(result.execucao).toBe(false);
+    // E `source` continua sendo a identidade do gateway, nao a venue.
+    expect(result.source).toBe('binance_api');
+  });
+
+  it('PROVA: sem fallback, os tres vem vazios — e nada e inventado', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      response({ ...base, symbol: 'BTCUSDT', candles: [vela(1788000000)] }),
+    );
+    const result = await getCandles(
+      { broker: 'binance', market: 'crypto-spot', symbol: 'BTCUSDT' },
+      'M15',
+      300,
+      { fetcher },
+    );
+    expect(result.candles).toHaveLength(1);
+    expect(result.fonte ?? null).toBeNull();
+    expect(result.fallback_publico ?? false).toBe(false);
+    expect(result.execucao ?? null).toBeNull();
   });
 });
