@@ -90,6 +90,18 @@ export function rotuloClasseMulti(id: string): string {
   return `classe ${id.slice('MULTI_'.length)}`;
 }
 
+/**
+ * A data do treino, legivel. O gateway manda ISO com microsegundos e fuso
+ * (ex. `...03T03:08:41.377819+00:00`), e a captura do dono (13/10/2026)
+ * mostrava o cru estourando o card — 30 caracteres para dizer o dia. O dia
+ * basta; a hora do treino nao opera nada. Fora do formato, travessao.
+ */
+export function diaDoTreino(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const dia = String(iso).slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(dia) ? dia : '—';
+}
+
 export default function ListaModelos() {
   const [modelos, setModelos] = useState<ModeloTreinado[]>([]);
   const [erro, setErro] = useState('');
@@ -358,7 +370,7 @@ const escolher = async (m: ModeloTreinado) => {
                   </div>
                   <div>
                     <dt>Treino em</dt>
-                    <dd>{m.train_date ?? '—'}</dd>
+                    <dd>{diaDoTreino(m.train_date)}</dd>
                   </div>
                   <div>
                     <dt>Estado</dt>

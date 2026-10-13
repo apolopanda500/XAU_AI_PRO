@@ -41,7 +41,7 @@ vi.mock('../hooks/queries', () => ({
   useAutoState: () => ({ data: { simbolo: 'GOLD', timeframe: 'H1' } }),
 }));
 
-const { default: ListaModelos } = await import('./ListaModelos');
+const { default: ListaModelos, diaDoTreino } = await import('./ListaModelos');
 
 /** Um modelo no formato REAL de `listar_modelos`. */
 const modelo = (extra: Record<string, unknown>) => ({
@@ -172,8 +172,7 @@ describe('ListaModelos — o que a tela mostra é do TREINO, não previsão', ()
     expect(texto).toMatch(/12[.,]2%/);
   });
 
-  it('numero ausente vira travessao, nunca zero', async () => {
-    // accuracy ausente é ausência de dado. Mostrar 0,0% diria que o modelo
+  it('numero ausente vira travessao, nunca zero', async () => {    // accuracy ausente é ausência de dado. Mostrar 0,0% diria que o modelo
     // errou tudo, que é uma leitura errada e bem mais grave.
     M.modelos = [modelo({ accuracy: null, edge: null, f1: null, test_samples: null })];
     render(<ListaModelos />);
@@ -335,5 +334,25 @@ describe('os modelos multi-classe tem chave propria e rotulo que nao repete', ()
       expect(document.body.textContent).toContain('2 artefatos'),
     );
     expect(document.body.textContent).toContain('de 3 períodos');
+  });
+});
+describe('diaDoTreino \u2014 o card mostra o dia, nao o ISO cru', () => {
+  it('ISO com microsegundos vira so o dia', () => {
+    expect(diaDoTreino('2026-10-03T03:08:41.377819+00:00')).toBe('2026-10-03');
+  });
+
+  it('ausente ou fora do formato vira travessao', () => {
+    expect(diaDoTreino(null)).toBe('\u2014');
+    expect(diaDoTreino(undefined)).toBe('\u2014');
+    expect(diaDoTreino('ontem')).toBe('\u2014');
+  });
+
+  it('PROVA NEGATIVA: o ISO cru nao aparece no card', async () => {
+    M.modelos = [modelo({ train_date: '2026-10-03T03:08:41.377819+00:00' })];
+    render(<ListaModelos />);
+    await waitFor(() => expect(linhas()).toHaveLength(1));
+    const texto = linhas()[0].textContent ?? '';
+    expect(texto).toContain('2026-10-03');
+    expect(texto).not.toContain('03:08:41');
   });
 });

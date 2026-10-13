@@ -15,11 +15,17 @@
 //  ENTÃO ESTE PAINEL ENTROU DENTRO DA OPERAÇÃO AUTOMÁTICA, e o que sobrou
 //  é só o que o motor precisa: modelo e período.
 //
-//  O QUE ESTE PAINEL FAZ E SÓ ESCOLHER
-//  =====================================
-//  Escolher o MODELO/PERIODO não chama o gateway: o backend resolve o modelo
-//  por (symbol, timeframe), então o período escolhido é o que vai para o motor
-//  quando ele roda.
+//  O QUE ESTE PAINEL FAZ: ESCOLHER E CONFIGURAR
+//  =============================================
+//  Escolher o MODELO/PERIODO configura o motor (`/api/auto/config` com par +
+//  periodo), igual ao clique no card da lista. Antes nao chamava o gateway — e
+//  a captura do dono (13/10/2026, 12:21) mostrava o porquê disso ser defeito:
+//  modelo H1 escolhido, grafico em M1, e a frase "escolha o timeframe antes
+//  de ligar". O periodo escolhido num campo e ignorado no outro e o AGENTS.md
+//  5: dois lados do mesmo dado discordando.
+//
+//  A recusa do motor aparece abaixo do campo (ver `recusaModelo`), com o que
+//  foi gravado e o que falta — igual ao card.
 //
 //  Edge e acerto aparecem no rótulo porque o operador escolhe entre modelos com
 //  números diferentes. Vem do TREINO (`.meta.json`), e medido: não é previsão.
@@ -210,6 +216,7 @@ export default function SeletorModelo() {
     MEDIDO antes e depois da lista: `1639 opcoes` -> `28 opcoes`.
   */
   const [mostrarTodos, setMostrarTodos] = useState(false);
+  const [recusaModelo, setRecusaModelo] = useState('');
   const simbolosComModelo = useMemo(() => {
     const comModeloOrdenados = paresElegiveis.filter((s) => comModelo.has(s));
     if (mostrarTodos) return paresElegiveis;
@@ -317,6 +324,46 @@ export default function SeletorModelo() {
     [visiveis, modeloId],
   );
 
+  /*
+    ESCOLHER O MODELO CONFIGURA O MOTOR (13/10/2026).
+    ==================================================
+    O mesmo gesto do card da lista: par + periodo vao para `/api/auto/config`.
+    Sem isso, o modelo escolhido no campo e o periodo do grafico/motor
+    discordavam, e a frase mandava "escolher o timeframe" que o operador ja
+    tinha escolhido — no campo ao lado.
+  */
+  const escolherModelo = useCallback(
+    async (id: string) => {
+      setModeloId(id);
+      setRecusaModelo('');
+      const m = modelos.find((x) => x.id === id) ?? null;
+      if (!m) return;
+      try {
+        const r = await fetch(`${apiBase()}/api/auto/config`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ simbolo: m.symbol, timeframe: m.timeframe }),
+          signal: AbortSignal.timeout(10_000),
+        });
+        const d = (await r.json().catch(() => ({}))) as {
+          ok?: boolean;
+          error?: string;
+          aplicado?: boolean;
+        };
+        if (d.ok === false && d.aplicado !== true) {
+          setRecusaModelo(d.error ?? `HTTP ${r.status}`);
+        } else if (d.ok === false) {
+          setRecusaModelo(
+            `Modelo aplicado ao motor (${m.symbol} · ${m.timeframe}), mas o automático não liga ainda: ${d.error ?? ''}`,
+          );
+        }
+      } catch {
+        setRecusaModelo('Gateway indisponível: o período não pôde ser trocado.');
+      }
+    },
+    [modelos],
+  );
+
   return (
     <div className="robo-par" aria-labelledby="robo-par-title">
       <div className="robo-par-linha">
@@ -391,7 +438,7 @@ export default function SeletorModelo() {
             aria-label="Modelo do robo"
             value={modeloId}
             disabled={!visiveis.length}
-            onChange={(e) => setModeloId(e.target.value)}
+            onChange={(e) => void escolherModelo(e.target.value)}
           >
             {!modeloId && visiveis.length > 0 && (
               <option value="">Escolha o modelo…</option>
@@ -414,6 +461,11 @@ export default function SeletorModelo() {
       {erroLista ? (
         <p className="hint" role="status">
           {erroLista}
+        </p>
+      ) : null}
+      {recusaModelo ? (
+        <p className="hint robo-par-recusa" role="status">
+          {recusaModelo}
         </p>
       ) : null}
       {escolhido && (
