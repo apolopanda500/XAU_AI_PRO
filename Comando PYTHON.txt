@@ -210,15 +210,11 @@ pip install notebook
 Abrir:
 
 jupyter notebook
-16) Streamlit (seu dashboard IA)
+16) Dashboard web (Streamlit) - FORA DO PROJETO
 
-Instalar:
-
-pip install streamlit
-
-Executar:
-
-streamlit run app.py
+O dashboard web nao faz parte desta versao (GUI nativa Tkinter). O comando
+'python Python/launcher.py dashboard' avisa quando o Streamlit nao esta
+instalado, em vez de tentar subir o servidor.
 17) Git (controle de versão)
 
 Ver status:

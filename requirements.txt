@@ -19,10 +19,11 @@ matplotlib
 plotly
 
 # Web Framework
+# Streamlit removido: o dashboard web nao faz parte do EXE GUI-only
+# (launcher.spec) e streamlit exige pillow<13, travando o Pillow 13.
 fastapi
 uvicorn
 pydantic
-streamlit
 litellm
 openai
 

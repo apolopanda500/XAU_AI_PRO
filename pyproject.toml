@@ -24,7 +24,6 @@ dependencies = [
     "catboost>=1.2",
     "matplotlib>=3.8",
     "plotly>=5.20",
-    "streamlit>=1.30",
     "litellm>=1.0",
     "openai>=1.0",
     "MetaTrader5>=5.0.45",
@@ -49,7 +48,6 @@ lightgbm = ">=4.0"
 catboost = ">=1.2"
 matplotlib = ">=3.8"
 plotly = ">=5.20"
-streamlit = ">=1.30"
 litellm = ">=1.0"
 openai = ">=1.0"
 MetaTrader5 = ">=5.0.45"

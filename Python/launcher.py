@@ -171,8 +171,8 @@ def _run_dashboard(root: Path) -> int:
     try:
         import streamlit  # noqa: F401
     except Exception:
-        _log("[AVISO] Dashboard web (Streamlit) no esta empacado nesta versao GUI-only.")
-        _log("Para o dashboard web executa desde o fonte: python Python/launcher.py dashboard")
+        _log("[AVISO] Dashboard web (Streamlit) nao faz parte desta versao GUI-only.")
+        _log("Use a interface nativa do XAU AI PRO; o painel web foi removido das dependencias.")
         return 0
     url_8501 = f"http://127.0.0.1:{DEFAULT_PORT}"
     url_8502 = f"http://127.0.0.1:{FALLBACK_PORT}"
