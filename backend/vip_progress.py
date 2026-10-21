@@ -139,22 +139,83 @@ def _parse_iso(valor: Any) -> datetime | None:
         return None
 
 
+def _quantidade_do_evento(evento: dict) -> float:
+    """Volume em dinheiro de um evento, ou 0 quando ele nao traz o dado.
+
+    A ordem de leitura e `notional`, depois `volume`/`quantity`.
+
+    POR QUE `notional` VEM PRIMEIRO
+    ==============================
+    A escada VIP mede o que a corretora mede:Dinheiro movimentado. `volume` num
+    payload de MT5 e LOTE — 0,01 e 0,10 sao a mesma ordem em valor, e o limiar
+    da escada e em dolares. Somar lotes como se fossem dolares daria o nivel
+    errado em duas ordens de grandeza.
+
+    O `notional` e o preco x quantidade, que e a unica unidade comparavel ao
+    limiar. Quando ele existe, ele manda; quando nao existe, `volume` ainda e
+    melhor que zero, desde que a origem seja uma exchange onde o campo ja vem
+    em dinheiro.
+    """
+    for chave in ("notional", "notional_value", "value"):
+        bruto = evento.get(chave)
+        try:
+            valor = abs(float(bruto))
+        except (TypeError, ValueError):
+            continue
+        if valor > 0:
+            return valor
+    for chave in ("volume", "quantity"):
+        bruto = evento.get(chave)
+        try:
+            valor = abs(float(bruto))
+        except (TypeError, ValueError):
+            continue
+        if valor > 0:
+            return valor
+    return 0.0
+
+
 def volume_por_grupo(dias: int = JANELA_DIAS) -> dict[str, float]:
     """Volume executado por grupo na janela.
 
     A fonte e o `audit.jsonl` gravado pelo proprio produto. Se o arquivo nao
     existe, o resultado e zero — e zero e a resposta honesta, nao um chute.
+
+    ORDENS SEM QUANTIDADE
+    ====================
+    Ate 05/10/2026 o `audit_log.record()` nao gravava volume nenhum, e todo
+    evento de ordem era descartado aqui por `float(None)`. A escada ficava
+    presa no primeiro degrau com a tela mostrando 0 — indistinguivel de
+    "cliente nao operou". Agora `volume_por_grupo_auditado()` expoe quantos
+    eventos entraram e quantos vieram sem quantidade, para a tela dizer a
+    verdade em vez de mostrar um zero silencioso.
+    """
+    return volume_por_grupo_auditado(dias)["volume"]
+
+
+def volume_por_grupo_auditado(dias: int = JANELA_DIAS) -> dict:
+    """Volume por grupo + o que entrou e o que veio sem quantidade.
+
+    `medido` distingue as duas situacoes que a tela antes confundia:
+
+    - `medido: False` — nao ha ordem executada na janela. Zero e verdade.
+    - `sem_quantidade > 0` e volume zerado — houve ordem executada, mas o
+      registro nao trazia quantidade. A escada nao pode ser lida; mostrar a
+      barra em 0% diria que o cliente nao operou.
     """
     caminho = _audit_path()
     vazio = {grupo: 0.0 for grupo in GRUPOS_INSTRUMENTO}
+    resultado: dict = {"volume": dict(vazio), "medido": False, "sem_quantidade": 0, "eventos": 0}
     if not caminho.exists():
-        return vazio
+        return resultado
     corte = datetime.now(timezone.utc) - timedelta(days=dias)
     total = dict(vazio)
+    executados = 0
+    sem_quantidade = 0
     try:
         linhas = caminho.read_text(encoding="utf-8", errors="replace").splitlines()
     except OSError:
-        return vazio
+        return resultado
     for linha in linhas:
         linha = linha.strip()
         if not linha:
@@ -170,13 +231,17 @@ def volume_por_grupo(dias: int = JANELA_DIAS) -> dict[str, float]:
         quando = _parse_iso(evento.get("at"))
         if quando is None or quando < corte:
             continue
-        try:
-            quantidade = abs(float(evento.get("volume") or evento.get("quantity")))
-        except (TypeError, ValueError):
-            continue
+        executados += 1
+        quantidade = _quantidade_do_evento(evento)
         if quantidade > 0:
             total[_grupo_do_corretora(evento.get("broker"))] += quantidade
-    return total
+        else:
+            sem_quantidade += 1
+    resultado["volume"] = total
+    resultado["medido"] = executados > 0 and sem_quantidade == 0
+    resultado["sem_quantidade"] = sem_quantidade
+    resultado["eventos"] = executados
+    return resultado
 
 
 def nivel_por_volume(volumes: dict[str, float]) -> dict[str, Any]:
@@ -275,7 +340,8 @@ def escada_completa(volumes: dict[str, float], alcancado_id: str) -> list[dict[s
 
 def progresso() -> dict[str, Any]:
     """Estado completo da progressao, para a tela e para a API."""
-    volumes = volume_por_grupo()
+    auditado = volume_por_grupo_auditado()
+    volumes = auditado["volume"]
     resultado = nivel_por_volume(volumes)
     resultado["volume_por_grupo"] = volumes
     resultado["janela_dias"] = JANELA_DIAS
@@ -294,4 +360,25 @@ def progresso() -> dict[str, Any]:
     # habilita saque, transferencia nem execucao real.
     resultado["live_execution"] = False
     resultado["withdrawals_enabled"] = False
+    # POR QUE A MEDICAO VI PARA A RESPOSTA
+    # ====================================
+    # Houve ordem executada na janela e o registro nao trazia quantidade
+    # (foi o caso de todo o audit.jsonl real ate 05/10/2026, porque o
+    # `audit_log` nao gravava volume). Nesse caso a barra em 0% seria uma
+    # mentira: diria que o cliente nao operou, quando operou.
+    #
+    # A tela recebe `medido: False` e diz que o dado nao existe. Zero so
+    # aparece quando zero e verdade — nenhuma ordem executada na janela.
+    resultado["medido"] = bool(auditado["medido"])
+    resultado["ordens_executadas"] = int(auditado["eventos"])
+    resultado["sem_quantidade"] = int(auditado["sem_quantidade"])
+    if auditado["sem_quantidade"] > 0:
+        resultado["motivo"] = (
+            f"{auditado['sem_quantidade']} ordem(ns) executada(s) na janela "
+            "sem quantidade registrada: o volume nao pode ser medido."
+        )
+        resultado["indisponivel"] = True
+    elif auditado["eventos"] == 0:
+        resultado["motivo"] = f"Nenhuma ordem executada nos ultimos {JANELA_DIAS} dias."
+        resultado["indisponivel"] = False
     return resultado

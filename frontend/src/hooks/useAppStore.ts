@@ -1,4 +1,4 @@
-﻿import { create } from 'zustand';
+import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { normalizeSymbols } from '../lib/constants';
 
@@ -20,8 +20,8 @@ export type TabType =
 
 export type ThemeName =
   | 'dark'
-  | 'xau_dark'
-  | 'btc_dark'
+  | 'dourado_dark'
+  | 'laranja_dark'
   | 'light'
   | 'ocean_dark'
   | 'emerald_dark'
@@ -47,32 +47,36 @@ export type ThemeName =
 // Antes: 'operar' | 'sinal' | 'ea' (+ 'copiloto', removido por nao ser IA — o
 // `backend/copilot.py` classifica a pergunta por regex e devolve template).
 // Separar "Sinal" e "EA" obrigava o operador a trocar de tela para responder
-// "qual ativo e modelo?" e "quanto posso arriscar?" — duas perguntas que
-// precisam da mesma resposta na mesma hora.
+// A aba ROBÔ não tem sub-aba desde 05/10/2026 (05/10/2026). O dono pediu
+// "remover mesa. apenas operação automática e embaixo gráfico XM Global, mais
+// embaixo miniterminal": uma coluna só, na ordem em que se opera.
 //
-// O tipo continua com um unico valor porque o `localStorage` de quem usou as
-// versoes antigas ainda guarda 'sinal'/'ea'; `LEGADO_ROBOT_SUB` mapeia tudo
-// para 'operar', entao ninguem fica preso numa aba que nao existe mais.
-export type RobotSub = 'operar';
-export const ROBOT_SUBS: RobotSub[] = ['operar'];
+// O `robotSub` continua no estado POR COMPATIBILIDADE de persistência, mas
+// nada lê. Quem tem um valor antigo gravado — 'sinal', 'ea', 'operar', 'mesa',
+// 'auto' — não fica preso numa aba que não existe, porque a tela já não usa o
+// campo para escolher o que renderizar. Um `robotSub` inválido deixaria a tela
+// vazia se alguém voltasse a ler.
+export type RobotSub = 'mesa' | 'acompanhar';
+export const ROBOT_SUBS: RobotSub[] = ['mesa', 'acompanhar'];
 
 // Nomes antigos persistidos no localStorage de quem usou as versoes de quatro
-// e cinco sub-abas. TODOS caem em 'operar', que e a unica aba que existe
-// agora: sem este mapa, trocar de versao deixaria o operador preso num
-// `robotSub` que nao e mais valido e a tela apareceria vazia.
+// e cinco sub-abas. Todos caem em 'mesa', que hoje nao decide nada: sem este
+// mapa, trocar de versao deixaria o operador preso num `robotSub` invalido.
 // Exportado porque o teste de RobotTabs fixa a correspondencia.
 export const LEGADO_ROBOT_SUB: Record<string, RobotSub> = {
-  modelo: 'operar',
-  ativos: 'operar',
-  sinal: 'operar',
-  ea: 'operar',
-  copiloto: 'operar',
-  operacao: 'operar',
-  ordem: 'operar',
-  automacao: 'operar',
-  mesa: 'operar',
-  risco: 'operar',
-  guardian: 'operar',
+  modelo: 'mesa',
+  ativos: 'mesa',
+  sinal: 'acompanhar',
+  ea: 'mesa',
+  copiloto: 'acompanhar',
+  operacao: 'mesa',
+  operar: 'mesa',
+  ordem: 'mesa',
+  automacao: 'mesa',
+  auto: 'mesa',
+  mesa: 'mesa',
+  risco: 'mesa',
+  guardian: 'mesa',
 };
 
 export interface Quote {
@@ -201,7 +205,9 @@ const quoteKey = (quote: Quote): string =>
 export const DEFAULT_SETTINGS: Settings = {
   pinEnabled: false,
   pinCode: '',
-  theme: 'xau_dark',
+  // O padrao continua sendo o tema DOURADO — so o nome mudou (10/10/2026), porque
+  // o ID antigo tinha nome de ativo (`xau_dark`). A cor e a mesma.
+  theme: 'dourado_dark',
   animations: true,
   soundEnabled: true,
   notifications: true,
@@ -283,8 +289,8 @@ export const useAppStore = create<AppState>()(
       // O produto é universal; XAUUSD é apenas uma opção do catálogo.
       selectedSymbol: '',
       setSelectedSymbol: (symbol) => set({ selectedSymbol: symbol }),
-      // A aba ROBÔ tem uma unica sub-aba, então o store sempre abre nela.
-      robotSub: 'operar',
+      // A aba ROBO abre na Mesa; as sub-abas dividem o espaco.
+      robotSub: 'mesa',
       setRobotSub: (sub) => set({ robotSub: sub }),
       marketWatchlist: [],
       setMarketWatchlist: (symbols) => set({ marketWatchlist: normalizeSymbols(symbols) }),
@@ -350,7 +356,7 @@ export const useAppStore = create<AppState>()(
             const salvo = String(p.robotSub ?? '');
             const legado = LEGADO_ROBOT_SUB[salvo] as RobotSub | undefined;
             if (legado) return legado;
-            return ROBOT_SUBS.includes(salvo as RobotSub) ? (salvo as RobotSub) : 'operar';
+            return ROBOT_SUBS.includes(salvo as RobotSub) ? (salvo as RobotSub) : 'mesa';
           })(),
         } as AppState;
       },

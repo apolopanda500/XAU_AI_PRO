@@ -6,6 +6,7 @@
 #include "../Core/StateMachine.mqh"   // v1.4.0 (Etapa 4): StateSet/STATE_*
 #include "../Core/OrderManager.mqh"
 #include "../Core/RiskEngine.mqh"
+#include "../Core/RiskCenter.mqh"       // ETAPA 15.5: gate unificado de risco
 #include "../Core/PositionManager.mqh"
 #include "../Core/TradeController.mqh"
 #include "../Core/SymbolValidator.mqh"
@@ -45,16 +46,42 @@ bool ExecuteTrade(string symbol,int signal)
       return false;
    }
 
-   // v1.4.0 (Etapa 4): risco verificado
-   StateSet(symbol, STATE_RISK_CHECK);
+    // v1.4.0 (Etapa 4): risco verificado
+    StateSet(symbol, STATE_RISK_CHECK);
 
-   // Verificar limite diario
-   if(!CanTradeToday())
-   {
-      Print("EXECUTION: Limite diario atingido");
-      EventRiskBlock(symbol, "limite diario de trades atingido");
-      return false;
-   }
+    // Verificar limite diario
+    if(!CanTradeToday())
+    {
+       Print("EXECUTION: Limite diario atingido");
+       EventRiskBlock(symbol, "limite diario de trades atingido");
+       return false;
+    }
+
+    //==================================================
+    // RISK CENTER — GATE UNIFICADO (ETAPA 15.5)
+    //==================================================
+    // RiskCenter.mqh existia mas NAO era chamado no fluxo
+    // de execução. As checagens eram feitas de forma
+    // espalhada: CanTradeToday() aqui, CSafetyManager::
+    // CheckAll() no OnTick, EquityProtection no OnTick.
+    //
+    // Agora o RiskCenter é o gate ÚNICO e OBRIGATÓRIO
+    // para novas entradas. Ele consolida em ordem
+    // determinística:
+    //   1. DAILY_LOSS      — perda diária vs limite
+    //   2. DAILY_DRAWDOWN  — drawdown vs limite
+    //   3. MAX_TRADES_PER_DAY — contagem de trades
+    //   4. FREE_MARGIN     — margem livre mínima
+    //   5. TOTAL_EXPOSURE  — exposição total
+    //
+    // Fail-closed: se qualquer leitura falhar, bloqueia.
+    string riskReason = "";
+    if(!RiskAllowEntry(symbol, riskReason))
+    {
+       Print("EXECUTION: RISK CENTER BLOCK | ", symbol, " | Motivo=", riskReason);
+       EventRiskBlock(symbol, "RiskCenter bloqueou: " + riskReason);
+       return false;
+    }
 
    double lot=0.0;
 
@@ -148,32 +175,89 @@ bool ExecuteTrade(string symbol,int signal)
 
    int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
 
+   //----------------------------------------------
+   // Distancias de SL/TP: em DINHEIRO quando pedido, em PONTOS senao
+   //----------------------------------------------
+   // MEDIDO 08/10/2026 na conta 391773676: `StopLossPoints=300` valia US$ 3,00
+   // no GOLD e US$ 3,00 no EURUSD, US$ 20 no USDJPY e US$ 0,03 no BTCUSD.
+   // Um numero so, quatro riscos diferentes — e US$ 3,00 contra um orcamento
+   // diario de US$ 0,61. Decisao do dono: risco por operacao em DOLARES, com
+   // alvo simetrico. A formula mora em `DistanciaPontosParaRiscoUSD`.
+   //
+   // Se a distancia em dinheiro nao pode ser calculada (falta point ou
+   // contrato), cai nos inputs em PONTOS em vez de mandar ordem sem
+   // protecao. Zero aqui e "nao sei", e "nao sei" tem saida.
+   double slPontos = (double)StopLossPoints;
+   double tpPontos = (double)TakeProfitPoints;
+
+   if(RiskPerTradeUsd > 0.0)
+   {
+      double slUSD = DistanciaPontosParaRiscoUSD(symbol, lot, RiskPerTradeUsd);
+
+      if(slUSD > 0.0)
+      {
+         slPontos = slUSD;
+         tpPontos = DistanciaPontosParaRiscoUSD(
+            symbol,
+            lot,
+            RiskPerTradeUsd * RewardRatio
+         );
+
+         // Alvo em dinheiro sem alvo em pontos e um alvo que nao existe.
+         if(tpPontos <= 0.0)
+            tpPontos = 0.0;
+      }
+   }
+
    if(signal == 1) // BUY
    {
       req.type  = ORDER_TYPE_BUY;
       req.price = SymbolInfoDouble(symbol, SYMBOL_ASK);
 
-      if(StopLossPoints > 0)
-         req.sl = NormalizeDouble(req.price - (StopLossPoints * point), digits);
+      if(slPontos > 0.0)
+         req.sl = NormalizeDouble(req.price - (slPontos * point), digits);
 
-      if(TakeProfitPoints > 0)
-         req.tp = NormalizeDouble(req.price + (TakeProfitPoints * point), digits);
+      if(tpPontos > 0.0)
+         req.tp = NormalizeDouble(req.price + (tpPontos * point), digits);
    }
    else if(signal == -1) // SELL
    {
       req.type  = ORDER_TYPE_SELL;
       req.price = SymbolInfoDouble(symbol, SYMBOL_BID);
 
-      if(StopLossPoints > 0)
-         req.sl = NormalizeDouble(req.price + (StopLossPoints * point), digits);
+      if(slPontos > 0.0)
+         req.sl = NormalizeDouble(req.price + (slPontos * point), digits);
 
-      if(TakeProfitPoints > 0)
-         req.tp = NormalizeDouble(req.price - (TakeProfitPoints * point), digits);
+      if(tpPontos > 0.0)
+         req.tp = NormalizeDouble(req.price - (tpPontos * point), digits);
    }
    else
    {
       return false;
    }
+
+   //==================================================
+   // STOP LOSS OBRIGATORIO (05/10/2026)
+   //==================================================
+   // MEDIDO na conta real 391773676: posicao aberta no MT5 com `sl = 0.0`
+   // e TP 86.584,30. Sem protecao, uma queda de 2% no BTCUSD levava o
+   // equity de 11,63 para -5,65 — STOP OUT, nao apenas perda.
+   //
+   // As linhas acima so calculam o SL quando `StopLossPoints > 0`. Com zero,
+   // `req.sl` fica 0.0 e a ordem SAI MESMO ASSIM. O backend ja recusava
+   // ("Stop Loss calculou zero", `auto_engine.py`); o EA nao recusava.
+   // Essa era a diferenca entre os dois caminhos de ordem.
+   //
+   // A ordem do teste importa: `req.sl <= 0` cobre os dois casos, o SL
+   // desligado E o SL calculado em zero por falta de espaco de preco.
+   if(RequireStopLoss && req.sl <= 0.0)
+     {
+      Print("EXECUTION: BLOQUEADA | ", symbol,
+            " | stop loss obrigatorio e o SL calculado e ",
+            DoubleToString(req.sl, (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS)),
+            " | ative StopLossPoints>0 ou desmarque RequireStopLoss");
+      return false;
+     }
 
    if(req.price <= 0.0)
    {

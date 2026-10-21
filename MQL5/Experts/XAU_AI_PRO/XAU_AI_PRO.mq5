@@ -858,14 +858,31 @@ void OnTick()
      }
 
 //------------------------------------------------
-// AutoTrade (input) - v1.2.0
+// AutoTrade (input) - RELIGADO em 05/10/2026
 //------------------------------------------------
-
-   if(false)   // v1.2.1: AutoTrade nao bloqueia mais (controle = botao Algoritmos do terminal)
+// Antes era `if(false)`, com o comentario "AutoTrade nao bloqueia mais
+// (controle = botao Algoritmos do terminal)". O input existia em
+// `Config.mqh:8`, aparecia na aba Inputs do MT5 e NUNCA era lido.
+//
+// MEDIDO: quem barra o trade e o gate real acima (`MQL_TRADE_ALLOWED` /
+// `TERMINAL_TRADE_ALLOWED`), o CircuitBreaker, o SafetyManager e o EquityProtection.
+// O `AutoTrade` e o UNICO ponto em que o operador desliga o EA sem fechar
+// o MT5 — e ele estava inerte.
+//
+// Deixar assim e pior do que nao existir: o painel mostra um interruptor que
+// nao faz nada, e o operador acredita que parou o sistema quando nao parou.
+// Este bloco nao substitui os gates; e o interruptor que eles nao cobrem.
+//
+   if(!AutoTrade)
      {
-      // v1.2.1 - throttle do log
-      if(AllowBlockPrint())
-         Print("[TRADE BLOCK] AUTOTRADE OFF | Ative AutoTrade=true no EA");
+      static datetime g_lastEventAutoTradeBlock = 0;
+      datetime _now = TimeCurrent();
+      if(_now - g_lastEventAutoTradeBlock >= 300)
+        {
+         if(AllowBlockPrint())
+            Print("[TRADE BLOCK] AUTOTRADE OFF | AutoTrade=false neste EA");
+         g_lastEventAutoTradeBlock = _now;
+        }
       return;
      }
 

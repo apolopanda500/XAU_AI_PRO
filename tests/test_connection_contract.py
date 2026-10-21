@@ -173,6 +173,211 @@ def test_leitura_de_conexoes_nao_cria_diretorio(gateway, tmp_path, monkeypatch):
 
 
 @_REQUERE_DPAPI
+def test_trocar_credencial_nao_exige_excluir_e_recriar(gateway):
+    """Trocar a chave reescreve o MESMO id. Nao existe PUT sem isso.
+
+    O caminho que existia antes — excluir e cadastrar de novo com o mesmo
+    nome — deixa a conta sem credencial no meio, e sem volta se o cadastro
+    novo falhar. Aqui o `id` e o mesmo e a credencial e sobrescrita no lugar.
+    """
+    payload = {
+        "id": "mexc:crypto-spot:demo",
+        "broker": "mexc",
+        "market": "crypto-spot",
+        "api_key": "CHAVE_ANTIGA",
+        "api_secret": "SECRET_ANTIGO",
+    }
+    status, data = _request(gateway, "POST", "/api/connections", payload)
+    assert status == 201, data
+
+    status, data = _request(
+        gateway, "PUT", "/api/connections/mexc%3Acrypto-spot%3Ademo",
+        {"api_key": "CHAVE_NOVA", "api_secret": "SECRET_NOVO"},
+    )
+    assert status == 200, data
+    assert data["ok"] is True
+    assert data["updated"] is True
+    assert data["connection"]["id"] == payload["id"]
+    # A listagem nunca devolve credencial — nem na edicao. O que se checa e o
+    # VALOR vazando, nao o nome do campo: `credential_source: "api_key"` contem
+    # a substring "api_key" e é informação legítima da tela.
+    assert "api_key" not in data["connection"]
+    assert "api_secret" not in data["connection"]
+    vazamento = json.dumps(data)
+    assert "CHAVE_NOVA" not in vazamento
+    assert "SECRET_NOVO" not in vazamento
+
+    from backend.connection_store import load_connection_credentials_full
+
+    key, secret, _ = load_connection_credentials_full("mexc:crypto-spot:demo")
+    assert key == "CHAVE_NOVA"
+    assert secret == "SECRET_NOVO"
+
+
+@_REQUERE_DPAPI
+def test_campo_em_branco_na_update_mantem_a_credencial(gateway):
+    """Rotacionar so a chave nao pode apagar o secret.
+
+    Este e o contrato que permite trocar a chave SEM ler a atual de volta: o
+    que falta no payload vem do DPAPI. Um PUT so com `api_key` trocaria a
+    chave e gravaria `api_secret: ""` — apagando a credencial valida.
+    """
+    payload = {
+        "id": "mexc:crypto-spot:rotacao",
+        "broker": "mexc",
+        "market": "crypto-spot",
+        "api_key": "KEY_1",
+        "api_secret": "SECRET_1",
+    }
+    assert _request(gateway, "POST", "/api/connections", payload)[0] == 201
+
+    status, data = _request(
+        gateway, "PUT", "/api/connections/mexc%3Acrypto-spot%3Arotacao",
+        {"api_key": "KEY_2"},
+    )
+    assert status == 200, data
+
+    from backend.connection_store import load_connection_credentials_full
+
+    key, secret, _ = load_connection_credentials_full("mexc:crypto-spot:rotacao")
+    assert key == "KEY_2", "a chave nova tem de estar gravada"
+    assert secret == "SECRET_1", "o secret em branco nao pode apagar o gravado"
+
+
+@_REQUERE_DPAPI
+def test_update_sem_nada_a_gravar_e_recusado(gateway):
+    """Um PUT sem credencial nova nao pode responder 200.
+
+    Responder "atualizado" sem ter atualizado nada faz o operador acreditar
+    que a chave mudou quando ela continua a antiga.
+    """
+    payload = {
+        "id": "mexc:crypto-spot:vazia",
+        "broker": "mexc",
+        "market": "crypto-spot",
+        "api_key": "KEY",
+        "api_secret": "SECRET",
+    }
+    assert _request(gateway, "POST", "/api/connections", payload)[0] == 201
+
+    status, data = _request(
+        gateway, "PUT", "/api/connections/mexc%3Acrypto-spot%3Avazia", {},
+    )
+    assert status == 422, data
+    assert data["ok"] is False
+
+    from backend.connection_store import load_connection_credentials_full
+
+    key, secret, _ = load_connection_credentials_full("mexc:crypto-spot:vazia")
+    assert (key, secret) == ("KEY", "SECRET"), "recusa nao pode ter apagado nada"
+
+
+@_REQUERE_DPAPI
+def test_update_da_mesma_conexao_da_broker_e_mercado(gateway):
+    """O `id` do path manda: um corpo divergente nao cria conexao paralela.
+
+    Sem isto, um `id` digitado errado na tela criaria uma conexao nova e a
+    antiga continuaria ativa com a chave velha — o operador acharia que
+    trocou a chave e estaria usando a antiga.
+    """
+    payload = {
+        "id": "mexc:crypto-spot:alvo",
+        "broker": "mexc",
+        "market": "crypto-spot",
+        "api_key": "KEY",
+        "api_secret": "SECRET",
+    }
+    assert _request(gateway, "POST", "/api/connections", payload)[0] == 201
+
+    status, data = _request(
+        gateway, "PUT", "/api/connections/mexc%3Acrypto-spot%3Aalvo",
+        {"id": "mexc:crypto-spot:OUTRO", "api_key": "KEY_NOVA", "api_secret": "SECRET_NOVO"},
+    )
+    assert status == 200, data
+    assert data["connection"]["id"] == "mexc:crypto-spot:alvo", "o path manda sobre o corpo"
+
+    conexoes = _request(gateway, "GET", "/api/connections")[1]["connections"]
+    ids = {c["id"] for c in conexoes}
+    assert "mexc:crypto-spot:alvo" in ids
+    assert "mexc:crypto-spot:OUTRO" not in ids, "o corpo nao pode criar conexao nova"
+
+
+@_REQUERE_DPAPI
+def test_update_em_conexao_inexistente_recusa(gateway):
+    """PUT em conexao que nao existe tem de recusar, nao criar.
+
+    O id vem do path. Se o body trouxesse um id completo, o PUT viraria um
+    POST disfarçado e criaria a conexao que o operador pediu para editar.
+    """
+    status, data = _request(
+        gateway, "PUT", "/api/connections/mexc%3Acrypto-spot%3Anaofala",
+        {"broker": "mexc", "market": "crypto-spot", "api_key": "K", "api_secret": "S"},
+    )
+    assert status == 404, data
+    assert data["ok"] is False
+
+    conexoes = _request(gateway, "GET", "/api/connections")[1]["connections"]
+    assert all(c["id"] != "mexc:crypto-spot:naofala" for c in conexoes)
+
+
+@_REQUERE_DPAPI
+def test_update_de_conexao_por_sessao_nao_grava_segredo(gateway):
+    """MT5 usa sessao do terminal. Gravar segredo vazio seria mentira no DPAPI."""
+    assert _request(
+        gateway, "POST", "/api/connections",
+        {"id": "mt5:forex:terminal", "broker": "mt5", "market": "forex"},
+    )[0] == 201
+
+    # Corretora de sessao nao tem credencial para trocar. Mesmo assim o PUT
+    # responde 200: grava-se o registro sem segredo, que e o unico resultado
+    # honesto. Gravar `api_key: "TENTATIVA"` seria o oposto.
+    status, data = _request(
+        gateway, "PUT", "/api/connections/mt5%3Aforex%3Aterminal",
+        {"api_key": "TENTATIVA", "api_secret": "TENTATIVA"},
+    )
+    assert status == 200, data
+    assert data["credential_source"] == "session"
+
+    conexoes = _request(gateway, "GET", "/api/connections")[1]["connections"]
+    linha = next(c for c in conexoes if c["id"] == "mt5:forex:terminal")
+    assert linha["market"] == "forex", "corretora de sessao nao muda de mercado no PUT"
+    assert linha["configured"] is False
+    assert "api_key" not in linha
+
+    from backend.connection_store import load_connection_credentials_full
+
+    assert load_connection_credentials_full("mt5:forex:terminal") == ("", "", "")
+
+
+@_REQUERE_DPAPI
+def test_update_nao_muda_o_mercado_da_conexao(gateway):
+    """Trocar chave nao pode trocar o mercado junto.
+
+    A conexao e identificada por `broker:market:nome`. Mudar o mercado no PUT
+    apontaria o mesmo id para um registro que nunca foi cadastrado nesse
+    mercado — e o `resolve_connection` casaria por broker+mercado e deixaria
+    de achar a conta.
+    """
+    assert _request(
+        gateway, "POST", "/api/connections",
+        {"id": "mexc:crypto-spot:fixa", "broker": "mexc", "market": "crypto-spot",
+         "api_key": "K", "api_secret": "S"},
+    )[0] == 201
+
+    status, data = _request(
+        gateway, "PUT", "/api/connections/mexc%3Acrypto-spot%3Afixa",
+        {"market": "crypto-futures", "api_key": "K2", "api_secret": "S2"},
+    )
+    assert status == 422, data
+    assert data["ok"] is False
+
+    from backend.connection_store import load_connection_credentials_full
+
+    # Recusa nao pode ter gravado nada.
+    assert load_connection_credentials_full("mexc:crypto-spot:fixa") == ("K", "S", "")
+
+
+@_REQUERE_DPAPI
 def test_falha_de_validacao_retorna_502_sem_segredos(gateway):
     payload = {"id": "binance:crypto-spot:demo", "broker": "binance", "market": "crypto-spot", "api_key": "KEY", "api_secret": "SECRET"}
 

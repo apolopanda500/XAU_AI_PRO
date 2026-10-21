@@ -88,6 +88,24 @@ impl Default for MarketConfig {
     }
 }
 
+/// Porta vinda de variavel de ambiente, com padrao.
+///
+/// MEDIDO em 09/10/2026: com o MT5 aberto, o MT5 escuta em `127.0.0.1:9001`
+/// (o `config/assistant.ini` dele tem `[MCP.MetaTrader] Enable=1` apontando
+/// para ahi) e o gateway Python morria com `WinError 10013`. A saida e mover o
+/// gateway por `XAU_GATEWAY_PORT`; estas duas ficam moveis pelo mesmo motivo,
+/// porque quem trava primeiro impede o outro de subir.
+///
+/// Valor ausente, nao numerico ou zero cai no padrao: porta errada lida em
+/// silencio e pior que porta errada recusada.
+pub fn porta_de(variavel: &str, padrao: u16) -> u16 {
+    std::env::var(variavel)
+        .ok()
+        .and_then(|v| v.trim().parse::<u16>().ok())
+        .filter(|p| *p > 0)
+        .unwrap_or(padrao)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct WebSocketConfig {
@@ -101,7 +119,7 @@ impl Default for WebSocketConfig {
         Self {
             enabled: true,
             bind_address: "127.0.0.1".into(),
-            port: 9002,
+            port: porta_de("XAU_WS_PORT", 9002),
         }
     }
 }
@@ -119,7 +137,7 @@ impl Default for HttpConfig {
         Self {
             enabled: true,
             bind_address: "127.0.0.1".into(),
-            port: 9003,
+            port: porta_de("XAU_HTTP_PORT", 9003),
         }
     }
 }

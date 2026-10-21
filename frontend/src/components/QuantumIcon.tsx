@@ -22,7 +22,6 @@ import { info } from './icons/info';
 import { wallet } from './icons/wallet';
 import { lock } from './icons/lock';
 import { quantum } from './icons/quantum';
-import { vips } from './icons/vips';
 
 export type IconName =
   | 'dashboard'
@@ -48,7 +47,6 @@ export type IconName =
   | 'warning'
   | 'bell'
   | 'chart'
-  | 'vips';
 
 interface Props {
   name: IconName;
@@ -77,7 +75,6 @@ const iconMap: Record<IconName, (c: string, a: string) => React.ReactNode> = {
   wallet,
   lock,
   quantum,
-  vips,
   integrations: tools, // fallback
   warning: info, // reuse info icon
   bell: info, // reuse info icon

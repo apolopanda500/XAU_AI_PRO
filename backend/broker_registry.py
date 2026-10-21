@@ -97,7 +97,20 @@ def normalize_read_scope(broker: str, market: str, symbol: str = "") -> dict[str
     normalized_symbol = str(symbol or "").strip().upper()
     if len(normalized_symbol) > 40:
         raise ValueError("symbol excede 40 caracteres")
-    return {"broker": normalized_broker, "market": normalized_market, "symbol": normalized_symbol}
+    # `symbol` segue EXATO para a corretora: sufixo de contrato (`MICRO`,
+    # `.PRO`) muda o que e negociado e nunca pode ser cortado no caminho
+    # da ordem. A forma canonica (para comparar o mesmo ativo entre
+    # venues e resolver modelo) vai em `symbol_canonical`, em campo
+    # separado — fonte: `backend.symbols`, sem nomes de ativos.
+    canonical = normalized_symbol
+    try:
+        from backend.symbols import canonico as _canonico
+
+        canonical = _canonico(normalized_symbol) or normalized_symbol
+    except Exception:
+        pass
+    return {"broker": normalized_broker, "market": normalized_market,
+            "symbol": normalized_symbol, "symbol_canonical": canonical}
 
 
 def list_brokers(include_planned: bool = False, include_code_only: bool = False) -> list[dict[str, Any]]:

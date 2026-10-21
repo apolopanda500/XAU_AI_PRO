@@ -40,15 +40,40 @@ bool OpenBuy(string symbol,double lot)
    double sl=0;
    double tp=0;
 
-   if(StopLossPoints>0)
+   // Mesma regra de `ExecutionEngine`: risco em DOLARES quando
+   // `RiskPerTradeUsd > 0`, e a mesma funcao de conversao. Antes esta
+   // formulas estava duplicada aqui e la; duas copias divergem, e quem lê o
+   // nome do input acredita que as duas falam a mesma coisa.
+   double slPontos=(double)StopLossPoints;
+   double tpPontos=(double)TakeProfitPoints;
+
+   if(RiskPerTradeUsd>0.0)
+   {
+      double slUSD=DistanciaPontosParaRiscoUSD(symbol,lot,RiskPerTradeUsd);
+
+      if(slUSD>0.0)
+      {
+         slPontos=slUSD;
+         tpPontos=DistanciaPontosParaRiscoUSD(
+            symbol,
+            lot,
+            RiskPerTradeUsd*RewardRatio
+         );
+
+         if(tpPontos<=0.0)
+            tpPontos=0.0;
+      }
+   }
+
+   if(slPontos>0.0)
       sl=NormalizeDouble(
-         ask-(StopLossPoints*point),
+         ask-(slPontos*point),
          (int)SymbolInfoInteger(symbol,SYMBOL_DIGITS)
       );
 
-   if(TakeProfitPoints>0)
+   if(tpPontos>0.0)
       tp=NormalizeDouble(
-         ask+(TakeProfitPoints*point),
+         ask+(tpPontos*point),
          (int)SymbolInfoInteger(symbol,SYMBOL_DIGITS)
       );
 
@@ -100,15 +125,40 @@ bool OpenSell(string symbol,double lot)
    double sl=0;
    double tp=0;
 
-   if(StopLossPoints>0)
+   // Mesma regra e mesma funcao do lado da compra, acima.
+   // `RiskPerTradeUsd > 0`, e a mesma funcao de conversao. Antes esta
+   // formulas estava duplicada aqui e la; duas copias divergem, e quem lê o
+   // nome do input acredita que as duas falam a mesma coisa.
+   double slPontos=(double)StopLossPoints;
+   double tpPontos=(double)TakeProfitPoints;
+
+   if(RiskPerTradeUsd>0.0)
+   {
+      double slUSD=DistanciaPontosParaRiscoUSD(symbol,lot,RiskPerTradeUsd);
+
+      if(slUSD>0.0)
+      {
+         slPontos=slUSD;
+         tpPontos=DistanciaPontosParaRiscoUSD(
+            symbol,
+            lot,
+            RiskPerTradeUsd*RewardRatio
+         );
+
+         if(tpPontos<=0.0)
+            tpPontos=0.0;
+      }
+   }
+
+   if(slPontos>0.0)
       sl=NormalizeDouble(
-         bid+(StopLossPoints*point),
+         bid+(slPontos*point),
          (int)SymbolInfoInteger(symbol,SYMBOL_DIGITS)
       );
 
-   if(TakeProfitPoints>0)
+   if(tpPontos>0.0)
       tp=NormalizeDouble(
-         bid-(TakeProfitPoints*point),
+         bid-(tpPontos*point),
          (int)SymbolInfoInteger(symbol,SYMBOL_DIGITS)
       );
 

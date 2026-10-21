@@ -83,6 +83,52 @@ export interface AssetRow {
   volumeMin: number | null;
   volumeMax: number | null;
   tradeMode: number | null;
+  // Ficha de especificacao (pagina de simbolo da XM): contrato, spread em
+  // pontos e swaps. Null = nao informado pela corretora, nunca zero.
+  // Opcionais para payload antigo sem os campos continuar tipando.
+  contractSize?: number | null;
+  spreadPoints?: number | null;
+  swapLong?: number | null;
+  swapShort?: number | null;
+  /**
+   * Classe do ativo, como a CORRETORA publicou (`asset_class` em
+   * `asset_registry.discover_assets`).
+   *
+   * MEDIDO (05/10/2026): e o campo que decide a UNIDADE do volume. Na XM,
+   * Bolivar (forex) escreve "0,01 Lote(s)" e BTCUSD (crypto) escreve
+   * "0,01 Token(s)". Sem este campo no catalogo, a tela so pode escrever
+   * "Lote" para qualquer ativo - e isso e presumir classe, que a regra proibe.
+   *
+   * `null` = a corretora nao devolveu. NUNCA vira um valor adivinhado pelo nome.
+   */
+  assetClass?: string | null;
+  /**
+   * O NOME COM QUE O MODELO FOI TREINADO, quando existe (07/10/2026).
+   *
+   * MEDIDO na conta 391773676 (XMGlobal-MT5 14): o catalogo publica `GOLD`,
+   * com `path = Derivatives\Spot Metals\GOLD` e `contract_size = 100`.
+   * `XAUUSD` NAO EXISTE no terminal XM. E os `.meta.json` do app se chamam
+   * `XAUUSD_H1/H4/M15/M5`.
+   *
+   * Entao `symbol` e `modelSymbol` sao o MESMO metal com nomes diferentes: um
+   * e o que a corretora entende, o outro e o que o `.pkl` procura no disco. O
+   * campo existe para a tela casar os dois sem duplicar o mapa do operador em
+   * dois lugares.
+   *
+   * `null` = nenhum modelo treinado com este nome. NUNCA o proprio `symbol`:
+   * isso seria dizer que todo par tem modelo, e a lista de modelos mentiria.
+   */
+  modelSymbol?: string | null;
+  /**
+   * A CORRETORA DIZ QUE TEM MODELO (13/10/2026).
+   *
+   * O gateway publica `has_model` por linha (MEDIDO: `GOLD` vem com
+   * `has_model: true`). Antes o frontend descartava o campo e deduzia "tem
+   * modelo" so pelo nome — e um par com modelo declarado sumia da lista
+   * curta quando o nome do modelo diferia do nome da corretora. Declarado
+   * e declarado: quem sabe se tem modelo e quem publicou a linha.
+   */
+  hasModel?: boolean;
 }
 
 /** Extrai o catálogo real devolvido por /api/universal/assets. */
@@ -106,6 +152,13 @@ export function parseAssetCatalog(payload: unknown): AssetRow[] {
       volumeMin: typeof row.volume_min === 'number' ? row.volume_min : null,
       volumeMax: typeof row.volume_max === 'number' ? row.volume_max : null,
       tradeMode: typeof row.trade_mode === 'number' ? row.trade_mode : null,
+      contractSize: typeof row.contract_size === 'number' ? row.contract_size : null,
+      spreadPoints: typeof row.spread_points === 'number' ? row.spread_points : null,
+      swapLong: typeof row.swap_long === 'number' ? row.swap_long : null,
+      swapShort: typeof row.swap_short === 'number' ? row.swap_short : null,
+      assetClass: typeof row.asset_class === 'string' && row.asset_class ? row.asset_class : null,
+      modelSymbol: typeof row.model_symbol === 'string' && row.model_symbol ? row.model_symbol : null,
+      hasModel: row.has_model === true,
     });
   }
   return rows;

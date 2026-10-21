@@ -71,6 +71,14 @@ public:
 
     static void RegisterTrade();
     static int GetDailyTrades();
+
+   // MEDIDA UNICA do limite diario. O gate (`CheckDailyDrawdown`) e a tela
+   // (`GetSafetySummary`) consomem ESTA funcao. Se cada um calculasse a
+   // sua propria, a tela passaria a mostrar um numero que o gate nao usa,
+   // e o operador leria a trava errada -- o mesmo defeito do §5 do AGENTS.md
+   // So uma definicao, dois consumidores.
+   static double GetDailyLossPercent(double &perda, double &base);
+
    static string GetSafetySummary();
 
    static void LogSafety();
@@ -348,17 +356,53 @@ bool CSafetyManager::CheckDailyDrawdown()
       return true;
    }
 
-   if(equity > m_daily_peak_equity)
-      m_daily_peak_equity = equity;
-
-   double dd = GetDrawdownPercent();
+   //==================================================
+   // PERDA DIARIA = PERDA REALIZADA (decisao do dono, 08/10/2026)
+   //==================================================
+   // MEDIDO na conta 391773676, conta REAL, com o AUTO ligado:
+   //
+   //   P/L: -0.16 | Trades: 1/20 | DD: 5.63%/5.00%
+   //   [TRADE BLOCK] SAFETY | DD: 5.63%/5.00%
+   //
+   // A conta tinha perdido $0,16 no dia. O bloqueio dizia 5,63%.
+   //
+   // O 5,63% vinha de `GetDrawdownPercent()`, que e AMPLITUDE de patrimonio:
+   // (pico - agora) / pico. E o pico era 21,32, de 08/10 23:47:53 UTC, com a
+   // posicao USDCAD recem-aberta lucando $6,90 de flutuante sobre um balance
+   // de $14,42. Ou seja: o sistema contou a IDA E A VOLTA de uma posicao como
+   // "perda diaria", sem a conta ter perdido dinheiro.
+   //
+   // `MaxDailyLossPercent` diz LOSS. O que era entregue era DRAWDOWN. Sao dois
+   // numeros com nomes diferentes e o `AGENTS.md` §5 na forma mais limpa: o
+   // nome do limite e uma medida, o codigo entrega outra, e quem decide quem
+   // opera e o codigo.
+   //
+   // AGORA: o numerador e o realizado do dia (`m_daily_profit`, que ja e
+   // persistido e reiniciado no virada do dia em :542), e o denominador e o
+   // SALDO do inicio do dia (`m_daily_start_balance`, persistido como
+   // `STARTBAL` em :171). Saldo, e nao patrimonio: patrimonio muda a cada
+   // tique, e um limite que muda sozinho nao e um limite.
+   //
+   // `GetDrawdownPercent()` NAO foi mexido e continua servindo a quem mede
+   // amplitude de verdade — `RiskCenter`, `RiskEngine`, `Telemetry`,
+   // `CircuitBreaker`. Um numero que e certo para uma coisa e errado para
+   // outra nao e defeito da formula; e a formula certa no lugar errado.
+   //
+   // MEDIDO com o numero real: perda 0,16 sobre saldo inicial ~15,30 = 1,05%,
+   // contra o limite de 5,00%. Passa com 4,8x de folga, que e o que a tela
+   // mostrava no P/L e nao mostrava no DD.
+   double perdaDoDia = 0.0;
+   double base = 0.0;
+   double dd = GetDailyLossPercent(perdaDoDia, base);
 
    if(dd >= m_limits.max_daily_drawdown)
    {
       PrintFormat(
-         "[SAFETY] Daily DD limit: %.2f%%/%.2f%%",
+         "[SAFETY] Daily loss limit: %.2f%%/%.2f%% (realizado %.2f de %.2f)",
          dd,
-         m_limits.max_daily_drawdown
+         m_limits.max_daily_drawdown,
+         perdaDoDia,
+         base
       );
 
       return false;
@@ -376,7 +420,7 @@ bool CSafetyManager::CheckDailyTrades()
    if(m_limits.max_trades_per_day <= 0)
       return true;
 
-   int tradesToday = GetDailyTradesCount();
+   int tradesToday = GetEffectiveDailyTradesCount();
 
    if(tradesToday >=
       m_limits.max_trades_per_day)
@@ -588,20 +632,55 @@ void CSafetyManager::UpdateStats()
 }
 
 //==================================================
+// MEDIDA UNICA DA PERDA DIARIA
+//==================================================
+// Definicao unica. O gate e a tela consomem ISTE numero.
+//
+// MEDIDO 08/10/2026, conta 391773676: depois de corrigir o gate, a tela ainda
+// imprimia `DD: 5.02%/5.00%` com perda realizada de 0,16. O gate ja nao usava
+// aquele numero, mas a tela usava `GetDrawdownPercent()`. O operador lia
+// 5,02% e concluia que a trava era o DD, quando a trava era a margem livre.
+// Duas leituras do mesmo limite divergindo: e o §5 do AGENTS.md de novo, so que
+// agora entre duas linhas do mesmo arquivo.
+//
+// Por isso a formula mora AQUI e nao em dois lugares. Regra do §9 tambem: cada
+// numero mostrado precisa de um consumidor que saiba o que ele e. Por isso o
+// resumo passa a nomear as duas medidas em vez de chamar as duas de "DD".
+double CSafetyManager::GetDailyLossPercent(double &perda, double &base)
+{
+   // Numerador: o REALIZADO do dia. Nao o patrimonio, que muda a cada tique.
+   perda = (m_daily_profit < 0.0) ? MathAbs(m_daily_profit) : 0.0;
+
+   // Denominador: o SALDO do inicio do dia. Nao o patrimonio.
+   base = (m_daily_start_balance > 0.0)
+             ? m_daily_start_balance
+             : AccountInfoDouble(ACCOUNT_BALANCE);
+
+   return (base > 0.0) ? (perda / base) * 100.0 : 0.0;
+}
+
+//==================================================
 // SAFETY SUMMARY
 //==================================================
 
 string CSafetyManager::GetSafetySummary()
 {
-   double dd = GetDrawdownPercent();
+   double perdaTela = 0.0;
+   double baseTela = 0.0;
+   double perdaPct = GetDailyLossPercent(perdaTela, baseTela);
 
+   // `PerdaDia` e o numero que o gate usa e o que trava. `Amplitude` e a
+   // medida pico-vale, que continua existindo e e informative, mas com o
+   // nome que ela mede. Nenhum dos dois se apresenta como "DD" sem dizer o
+   // que e: e o que fez o operador procurar DD num bloqueio que era margem.
    return StringFormat(
-      "P/L: %.2f | Trades: %d/%d | DD: %.2f%%/%.2f%% | FreeMargin: %.2f",
+      "P/L: %.2f | Trades: %d/%d | PerdaDia: %.2f%%/%.2f%% | Amplitude: %.2f%% | FreeMargin: %.2f",
       m_daily_profit,
       GetDailyTrades(),
       m_limits.max_trades_per_day,
-      dd,
+      perdaPct,
       m_limits.max_daily_drawdown,
+      GetDrawdownPercent(),
       AccountInfoDouble(
          ACCOUNT_MARGIN_FREE
       )

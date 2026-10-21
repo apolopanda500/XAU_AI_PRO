@@ -1,25 +1,42 @@
 # Índice de Docs — XAU AI PRO
 
-Atualizado em **03/10/2026**. Este mapa existe porque a pasta chegou a ter
+Atualizado em **11/10/2026**. Este mapa existe porque a pasta chegou a ter
 61 arquivos com quatro "FINAL" e cinco "HANDOFF" disputando o mesmo assunto.
 
-**Comece por:** [`CONVERSA_20261003_04_DO_WINDOWS_AO_APP_PRONTO.md`](./CONVERSA_20261003_04_DO_WINDOWS_AO_APP_PRONTO.md) —
-**a conversa do ciclo na ordem**, os 7 defeitos medidos e a lista real do que
-falta.
-Depois: [`SESSAO_20261004_COOLDOWN_MARGEM_E_EA_COMPILANDO.md`](./SESSAO_20261004_COOLDOWN_MARGEM_E_EA_COMPILANDO.md) —
-a trava de margem **já existia**: o defeito era o EA insistir a cada 2-3 s.
-Segurança: [`CODE_SCANNING.md`](./CODE_SCANNING.md) — os 19 alertas do CodeQL,
-o que era real (travessia de caminho até execução de código) e o que ele só
-reporta.
+**Comece por:** [`CONVERSA_20261011_TEMAS_RENOMEADOS_E_ESTADO_MEDIDO.md`](./CONVERSA_20261011_TEMAS_RENOMEADOS_E_ESTADO_MEDIDO.md) —
+**o ciclo de 11/10**: app novo rodando pelo atalho, `0 falhas bloqueantes`, e a
+lacuna fechada — a pergunta de temas com nome de ativo (`xau_dark`/`btc_dark`) que
+o ciclo anterior deixou em aberto **já estava resolvida no código**
+(`dourado_dark`/`laranja_dark`, com migração da preferência) e só faltava
+documentar. Sem commit: é decisão do dono.
+Depois: [`CONVERSA_20261010_VALIDACAO_COMPLETA_E_APROVACAO.md`](./CONVERSA_20261010_VALIDACAO_COMPLETA_E_APROVACAO.md) —
+**o ciclo de 10/10 que fechou tudo**: as 82 imagens lidas, o build 7/7, a
+reinstalação limpa (hash da ponte medido, 1,39 GB de resíduo removidos), as
+telas medidas uma por uma e **dois defeitos a mais** — o preflight que media
+9001 fixa enquanto o produto usava 9011 (corrigido, com prova negativa) e o app
+que fecha sozinho em sessão longa (medido, não corrigido). `1315 passed`,
+`874 vitest`, `tsc` limpo.
+Depois: [`CONVERSA_20261010_AMBIENTE_LIVRE_E_CORRECOES.md`](./CONVERSA_20261010_AMBIENTE_LIVRE_E_CORRECOES.md) —
+os 6 defeitos da fila e a decisão dos ícones.
+Antes: [`PASSAGEM_20261008_MONITOR_GRAFICO_CALENDARIO.md`](./PASSAGEM_20261008_MONITOR_GRAFICO_CALENDARIO.md) —
+o gráfico que nunca aparecia (`symbols_get()` sem a guarda de sessão, 0 → 1640
+ativos) e o terminal que pintava ERROR em sete checks que diziam `OK`, porque
+casava `Failures`/`Error:` em vez do valor.
+Segurança: [`CODE_SCANNING.md`](./CODE_SCANNING.md) — os 19 alertas do CodeQL.
 
 ---
 
 ## Referência do estado atual
 
-| Documento                                              | Quando      | Sobre                                                                                                                                                                                     |
-| ------------------------------------------------------ | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`CONVERSA_20261003_04_DO_WINDOWS_AO_APP_PRONTO.md`** | 03→04/10    | **A conversa na ordem: 6 pedidos, 7 defeitos medidos, o cooldown de margem (3.191×), o EA que não compilava desde `dbdce10`, e as 7 pendências reais.** Leitura de entrada.               |
-| **`SESSAO_20261003_NOITE_MERGE_E_BROKER_ERROR.md`**    | 03/10 noite | **Merge `develop` → `main` (`46fd23b`, 4 conflitos de lockfile) e a causa raiz dos 4.246 `BROKER_ERROR`: 4.165 `EXEC_NO_MARGIN` entre 03h–05h. Conta DEMO preservada.**                   |
+| Documento | Quando | Sobre |
+| --------- | ------ | ----- |
+| **`CONVERSA_20261011_TEMAS_RENOMEADOS_E_ESTADO_MEDIDO.md`** | 11/10 | **Leitura de entrada.** App novo rodando pelo atalho, `0 falhas`, e a **lacuna fechada**: a pergunta de temas `xau_dark`/`btc_dark` já estava resolvida no código (`dourado_dark`/`laranja_dark`, com migração da preferência) — este ciclo só documentou. Sem commit. |
+| **`CONVERSA_20261010_VALIDACAO_COMPLETA_E_APROVACAO.md`** | 10/10 tarde | Build 7/7, reinstalação limpa com hash medido, cada tela validada, e os 2 defeitos achados na validação (preflight com porta fixa — corrigido; app que fecha sozinho — medido). `1315 passed`, `874 vitest`, 9,51 GB livres. |
+| **`CONVERSA_20261010_AMBIENTE_LIVRE_E_CORRECOES.md`** | 10/10 | **Os 6 defeitos da fila** (IA que desligava, `max 0`, `MULTI_METALS`, menu do botão direito, excedente sob o gráfico, fuso) e a decisão do dono sobre ícone. |
+| **`PASSAGEM_20261008_MONITOR_GRAFICO_CALENDARIO.md`** | 08/10 | **Leitura de entrada.** Os três defeitos medidos, as quatro provas negativas, e **o app no ar sem backend** (porta 9001 sem dono). `1283 passed`, `773 vitest`, `tsc` limpo. |
+| **`CONVERSA_20261008_MONITOR_GRAFICO_CALENDARIO.md`** | 08/10 | **A conversa na ordem**: as 6 perguntas, o que cada resposta mudou, e as **3 premessas do resumo anterior que o comando mediu diferente**. |
+| **`CONVERSA_20261003_04_DO_WINDOWS_AO_APP_PRONTO.md`** | 03→04/10 | **A conversa na ordem: 6 pedidos, 7 defeitos medidos, o cooldown de margem (3.191×), o EA que não compilava desde `dbdce10`, e as 7 pendências reais.** |
+| **`SESSAO_20261003_NOITE_MERGE_E_BROKER_ERROR.md`** | 03/10 noite | **Merge `develop` → `main` (`46fd23b`, 4 conflitos de lockfile) e a causa raiz dos 4.246 `BROKER_ERROR`: 4.165 `EXEC_NO_MARGIN` entre 03h–05h. Conta DEMO preservada.** |
 | ---                                                    | ---         | ---                                                                                                                                                                                       |
 | **`SESSAO_20261003_TARDE_BUILD_APAGAVA_MODELOS.md`**   | 03/10 tarde | **O `robocopy /MIR` que apagava da pasta do `.spec` os 3 modelos MULTI a cada build; o cron que lê a branch errada; os 199 `ERROR` de ACL corrompida. `833 passed`.** Leitura de entrada. |
 | **`SESSAO_20261003_CI_VERMELHO_E_LEITURA_DOCS.md`**    | 03/10 manhã | **Os 3 workflows vermelhos: um corrigido (teste media artefato fora do git), um sem patch no upstream, um que é decisão do dono. Plus a leitura dos 58 docs.**                            |
@@ -68,7 +85,6 @@ Estas descrevem regras que **continuam valendo**. Não são registros de sessão
 | `TESTE_APK_EMULADOR.md`                 | Teste do APK no emulador        |
 | `PRODUCAO_ANDROID.md`                   | Produção Android                |
 | `DEPLOY_GATEWAY_REMOTO_ANDROID.md`      | Deploy do gateway remoto        |
-| `VERCEL_INTEGRACAO.md`                  | Integração Vercel               |
 | `endurance_test_plan.md`                | Plano do teste de endurance     |
 | `production_readiness.md`               | Prontidão para produção         |
 | `production_gate_etapa24.md`            | Gate de produção                |
@@ -146,6 +162,17 @@ git show <commit-antigo>:Docs/<arquivo>
 | `HANDOFF_XAU_AI_PRO_20260923.md`   | 23/09         | Substituído pelo handoff de 28/09                |
 | `HANDOFF_2026-09-14_XAU_AI_PRO.md` | 14/09         | Sessão antiga                                    |
 | `HANDOFF_XAU_AI_PRO_20260925.md`   | 25/09         | Substituído pelo handoff de 28/09                |
+
+---
+
+## Sessoes de 09/10/2026
+
+| documento | o que responde |
+|---|---|
+| `SESSAO_20261009_RISCO_DINHEIRO_ESCADA_E_CONTA_ZERO.md` | Risco em dinheiro (spread, DD realizado, `MinFreeMargin`, SL/TP e gatilhos em dolares), escada de 9 padroes, regra sem stop, os 4 defeitos corrigidos, os 8 erros meus, e a conta que foi a zero por `magic 0` |
+| `CONVERSA_20261009_PORTA_CONFIGURAVEL_E_APP.md` | Conflito de porta MT5 x gateway (`WinError 10013`), a opcao (B) que deixa a porta configuravel em Python/Core/Tauri/CSP, e o estado do build interrompido |
+
+As duas sao referencia do estado atual. O `AGENTS.md` continua mandando nas regras.
 
 ---
 

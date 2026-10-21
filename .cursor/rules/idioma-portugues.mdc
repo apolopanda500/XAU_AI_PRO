@@ -1,0 +1,17 @@
+---
+description: Sempre responder e documentar em Português (Brasil)
+alwaysApply: true
+---
+
+# Idioma Padrão — Português (Brasil)
+
+- **Respostas, explicações e comentários** no código: sempre em português.
+- **Documentação** (`.md`, `README`, `CHANGELOG`, `ROADMAP`): em português.
+- **Mensagens de commit**: em português (padrão do projeto).
+- **Strings exibidas ao usuário** (logs de EA, mensagens de UI): em português.
+
+Permanecem em inglês por convenção técnica:
+
+- Nomes de variáveis, funções, classes e arquivos.
+- Logs e mensagens de erro gerados pelo sistema (manter no idioma original).
+- Termos técnicos sem tradução consagrada: bug, backtest, drawdown, spread, pip, commit, branch, merge, hook, fallback, buffer, timeout, log, trigger, handle, etc.

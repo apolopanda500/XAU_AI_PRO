@@ -80,6 +80,39 @@ a = Analysis(
         # responde 404 na rota — e o teste `test_nenhum_modulo_do_backend_fica_
         # de_fora_do_bundle` reprova, que e exatamente para onde isto aponta.
         'backend.latencia',
+        # CALENDARIO ECONOMICO (2026-10-05)
+        #
+        # `economic_calendar_publica` e importado DENTRO de `_economic_calendar`,
+        # e `planos.economic_calendar` dentro do mesmo trecho. O analisador nao
+        # enxerga import feito dentro de funcao, entao sem esta linha o gateway
+        # congelado sobe normal e a rota `/api/economic/calendar` responde
+        # "agenda indisponivel" — sem excecao, sem log, so a tela vazia.
+        'backend.economic_calendar_publica',
+        'backend.planos.economic_calendar',
+        # ASSINATURAS E SOCIAL PAPER (2026-10-11)
+        #
+        # MEDIDO no app instalado, aba Configuracoes -> Plano:
+        #
+        #     Assinatura indisponível: Failed to fetch
+        #     Catálogo de planos indisponível: Failed to fetch
+        #
+        # `backend.planos.subscriptions` (e `caminhos`, `social_paper`) nunca
+        # entraram aqui: nenhum import de topo os alcanca — o `__init__.py`
+        # do pacote e vazio e todos os imports sao DENTRO de funcao
+        # (`mt5_gateway` importa `list_plans`/`get_subscription`/
+        # `activate_local_plan` dentro dos handlers, `plano_gate` importa
+        # `list_plans`/`has_entitlement` dentro das funcoes, e `social_paper`
+        # importa os dois irmaos no topo MAS ele mesmo so entra por import
+        # dentro de funcao). No `.exe` congelado a rota cai a conexao sem
+        # resposta, e a tela le TypeError em vez de 401/422 — enquanto todo
+        # o resto funciona, e o defeito parece "so da aba Plano".
+        #
+        # O teste `test_nenhum_modulo_do_planos_fica_de_fora_do_bundle`
+        # varre `backend/planos/*.py` para este buraco nao reabrir quando o
+        # proximo modulo do pacote nascer.
+        'backend.planos.subscriptions',
+        'backend.planos.caminhos',
+        'backend.planos.social_paper',
         # METAS E TRAVAS DO VIP (2026-10-02)
         #
         # Estes dois NAO entram sozinhos pelo mesmo motivo acima: o
@@ -127,6 +160,29 @@ a = Analysis(
         # coloca no executavel. Sem ele, `classe_de` cai em `OUTROS` no app
         # instalado e a progressao VIP perde a separacao por grupo.
         'backend.asset_classes',
+        # SIMBOLOS E ALIAS (2026-10-04)
+        #
+        # `symbols` e a fonte unica do simbolo canonico (importado dentro
+        # de funcao em `ai_inference` e `broker_registry`); `symbol_aliases`
+        # resolve modelo -> corretora (`XAUUSD` -> `GOLD` na XM) no motor.
+        # Sem os dois, o app instalado volta a nao achar modelo para par
+        # de exchange e a pedir `XAUUSD` a XM que so tem `GOLD`.
+        'backend.symbols',
+        'backend.symbol_aliases',
+        # `mercado_publico` entra pelo mesmo motivo de `latencia`: a rota
+        # `/api/publico/ohlc` e o fallback de `_universal_candles` importam
+        # DENTRO da funcao. Sem esta linha, o app INSTALADO levanta
+        # ModuleNotFoundError no primeiro candle ausente — e o sintoma e o
+        # grafico voltar a aparecer PRETO, que e exatamente o defeito que o
+        # modulo veio resolver.
+        'backend.mercado_publico',
+
+    # `alvo_risco` e o SL/TP em DINHEIRO que o motor usa para derivar o nivel de
+    # preco (05/10/2026). Entra pelo mesmo motivo: e importado dentro de
+    # `auto_engine`, que o PyInstaller nao segue em analise estatica.
+    # Sem ele no pacote, o caminho de dinheiro cai em ImportError na hora da
+    # ordem — e o motor so descobre isso com o operador esperando.
+    'backend.alvo_risco',
         'backend.watchdog',
         'backend.guardian_engine',
         'backend.persistent_queue',
@@ -142,6 +198,7 @@ a = Analysis(
         'backend.third_party_ea',
         'backend.ea_map',
         'backend.ea_manager',
+        'backend.ea_deploy',
         'Python.model_registry',
         'Python.ai.train_v2',
         'pandas', 'sklearn', 'joblib', 'requests',

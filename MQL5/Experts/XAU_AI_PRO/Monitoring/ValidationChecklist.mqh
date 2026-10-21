@@ -180,10 +180,14 @@ bool ValidationChecklistRun()
    if(ask > 0.0 && bid > 0.0 && point > 0.0)
    {
       double spreadPoints = (ask - bid) / point;
-      if(spreadPoints > MaxSpread)
+      // `GetMaxSpread()`, e nao o input cru `MaxSpread`: ver
+      // `Monitoring/ProductionChecklist.mqh` no mesmo ponto. O input virou
+      // porcentagem; quem converte para PONTOS e o getter.
+      double maxSpreadPts = GetMaxSpread();
+      if(spreadPoints > maxSpreadPts)
       {
          spreadOK = false;
-         spreadMsg = "Spread " + DoubleToString(spreadPoints, 1) + " > max " + DoubleToString(MaxSpread, 1);
+         spreadMsg = "Spread " + DoubleToString(spreadPoints, 1) + " > max " + DoubleToString(maxSpreadPts, 1);
       }
    }
 

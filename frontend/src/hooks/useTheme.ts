@@ -3,8 +3,8 @@ import { useAppStore } from './useAppStore';
 
 export type ThemeName =
   | 'dark'
-  | 'xau_dark'
-  | 'btc_dark'
+  | 'dourado_dark'
+  | 'laranja_dark'
   | 'light'
   | 'ocean_dark'
   | 'emerald_dark'
@@ -13,8 +13,8 @@ export type ThemeName =
 
 export const THEMES: { id: ThemeName; label: string; desc: string }[] = [
   { id: 'dark', label: 'Dark (Padrao)', desc: 'Azul elétrico' },
-  { id: 'xau_dark', label: 'XAU Dark', desc: 'Dourado' },
-  { id: 'btc_dark', label: 'BTC Dark', desc: 'Laranja' },
+  { id: 'dourado_dark', label: 'Dourado', desc: 'Fundo escuro com brilho dourado' },
+  { id: 'laranja_dark', label: 'Laranja', desc: 'Fundo escuro com brilho laranja' },
   { id: 'light', label: 'Light', desc: 'Claro' },
   { id: 'ocean_dark', label: 'Ocean Dark', desc: 'Ciano profundo' },
   { id: 'emerald_dark', label: 'Emerald Dark', desc: 'Verde esmeralda' },
@@ -24,14 +24,32 @@ export const THEMES: { id: ThemeName; label: string; desc: string }[] = [
 
 const VALID: ThemeName[] = [...THEMES.map((t) => t.id)];
 
+/**
+ * Migracao dos IDs ANTIGOS, que tinham nome de ativo (09/10/2026).
+ *
+ * MEDIDO: os dois temas se chamavam `xau_dark` e `btc_dark` — apelidos de cor
+ * com nome de ativo, que e o que a regra "nenhum nome de ativo no codigo"
+ * proibe. Renomeados para a COR que descrevem: `dourado_dark` e `laranja_dark`.
+ *
+ * Sem este mapa, quem ja tinha escolhido um dos dois veria o tema voltar para
+ * `dark` na proxima abertura: a preferencia esta no `localStorage` com o ID
+ * velho, e `normalizeTheme` reprova o que nao conhece. Migrar e o oposto de
+ * perder a escolha do operador por causa de uma limpeza de nome.
+ */
+const ANTIGOS: Record<string, ThemeName> = {
+  xau_dark: 'dourado_dark',
+  btc_dark: 'laranja_dark',
+};
+
 export function normalizeTheme(name: string): ThemeName {
-  return (VALID.includes(name as ThemeName) ? name : 'dark') as ThemeName;
+  const migrado = ANTIGOS[name] ?? name;
+  return (VALID.includes(migrado as ThemeName) ? migrado : 'dark') as ThemeName;
 }
 
 const WALLPAPER_CLASSES: Record<ThemeName, string> = {
   dark: 'wallpaper-quantum',
-  xau_dark: 'wallpaper-xau',
-  btc_dark: 'wallpaper-btc',
+  dourado_dark: 'wallpaper-dourado',
+  laranja_dark: 'wallpaper-laranja',
   light: 'wallpaper-quantum',
   ocean_dark: 'wallpaper-quantum',
   emerald_dark: 'wallpaper-quantum',

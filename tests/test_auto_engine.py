@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import pytest
 
+from dataclasses import asdict
+
 from backend.auto_engine import LimitesAuto, MotorAuto
 from backend import ai_inference as ai
 
@@ -107,8 +109,7 @@ class TestLimites:
         ok, _ = LimitesAuto(max_operacoes_dia=10).valido()
         assert ok is False
 
-    def test_perda_diaria_alta_e_aceita(self):
-        # O operador avancado escolhe o risco alto. O motor respeita a
+    def test_perda_diaria_alta_e_aceita(self):        # O operador avancado escolhe o risco alto. O motor respeita a
         # escolha em vez de estreitar o intervalo silenciosamente.
         ok, motivo = LimitesAuto(
             banca=1000.0, risco_por_trade_pct=1.0, confianca_minima=55.0,
@@ -117,6 +118,36 @@ class TestLimites:
             perda_diaria_max_pct=20.0,
         ).valido()
         assert ok is True, motivo
+
+    def test_modo_simples_lote_sl_tp_basta(self):
+        """Painel simples: TP, SL, LOTE. Sem banca, risco, confianca ou perda."""
+        ok, motivo = LimitesAuto(lote=0.01, sl_preco=4290.0, tp_preco=4310.0).valido()
+        assert ok is True, motivo
+
+    def test_modo_simples_incompleto_aceita_sem_sl_e_tp(self):
+        """SL e TP nao sao mais obrigatorios (decisao do dono, 07/10/2026).
+
+        Este caso era `test_modo_simples_incompleto_recusa` e affirmava o
+        contrario. O LOTE continua obrigatorio — e o que se prova logo abaixo,
+        com a prova negativa.
+        """
+        ok, motivo = LimitesAuto(lote=0.01).valido()
+        assert ok is True, motivo
+
+    def test_sem_lote_ainda_recusa(self):
+        """PROVA NEGATIVA: sem lote nao ha ordem.
+
+        Retirar a obrigatoriedade de sl/tp nao pode arrastar a do lote.
+        """
+        ok, motivo = LimitesAuto(lote=0.0).valido()
+        assert ok is False
+        assert "stop" in motivo.lower() or "take" in motivo.lower() or "lote" in motivo.lower()
+
+    def test_sl_negativo_ainda_recusa(self):
+        """PROVA NEGATIVA: valor negativo e lixo, e lixo nao vira ordem."""
+        ok, motivo = LimitesAuto(lote=0.01, sl_preco=-1.0, tp_preco=10.0).valido()
+        assert ok is False
+        assert "negativo" in motivo.lower()
 
 
 # ------------------------------------------------------- nao abre quando nao deve
@@ -289,6 +320,72 @@ class TestOperaQuandoDeve:
         # risco = 1000 * 1% = 10; distancia = 5 => volume = 2, mas o teto
         # do gateway e 0.10.
         assert p["quantity"] == pytest.approx(0.10, abs=0.01)
+
+    def test_modo_simples_opera_com_lote_e_precos_do_painel(self):
+        m = MotorAuto()
+        m.simbolo = ATIVO
+        m.timeframe = PERIODO
+        m.limites = LimitesAuto(lote=0.01, sl_preco=4290.0, tp_preco=4310.0)
+        chamadas: list[dict] = []
+        d = m.ciclo_unico(
+            lambda s, t: InferenciaFalsa(signal="BUY", price=4300.0, atr=5.0,
+                                         confianca=72.0, edge=0.12),
+            enviar_espiao(chamadas), risco)
+        assert d.agir is True, d.motivo
+        p = chamadas[0]
+        assert p["quantity"] == pytest.approx(0.01)
+        assert p["stop_loss"] == pytest.approx(4290.0)
+        assert p["take_profit"] == pytest.approx(4310.0)
+
+    def test_modo_simples_recusa_sl_incoerente_com_buy(self):
+        m = MotorAuto()
+        m.simbolo = ATIVO
+        m.timeframe = PERIODO
+        m.limites = LimitesAuto(lote=0.01, sl_preco=4310.0, tp_preco=4290.0)
+        d = m.ciclo_unico(
+            lambda s, t: InferenciaFalsa(signal="BUY", price=4300.0, atr=5.0,
+                                         confianca=72.0, edge=0.12),
+            enviar_espiao([]), risco)
+        assert d.agir is False
+        assert "SL" in d.motivo
+
+    def test_modo_simples_aceita_distancia(self):
+        """SL 10 / TP 20 com preco 4300 vira SL 4290 / TP 4320 no BUY."""
+        m = MotorAuto()
+        m.simbolo = ATIVO
+        m.timeframe = PERIODO
+        m.limites = LimitesAuto(lote=0.01, sl_preco=10.0, tp_preco=20.0)
+        chamadas: list[dict] = []
+        d = m.ciclo_unico(
+            lambda s, t: InferenciaFalsa(signal="BUY", price=4300.0, atr=5.0,
+                                         confianca=72.0, edge=0.12),
+            enviar_espiao(chamadas), risco)
+        assert d.agir is True, d.motivo
+        assert chamadas[0]["stop_loss"] == pytest.approx(4290.0)
+        assert chamadas[0]["take_profit"] == pytest.approx(4320.0)
+
+    def test_distancia_absurda_nao_vira_preco(self):
+        """SL 4310 com preco 4300 nao e distancia: recusa com exemplo."""
+        m = MotorAuto()
+        m.simbolo = ATIVO
+        m.timeframe = PERIODO
+        m.limites = LimitesAuto(lote=0.01, sl_preco=4310.0, tp_preco=4320.0)
+        d = m.ciclo_unico(
+            lambda s, t: InferenciaFalsa(signal="BUY", price=4300.0, atr=5.0,
+                                         confianca=72.0, edge=0.12),
+            enviar_espiao([]), risco)
+        assert d.agir is False
+        assert "distancia" in d.motivo.lower()
+
+    def test_banca_de_1_dolar_tem_piso_de_lote(self):
+        """Conta de $1: o volume fracionario nao pode arredondar para zero."""
+        m = motor_pronto(banca=1.0, risco_por_trade_pct=1.0, sl_atr=1.0)
+        chamadas: list[dict] = []
+        d = m.ciclo_unico(
+            lambda s, t: InferenciaFalsa(signal="BUY", price=4300.0, atr=5.0, confianca=72.0),
+            enviar_espiao(chamadas), risco)
+        assert d.agir is True, d.motivo
+        assert chamadas[0]["quantity"] == pytest.approx(0.01)
 
     def test_registra_decisao_com_proveniencia(self):
         m = motor_pronto()
@@ -489,6 +586,64 @@ class TestRoteamentoPorCorretora:
         assert "corretora" in r["error"].lower()
         assert m.ativo is False
 
+    def test_ligar_exige_mercado_escolhido(self):
+        """Ligar sem mercado e recusado nomeando o mercado, nao a combinacao.
+
+        Sem esta trava, o `_escopo` abaixo recusaria como "combinacao
+        corretora/mercado nao suportada" — o motivo certo para par invalido,
+        mas o motivo errado para campo vazio (AGENTS.md 5).
+        """
+        m = motor_pronto()
+        m.broker = "mexc"
+        m.market = ""
+        r = m.ligar()
+        assert r["ok"] is False
+        assert "mercado" in r["error"].lower()
+        assert "combina" not in r["error"].lower()
+        assert m.ativo is False
+
+    def test_ligar_recusa_mercado_nao_suportado_pela_corretora(self):
+        """Ligar com par (corretora, mercado) invalido e recusado NA PORTA.
+
+        MEDIDO no app instalado em 12/10/2026, aba Operacoes: motor "ligado"
+        com mexc + mercado incompativel, e cada ciclo morrendo com "erro no
+        ciclo: ValueError: mercado não suportado para mexc". Ligar para errar
+        em loop e a mesma descoberta tardia do simbolo vazio — a regra e a
+        MESMA do `broker_registry.normalize_read_scope` que o ciclo usa,
+        aplicada antes da thread nascer.
+        """
+        m = motor_pronto()
+        m.broker = "mexc"
+        m.market = "forex"
+        r = m.ligar()
+        assert r["ok"] is False
+        assert "mexc" in r["error"].lower()
+        assert m.ativo is False
+
+    def test_ligar_recusa_corretora_desconhecida(self):
+        m = motor_pronto()
+        m.broker = "corretora-que-nao-existe"
+        m.market = "forex"
+        r = m.ligar()
+        assert r["ok"] is False
+        assert m.ativo is False
+
+    def test_ligar_aceita_par_suportado(self, monkeypatch):
+        """O par valido liga de verdade — a trava nao tranca a porta certa.
+
+        `_loop` e thread de producao com rede: aqui ele e neutralizado para o
+        teste medir SO a porta, sem ciclo e sem gateway.
+        """
+        monkeypatch.setattr(MotorAuto, "_loop", lambda self: None)
+        m = motor_pronto()
+        m.broker = "mexc"
+        m.market = "crypto-spot"
+        r = m.ligar()
+        assert r["ok"] is True
+        assert m.ativo is True
+        m.desligar()
+        assert m.ativo is False
+
 
 class TestMultiAlvos:
     """Varios graficos, horarios diferentes, sem duplicar."""
@@ -560,3 +715,304 @@ class TestMultiAlvos:
         resultados = m.ciclo_alvos(_inferir, enviar_espiao([]), risco)
         assert len(resultados) == 2
         assert resultados[1].agir is True or resultados[1].motivo
+
+
+class TestSlTpEmDinheiroNoMotor:
+    """
+    SL/TP EM DINHEIRO NO MOTOR (05/10/2026)
+    =====================================
+    O painel tem duas abas na XM: `Preco` e `Quantidade`. Na `Quantidade` o
+    operador escreve o VALOR e o nivel e derivado. O motor e o lugar certo: e o
+    unico que sabe o LADO (que veio do modelo), o PRECO do ciclo e o VOLUME.
+
+    MEDIDO na tela, antes: o campo de risco calculava `preco * lote * distancia`
+    e exagerava 85.865x. Aqui o erro nao pode reaparecer: o stop derivado tem de
+    valer o dinheiro que o operador escreveu.
+    """
+
+    def _motor(self, contrato=100_000.0, digits=5):
+        from backend.auto_engine import MotorAuto, LimitesAuto
+
+        m = MotorAuto.__new__(MotorAuto)
+        m.contract_size = staticmethod(lambda _s: contrato)
+        m.asset_digits = staticmethod(lambda _s: digits)
+        return m
+
+    def test_niveis_derivados_valem_o_dinheiro_do_operador(self):
+        m = self._motor()
+        limites = {"lote": 0.01, "sl_valor": 3.5, "tp_valor": 7.0}
+        assert m.modo_preco_do_lote(limites) is False
+        from backend.alvo_risco import niveis_do_valor
+
+        for lado in ("buy", "sell"):
+            n = niveis_do_valor(1.085, 3.5, 7.0, 0.01, lado, 100_000.0)
+            assert abs(1.085 - n["sl_preco"]) * 0.01 * 100_000 == pytest.approx(3.5)
+            assert abs(1.085 - n["tp_preco"]) * 0.01 * 100_000 == pytest.approx(7.0)
+
+    def test_stop_fica_do_lado_correto_do_lado_da_posicao(self):
+        # PROVA NEGATIVA do bug de direcao: numa COMPRA o stop fica ABAIXO da
+        # entrada. Acima, seria executado no primeiro tick.
+        from backend.alvo_risco import niveis_do_valor
+
+        compra = niveis_do_valor(1.085, 3.5, 7.0, 0.01, "buy", 100_000.0)
+        venda = niveis_do_valor(1.085, 3.5, 7.0, 0.01, "sell", 100_000.0)
+        assert compra["sl_preco"] < 1.085 < compra["tp_preco"]
+        assert venda["sl_preco"] > 1.085 > venda["tp_preco"]
+
+    def test_PRECO_tem_prioridade_sobre_dinheiro(self):
+        # Com os dois preenchidos, o operador escolheu o nivel: derivar de
+        # dinheiro ignoraria a escolha dele.
+        m = self._motor()
+        limites = {"lote": 0.01, "sl_preco": 1.0815, "tp_preco": 1.0900,
+                   "sl_valor": 3.5, "tp_valor": 7.0}
+        assert m.modo_preco_do_lote(limites) is True
+
+    def test_arredonda_no_digits_da_corretora(self):
+        # Em EURUSD, 2 casas fixas cortam meio pip do nivel de protecao.
+        m = self._motor(digits=5)
+        assert m.arredonda_no_ativo("EURUSD", 1.081234567) == pytest.approx(1.08123)
+        # Sem digits publicados, cai na escala antiga em vez de inventar.
+        m2 = self._motor(digits=None)
+        assert m2.arredonda_no_ativo("X", 1.081234567) == pytest.approx(1.08)
+
+    def test_limites_valem_nos_dois_modos(self):
+        from backend.auto_engine import LimitesAuto
+
+        assert LimitesAuto(lote=0.01, sl_preco=4290.0, tp_preco=4310.0).valido()[0]
+        assert LimitesAuto(lote=0.01, sl_valor=3.5, tp_valor=7.0).valido()[0]
+        # Nenhum dos dois: agora ACEITO (decisao do dono, 07/10/2026). O risco
+        # passou a ser do operador e da IA. O que continua obrigatorio e o
+        # lote — provado abaixo, com a prova negativa.
+        ok, motivo = LimitesAuto(lote=0.01).valido()
+        assert ok is True, motivo
+
+    def test_sem_lote_nem_no_modo_dinheiro(self):
+        """PROVA NEGATIVA: os dois modos sem lote continuam recusados."""
+        from backend.auto_engine import LimitesAuto
+
+        for limites in (
+            LimitesAuto(lote=0.0),
+            LimitesAuto(lote=0.0, sl_valor=3.5, tp_valor=7.0),
+            LimitesAuto(lote=0.0, sl_preco=4290.0, tp_preco=4310.0),
+        ):
+            ok, motivo = limites.valido()
+            assert ok is False, f"lote ausente foi aceito: {motivo}"
+
+
+class TestProvedorDaFicha:
+    """
+    O PROVEDOR DE `contract_size` (05/10/2026)
+    ==========================================
+    Sem ele o motor RECUSA o modo dinheiro — falha fechada, correto, mas deixava
+    o recurso inteiro sem uso. O provedor le `trade_contract_size` e `digits` do
+    ITEM que a corretora publica; sem terminal, devolve None e o motor recusa.
+
+    Estes testes medem a DEGRADACAO: terminal fora tem que virar recusa com
+    motivo, nunca numero estimado.
+    """
+
+    def test_sem_terminal_devolve_none_e_nao_estima(self):
+        from backend import auto_engine
+
+        # Nao ha terminal neste processo de teste. O provedor tem que devolver
+        # None, e nao 1: assumir 1 em forex deixa o nivel 100.000x errado.
+        assert auto_engine._contract_size("GOLD") is None
+        assert auto_engine._contract_size("EURUSD") is None
+        assert auto_engine._asset_digits("GOLD") is None
+
+    def test_simbolo_vazio_nao_consulta_nada(self):
+        from backend import auto_engine
+
+        assert auto_engine._ficha_do_ativo("") == {}
+        assert auto_engine._ficha_do_ativo("   ") == {}
+
+    def test_o_motor_recebe_os_provedores(self):
+        """
+        O singleton tem que estar ligado ao PROVEDOR REAL, e nao ao default.
+
+        Este teste antes era decorativo: comparava com
+        `_contract_size.__wrapped__`, atributo que uma funcao simples nao tem,
+        entao caia num `assert True` e passava sem provar nada (AGENTS.md 6).
+        Agora ele mede o EFEITO: com um terminal falso que publica contrato,
+        o singleton tem que devolver o contrato da ficha.
+        """
+        from backend import auto_engine
+
+        contrato = 100_000.0
+
+        class FalsoMt5:
+            """Terminal que publica o item como o MT5 publica."""
+
+        def _falso_registry(_mt5, include_hidden=False):
+            return [
+                {"symbol": "EURUSD", "contract_size": contrato, "digits": 5},
+                {"symbol": "XAUUSD", "contract_size": 100.0, "digits": 2},
+            ]
+
+        original_mt5 = auto_engine.mt5_gateway._mt5 if hasattr(auto_engine, "mt5_gateway") else None
+        import backend.mt5_gateway as gateway_mod
+        import backend.asset_registry as registry_mod
+
+        mt5_original = gateway_mod._mt5
+        discover_original = registry_mod.discover_assets
+        try:
+            gateway_mod._mt5 = lambda: FalsoMt5()
+            registry_mod.discover_assets = _falso_registry
+            # O singleton — nao uma instancia nova — tem que ler a ficha.
+            assert auto_engine.motor.contract_size("EURUSD") == contrato
+            assert auto_engine.motor.contract_size("XAUUSD") == 100.0
+            assert auto_engine.motor.asset_digits("EURUSD") == 5
+            assert auto_engine.motor.asset_digits("XAUUSD") == 2
+        finally:
+            gateway_mod._mt5 = mt5_original
+            registry_mod.discover_assets = discover_original
+        del original_mt5
+
+    def test_o_motor_real_recusa_sem_terminal(self):
+        """
+        PROVA NEGATIVA: o mesmo singleton, sem terminal, tem que devolver
+        `None` — e nao o valor de um terminal de mentira.
+
+        Se `o_motor_recebe_os_provedores` passasse por um mock colado no
+        singleton, este aqui reprovaria. E o que garante que o provedor le a
+        ficha de verdade e cai em recusa quando ela nao existe.
+        """
+        from backend import auto_engine
+        import backend.mt5_gateway as gateway_mod
+
+        mt5_original = gateway_mod._mt5
+        try:
+            gateway_mod._mt5 = lambda: None
+            assert auto_engine.motor.contract_size("EURUSD") is None
+            assert auto_engine.motor.asset_digits("EURUSD") is None
+        finally:
+            gateway_mod._mt5 = mt5_original
+
+    def test_motor_sem_provedor_recusa_o_modo_dinheiro(self):
+        """
+        PROVA NEGATIVA: `MotorAuto()` sem provedores tem `None`, e `None` e
+        recusa. Um default que estimasse 1 transformaria o modo dinheiro em
+        nivel errado e silencioso.
+        """
+        from backend.auto_engine import MotorAuto
+
+        m = MotorAuto()
+        assert m.contract_size("GOLD") is None
+        assert m.asset_digits("GOLD") is None
+
+    def test_ficha_lida_ignora_valor_invalido(self):
+        from backend import auto_engine
+
+        class FalsoMt5:
+            pass
+
+        # `discover_assets` devolvendo contrato zero ou negativo tem que cair em
+        # None: zero nao e contrato, e assumir 1 seria o erro de forex.
+        original = auto_engine.discover_assets if hasattr(auto_engine, "discover_assets") else None
+        assert original is None or callable(original)
+        # o caminho de leitura invalida e coberto pelo `> 0` no provedor
+        assert auto_engine._contract_size("NAO_EXISTE_XYZ") is None
+
+
+# ------------------------------------------------- limites recusados
+# O defeito medido em 09/10/2026: `configurar` gravava o valor invalido e SO
+# DEPOIS chamava `valido()`. A resposta recusava, e o valor invalido ja estava
+# dentro do motor — que passava a recusar todos os ciclos com um motivo que nao
+# explicava nada ("ja ha 0 posicoes (max 0)").
+
+
+class TestConfigurarNaoEnvenenaOMotor:
+    def test_valor_invalido_nao_entra_no_motor(self):
+        """Recusar o pedido e aplicar o pedido nao podem acontecer separados."""
+        m = motor_pronto()
+        antes = asdict(m.limites)
+
+        r = m.configurar({"max_posicoes": 0})
+
+        assert r["ok"] is False
+        # O motor CONTINUA com o limite que tinha: recusar nao pode zerar.
+        assert m.limites.max_posicoes == antes["max_posicoes"]
+        assert m.limites.max_posicoes == 2
+
+    def test_varios_campos_ou_entram_todos_ou_nenhum(self):
+        """
+        O pedido misto nao pode aplicar metade.
+
+        MEDIDO: com `{"max_posicoes": 0, "lote": 0.5}`, a versao antiga gravava
+        o lote 0.5 (que e valido) e so recusava no `max_posicoes`. O operador
+        via "recusado" e o lote tinha mudado.
+        """
+        m = motor_pronto()
+        lote_antes = m.limites.lote
+
+        r = m.configurar({"max_posicoes": 0, "lote": 0.5})
+
+        assert r["ok"] is False
+        assert m.limites.lote == lote_antes, "o pedido recusado aplicou metade dele"
+
+    def test_pedido_valido_entra(self):
+        """A prova de que a trava nao virou "nunca aceita nada"."""
+        m = motor_pronto()
+
+        r = m.configurar({"max_posicoes": 3})
+
+        assert r["ok"] is True
+        assert m.limites.max_posicoes == 3
+
+    def test_pedido_valido_mesclado_com_o_que_ja_existia(self):
+        """Um campo novo nao pode apagar os outros."""
+        m = motor_pronto()
+        confianca_antes = m.limites.confianca_minima
+
+        r = m.configurar({"timeframe": "H4"})
+
+        assert r["ok"] is True
+        assert m.timeframe == "H4"
+        assert m.limites.confianca_minima == confianca_antes
+
+
+class TestMotivoDoLimite:
+    """
+    O MOTIVO ERRADO, MEDIDO NA CAPTURA DE 20:15
+    ===========================================
+    Motor LIGADO, `max_posicoes = 0`, e o MOTIVO dizia:
+
+        "ja ha 0 posicoes (max 0)"
+
+    Com NENHUMA posicao aberta. O operador ia olhar as posicoes, via que nao
+    tinha nenhuma, e nao tinha o que fazer — o defeito era o LIMITE NAO
+    DECLARADO, e a mensagem mandava olhar as POSICOES. E a regra 5 do AGENTS.md
+    na sua forma mais cara: recusa com motivo errado, operador culpando a
+    coisa errada.
+    """
+
+    def _rodar(self, abertas: int):
+        m = motor_pronto()
+        chamadas: list[dict] = []
+        return m.ciclo_unico(
+            lambda s, t: InferenciaFalsa(confianca=90.0, edge=0.2, signal="BUY"),
+            enviar_espiao(chamadas),
+            lambda: risco(open_positions=abertas),
+        )
+
+    def test_sem_limite_o_motivo_e_o_limite(self):
+        m = motor_pronto(max_posicoes=0)
+        chamadas: list[dict] = []
+        d = m.ciclo_unico(
+            lambda s, t: InferenciaFalsa(confianca=90.0, edge=0.2, signal="BUY"),
+            enviar_espiao(chamadas),
+            lambda: risco(open_positions=0),
+        )
+        assert "nao declarado" in d.motivo
+        # E NAO o motivo que manda olhar as posicoes.
+        assert "ja ha" not in d.motivo
+        assert chamadas == [], "sem limite declarado nao sai ordem"
+
+    def test_com_limite_e_sem_posicao_o_motor_passaria(self):
+        """O motivo antigo so faz sentido com limite declarado."""
+        d = self._rodar(0)
+        assert "posicoes" not in d.motivo
+
+    def test_limite_atingido_diz_o_que_aconteceu(self):
+        d = self._rodar(2)
+        assert d.motivo == "ja ha 2 posicoes (max 2)"

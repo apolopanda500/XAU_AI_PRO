@@ -69,9 +69,32 @@ class TestNomeDeArtefatoRecusa:
     def test_timeframe_fora_da_allowlist(self, timeframe: str):
         # `M1` nao esta em TIMEFRAMES_VALIDOS: medido nos artefatos reais
         # (M5, M15, H1, H4), `M1` seria um timeframe novo e nao um existente.
-        assert ai._nome_de_artefato("XAUUSD", timeframe.upper().strip()) is None or (
-            timeframe.upper().strip() in ai.TIMEFRAMES_VALIDOS
-        ), f"timeframe {timeframe!r} nao deveria ser aceito"
+        #
+        # POR QUE ESTE TESTE MEDE `inferir`, E NAO `_nome_de_artefato`
+        # ===========================================================
+        # Em 04/10/2026 a resolucao de nome ganhou uma porta nova: o timeframe
+        # VAZIO devolve o nome geral (`MULTI_METALS`), para o modelo unico que
+        # cobre varios periodos. Isso fez este teste reprovar — mas o
+        # comportamento estava CORRETO: `inferir` ja recusa timeframe fora da
+        # allowlist ANTES de chegar no resolvedor de nome, entao um pedido do
+        # operador nunca usa a porta do vazio.
+        #
+        # O teste antigo verificava a camada errada. A propriedade que importa
+        # e "um pedido com timeframe invalido nao vira nome de arquivo", e
+        # essa e medida aqui no caminho real, com `inferir`.
+        import pandas as pd
+
+        candles = pd.DataFrame({
+            "Time": pd.date_range("2026-01-01", periods=300, freq="h"),
+            "Open": range(300), "High": range(300), "Low": range(300),
+            "Close": range(300), "Volume": range(300),
+            "ATR": 12.0, "ADX": 30.0, "RSI": 50.0,
+        })
+        inf = ai.inferir("XAUUSD", candles, timeframe)
+        assert inf.disponivel is False, (
+            f"timeframe {timeframe!r} foi aceito e produziu decisao"
+        )
+        assert "timeframe" in inf.motivo or "nao publicado" in inf.motivo, inf.motivo
 
     @pytest.mark.parametrize(
         "simbolo,timeframe",

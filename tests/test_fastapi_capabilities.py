@@ -39,6 +39,8 @@ def test_fastapi_universal_encaminha_execucao(monkeypatch):
         return {"ok": True, "status": "executed", "action": action}
 
     monkeypatch.setattr(fgw.gw, "_universal_execute", _executor)
+    # Fail-closed com `.env` (05/10/2026): autentica para mirar o 200 da rota.
+    monkeypatch.setattr(fgw, "API_TOKEN", "token-de-teste")
     cliente = TestClient(fgw.app)
     for acao, rota in (("order", "/api/universal/order"),
                        ("close", "/api/universal/close"),
@@ -46,7 +48,8 @@ def test_fastapi_universal_encaminha_execucao(monkeypatch):
                        ("cancel", "/api/universal/cancel")):
         resposta = cliente.post(rota, json={"execute": True, "broker": "mt5",
                                             "market": "forex", "symbol": "XAUUSD",
-                                            "account_id": "mt5:active"})
+                                            "account_id": "mt5:active"},
+                                headers={"Authorization": "Bearer token-de-teste"})
         assert resposta.status_code == 200, (rota, resposta.text)
         assert resposta.json()["ok"] is True
         assert vistos, "o executor nao foi chamado"

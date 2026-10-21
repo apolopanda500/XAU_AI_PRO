@@ -38,7 +38,7 @@
   "plugins": {},
   "app": {
     "security": {
-        "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:9001 http://localhost:9001 ws://127.0.0.1:9002 ws://localhost:9002 http://10.0.2.2:9001 ws://10.0.2.2:9002 https: wss:; img-src 'self' data:; style-src 'self' 'unsafe-inline'"
+        "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:9001 http://localhost:9001 ws://127.0.0.1:9002 ws://localhost:9002 http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:* http://10.0.2.2:9001 ws://10.0.2.2:9002 https: wss:; img-src 'self' data:; style-src 'self' 'unsafe-inline'"
     },
     "windows": [
       {

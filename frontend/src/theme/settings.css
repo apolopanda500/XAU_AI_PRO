@@ -308,3 +308,41 @@
   background: var(--panel, transparent);
   font-size: 13px;
 }
+
+/* Plano local (Free / VIP / VIPS) — Configurações → Plano (11/10/2026).
+   Lista de catálogo com o plano ATUAL destacado. Nenhum campo aqui é
+   interruptor de execução real: `live_execution` e `withdrawals_enabled`
+   são declaração vinda do gateway, não opção do usuário. */
+.plano-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.plano-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  border-radius: 10px;
+  background: var(--panel, transparent);
+}
+.plano-item.ativo {
+  border-color: rgba(34, 197, 94, 0.55);
+}
+.plano-item h4 {
+  margin: 0 0 4px;
+  font-size: 14px;
+}
+.plano-item p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted, #9aa4b2);
+}
+.plano-item .plano-features {
+  margin: 6px 0 0;
+  padding-left: 16px;
+  font-size: 12px;
+  color: var(--muted, #9aa4b2);
+}

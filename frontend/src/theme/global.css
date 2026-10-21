@@ -362,6 +362,30 @@ a {
   width: 60px;
 }
 
+/*
+  O BOTAO DE RECOLHER/EXPANDIR NAO PODE SER CORTADO (11/10/2026)
+  ==============================================================
+  MEDIDO na captura do dono: com a barra minimizada, so UMA PARTE do botao
+  `›` aparecia — dificil acesso. A conta: 60px de barra menos 24px de padding
+  do `.brand` = 36px para logo (34px fixos) + botao lado a lado, com o
+  `.brand` em `overflow: hidden`. O botao nascia espremido em 2px e cortado.
+
+  Recolhido, o topo empilha: logo em cima, botao embaixo com a largura cheia
+  e o `›` centralizado. Sem condicao de corrida com o `overflow`: os dois
+  cabem (34px + botao) na vertical, e na horizontal o botao tem 48px.
+*/
+.sidebar.collapsed .brand {
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 6px;
+  gap: 8px;
+}
+
+.sidebar.collapsed .collapse-btn {
+  width: 100%;
+  padding: 4px 0;
+}
+
 .brand {
   display: flex;
   align-items: center;
@@ -450,6 +474,38 @@ a {
   font-size: 11px;
   white-space: nowrap;
   overflow: hidden;
+}
+
+/*
+  O CARIMBO DO RODAPE (06/10/2026)
+  ================================
+  O rodape tinha duas linhas de TEXTO (`XAU AI PRO · Operacao segura` e
+  `Versao 1.2.4`) e passou a ter o simbolo. A imagem e a mesma do topo
+  (`/xau-ai-pro-mark.png`).
+
+  `margin-inline: auto` e o que CENTRA: o rodape nao e flex, entao sem isso a
+  imagem fica colada na esquerda e o carimbo parece descuido em vez de
+  assinatura.
+
+  O TAMANHO e menor que a do topo (34px) de proposito: o rodape e uma
+  assinatura, nao o logotipo principal. Um carimbo do mesmo tamanho do topo
+  competiria com o nome e a marca sumiria.
+*/
+.sidebar-stamp {
+  display: block;
+  width: 44px;
+  height: 44px;
+  margin-inline: auto;
+  object-fit: cover;
+  border-radius: 10px;
+  opacity: 0.82;
+  box-shadow:
+    0 0 12px rgba(55, 194, 255, 0.22),
+    0 0 8px rgba(245, 185, 66, 0.14);
+}
+
+.sidebar-stamp:hover {
+  opacity: 1;
 }
 
 .sidebar.collapsed .brand-name,
@@ -1520,6 +1576,37 @@ a {
 .content .hint {
   display: block;
   line-height: 1.55;
+}
+
+/* ---------- CONTAS E CONEXÕES: POR QUE O BOTÃO ESTÁ CINZA (05/10/2026) ----------
+   MEDIDO: o botão "Sincronizar MT5" / "Salvar e validar API" ficava morto sem
+   NOME digitado, e no MT5 o nome é opcional — o código usa o nome do terminal.
+   O operador via um botão apagado e nenhuma explicação.
+
+   A lista de pendências é o que transforma botão morto em instrução. Sem
+   `list-style` explícito, a lista entra com marcador de item e o texto fica
+   alinhado à direita do marcador, o que quebra a leitura. */
+.con-pendencias {
+  margin: 8px 0 0;
+  padding: 8px 12px 8px 26px;
+  list-style: disc;
+  border: 1px solid color-mix(in srgb, var(--warn) 34%, transparent);
+  border-radius: var(--radius-sm, 3px);
+  background: color-mix(in srgb, var(--warn) 8%, transparent);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.con-pendencias li {
+  margin: 0;
+}
+
+.con-aviso {
+  color: var(--warn, #ffb020);
+}
+
+.con-ok {
+  color: var(--ok, #22c55e);
 }
 
 /* Gavetas semânticas para detalhes secundários, compatíveis com qualquer aba. */
@@ -3026,19 +3113,63 @@ select {
 }
 .history-filters {
   display: grid;
-  grid-template-columns: 1fr 1.3fr 1.4fr auto;
+  /*
+    A 4a coluna (`.history-count`) tem PISO, e nao `min(0)` (09/10/2026)
+    ================================================================
+    MEDIDO na captura de 07/10 00:38, no app instalado, aba Historico:
+    a contagem ocupava uma fatia estreita a direita e cada item caia na
+    linha de baixo:
+
+        Exibindo | 5 | operacoes | e | 3 | movimentacoes | 12 registros | 00:38:10
+
+    Oito palavras empilhadas, com a janela de 1456px. Nao era falta de espaco.
+
+    Era a REGRA, do lado de dentro (abaixo). E e a MESMA armadilha do `minmax(0,
+    ...)` do ticket (07/10 §1.7): a coluna de piso zero e a que colapsa, porque
+    o grid serve primeiro as colunas com conteudo intrinseco. Aqui ela nem
+    estava zerada — estava espremida a ~130px, que e o bastante para a maior
+    palavra e nao para a frase.
+
+    `minmax(260px, auto)`: `auto` continua valendo (o conteudo decide), e o piso
+    garante que a coluna da contagem existe antes de as de filtro serem
+    servidas.
+  */
+  grid-template-columns: 1fr 1.3fr 1.4fr minmax(260px, auto);
   gap: 10px;
   align-items: end;
 }
+/*
+  A CONTAGEM E UMA FRASE, E A FRASE FICA NA LINHA
+  ================================================
+  O JSX (`HistoryTab.tsx`) escreve os itens em sequencia: `Exibindo`, o numero,
+  `operacoes`, `e`, o numero, `movimentacoes`, os registros, a hora. Sao OITO
+  irmaos de uma frase, e o `gap: 4px` era espaco entre eles — espaco de linha.
+
+  A regra dizia `flex-direction: column`. Com `column`, cada `<span>` vira uma
+  linha por si, e o `gap` vira altura: e por isso que a frase aparecia partida
+  em oito linhas, e nao espremida.
+
+  `flex-flow: row wrap` e o que mantem o comportamento de linha **e** deixa a
+  quebra acontecer no item inteiro quando faltar espaco — nunca dentro da
+  palavra. E `align-items: baseline` alinha numero e palavra na mesma linha de
+  base, para o `strong` com 15px nao ficar pendurado em relacao ao resto.
+
+  O `strong` caiu de 20px para 15px por causa disso: um numero a 20px dentro de
+  uma frase a 12px desalinha a linha de base e faz o numero parecer um titulo
+  perdido no meio de uma frase. O destaque continua — peso e cor, nao tamanho.
+*/
 .history-count {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  flex-flow: row wrap;
+  align-items: baseline;
+  gap: 4px 8px;
   padding: 8px 14px;
   border-left: 1px solid var(--border, #2b3442);
 }
 .history-count strong {
-  font-size: 20px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
 }
 @media (max-width: 800px) {
   .history-filters {
@@ -3882,6 +4013,26 @@ input:focus-visible {
   color: var(--muted, #8a94a6);
   margin-bottom: 10px;
 }
+/*
+  O AVISO DE "NAO HA ATIVO ESCOLHIDO" (09/10/2026)
+  =================================================
+  E a recusa com motivo do AGENTS.md §3 na tela da IA. Antes a aba assumia
+  XAUUSD quando o operador nao tinha escolhido nada, e a IA inferia por um ativo
+  que ninguem pediu. A recusa precisa ser VISIVEL: um espaco vazio no lugar do
+  sinal parece lentidao, e o operador esperaria por uma inferencia que nao vem.
+
+  A cor de aviso e o mesmo tom dos outros avisos do app, e o texto e que carrega
+  o motivo — cor sozinha nao diz nada a um leitor de tela.
+*/
+.ai-panel .ai-aviso {
+  font-size: 13px;
+  color: var(--warn, #d9a441);
+  background: color-mix(in srgb, var(--warn, #d9a441) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warn, #d9a441) 35%, transparent);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 0 0 12px;
+}
 .ai-panel .ai-signal-details {
   display: flex;
   gap: 16px;
@@ -4166,4 +4317,56 @@ input:focus-visible {
 .btn.ghost.danger:hover:not(:disabled) {
   background: rgba(239, 68, 68, 0.14);
   border-color: var(--danger);
+}
+
+/* ---------- SR-ONLY: escondido do olho, presente no leitor ----------
+   MEDIDO (11/10/2026): a unica regra `.sr-only` do projeto era
+   `.market-page .sr-only` (market.css:450) — ou seja, so dentro da pagina de
+   mercado. FORA dela a classe nao fazia nada, e o que era texto de leitor de
+   tela aparecia na tela como texto solto, que parece erro de layout:
+
+     - o resumo do grafico da ROBÔ ("GOLD: 300 candles no timeframe H1 ...
+       ultimo fechamento ...") impresso DUAS vezes embaixo do grafico;
+     - "Abrir latencia por corretora" ao lado do botao de latencia
+       (LatenciaBar.tsx);
+     - os `<caption>` do historico e do painel de auditoria.
+
+   A tecnica (caixa 1x1, clip, sem quebra de linha) e a mesma que o
+   `market.css` ja usava — aqui ela passa a valer em QUALQUER pagina,
+   inclusive na ROBÔ, que e onde o sintoma foi medido. `main.tsx` importa
+   esta folha antes de todas as outras.
+*/
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/*
+  LETRAS QUE SUMIAM NO TEMA CLARO (12/10/2026, pedido do dono: "modo claro nao
+  aparece algumas letras").
+  ============================================================================
+  MEDIDO: tres regras com `color: #cbd5e1` (cinza-claro de texto pensado para
+  fundo escuro) aplicadas sobre painel BRANCO no tema claro:
+
+  1. `.chip.neutral` — os chips "pode operar" dos cards de modelo sumiam;
+  2. `.strategy-rule-grid span` — o texto das regras sumia;
+  3. `.history-tab .tbl-wrap::before` — a ajuda do historico sumia.
+
+  Nos temas escuros o `#cbd5e1` continua certo (fundo escuro), por isso o
+  corretivo e SOBREPOSICAO so no claro, com `var(--text)`, e nao troca da regra
+  original. Fica no FIM da folha para vencer por ordem tambem, nao so por
+  especificidade. Se um dia aparecer outro texto fixo claro, ele entra NESTE
+  bloco.
+*/
+[data-theme='light'] .chip.neutral,
+[data-theme='light'] .strategy-rule-grid span,
+[data-theme='light'] .history-tab .tbl-wrap::before {
+  color: var(--text);
 }

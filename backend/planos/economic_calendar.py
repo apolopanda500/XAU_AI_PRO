@@ -9,6 +9,7 @@ em padroes de calendario de alto impacto).
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from typing import Any
 
 # Eventos de alto impacto recorrentes (horarios aproximados UTC).
@@ -62,10 +63,66 @@ def tz_list() -> list[str]:
     return sorted(_TZ_OFFSETS, key=lambda k: (_TZ_OFFSETS[k], k))
 
 
+def tz_desconhecida(tz: str) -> bool:
+    """O fuso nao e uma zona IANA nem uma chave da tabela?
+
+    MEDIDO (05/10/2026): `convert_to_tz` fazia `_TZ_OFFSETS.get(tz, 0)`, e
+    fuso desconhecido virava **UTC sem erro nenhum**. O cliente que manda
+    `America/Sao_Paulo` receberia agenda com 3 horas de diferenca e nenhuma
+    pista do motivo — a divergencia silenciosa entre os dois lados, que e o
+    defeito mais caro deste projeto.
+
+    Esta funcao existe para o chamador poder RECUSAR com motivo, em vez de
+    servir numero plausivel e errado.
+    """
+    chave = (tz or "UTC").strip()
+    if not chave:
+        return False
+    if chave.upper() in _TZ_OFFSETS:
+        return False
+    try:
+        ZoneInfo(chave)
+    except Exception:
+        return True
+    return False
+
+
 def convert_to_tz(dt: datetime, tz: str) -> datetime:
-    """Converte um datetime (UTC) para o fuso alvo (offset fixo)."""
-    offset = _TZ_OFFSETS.get((tz or "UTC").upper(), 0)
-    return dt + timedelta(hours=offset)
+    """
+    Converte um datetime (UTC) para o fuso alvo.
+
+    ACEITA ZONA IANA, alem das chaves curtas de sempre.
+
+    MEDIDO (05/10/2026): a tabela de offset fixo nao consegue representar o que
+    o dono ve na XM. `Europe/London` e UTC+0 em janeiro e UTC+1 em outubro — a
+    tabela tem uma so linha para ele, entao uma das duas esta errada o ano
+    inteiro. E `Europe/London` nao esta na tabela: caia em UTC.
+
+    Ordem de resolucao:
+      1. zona IANA (`Europe/London`, `America/Sao_Paulo`) — tem horario de
+         verao, e o que o cliente realmente sabe;
+      2. chave curta da tabela (`BRT`, `JST`), mantida porque ja era usada;
+      3. `UTC`, que e o que a tabela sempre devolveu para o desconhecido.
+    """
+    chave = (tz or "UTC").strip()
+    if chave.upper() in _TZ_OFFSETS:
+        return dt + timedelta(hours=_TZ_OFFSETS[chave.upper()])
+    try:
+        zona = ZoneInfo(chave)
+    except Exception:
+        # Mantem o comportamento antigo em vez de estourar: quem chama decide se
+        # recusa (ver `tz_desconhecida`). Aqui a agenda continua saindo.
+        return dt
+    # O datetime chega NAIVE e e UTC (`upcoming_events` faz
+    # `datetime.now(timezone.utc).replace(tzinfo=None)`).
+    #
+    # `dt.astimezone(zona)` sozinho estaria ERRADO: sem `tzinfo`, o Python
+    # assume que o valor ja e hora do sistema. MEDIDO: nesta maquina, whose fuso
+    # e America/Sao_Paulo, `12:00` UTC voltava `12:00` — certo por ACIDENTE,
+    # porque a maquina esta em Sao Paulo. Na mesma conta, uma maquina em Londres
+    # devolveria 08:00 para as 12:00 UTC. Por isso o `replace(tzinfo=utc)`
+    # acontece ANTES, e o depois descarta o tzinfo para o formato antigo.
+    return dt.replace(tzinfo=timezone.utc).astimezone(zona).replace(tzinfo=None)
 
 
 def _next_occurrence(week_start: datetime, event: dict[str, Any]) -> datetime:

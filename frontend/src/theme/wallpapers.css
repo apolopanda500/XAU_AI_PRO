@@ -1,5 +1,5 @@
-﻿/* Wallpaper XAU — Dourado/Preto com partículas */
-.wallpaper-xau {
+/* Wallpaper XAU — Dourado/Preto com partículas */
+.wallpaper-dourado {
   background:
     radial-gradient(ellipse at 20% 50%, rgba(255, 215, 0, 0.15) 0%, transparent 50%),
     radial-gradient(ellipse at 80% 20%, rgba(255, 165, 0, 0.1) 0%, transparent 40%),
@@ -7,7 +7,7 @@
     linear-gradient(135deg, #0a0a0a 0%, #1a1000 50%, #0a0500 100%);
 }
 
-.wallpaper-xau::before {
+.wallpaper-dourado::before {
   content: '';
   position: fixed;
   inset: 0;
@@ -40,14 +40,14 @@
 }
 
 /* Wallpaper BTC — Laranja/Preto */
-.wallpaper-btc {
+.wallpaper-laranja {
   background:
     radial-gradient(ellipse at 30% 40%, rgba(255, 107, 0, 0.15) 0%, transparent 50%),
     radial-gradient(ellipse at 70% 60%, rgba(255, 69, 0, 0.1) 0%, transparent 40%),
     linear-gradient(135deg, #0a0a0a 0%, #1a0800 50%, #0a0500 100%);
 }
 
-.wallpaper-btc::before {
+.wallpaper-laranja::before {
   content: '';
   position: fixed;
   inset: 0;

@@ -88,7 +88,7 @@ private:
 
    static int  LastIndexOf(string s, ushort ch);
    static long FileSizeOf(string path, int root);
-   static int  ExpandPattern(string pattern, int root, BackupRecord &out[], int maxOut, string itemName);
+   static int  ExpandPattern(string pattern, int root, BackupRecord &out[], int start, int maxOut, string itemName);
    static bool BackupFile(string src, int srcRoot, long srcSize, string dst);
    static bool AlreadyBackedUp(string origPath, int origRoot);
    static bool WriteManifest(string snapshotPath, string timestamp);
@@ -214,11 +214,17 @@ int CBackupManager::ExpandPattern(
    string pattern,
    int root,
    BackupRecord &out[],
+   int start,
    int maxOut,
    string itemName
 )
 {
-   int count = 0;
+   // MEDIDO em 08/10/2026 22:14: copiados=64 | falhas=44 com caminho vazio.
+   // A funcao escrevia sempre a partir de out[0] e nao aceitava indice inicial;
+   // o chamador a usava duas vezes no mesmo array e somava os retornos, entao a
+   // segunda sobrescrevia a primeira e o laco lia lixo. Agora `start` e o indice
+   // inicial e o retorno e a quantidade encontrada.
+   int count = start;
 
    int last = LastIndexOf(pattern, '\\');
 
@@ -254,7 +260,7 @@ int CBackupManager::ExpandPattern(
          }
       }
 
-      return count;
+      return count - start;
    }
 
    //----------------------------------------------
@@ -272,7 +278,7 @@ int CBackupManager::ExpandPattern(
    );
 
    if(search == INVALID_HANDLE)
-      return count;
+      return count - start;
 
    do
    {
@@ -299,7 +305,7 @@ int CBackupManager::ExpandPattern(
 
    FileFindClose(search);
 
-   return count;
+   return count - start;
 }
 
 // Copia UM arquivo com VALIDACAO DE SUCESSO REAL.
@@ -876,6 +882,10 @@ bool CBackupManager::RunBackup()
 
    bool all_ok = true;
 
+   // Total de entradas sem caminho: se reaparecer no relatorio, a lista voltou
+   // a vir suja.
+   int sem_caminho_total = 0;
+
    for(int i = 0; i < m_item_count; i++)
    {
       m_items[i].success      = false;
@@ -886,11 +896,13 @@ bool CBackupManager::RunBackup()
 
       int found = 0;
 
-      // Procura nos DOIS roots: COMMON e LOCAL
+      // Procura nos DOIS roots: COMMON e LOCAL. `found` e o indice inicial de
+      // cada chamada: a segunda ANEXA depois da primeira.
       found += ExpandPattern(
          m_items[i].path,
          FILE_COMMON,
          sources,
+         found,
          512,
          m_items[i].name
       );
@@ -899,6 +911,7 @@ bool CBackupManager::RunBackup()
          m_items[i].path,
          0,
          sources,
+         found,
          512,
          m_items[i].name
       );
@@ -917,8 +930,17 @@ bool CBackupManager::RunBackup()
 
       int seq = 0;
 
+      int sem_caminho = 0;
+
       for(int j = 0; j < found; j++)
       {
+         if(StringLen(sources[j].origPath) == 0)
+         {
+            sem_caminho++;
+            sem_caminho_total++;
+            continue;
+         }
+
          // Dedup COMMON/LOCAL
          if(AlreadyBackedUp(sources[j].origPath, sources[j].origRoot))
             continue;
@@ -1020,6 +1042,8 @@ bool CBackupManager::RunBackup()
       m_lastCopied,
       " | falhas=",
       m_lastFailed,
+      " | sem_caminho=",
+      sem_caminho_total,
       " | snapshot=",
       backup_path
    );

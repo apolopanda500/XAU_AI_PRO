@@ -121,3 +121,63 @@ def test_simbolo_e_normalizado(mt5_falso):
     dublê = mt5_falso(_Mt5Falso(rates=[], terminal=True))
     gw._mt5_candles("  xauusd  ", "M5", 100)
     assert dublê.chamadas[0][0] == "XAUUSD"
+
+
+# ---------------------------------------------------------------------------
+# A CAMADA UNIVERSAL NAO PODE JOGAR O MOTIVO FORA (11/10/2026)
+# ---------------------------------------------------------------------------
+# MEDIDO na captura das 12:24, MT5 fechado entre duas sessoes do app: a tela do
+# Robo dizia "candles ausentes ou inválidos no upstream" e 0 candles. O motivo
+# REAL — `terminal MT5 nao conectado ou nao autorizado`, com reason_code
+# `terminal_disconnected` — ja era escrito por `_mt5_candles`, mas
+# `_universal_candles` pegava so `.get("candles", [])` e reembrulhava a lista
+# vazia em `_candles_from_raw`, que so sabe o texto generico.
+#
+# E o AGENTS.md 5 na forma mais cara: dois lados do mesmo dado com nomes
+# diferentes, e o operador sendo mandado pra corretora quando a resposta certa
+# ("abra o MetaTrader 5") ja estava escrita uma funcao acima.
+
+
+def _sem_fonte_publica(monkeypatch):
+    def _recusa(*_args, **_kwargs):
+        raise RuntimeError("sem rede no teste")
+
+    monkeypatch.setattr("backend.mercado_publico.ohlc_publico", _recusa)
+
+
+def test_universal_candles_com_terminal_fechado_fala_a_verdade(mt5_falso, monkeypatch):
+    mt5_falso(_Mt5Falso(rates=None, terminal=False, last_error=(1, "Falha ao conectar")))
+    _sem_fonte_publica(monkeypatch)
+
+    resposta = gw._universal_candles("mt5", "other", "XAUUSD", "M15", 50)
+
+    assert resposta["candles"] == []
+    assert resposta["count"] == 0
+    assert resposta.get("reason_code") == "terminal_disconnected"
+    assert "terminal MT5" in str(resposta.get("error"))
+    # A prova negativa: o texto generico nao pode mais ser o que a tela lê.
+    assert "upstream" not in str(resposta.get("error"))
+
+
+def test_universal_candles_com_terminal_aberto_sem_simbolo_aponta_o_simbolo(mt5_falso, monkeypatch):
+    mt5_falso(_Mt5Falso(rates=None, terminal=True, last_error=(2, "Symbol not found")))
+    _sem_fonte_publica(monkeypatch)
+
+    resposta = gw._universal_candles("mt5", "other", "XAUUSDc", "M15", 50)
+
+    assert resposta.get("reason_code") == "no_candles_for_symbol"
+    assert "XAUUSDC" in str(resposta.get("error"))
+    assert "upstream" not in str(resposta.get("error"))
+
+
+def test_universal_candles_com_dado_continua_intacto(mt5_falso):
+    linhas = [
+        {"time": 100, "open": 1.0, "high": 1.5, "low": 0.5, "close": 1.2, "tick_volume": 8},
+    ]
+    mt5_falso(_Mt5Falso(rates=linhas, terminal=True))
+
+    resposta = gw._universal_candles("mt5", "other", "XAUUSD", "M15", 50)
+
+    assert resposta["count"] == 1
+    assert resposta.get("error") is None
+    assert resposta.get("candles")[0]["time"] == 100

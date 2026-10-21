@@ -37,7 +37,22 @@ function num(n: number | null, casas = 4): string {
 }
 
 export default function AIPanel() {
-  const selectedSymbol = useAppStore((s) => s.selectedSymbol) || 'XAUUSD';
+  /*
+    NENHUM ATIVO E PRESUMIDO AQUI (09/10/2026)
+    ==========================================
+    MEDIDO: esta linha era `useAppStore((s) => s.selectedSymbol) || 'XAUUSD'`.
+    Sem ativo escolhido, a aba pedia inferencia de XAUUSD ao gateway — o mesmo
+    ativo que nao existe no terminal XM (`volumeUnidade.ts:31`) e que ninguem
+    tinha escolhido. A IA respondia por um ativo que nao era o do operador.
+
+    E a regra do AGENTS.md §3: simbolo vazio e RECUSA COM MOTIVO. Aqui a recusa
+    e antes da chamada: sem ativo, a inferencia nao roda (ver o efeito abaixo),
+    e a tela diz onde escolher. O ativo vem da loja, que vem do catalogo da
+    corretora — nenhum nome de ativo existe no codigo desta aba.
+  */
+  const selectedSymbol = String(useAppStore((s) => s.selectedSymbol) ?? '')
+    .trim()
+    .toUpperCase();
   const aiEnabled = useAppStore((s) => s.settings.aiEnabled);
   const aiInterval = useAppStore((s) => s.settings.aiInterval) || 60;
   // Aba interna: 'modelo' e a leitura do operador (probabilidade real do
@@ -99,7 +114,10 @@ export default function AIPanel() {
 
   // Inferência ao vivo, no intervalo configurado pelo operador.
   useEffect(() => {
-    if (!aiEnabled || !modelo) return;
+    // Sem ativo NAO ha inferencia: chamar o gateway com simbolo vazio seria
+    // repetir a cada 15s uma chamada que so pode voltar recusa. E a recusa
+    // precisa aparecer UMA vez na tela, nao no log do gateway.
+    if (!aiEnabled || !modelo || !selectedSymbol) return;
     void rodar();
     const id = window.setInterval(() => void rodar(), Math.max(15, aiInterval) * 1000);
     return () => clearInterval(id);
@@ -234,6 +252,21 @@ export default function AIPanel() {
                 </p>
               )}
             </section>
+          )}
+
+          {/*
+            A RECUSA COM MOTIVO do §3, na tela.
+
+            Sem ativo escolhido nao ha sinal, e a aba nao pode passar a
+            impressao de que a IA esta quieta por falta de modelo ou por
+            lentidao. O motivo e um so: falta escolher o ativo. Dito aqui,
+            onde o operador esta olhando — e nao no log do gateway.
+          */}
+          {!selectedSymbol && !sinal && (
+            <p className="ai-aviso" role="status">
+              Nenhum ativo escolhido. Selecione um ativo na barra de mercado — a IA
+              opera o ativo da conta, e nenhum ativo e presumido aqui.
+            </p>
           )}
 
           {/* Sinal. Só aparece quando a inferência rodou de verdade. */}

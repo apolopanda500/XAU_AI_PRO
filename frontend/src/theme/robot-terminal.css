@@ -66,7 +66,9 @@
 
 /* ---- terminal ao vivo ---- */
 .robot-live-latest .table-scroll {
-  max-height: 300px;
+  /* Usa a tela (13/10/2026, pedido do dono): o journal cortado em 300px
+     deixava metade da sub-aba em papel de parede. */
+  max-height: min(46vh, 520px);
   overflow: auto;
 }
 .robot-live-latest .compact-table {

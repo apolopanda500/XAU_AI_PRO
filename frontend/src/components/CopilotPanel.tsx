@@ -20,7 +20,7 @@ import { apiBase } from '../lib/api';
 import './copilot.css';
 import '../theme/copilot-table.css';
 
-const API = `${apiBase()}`;
+// Base resolvida por chamada (13/10/2026), nunca congelada no topo do modulo.
 
 interface Mensagem {
   id: string;
@@ -158,7 +158,7 @@ export default function CopilotPanel() {
     const ctrl = new AbortController();
     void (async () => {
       try {
-        const r = await fetch(`${API}/api/copilot/contexto`, { signal: ctrl.signal });
+        const r = await fetch(`${apiBase()}/api/copilot/contexto`, { signal: ctrl.signal });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         setContexto((await r.json()) as Contexto);
       } catch (e) {
@@ -176,7 +176,7 @@ export default function CopilotPanel() {
     void (async () => {
       try {
         const q = filtro ? `?gravidade=${encodeURIComponent(filtro)}` : '';
-        const r = await fetch(`${API}/api/ea/achados${q}`, { signal: ctrl.signal });
+        const r = await fetch(`${apiBase()}/api/ea/achados${q}`, { signal: ctrl.signal });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const d = (await r.json()) as { achados: Achado[] };
         setAchados(d.achados);
@@ -199,7 +199,7 @@ export default function CopilotPanel() {
       setEnviando(true);
       setMensagens((m) => [...m, { id: `u${Date.now()}`, de: 'user', texto: limpa }]);
       try {
-        const r = await fetch(`${API}/api/copilot/perguntar`, {
+        const r = await fetch(`${apiBase()}/api/copilot/perguntar`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ pergunta: limpa }),

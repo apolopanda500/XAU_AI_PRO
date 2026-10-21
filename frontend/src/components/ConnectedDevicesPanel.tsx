@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { IconeDispositivo } from './Icones';
 type Device = { id: string; name: string; type: string; address: string; state: string };
 export default function ConnectedDevicesPanel() {
   const [devices, setDevices] = useState<Device[]>(() => {
@@ -75,7 +76,7 @@ export default function ConnectedDevicesPanel() {
       )}
       {!devices.length && (
         <div className="device-empty">
-          <span className="device-empty-icon">⌁</span>
+          <IconeDispositivo className="device-empty-icon" />
           <strong>Nenhum dispositivo conectado</strong>
           <small>Adicione um celular ou IP autorizado para acompanhar as sessões.</small>
         </div>

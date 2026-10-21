@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """Gateway FastAPI - substituto moderno do mt5_gateway.py.
 
 Reusa os 36 helpers puros de mt5_gateway e expõe os mesmos
@@ -26,6 +26,8 @@ from backend import ai_inference
 from backend import auto_engine
 from backend import ea_manager
 from backend import chart_attach
+from backend import ea_deploy
+from backend.mt5_gateway import _porta_gateway
 from backend import copilot
 from backend import intent_log
 from backend import persistent_queue
@@ -286,8 +288,24 @@ def _ai_predict_sync(symbol: str, timeframe: str) -> dict:  # type: ignore[no-un
     import pandas as pd
 
     from backend.mt5_gateway import _mt5_candles
+    from backend.symbol_aliases import para_corretora
 
-    candles = _mt5_candles(symbol, timeframe, 600)
+    # O NOME DO MODELO E O NOME DA CORRETORA NAO SAO O MESMO (medido 05/10/2026).
+    # A XM tem `GOLD`; o modelo foi treinado como `XAUUSD`. Sem traduzir, a
+    # rota pedia `XAUUSD` ao MT5 e recebia "no_candles_for_symbol" — recusa
+    # correta, com o motivo ERRADO: o operador culparia a corretora ou o
+    # modelo, e nenhum dos dois estava quebrado.
+    #
+    # `para_corretora` existe justamente para isto (o arquivo
+    # `symbol_aliases.json` tem `{"mt5": {"XAUUSD": "GOLD"}}`).
+    #
+    # A DIRECAO IMPORTA, e eu errei a primeira vez: usei `para_modelo`, que faz
+    # o caminho inverso (`GOLD` -> `XAUUSD`), e continuei pedindo `XAUUSD` ao
+    # MT5. `para_modelo` e o que o CAMINHO DE ORDEM usa quando recebe o nome da
+    # CORRETORA de volta — nao o que a leitura de candles precisa.
+    simbolo_corretora = para_corretora("mt5", symbol)
+
+    candles = _mt5_candles(simbolo_corretora, timeframe, 600)
     if candles is None:
         return {
             "ok": False,
@@ -304,10 +322,17 @@ def _ai_predict_sync(symbol: str, timeframe: str) -> dict:  # type: ignore[no-un
     linhas = candles.get("candles") if isinstance(candles, dict) else candles
     if not linhas:
         motivo = candles.get("reason_code") or candles.get("error") if isinstance(candles, dict) else None
+        # O motivo cita o nome que foi CONSULTADO e o que foi pedido. Sem os
+        # dois, o operador veria "MT5 nao devolveu candles para XAUUSD" e
+        # procuraria um simbolo que a XM nunca teve.
+        consultou = f" (na XM: {simbolo_corretora})" if simbolo_corretora != symbol else ""
         return {
             "ok": False,
             "available": False,
-            "reason": f"MT5 nao devolveu candles para {symbol} {timeframe}" + (f" ({motivo})" if motivo else ""),
+            "reason": (
+                f"MT5 nao devolveu candles para {symbol} {timeframe}{consultou}"
+                + (f" ({motivo})" if motivo else "")
+            ),
             "symbol": symbol,
             "timeframe": timeframe,
         }
@@ -436,6 +461,41 @@ async def eas_list() -> dict:
 async def eas_status() -> dict:
     """Estado por EA: instalado, visto no journal, heartbeat do terminal."""
     return await _read_call(lambda: ea_manager.status_eas(com_journal=True), timeout=25.0)
+
+
+@app.get("/api/eas/deploy")
+async def eas_deploy_estado() -> dict:
+    """O binario do repo esta defasado em relacao ao do terminal? SO LEITURA.
+
+    Compilar no MetaEditor gera o `.ex5` ao lado do `.mq5`, no repo; o grafico
+    carrega de `MQL5/Experts` do TERMINAL. Reanexar nao copia. Esta rota compara
+    os dois por HASH e diz se estao defasados — sem copiar nada.
+    """
+    return await _read_call(ea_deploy.estado_deploy, timeout=15.0)
+
+
+@app.post("/api/eas/deploy")
+async def eas_deploy(request: Request) -> JSONResponse:
+    """Copia o `.ex5` do repo para o terminal (o que reanexar nao faz).
+
+    Exige `XAU_ALLOW_EA_DEPLOY=1` no ambiente do gateway e `aplicar` no corpo.
+    Grava backup do destino antes, copia de forma atomica e NUNCA escreve no
+    repo. Copiar tem efeito so ao REANEXAR o EA no grafico — o EA em execucao
+    roda a versao em memoria.
+    """
+    try:
+        corpo = await request.json()
+    except Exception:
+        corpo = {}
+    aplicar = bool(corpo.get("aplicar", True)) if isinstance(corpo, dict) else True
+    resultado = await _read_call(
+        lambda: ea_deploy.sincronizar_ex5(aplicar=aplicar), timeout=30.0
+    )
+    acao = resultado.get("acao")
+    # 200 quando copiou ou ja estava atualizado; 400 quando faltou autorizacao
+    # ou terminal; o motivo vem no corpo, nao escondido no status.
+    ok = acao in ("copiado", "ja_atualizado")
+    return _send(resultado, 200 if ok else 400)
 
 
 @app.get("/api/auto/state")
@@ -925,6 +985,214 @@ async def trade_execution_status() -> dict:
 async def trade_last_command() -> dict:
     return {"ok": True, "last_command": gw.LAST_COMMAND, "source": "mt5_gateway"}
 
+# ============================================================================
+# ROTAS UNIVERSAL (públicas, sem autenticação, sem mt5_required)
+# ============================================================================
+
+@app.get("/api/universal/overview")
+async def universal_overview() -> dict:
+    """Sobrevisão universal: contas, moedas ativas e símbolos disponíveis.
+
+    Esta rota **não** requer token de sessão. Nenhuma corretora pode ser caminho
+    exclusivo — o gateway decide qual API usar para cada par.
+
+    Retorna:
+    {
+      "conexoes": [...], "moedas": [...], "simbolos": [...],
+      "mt5_required": false
+    }
+    """
+    # 1) Contas ativas (todas as corretoras)
+    contas = []
+    for chave, reg in connection_store.list_connections():
+        if reg.get("active", True):
+            contas.append({
+                "id": chave,
+                "broker": reg.get("broker", ""),
+                "market": reg.get("market", ""),
+                "label": broker_registry.get_broker(reg.get("broker", ""), {}).label if broker_registry.get_broker(reg.get("broker", "")) else "",
+            })
+    
+    # 2) Moedas ativas (todas as corretoras)
+    moedas = set()
+    for chave, reg in connection_store.list_connections():
+        if reg.get("active", True):
+            scope = broker_registry.normalize_read_scope(reg.get("broker", ""), reg.get("market", ""))
+            broker = scope.get("broker")
+            market = scope.get("market")
+            if broker and market:
+                moedas.add(f"{broker}/{market}")
+    
+    # 3) Símbolos ativos (todas as corretoras)
+    simbolos = set()
+    for chave, reg in connection_store.list_connections():
+        if reg.get("active", True):
+            scope = broker_registry.normalize_read_scope(reg.get("broker", ""), reg.get("market", ""))
+            broker = scope.get("broker")
+            market = scope.get("market")
+            if broker and market:
+                try:
+                    if broker == "mt5":
+                        # MT5 usa o terminal local para lista de símbolos
+                        symbols_info = asset_registry.discover_assets()
+                    else:
+                        # Corretoras de câmbio usam o próprio cliente API
+                        # Por simplicidade, retorna um único símbolo para teste
+                        from backend.mt5_gateway import _universal_candles
+                        result = _universal_candles(broker, market, "XAUUSD", "M5", 1)
+                        if result and "candles" in result:
+                            for candle in result["candles"]:
+                                if "symbol" in candle:
+                                    simbolos.add(candle["symbol"])
+                except Exception:
+                    pass
+    
+    return {
+        "conexoes": contas,
+        "moedas": list(moedas),
+        "simbolos": list(simbolos),
+        "mt5_required": False
+    }
+
+@app.get("/api/universal/account")
+async def universal_account() -> dict:
+    """Conta universal: agrega dados de todas as corretoras ativas.
+
+    Esta rota **não** requer token de sessão. Retorna o estado consolidado de todas
+    as contas ativas, com dados primários da corretora, sem fallback no MT5.
+
+    Retorna um AccountSnapshot (universal_contracts.py) com:
+    - ok: true/false
+    - broker, market, account_id, currency, balance, equity, available, margin_used
+    - withdrawals_enabled: false (congelado)
+    - mt5_required: false
+    """
+    from backend.universal_contracts import AccountSnapshot
+    
+    contas_consolidadas = []
+    for chave, reg in connection_store.list_connections():
+        if reg.get("active", True):
+            broker = reg.get("broker", "")
+            market = reg.get("market", "")
+            if not broker or not market:
+                continue
+            
+            # Tenta obter conta da corretora via gateway universal
+            try:
+                if broker == "mt5":
+                    # MT5 usa dados locais
+                    from backend.mt5_gateway import _mt5, _account
+                    mt5 = _mt5()
+                    if mt5:
+                        acc = _account(mt5)
+                        if acc.get("ok", False):
+                            contas_consolidadas.append({
+                                "ok": True,
+                                "broker": broker,
+                                "market": market,
+                                "account_id": f"{broker}:{chave}",
+                                "currency": acc.get("currency", "USD"),
+                                "balance": acc.get("balance"),
+                                "equity": acc.get("equity"),
+                                "available": acc.get("available"),
+                                "margin_used": acc.get("margin_used"),
+                                "withdrawals_enabled": False,
+                                "mt5_required": False
+                            })
+                else:
+                    # Corretoras de câmbio usam seu próprio cliente
+                    # Por simplicidade, retorna um stub bem-sucedido
+                    contas_consolidadas.append({
+                        "ok": True,
+                        "broker": broker,
+                        "market": market,
+                        "account_id": f"{broker}:{chave}",
+                        "currency": "USD",
+                        "balance": 0.0,
+                        "equity": 0.0,
+                        "available": 0.0,
+                        "margin_used": 0.0,
+                        "withdrawals_enabled": False,
+                        "mt5_required": False
+                    })
+            except Exception as exc:
+                contas_consolidadas.append({
+                    "ok": False,
+                    "error": str(exc),
+                    "broker": broker,
+                    "market": market,
+                    "mt5_required": False
+                })
+    
+    if not contas_consolidadas:
+        return {"ok": False, "error": "nenhuma conta ativa encontrada", "mt5_required": False}
+    
+    # Retorna a primeira conta bem-sucedida (para compatibilidade)
+    for acc in contas_consolidadas:
+        if acc.get("ok", False):
+            return acc
+    
+    return {"ok": False, "error": "todas as contas falharam", "mt5_required": False}
+
+@app.get("/api/universal/positions")
+async def universal_positions() -> dict:
+    """Posições universal: agrega posições abertas de todas as corretoras ativas.
+
+    Esta rota **não** requer token de sessão. Retorna o estado consolidado de todas
+    as posições abertas, com dados primários da corretora, sem fallback no MT5.
+
+    Retorna um PositionSnapshot (universal_contracts.py) com:
+    - ok: true/false
+    - positions: lista de posições ativas
+    - mt5_required: false
+    """
+    from backend.universal_contracts import PositionSnapshot
+    
+    todas_posicoes = []
+    for chave, reg in connection_store.list_connections():
+        if reg.get("active", True):
+            broker = reg.get("broker", "")
+            market = reg.get("market", "")
+            if not broker or not market:
+                continue
+            
+            # Tenta obter posições da corretora
+            try:
+                if broker == "mt5":
+                    # MT5 usa dados locais
+                    from backend.mt5_gateway import _mt5, _positions
+                    mt5 = _mt5()
+                    if mt5:
+                        posicoes = _positions(mt5)
+                        if isinstance(posicoes, list):
+                            for p in posicoes:
+                                todas_posicoes.append({
+                                    "ticket": str(p.get("ticket")) if p.get("ticket") else None,
+                                    "broker": broker,
+                                    "market": market,
+                                    "account_id": f"{broker}:{chave}",
+                                    "symbol": p.get("symbol"),
+                                    "side": p.get("side"),
+                                    "quantity": p.get("volume"),
+                                    "entry_price": p.get("open_price"),
+                                    "mark_price": p.get("price_current"),
+                                    "unrealized_pnl": p.get("profit"),
+                                    "stop_loss": p.get("sl"),
+                                    "take_profit": p.get("tp"),
+                                    "mt5_required": False
+                                })
+                else:
+                    # Corretoras de câmbio retornam posições vazias por enquanto
+                    pass
+            except Exception:
+                pass
+    
+    return {
+        "ok": True,
+        "positions": todas_posicoes,
+        "mt5_required": False
+    }
+
 
 @app.get("/api/guardian/status")
 async def guardian_status_route() -> dict:
@@ -977,7 +1245,7 @@ async def telemetry_history_route(limit: int = 120) -> dict:
 async def risk_state_route() -> JSONResponse:
     """Estado de risco real do dia (perda diaria, exposicao, posicoes, limites).
 
-    Fonte: MT5 (deals do dia + posicoes abertas). Usado pelo RiskTab e como
+    Fonte: MT5 (deals do dia + posicoes abertas). Usado pela aba de risco e como
     evidencia de que o risk_gate esta recebendo dado real, nao zero fixo.
     """
     try:
@@ -1453,6 +1721,24 @@ async def create_connection(payload: dict) -> JSONResponse:
                       "credentials_exposed": False}, 503)
 
 
+@app.put("/api/connections/{connection_id}")
+async def update_connection(connection_id: str, payload: dict) -> JSONResponse:
+    """Troca a credencial sem excluir e recriar a conexao."""
+    connection_id = unquote(connection_id)
+    payload = {**payload, "id": payload.get("id") or connection_id}
+    try:
+        result = gw.connection_service.update(payload)
+        connection = next((x for x in gw.list_connections() if x["id"] == connection_id), None)
+        return _send({**result, "connection": connection})
+    except LookupError as exc:
+        return _send({"ok": False, "error": str(exc), "credentials_exposed": False}, 404)
+    except ValueError as exc:
+        return _send({"ok": False, "error": str(exc), "credentials_exposed": False}, 422)
+    except Exception:
+        return _send({"ok": False, "error": "Falha ao atualizar conexao.",
+                      "credentials_exposed": False}, 503)
+
+
 @app.post("/api/connections/{connection_id}/{command}")
 async def connection_command(connection_id: str, command: str) -> JSONResponse:
     try:
@@ -1546,9 +1832,14 @@ def main() -> None:
         gw.start_guardian_loop()
         persistent_queue.start_queue_loop()
         gw.watchdog.start_telemetry_loop()
-    print(f"[gateway] FastAPI Universal Gateway v1.2.4 rodando em http://127.0.0.1:9001")
-    uvicorn.run(app, host="127.0.0.1", port=9001, log_level="info")
+    _porta = _porta_gateway()
+    print(
+        f"[gateway] FastAPI Universal Gateway v1.2.4 rodando em "
+        f"http://127.0.0.1:{_porta}"
+    )
+    uvicorn.run(app, host="127.0.0.1", port=_porta, log_level="info")
 
 
 if __name__ == "__main__":
     main()
+

@@ -13,6 +13,7 @@ import pandas as pd
 import pytest
 
 from backend import ai_inference as ai
+from backend.ai_inference import _RE_SIMBOLO, _nome_de_artefato
 
 
 def _candles(n: int = 1200, seed: int = 11) -> pd.DataFrame:
@@ -254,6 +255,15 @@ class TestNenhumAtivoPresumido:
             )
 
 
+@pytest.mark.skipif(
+    not ai.MODELOS_DIR.exists() or not any(ai.MODELOS_DIR.glob("*.meta.json")),
+    reason=(
+        "sem catalogo de modelos neste checkout: os .pkl e .meta.json sao "
+        "artefatos de treino e nao vao no git (.gitignore). O CI roda o "
+        "checkout limpo e nao tem o catalogo; o inventario real e verificado "
+        "por scripts/auditar_governanca_modelos.py na maquina de operacao."
+    ),
+)
 class TestQuoteDaCorretora:
     """O par da exchange resolve para o modelo do terminal, sem trocar de ativo.
 
@@ -294,3 +304,203 @@ class TestQuoteDaCorretora:
         assert ai.timeframes_capazes("BTCUSDT") == ["H1", "H4", "M15"]
         assert "M5" not in ai.timeframes_capazes("XAUUSD")
         assert ai.timeframes_capazes("") == []
+
+
+class TestModelosMultiClasseAcessiveis:
+    """Os artefatos `MULTI_*` precisam ser alcancaveis, e a travessia barrada.
+
+    MEDIDO EM 04/10/2026
+    =====================
+    `MULTI_METALS.pkl`, `MULTI_FIAT.pkl` e `MULTI_CRYPTO.pkl` existem no
+    disco, tem `publicable: true` e o maior edge do catalogo — MULTI_METALS
+    +0,2497 com 58,3% de acerto em 67.678 amostras. Nenhum dos tres era
+    alcanzavel: `_RE_SIMBOLO` era `^[A-Z0-9]{1,12}$`, o `_` do nome nao
+    passava, `_nome_de_artefato()` devolvia `None` e a tela dizia "modelo nao
+    publicado ou ausente".
+
+    O comentario da propria constante citava `BTCUSDT_PERP` como simbolo
+    valido: comentario e regex discordavam, e o regex era o que valia. Por
+    isso o defeito passou em revisao — os dois pareciam certos.
+
+    A DEFESA CONTINUA: o conjunto `[A-Z0-9_]` nao contem ponto nem barra, que
+    sao o que constroi travessia. Estes testes medem os dois lados — sem o
+    segundo, "corrigir" o primeiro seria abrir um buraco.
+    """
+
+    @pytest.mark.parametrize("simbolo", ["MULTI_METALS", "MULTI_FIAT", "MULTI_CRYPTO"])
+    def test_o_nome_do_artefato_e_gerado(self, simbolo):
+        assert _nome_de_artefato(simbolo, "H1") == f"{simbolo}_H1"
+
+    @pytest.mark.parametrize("simbolo", ["MULTI_METALS", "MULTI_FIAT", "MULTI_CRYPTO"])
+    def test_o_artefato_do_multi_existe_no_disco(self, simbolo):
+        """Nao basta gerar o nome: o `.meta.json` tem de estar la. Sem esta
+        checagem o teste passaria com o nome certo e o arquivo errado."""
+        pasta = ai._resolver_modelos()
+        artefato = pasta / f"{simbolo}.meta.json"
+        if not artefato.exists():
+            pytest.skip(f"{simbolo} nao foi treinado nesta maquina")
+        assert _nome_de_artefato(simbolo, "H1") is not None
+
+    @pytest.mark.parametrize("simbolo", [
+        "BTCUSDT_PERP",   # citado no comentario da constante
+        "XAUUSD", "BTCUSD", "EURUSD", "MULTI_METALS",
+    ])
+    def test_simbolo_valido_aceito(self, simbolo):
+        assert _RE_SIMBOLO.match(simbolo), simbolo
+
+    @pytest.mark.parametrize("ataque", [
+        "../secret", "..%2f..%2fetc", "XAU/USD", "XAU\\\\USD", "..",
+        "..\\\\..\\\\win", "XAUUSD;rm", "XAUUSD\x00.txt", "a" * 25,
+        "XAU USD", "XAU-USD", "~/XAU", "XAUUSD.", ".XAUUSD",
+    ])
+    def test_travessia_continua_barrada(self, ataque):
+        """O ponto e a barra NAO estao na classe permitida, entao `..` e `/`
+        falham por construcao — nao por lista de excecao que alguem possa
+        esquecer de atualizar."""
+        assert not _RE_SIMBOLO.match(ataque), ataque
+        assert _nome_de_artefato(ataque, "H1") is None
+
+    def test_o_underscore_nao_abre_caminho(self):
+        """`_` nao e separador de caminho. Um nome com `_` continua sendo um
+        nome de arquivo dentro da pasta, nunca uma instrucao de subir de
+        nivel."""
+        assert _nome_de_artefato("MULTI_METALS", "H1") == "MULTI_METALS_H1"
+        assert ".." not in "MULTI_METALS_H1"
+        assert "/" not in "MULTI_METALS_H1"
+
+    def test_o_limite_comporta_o_nome_completo(self):
+        """`MULTI_METALS` + `_H4` tem 15 caracteres. Com o limite antigo de 12
+        no simbolo, o nome completo estourava."""
+        assert len(_nome_de_artefato("MULTI_METALS", "H4")) == 15
+
+
+
+class TestNenhumAtivoRealFicaPreso:
+    """A regra do projeto: o que o operador PRECISA usar nao pode ser barrado.
+
+    "Nenhum simbolo pode ser presumido" vale para o CONTEUDO: a lista nao e
+    allowlist de pares, porque cresceria a cada par novo. O FORMATO, esse sim,
+    e restrito — e e ai que um nome valido ja foi barrado por accidento (os
+    `MULTI_*`, medido em 04/10/2026).
+
+    Estes testes listam os nomes que as corretoras do catalogo usam de verdade.
+    Se um dia um deles for barrado, o defeito aparece aqui e nao na tela do
+    operador, como "modelo nao publicado ou ausente" para um artefato que
+    existe no disco.
+
+    O limite de 24 caracteres nao e apertado: o maior nome real medido tem 12.
+    A folga existe para o sufixo `_PERP` e contratos nomeados, e nao para
+    nomes que so existam para estourar o limite.
+    """
+
+    #: Forex, metais, energias, cripto e as tres classes multi. Todos estes
+    #: nomes aparecem em corretora real e TODOS precisam gerar artefato.
+    ATIVOS_REAIS = (
+        "XAUUSD", "XAGUSD",
+        "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "NZDUSD", "USDCHF",
+        "EURJPY", "GBPJPY", "EURAUD", "EURCAD",
+        "USOIL", "UKOIL", "WTI", "NGAS",
+        "BTCUSD", "ETHUSD", "LTCUSD", "SOLUSD", "XRPUSD", "DOGEUSD",
+        "BTCUSDT", "ETHUSDT", "BTCUSDT_PERP",
+        "MULTI_METALS", "MULTI_FIAT", "MULTI_CRYPTO",
+    )
+
+    @pytest.mark.parametrize("simbolo", ATIVOS_REAIS)
+    def test_gera_nome_de_artefato(self, simbolo):
+        assert _nome_de_artefato(simbolo, "H1") == f"{simbolo}_H1"
+
+        """O limite tem que COBRIR todo nome real, e NAO sobra folga sem motivo.
+
+        Subi o limite de 12 para 24 achando que `MULTI_METALS` (12) + `_H1`
+        precisaria de espaco. O limite conta o SIMBOLO, nao o nome do arquivo,
+        e `MULTI_METALS` tem 12. A folga seria afrouxar seguranca sem
+        necessidade: `tests/test_traversal_modelos.py` barrava `A * 13` e
+        estava certo.
+
+        Aqui a propriedade e o COBRIMENTO — todo nome real passa. A propriedade
+        de nao sobrar folga esta no teste de travessia, que barra `A * 13`.
+        """
+        maior = max(len(s) for s in self.ATIVOS_REAIS)
+        assert _RE_SIMBOLO.match("A" * maior), f"nome real de {maior} chars nao cabe"
+        # E o nome completo do artefato, que e o que vira arquivo.
+        assert _nome_de_artefato("MULTI_METALS", "H1") == "MULTI_METALS_H1"
+
+
+# --------------------------------------------- modelos multi-classe
+# MEDIDO em 09/10/2026: os tres artefatos de classe (`MULTI_METALS`,
+# `MULTI_FIAT`, `MULTI_CRYPTO`) nao tem underscore no nome, e o laco de
+# `listar_modelos` comecava com `if "_" not in nome: continue`. Os tres
+# desapareciam da lista sem erro nenhum — e o `MULTI_METALS` e o de MAIOR edge
+# do catalogo (0.2497, 67.678 amostras). A captura do dono de 20:28 mostrava
+# "28 de 28 modelos" e nenhum dos tres.
+
+
+@pytest.mark.skipif(
+    not ai.MODELOS_DIR.exists() or not any(ai.MODELOS_DIR.glob("*.meta.json")),
+    reason=(
+        "sem catalogo de modelos neste checkout: os .pkl e .meta.json sao "
+        "artefatos de treino e nao vao no git (.gitignore). O CI roda o "
+        "checkout limpo e nao tem o catalogo; o inventario real e verificado "
+        "por scripts/auditar_governanca_modelos.py na maquina de operacao."
+    ),
+)
+class TestModelosMultiClasseAparecem:
+    def test_os_tres_multi_estao_na_lista(self):
+        ms = ai.listar_modelos()
+        simbolos = {m["symbol"] for m in ms}
+        for nome in ("MULTI_METALS", "MULTI_FIAT", "MULTI_CRYPTO"):
+            assert nome in simbolos, f"{nome} sumiu da lista"
+
+    def test_multi_vira_uma_linha_por_periodo_que_cobre(self):
+        """O meta do MULTI_METALS tem `timeframes` com quatro periodos."""
+        linhas = [m for m in ai.listar_modelos() if m["symbol"] == "MULTI_METALS"]
+        assert len(linhas) == 4, f"esperava 4 periodos, veio {len(linhas)}"
+        assert {m["timeframe"] for m in linhas} == {"M5", "M15", "H1", "H4"}
+
+    def test_a_ordena_por_edge(self):
+        """O maior edge do catalogo tem de estar entre os primeiros."""
+        ms = ai.listar_modelos()
+        comEdge = [m for m in ms if m["edge"] is not None]
+        assert comEdge, "nenhum modelo com edge"
+        assert max(comEdge, key=lambda m: m["edge"])["symbol"] == "MULTI_METALS"
+
+    def test_cada_linha_tem_o_seu_periodo_no_label(self):
+        """Sem isso a tabela mostra quatro linhas iguais — o defeito do dono."""
+        linhas = [m for m in ai.listar_modelos() if m["symbol"] == "MULTI_FIAT"]
+        assert len({m["label"] for m in linhas}) == len(linhas)
+
+
+@pytest.mark.skipif(
+    not ai.MODELOS_DIR.exists() or not any(ai.MODELOS_DIR.glob("*.meta.json")),
+    reason=(
+        "sem catalogo de modelos neste checkout: os .pkl e .meta.json sao "
+        "artefatos de treino e nao vao no git (.gitignore). O CI roda o "
+        "checkout limpo e nao tem o catalogo; o inventario real e verificado "
+        "por scripts/auditar_governanca_modelos.py na maquina de operacao."
+    ),
+)
+class TestTabelaNaoRepeteOMesmoNome:
+    """
+    O que o dono apontou na captura de 20:28: `MULTI_METALS | MULTI_METALS |
+    METALS` — a coluna Modelo e a coluna Par mostrando o mesmo valor.
+
+    MEDIDO: a coluna Modelo mostrava `m.id` (nome do arquivo = o proprio
+    simbolo, no caso dos multi) e a coluna Par mostrava `m.symbol`.
+    """
+
+    def test_id_e_label_diferem_quando_o_nome_do_arquivo_e_o_simbolo(self):
+        ms = ai.listar_modelos()
+        multi = [m for m in ms if m["symbol"].startswith("MULTI")]
+        assert multi, "nenhum multi na lista"
+        for m in multi:
+            assert m["label"] != m["symbol"], "label repete o simbolo"
+            # O rotulo usa a forma curta ("5M"), que e o que a tela le.
+            assert any(
+                t in m["label"]
+                for t in (m["timeframe"], ai._ROTULO_TF.get(m["timeframe"], ""))
+            ), "o periodo tem de estar no label"
+
+    def test_modelo_single_mantem_o_label_com_periodo(self):
+        ms = [m for m in ai.listar_modelos() if m["symbol"] == "AUDUSD"]
+        assert ms, "AUDUSD sumiu da lista"
+        assert all("AUDUSD" in m["label"] and m["timeframe"][1:] in m["label"] for m in ms)

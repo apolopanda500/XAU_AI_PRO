@@ -1,133 +1,153 @@
-// Aba Robô organizada em sub-abas.
+// ===========================================================================
+//  ABA ROBÔ — PÁGINA ÚNICA. 05/10/2026.
+// ===========================================================================
 //
-// O QUE MUDOU
-// ===========
-// A aba devolvia um fragmento com oito ErrorBoundary empilhados: Modelo,
-// Automação, Ordem, Risco, Guardian, Ativos, Copiloto e Mini Terminal, todos
-// num único scroll. Era uma página sem hierarquia — nada dizia onde uma
-// responsabilidade terminava e a outra começava.
+//  A FOLHA ANTIGA (`mesa-xm.css`) SAIU, E ESTE É O MOTIVO
+//  ======================================================
+//  A aba anterior era `MesaXM` (ticket manual) + sub-aba `Acompanhar`. O dono
+//  mandou tirar a mesa. A versão intermediária trocou `MesaXM` por
+//  `OperacaoAutomatica` e MANTIVEU a folha antiga, com o prefixo `mesa-`.
 //
-// A versão seguinte fez cinco seções (Modelo & Sinal | Operação | Ordem |
-// Ativos | Copiloto) e aí apareceram dois problemas: Ordem e Ativos falavam do
-// mesmo ativo escolhido em telas separadas, e o operador via a mesma ordem de
-// botões repetida em painéis diferentes.
+//  Resultado medido: a aba ficou DESCONFIGURADA, sem erro e sem exceção. A
+//  folha deixou de ser importada quando o componente que a importava foi
+//  apagado, e todas as classes do ticket ficaram sem regra: ticket desmontado,
+//  botão sem cor, campos empilhados.
 //
-// Agora são cinco (Sinal | Automação | Mesa | EA | Copiloto):
+//  A reconstrução parte do CSS, não do componente. Cada arquivo da página
+//  importa SUA folha, e a folha é declarada com o nome da página (`robo-`).
+//  Não existe mais nenhum `mesa-`.
 //
-//   Sinal      → qual ativo usar, qual modelo roda e o que ele prevê
-//   Automação  → se o motor está ligado, com que limites e sobre qual par
-//   Mesa       → mandar ordem à mão e a parada de emergência
-//   EA         → o que existe no terminal MT5, o que o heartbeat reporta e
-//                os comandos do Expert Advisor
-//   Copiloto   → conversa e achados do EA
+//  O DONO PEDIU (esta rodada)
+//  ==========================
+//  "aba robo ativo e periodo remover. acompanhar modelos remover. apenas
+//   operacao automatica completa com modelos e ligar auto sim ou nao, NO MEIO
+//   grafico estilo XM global e embaixo miniterminal ao vivo e as operacoes
+//   abertas."
 //
-// E o Mini Terminal continua sempre visível no fim: ele é conferência, não
-// comando — é ali que se vê o motor rodando, as posições e a conta.
+//  O QUE SAIU, E POR QUÊ
+//  =====================
+//  1. "Ativo e Período" — bloco SEPARADO de escolha de par.
 //
-// OS PAINÉIS NÃO SÃO DESMONTADOS
-// ===============================
-// As sub-abas escondem com `hidden`, sem deixar de renderizar. Desmontar
-// jogaria fora a conversa do Copiloto (estado local em useState), a seleção
-// de ativo e qualquer leitura em andamento.
-import type { ReactNode } from 'react';
-import { useAppStore, ROBOT_SUBS, type RobotSub } from '../hooks/useAppStore';
+//     Ele respondia a pergunta "qual ativo e modelo?", e a pergunta é legítima.
+//     Mas o dono pediu para remover, e o motivo dele se sustenta: o par já é
+//     escolhido na barra inferior (o botão `status-simbolo` abre o seletor de
+//     par E de timeframe), que é ONDE O MT5 e a XM colocam. Ter a escolha em
+//     dois lugares é o caminho para os dois discordarem — e quando discordam,
+//     o operador acredita no lugar errado. Este bloco lia `auto/config` e a
+//     barra inferior escreve o mesmo endpoint. Mesmo dado, dois lugares.
+//
+//  2. "Acompanhar modelos" como COMPONENTE.
+//
+//     Saiu o nome e o wrapper, não a função: o gráfico continua no meio da
+//     OPERAÇÃO. O que muda é que não existe mais um componente chamado
+//     "acompanhar" — o bloco do meio é o GRÁFICO, e ele é o que o dono pediu
+//     para estar no meio, no estilo XM (`my.xm.com/pt/symbol-info/BTCUSD`).
+//     O seletor de modelo DENTRO da operação automática permanece, porque sem
+//     ele não existe "operação automática completa com modelos".
+//
+//     E UM GRAFICO SO (11/10/2026, decisao do dono: duas sub-abas estavam com
+//     o grafico duplicado). O grafico mora na sub-aba Operacao; Modelos,
+//     Risco e Operacoes mostram so o painel delas. Ver o comentario acima do
+//     `{subAba === 'operacao' && (` no final do arquivo.
+//
+//  A ORDEM É A QUE O DONO PEDIU
+//  ===========================
+//  1. cabeçalho
+//  2. operação automática COMPLETA (lote, SL, TP, modelo, liga/desliga)
+//  3. gráfico operacional ao vivo — ESTILO XM, no meio (SO na Operacao)
+//  4. MiniTerminal ao vivo e as operações abertas — embaixo (sub-aba Operacoes)
+//
+//  Cada bloco é seu próprio `<section>`, e a página não tem `overflow` próprio:
+//  quem rola é `.content`. É isso que impede um bloco de encavalitar sobre o
+//  outro — que foi o sintoma da versão quebrada anterior.
+// ===========================================================================
+import { useState } from 'react';
 import ErrorBoundary from './ErrorBoundary';
-import AutoEnginePanel from './AutoEnginePanel';
-import RiskTab from './tabs/RiskTab';
+import AcompanharModelos from './AcompanharModelos';
+import OperacaoAutomatica from './OperacaoAutomatica';
 import UniversalLiveTerminal from './UniversalLiveTerminal';
-import '../theme/robot-subtabs.css';
-// Densidade das tabelas do Histórico, aplicada também às do Robô (M3).
-import '../theme/history-grid.css';
+import ListaModelos from './ListaModelos';
+import '../theme/robo.css';
 
-const ROTULOS: Record<RobotSub, string> = {
-  operar: 'Operar',
-};
-
-const RESUMOS: Record<RobotSub, string> = {
-  operar: 'Operação automática, terminal e posições abertas — só o que o operador precisa ver.',
-};
-
-function Secao({ nome, children }: { nome: string; children: ReactNode }) {
+function Secao({ nome, children }: { nome: string; children: React.ReactNode }) {
   return <ErrorBoundary nome={nome}>{children}</ErrorBoundary>;
 }
 
-export default function RobotTabs() {
-  const sub = useAppStore((s) => s.robotSub);
-  const setSub = useAppStore((s) => s.setRobotSub);
+type SubAba = 'operacao' | 'modelos' | 'risco' | 'operacoes';
 
-  // ORDEM DA MESA, E O QUE FICOU (2026-09-30)
-  // ==============================================
-  // O dono pediu: *"operacao automatica, terminal, posicoes abertas so isso
-  // mais bem configurado e com botoes melhorados"*.
-  //
-  // Antes eram quatro blocos, nesta ordem:
-  //   1. automatico  — AutoEnginePanel
-  //   2. posicoes    — UniversalLiveTerminal
-  //   3. ordem manual — OrderPanel
-  //   4. guardian    — GuardianManager
-  //
-  // Saem (3) e (4):
-  //   - **Ordem manual**: tinha o seletor de corretora/mercado DUPLICADO (o
-  //     `OrderPanel` mantem o proprio `Broker` e `MERCADOS`), o que fazia a
-  //     tela afirmar uma corretora e o motor operar outra. Era a origem de
-  //     "escolhi Binance e a ordem foi para o MT5".
-  //   - **Guardian**: protecao e trailing ficam legiveis no terminal ao vivo e
-  //     no EA; dentro do Robô eram um bloco de configuracao que o operador
-  //     rarely revisava e que competia visually com o motor.
-  //
-  // Ficam (1) e (2), que sao as duas leituras que o operador precisa
-  // continuamente: o que o motor esta fazendo e o que esta aberto agora.
-  const paineis: Record<RobotSub, ReactNode> = {
-    operar: (
-      <>
-        <Secao nome="Operação automática">
-          <AutoEnginePanel />
-        </Secao>
-        <Secao nome="Posições ao vivo">
-          <UniversalLiveTerminal />
-        </Secao>
-      </>
-    ),
-  };
+const SUB_ABAS: Array<{ id: SubAba; rotulo: string }> = [
+  { id: 'operacao', rotulo: 'Operação' },
+  { id: 'modelos', rotulo: 'Modelos' },
+  { id: 'risco', rotulo: 'Risco' },
+  { id: 'operacoes', rotulo: 'Operações' },
+];
+
+export default function RobotTabs() {
+  const [subAba, setSubAba] = useState<SubAba>('operacao');
 
   return (
-    <main className="robot-page">
-      <div className="page-head">
-        <div>
-          <span className="eyebrow">OPERAÇÃO</span>
-          <h1>ROBÔ</h1>
-          <span className="muted">{RESUMOS[sub]}</span>
-        </div>
-        <div className="btn-row robot-subtabs" role="tablist" aria-label="Seções de operação">
-          {ROBOT_SUBS.map((id) => (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              id={`robot-tab-${id}`}
-              aria-controls={`robot-panel-${id}`}
-              aria-selected={sub === id}
-              className="btn"
-              onClick={() => setSub(id)}
-            >
-              {ROTULOS[id]}
-            </button>
-          ))}
-        </div>
-      </div>
+    <main className="robo">
+      <nav className="robo-sub-abas" role="tablist" aria-label="Sub-abas do robô">
+        {SUB_ABAS.map((aba) => (
+          <button
+            key={aba.id}
+            type="button"
+            role="tab"
+            aria-selected={subAba === aba.id}
+            className={`robo-sub-aba ${subAba === aba.id ? 'ativa' : ''}`}
+            onClick={() => setSubAba(aba.id)}
+          >
+            {aba.rotulo}
+          </button>
+        ))}
+      </nav>
 
-      {ROBOT_SUBS.map((id) => (
-        <div
-          key={id}
-          className="robot-subpanel"
-          role="tabpanel"
-          id={`robot-panel-${id}`}
-          aria-labelledby={`robot-tab-${id}`}
-          hidden={sub !== id}
-        >
-          {paineis[id]}
-        </div>
-      ))}
+      {subAba === 'operacao' && (
+        <Secao nome="Operação automática">
+          <OperacaoAutomatica />
+        </Secao>
+      )}
+
+      {subAba === 'modelos' && (
+        <Secao nome="Modelos treinados">
+          <ListaModelos />
+        </Secao>
+      )}
+
+      {subAba === 'risco' && (
+        <Secao nome="Controle de risco">
+          <OperacaoAutomatica visao="risco" />
+        </Secao>
+      )}
+
+      {subAba === 'operacoes' && (
+        <Secao nome="Operações abertas">
+          <UniversalLiveTerminal />
+        </Secao>
+      )}
+
+      {/*
+        UM GRAFICO SO, E NA SUB-ABA OPERACAO (11/10/2026)
+        ==================================================
+        Decisao do dono: duas sub-abas estavam com o grafico duplicado — remover
+        de uma, apenas 1 grafico. Antes o `<AcompanharModelos />` era SEMPRE
+        visivel, embaixo de qualquer sub-aba: o mesmo grafico repetido em
+        Operacao, Modelos, Risco e Operacoes. Quatro telas com o mesmo grafico
+        e o mesmo defeito das sub-abas duplicadas em outra roupa: o operador
+        nao sabe qual dos graficos manda (e sao quatro consultas, quatro
+        polls, quatro series para o mesmo par).
+
+        Agora o grafico mora na Operacao — operar e ver sao o mesmo gesto, e
+        era o desenho original desta pagina ("no MEIO grafico estilo XM").
+        Modelos, Risco e Operacoes mostram so o painel delas. As linhas de
+        posicao (entrada/SL/TP arrastaveis) continuam no grafico da Operacao,
+        que le as mesmas posicoes.
+      */}
+      {subAba === 'operacao' && (
+        <Secao nome="Gráfico ao vivo">
+          <AcompanharModelos />
+        </Secao>
+      )}
     </main>
   );
 }

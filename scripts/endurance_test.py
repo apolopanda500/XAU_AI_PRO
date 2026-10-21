@@ -45,7 +45,21 @@ def _token() -> str:
 
 def _consultar(rota: str, token: str) -> tuple[bool, dict]:
     url = f"{GATEWAY}{rota}"
-    pedido = urllib.request.Request(url, headers={"X-Gateway-Token": token})
+    # O header e `Authorization: Bearer` e NAO `X-Gateway-Token`.
+    #
+    # `mt5_gateway.py:2594-2596` aceita uma unica forma:
+    #     auth = self.headers.get("Authorization", "")
+    #     if auth != f"Bearer {API_TOKEN}": return False, "token"
+    #
+    # Este script mandava `X-Gateway-Token`, que o gateway ignora. O efeito era
+    # 401 em TODA consulta — e `HTTP 401` gravado como se fosse queda do
+    # gateway: o endurance test reprovava 100% das amostras por um header
+    # errado, e apontava o operador para o gateway em vez do cliente. E a
+    # quinta ocorrencia da regra do AGENTS.md: dois lados discordando do nome
+    # do mesmo campo. O EA ja passou por isso (Docs/SESSAO_20261005_IA_
+    # CHEGOU_AO_MT5_E_OURO.md).
+    cabecalhos = {"Authorization": f"Bearer {token}"} if token else {}
+    pedido = urllib.request.Request(url, headers=cabecalhos)
     try:
         with urllib.request.urlopen(pedido, timeout=10) as resposta:
             return True, json.loads(resposta.read().decode("utf-8"))
@@ -62,7 +76,12 @@ def _amostrar(token: str) -> dict:
         "incidentes": [],
     }
 
-    ok, saude = _consultar("/health", token)
+    # `/api/health`, e NAO `/health`. O gateway so conhece "/" e "/api/health"
+    # (`mt5_gateway.py:2750`); "/health" cai no 404 do else final. O mesmo
+    # caminho errado ja foi medido no core Rust (`core/src/bridge/mod.rs:80`),
+    # onde `MT5Bridge::new` recebia 404, `bridge` ficava `None` para sempre e o
+    # WebSocket 9002 nao entregava nenhuma cotacao.
+    ok, saude = _consultar("/api/health", token)
     if not ok:
         registro["incidentes"].append(f"health: {saude.get('erro')}")
         return registro

@@ -1,138 +1,83 @@
 # STATUS ATUAL DO PROJETO
 
-**Data:** 03/08/2026  
-**Versão:** 1.11  
-**Status:** 🟢 Bugs críticos corrigidos, aguardando teste no MT5
+**Data:** 11/10/2026
+**Versão:** 1.2.4
+**Status:** app novo **instalado e rodando** pelo atalho; todas as telas validadas;
+`0 falhas bloqueantes`. Pendências são **ação do dono** (ver §ABERTO).
 
 ---
 
-## ✅ Correções Aplicadas (03/08/2026)
+## LEIA PRIMEIRO
 
-### Bugs CRÍTICOS corrigidos (impediam o EA de iniciar):
+**→ [`Docs/CONVERSA_20261011_TEMAS_RENOMEADOS_E_ESTADO_MEDIDO.md`](CONVERSA_20261011_TEMAS_RENOMEADOS_E_ESTADO_MEDIDO.md)**
 
-1. **ValidationChecklist.mqh** — Código de verificação de Spread estava DEPOIS do `#endif` (nunca executava → `g_checkResults[9]` ficava false → `INIT_FAILED`). Movido para antes do `#endif`.
-2. **Diagnostics.mqh** — Código de verificação de Arquivos e IA estava DEPOIS do `#endif`. Movido para dentro da função `DiagnosticsRun()`.
-3. **AIClient.mqh** — `AIClientConnected()` retornava `false` hardcoded → checklist AI sempre falhava. Corrigido para retornar `true` (AIConnector local está implementado e funcional).
-4. **ValidationChecklist.mqh** — Caminhos de arquivo errados: `"prediction_..."` e `"dataset.csv"`. Corrigidos para `"Data\\prediction_..."` e `"Data\\dataset.csv"`.
-5. **Diagnostics.mqh** — Caminho do prediction file errado: `"Files/Data/prediction_..."`. Corrigido para `"Data\\prediction_..."`.
-
-### Problemas de LÓGICA corrigidos (impediam operações):
-
-6. **SignalCore.mqh** — Critérios de sinal extremamente restritivos:
-   - BUY: `rsi < 35` → `rsi < 50` (tendência alta + RSI não sobrecomprado)
-   - SELL: `rsi > 65` → `rsi > 50` (tendência baixa + RSI não sobrevendido)
-
-### Parâmetros OTIMIZADOS (Config.mqh):
-
-7. `ATRMultiplier`: 2.0 → 1.2 (trailing stop mais justo)
-8. `BreakEvenTrigger`: 150 → 80 (break-even mais rápido)
-9. `PartialTrigger`: 300 → 150 (parcial mais cedo)
-10. `PartialPercent`: 50.0 → 30.0 (parcial menor, preserva mais lucro)
-
-### Pipeline PYTHON corrigido:
-
-11. **feature_engineering.py** — Estava VAZIO (importado pelo pipeline.py). Implementado com `FEATURES`, `build_features()` e `prepare_features()`.
-12. Pipeline Python testado e funcionando: `train.py` (modelo criado, 72 registros) e `predict.py` (6 predições geradas).
-13. Arquivos `prediction_{symbol}.json` sincronizados para `MQL5/Files/Data/` e `MQL5/Experts/XAU_AI_PRO/Data/`.
+Diz o que fazer, o que medir e o que está aberto, com o estado de agora.
+Este arquivo é o resumo.
 
 ---
 
-## 🏗️ Arquitetura do Sistema (3 componentes)
+## OS NÚMEROS (medidos em 11/10/2026)
 
-### 1. EA MQL5 (MetaTrader 5)
+| | |
+|---|---|
+| `preflight --etapa app-rodando` | **0 falhas**, 2 avisos (MQL5 + git pendente) |
+| `tsc --noEmit` | **exit 0** |
+| app em execução | `XAU AI PRO` + `mt5-gateway` + `xau-ai-pro-core` |
+| portas escutando | **9011** (gateway), **9002**/**9003** (core) — ocupadas |
+| `frontend/src` com nome de ativo no código | **0** (com comentário/docstring removidos) |
+| disco C: livre | **8,99 GB** |
+| branch | `develop`, 2 commits à frente de `origin/develop` |
+| arquivos pendentes no git | **108** |
 
-- Local: `MQL5/Experts/XAU_AI_PRO/`
-- Compila sem erros (`0 errors, 0 warnings`)
-- EA compilado (`XAU_AI_PRO.ex5`) presente no diretório do MT5
-- Coleta dados de mercado, salva `dataset.csv`, lê `prediction_{symbol}.json`, executa trades
-
-### 2. Pipeline Python (IA)
-
-- Local: `Python/`
-- `main.py` — CLI entry point (train, predict)
-- `train.py` — Treina RandomForest (300 estimators, max_depth=10)
-- `predict.py` — Gera predições multi-símbolo
-- `pipeline.py` — Pipeline completo com backtest, decision engine, entry filter, risk manager
-- `ai/feature_engineering.py` — Engenharia de features centralizada
-- `ai/predict_model.py` — Carregador de modelo e predição
-- `ai/predict_engine.py` — Construtor de sinais
-- `ai/validation.py` — Validação via LLM (LiteLLM Proxy)
-
-### 3. Ultimate App (Desktop)
-
-- Local: `Ultimate/`
-- `XAU_AI_PRO.exe` — Executável PyInstaller (9.5MB)
-- `launcher.py` — Inicia Backend + Frontend + Proxy
-- `backend/api.py` — FastAPI REST API (porta 8000)
-- `frontend/app.py` — GUI Tkinter (Trade, Dashboard, History, Balance, Logs)
-- `database/trading.db` — SQLite (tabelas: predictions, trades, account, daily_pnl)
-- `configs.json` — Configuração do app
+Números da suíte completa vêm do ciclo de 10/10 (`1315 passed`, `874 vitest`);
+não foram re rodados em 11/10 porque a mudança deste ciclo foi **só documentação**
+— nenhum fonte foi tocado, e o `tsc --noEmit` de agora confirma o frontend limpo.
 
 ---
 
-## 📋 Próximas Ações
+## O QUE FOI FEITO NO CICLO DE 11/10
 
-### Imediato (Usuário)
+| item | antes | agora |
+|---|---|---|
+| pergunta de temas com nome de ativo | em aberto (`xau_dark`/`btc_dark`) | **resolvida no código** e **documentada** (`dourado_dark`/`laranja_dark`, com migração da preferência salva) |
+| deploy do `.ex5` para o terminal | inexistente (reanexar não copiava) | **`backend/ea_deploy.py`** copia só o `.ex5` (com backup, atômico, `XAU_ALLOW_EA_DEPLOY=1`) + **12 testes** (prova positiva e negativa) |
 
-1. Abrir MetaTrader 5
-2. Recompilar o EA (F7 no MetaEditor) — os arquivos corrigidos já estão no diretório do MT5
-3. Arrastar o EA para o gráfico XAUUSD (ou símbolo da corretora)
-4. Verificar aba Experts (Ctrl+T) para mensagens
-5. O EA agora deve iniciar (bugs de INIT_FAILED corrigidos)
+A renomeação dos temas já estava pronta no fonte; este ciclo **fechou a lacuna de
+documentação** e **mediu o estado**.
 
-### Depois (Validação)
+### ⚠️ Descoberta: o EA no terminal está defasado e operando a conta real
 
-1. Testar em conta DEMO por 1 semana
-2. Verificar se operações são abertas (sinais agora são mais realistas)
-3. Monitore logs: Score, Risk, AI, Execution
-4. Verificar métricas no Ultimate App
+MEDIDO (hash, não data):
 
----
+| Onde | Hash (12) | Modificado |
+|---|---|---|
+| repo `XAU_AI_PRO.ex5` | `dc115aecc4df` | 10/10 21:00 |
+| terminal `XAU_AI_PRO.ex5` | `6f86cd6e37cd` | **08/10 23:03** |
 
-## 📊 Estado dos Componentes
+Compilar no MetaEditor gera o `.ex5` **ao lado do `.mq5`, no repo** — mas o
+gráfico carrega de `MQL5/Experts` do **terminal**. Reanexar não copia. O journal
+de 11/10 (domingo) mostra o EA **velho** operando a conta 391773676: 1132 vendas
+de EURUSD, 566 com `[Market closed]`. Opera EURUSD, não o BTCUSD do app.
 
-| Componente      | Status         | Observação                                                       |
-| --------------- | -------------- | ---------------------------------------------------------------- |
-| EA MQL5         | 🟢 Corrigido   | Bugs de init resolvidos, sinais relaxados, parâmetros otimizados |
-| Pipeline Python | 🟢 Funcional   | train e predict testados com sucesso                             |
-| Ultimate App    | 🟡 Estruturado | Banco SQLite vazio (sem trades ainda), app não testado           |
-| Banco de Dados  | 🟡 Vazio       | Tabelas criadas, 0 registros                                     |
-| Git             | 🟡 Pendente    | Arquivos não versionados, main 2 commits atrás                   |
-
----
-
-## 🎯 Objetivo Geral
-
-Transformar o XAU_AI_PRO em uma **plataforma de trading quantitativo** completa:
-
-1. **V1.0** - Robô estável e lucrativo (ATUAL)
-2. **V2.0** - Data Analytics completo
-3. **V3.0** - XAU AI Studio (app desktop)
-4. **V4.0** - Portal Web
-5. **V5.0** - Ecossistema completo com IA
+**Fechado a ferramenta, não o deploy.** `ea_deploy.py` está pronto e testado,
+mas **não copiei** — exige `XAU_ALLOW_EA_DEPLOY=1` e mexe no binário da conta
+real. Decisão do dono.
 
 ---
 
-**Status:** 🟢 Bugs críticos corrigidos, aguardando teste no MT5  
-**Próximo passo:** Recompilar EA no MetaEditor e testar no gráfico
+## O QUE ESTÁ ABERTO (ação do dono, não do ciclo)
+
+1. **Reanexar o EA ao gráfico.** Compilar não reanexa; 21 arquivos MQL5 estão com
+   autorização declarada no preflight. O EA anexado ao terminal é mais antigo que
+   o do repo.
+2. **Confirmar o AutoTrading do terminal.** A validação do app é só em leitura:
+   motor e IA ficam desligados.
+3. **Commit dos 108 arquivos** — decisão do dono.
+4. **Fechamento espontâneo do app** em sessão longa: medido, sem log nem stack.
+   Se repetir, rodar com o console aberto para ter o rastro.
 
 ---
 
-> ## ⚠️ DOCUMENTO OBSOLETO — NAO EXECUTAR (marcado em 2026-09-26)
->
-> Este arquivo **nao deve ser seguido**. Ele foi escrito em 30/07/2026 e esta
-> errado em relacao ao projeto atual (`ee90466`).
->
-> **Motivo principal:** os passos aqui pedem **editar arquivos `.mqh` do MQL5**
-> (`Core/ExecutionEngine.mqh`, `Core/DecisionEngine.mqh`, `AI/AIEngine.mqh`,
-> `Core/RiskEngine.mqh`, `Core/SignalCore.mqh`, `Core/PositionManager.mqh`,
-> `Core/Config.mqh`). Isso e **proibido**: `AGENTS.md` e `opencode.json`
-> (`permission.edit`) tratam `MQL5/Experts`, `.mq4`, `.mq5`, `.mqh` e `.set`
-> como intocaveis. Executar este plano viola a regra de escopo do projeto.
->
-> **Outros desvios:** afirma versao `1.10` (a real e 1.2.3) e caminhos em
-> `C:\Users\Micro\Downloads\XAU_AI_PRO\` (o repo esta em
-> `MQL5\Files\XAU_AI_PRO`).
->
-> Para o estado atual, leia `CONVERSAHOJE.txt` e
-> `Docs/HANDOFF_XAU_AI_PRO_20260926.md`.
+**Um documento antigo neste `Docs/` não está desatualizado por estar no fim da
+lista — e sim por ser de um ciclo anterior. O `command` vence o número; o
+documento mais recente manda.** Ver `CONVERSA_20261011_TEMAS_RENOMEADOS_E_ESTADO_MEDIDO.md` §7.

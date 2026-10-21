@@ -188,40 +188,53 @@ _CACHE: dict[str, Any] = {}
 #
 # O simbolo NAO tem allowlist de pares: a lista cresceria a cada novo par
 # listado e a regra do projeto e "nenhum simbolo pode ser presumido". O que se
-# restringe e o FORMATO, nao o conteudo: letras e digitos, sem separadores.
-# `..`, `/`, `\` e `%2e%2e` nao passam.
+# restringe e o FORMATO, nao o conteudo: letras, digitos e o underscore de
+#familia. `..`, `/`, `\` e `%2e%2e` nao passam — o ponto e a barra sao o que
+# constroi travessia de caminho, e nenhum dos dois esta na classe.
 TIMEFRAMES_VALIDOS = frozenset({"M5", "M15", "H1", "H4"})
 
-# 12 e o maior comprimento de simbolo em Forex/Cripto/metal (ex.: `XAUUSD`,
-# `BTCUSDT_PERP`). Acima disso ou ja e abuso, ou nao e simbolo.
-_RE_SIMBOLO = re.compile(r"^[A-Z0-9]{1,12}$")
+# O UNDERSCORE ENTRA POR CAUSA DOS MODELOS MULTI_CLASSE (medido 04/10/2026).
+# --------------------------------------------------------------------------
+# Os artefatos `MULTI_METALS.pkl`, `MULTI_FIAT.pkl` e `MULTI_CRYPTO.pkl` levam
+# o `_` no nome. Com `^[A-Z0-9]{1,12}$` os TRES eram INALCANCAVEIS:
+# `_nome_de_artefato()` devolvia `None` e a tela dizia "modelo nao publicado
+# ou ausente" — para artefatos que existem no disco, com `publicable: true` e
+# o maior edge do catalogo (MULTI_METALS +0.2497, 67.678 amostras).
+#
+# E o comentario desta constante JA citava `BTCUSDT_PERP` como exemplo de
+# simbolo valido: o comentario e o regex discordavam, e o regex era o que
+# valia. Por isso o defeito nao apareceu em revisao — os dois pareciam certos.
+#
+# A DEFESA CONTRA TRAVERSIA CONTINUA INTEIRA: o conjunto permitido e
+# `[A-Z0-9_]`, que nao contem ponto, barra nem barra invertida. `..`, `/` e
+# `\` seguem barrados por construcao, nao por lista de excecao. O
+# confinamento de destino em `_caminho_confinado` e a segunda barreira e
+# continua valendo.
+#
+# O LIMITE CONTINUA EM 12. Subi para 24 achando que precisaria de folga para
+# `MULTI_METALS` (12) + `_H1` (3) = 15 — mas o limite conta o SIMBOLO, nao o
+# nome do arquivo. Medido: MULTI_METALS 12, MULTI_CRYPTO 12, BTCUSDT_PERP 12.
+# Nenhum precisa de mais. `tests/test_traversal_modelos.py` barrava `A * 13`
+# e estava CERTO: subir o limite seria afrouxar seguranca sem necessidade.
+_RE_SIMBOLO = re.compile(r"^[A-Z0-9_]{1,12}$")
 
 
 def base_do_ativo(simbolo: str) -> str:
     """Base do ativo sem o quote da corretora: `BTCUSDT` -> `BTC`.
 
-    MEXC/Binance/Bybit/OKX operam contra USDT/USDC; MT5 (XM) opera contra
-    USD. Os modelos sao treinados no par do terminal (`BTCUSD`), entao o
-    par da exchange precisa resolver para o mesmo artefato — sem trocar de
-    ativo (BTC nunca vira ETH) e sem presumir nada quando vazio.
+    Delega a `backend.symbols` (fonte unica): MEXC/Binance/Bybit/OKX operam
+    contra USDT/USDC; MT5 (XM) opera contra USD. Sem nomes de ativos.
     """
-    s = str(simbolo or "").strip().upper()
-    for sufixo in ("USDT", "USDC", "USD", "EUR", "BUSD", "FDUSD", "TUSD"):
-        if len(s) > len(sufixo) and s.endswith(sufixo):
-            return s[: -len(sufixo)]
-    if s.endswith("_PERP"):
-        return base_do_ativo(s[: -len("_PERP")])
-    return s
+    from backend.symbols import base as _base
+
+    return _base(simbolo)
 
 
 def mesmo_ativo(a: str, b: str) -> bool:
     """Mesmo ativo em quotes diferentes (`BTCUSDT` == `BTCUSD`)."""
-    sa, sb = (str(a or "").strip().upper(), str(b or "").strip().upper())
-    if not sa or not sb:
-        return False
-    if sa == sb:
-        return True
-    return base_do_ativo(sa) == base_do_ativo(sb) and bool(base_do_ativo(sa))
+    from backend.symbols import mesmo_ativo as _igual
+
+    return _igual(a, b)
 
 
 def candidatos_de_simbolo(simbolo: str) -> list[str]:
@@ -230,27 +243,37 @@ def candidatos_de_simbolo(simbolo: str) -> list[str]:
     Ordem: o pedido literal primeiro (um `BTCUSDT_H1.pkl` treinado na
     exchange vence o alias); depois as formas no quote do terminal.
     """
-    s = str(simbolo or "").strip().upper()
-    if not s:
-        return []
-    base = base_do_ativo(s)
-    candidatos = [s]
-    for forma in (f"{base}USD", f"{base}USDT", f"{base}USDC"):
-        if forma != s and forma not in candidatos:
-            candidatos.append(forma)
-    return candidatos
+    from backend.symbols import formas as _formas
+
+    return _formas(simbolo)
 
 
 def _nome_de_artefato(simbolo: str, timeframe: str) -> str | None:
-    """`<SIMBOLO>_<TF>` ou `None` se o par nao puder gerar nome de arquivo.
+    """`<SIMBOLO>_<TF>`, ou so `<SIMBOLO>`, ou `None` se nao puder nomear.
 
     `None` e recusa COM MOTIVO. Chamar `MODELOS_DIR / nome` com um nome
     invalido e o que produz o alerta de CodeQL; devolver `None` deixa a
     decisao no codigo, onde da para recusar e explicar.
+
+    `timeframe` VAZIO devolve o nome geral (`MULTI_METALS`), que e o modelo
+    unico que cobre varios periodos. E o que `_nomes_de_artefato` tenta
+    depois do especifico.
+
+    POR QUE O VAZIO CONTINUA SENDO RECUSA NO `inferir`
+    ---------------------------------------------------
+    A porta do vazio existe aqui, dentro do resolvedor de NOME, e nao no
+    `inferir`. `inferir` ja recusa timeframe fora da allowlist antes de
+    chegar aqui, entao um pedido do operador nunca usa esta porta — ela so
+    e alcancavel pela propria `_nomes_de_artefato`, que sabe o que esta
+    fazendo. Um `timeframe` QUE NAO EXISTE na allowlist continua recusando:
+    a allowlist e o que impede que qualquer string vire nome de arquivo.
     """
-    if timeframe not in TIMEFRAMES_VALIDOS:
-        return None
     if not _RE_SIMBOLO.match(simbolo):
+        return None
+    if not timeframe:
+        # Nome geral: `<SIMBOLO>.pkl`, o modelo unico multi-periodo.
+        return simbolo
+    if timeframe not in TIMEFRAMES_VALIDOS:
         return None
     return f"{simbolo}_{timeframe}"
 
@@ -397,14 +420,15 @@ def _carregar(symbol: str, timeframe: str) -> tuple[Any | None, dict[str, Any]]:
     # `_caminho_confinado` (destino) — o alias nao afrouxa nenhuma defesa.
     ultimo_meta: dict[str, Any] = {}
     for candidato in candidatos_de_simbolo(simbolo):
-        nome = _nome_de_artefato(candidato, timeframe)
-        if nome is None:
-            continue
-        carregado, meta = _carregar_artefato(candidato, nome)
-        if carregado is not None:
-            return carregado, meta
-        if meta:
-            ultimo_meta = meta
+        # Dois nomes por candidato: o especifico (`XAUUSD_H1`) e o geral
+        # (`MULTI_METALS`). Ver `_nomes_de_artefato` — o motivo de o segundo
+        # existir e os tres modelos de maior edge do catalogo.
+        for nome in _nomes_de_artefato(candidato, timeframe):
+            carregado, meta = _carregar_artefato(candidato, nome)
+            if carregado is not None:
+                return carregado, meta
+            if meta:
+                ultimo_meta = meta
     if ultimo_meta:
         _CACHE[f"modelo:{simbolo}:{timeframe}"] = (None, ultimo_meta)
         return None, ultimo_meta
@@ -413,6 +437,42 @@ def _carregar(symbol: str, timeframe: str) -> tuple[Any | None, dict[str, Any]]:
     # treino; "simbolo invalido" e entrada do cliente.
     _CACHE[f"modelo:{simbolo}:{timeframe}"] = (None, {})
     return _CACHE[f"modelo:{simbolo}:{timeframe}"]
+
+
+def _nomes_de_artefato(candidato: str, timeframe: str) -> list[str]:
+    """Nomes a tentar, do mais especifico ao mais geral.
+
+    POR QUE EXISTE (medido em 04/10/2026)
+    ======================================
+    Os artefatos tem dois formatos, porque foram treinados por dois motivos
+    diferentes:
+
+    1. `<SIMBOLO>_<TF>.pkl` — um modelo por ativo e por periodo:
+       `XAUUSD_H1.pkl`, `EURUSD_H4.pkl`.
+
+    2. `<SIMBOLO>.pkl` — um modelo UNICO que cobre varios periodos. E o caso
+       dos `MULTI_*`: `MULTI_METALS.pkl`, treinado sobre a uniao de metais,
+       vale para H1, H4 e M15.
+
+    O codigo so procurava o formato 1. Resultado medido: os tres `MULTI_*`
+    respondiam "modelo nao publicado ou ausente" — sendo que existem no
+    disco, tem `publicable: true` e o MAIOR edge do catalogo (MULTI_METALS
+    +0,2497, 58,3% de acerto, 67.678 amostras).
+
+    A ORDEM IMPORTA: o nome COM timeframe e o mais especifico e precisa
+    ganhar. Um `XAUUSD_H1` especifico tem sempre preferencia sobre um
+    `XAUUSD` geral — caso contrario, pedir H1 cairia no modelo de H4.
+
+    NENHUM ARQUIVO E RENOMEADO. O artefato continua como o treino o gravou;
+    o que muda e que o codigo passa a saber PROCURAR-lo.
+    """
+    especifico = _nome_de_artefato(candidato, timeframe)
+    geral = _nome_de_artefato(candidato, "")
+    saida: list[str] = []
+    for nome in (especifico, geral):
+        if nome and nome not in saida:
+            saida.append(nome)
+    return saida
 
 
 def _carregar_artefato(candidato: str, nome: str) -> tuple[Any | None, dict[str, Any]]:
@@ -570,15 +630,25 @@ def _nome_do_modelo(symbol: str, timeframe: str, meta: dict[str, Any]) -> str:
     par = rotulo_modelo(symbol, timeframe)
     if not algoritmo:
         return par
-    # `RandomForestClassifier` -> "Floresta" fica ilegivel para o operador;
-    # `random_forest` e o nome tecnico curto que ele reconhece.
+    # O NOME E O ATIVO E O PERIODO. O ALGORITMO FICA NO CAMPO `algorithm`.
     #
-    # `rotulo_modelo()` ja devolve "MODELO XAUUSD 1H". Com o prefixo do algoritmo
-    # antes, a tela mostrava "Floresta MODELO XAUUSD 1H" - a palavra MODELO no
-    # meio, entre o nome e o timeframe. O operador pediu nome limpo e curto, sem
-    # sublinhado: o timeframe ja vem legivel de `rotulo_modelo`, e o algoritmo
-    # continua disponivel em `algorithm` no payload, entao nada se perde.
-    return f"{_ROTULO_ALGORITMO.get(algoritmo, algoritmo)} · {rotulo_modelo(symbol, timeframe, comPrefixo=False)}"
+    # MEDIDO na captura de 20:17 (09/10/2026), pedido do dono: o terminal
+    # mostrava `MODELO Floresta · BTCUSD 1H`, e a tabela de modelos treinados
+    # mostrava o mesmo nome na coluna MODELO **e** na coluna PAR — o mesmo par
+    # duas vezes na mesma linha.
+    #
+    # "Floresta" e a traducao de `RandomForestClassifier` que existe para quem
+    # precisa do nome tecnico. O operador nao precisa: ele precisa saber QUAL
+    # ativo e QUAL periodo, porque e isso que ele compara com a ordem que esta
+    # montando. Um algoritmo nao diz se o stop cai no lugar certo.
+    #
+    # O `algorithm` continua no payload, entao nada se perde — quem precisar do
+    # nome tecnico le o campo, e nao o rotulo.
+    #
+    # Este e o AGENTS.md §9: formatação de numero e nome e configuração, nao
+    # enfeite. E a forma como o nome aparecia era ruido entre o operador e o
+    # dado que ele precisa.
+    return rotulo_modelo(symbol, timeframe, comPrefixo=False)
 
 
 #: Rotulo legivel por algoritmo. Sem esta tabela, a tela mostraria
@@ -744,44 +814,87 @@ def listar_modelos() -> list[dict[str, Any]]:
         return saida
     for meta_path in sorted(MODELOS_DIR.glob("*.meta.json")):
         nome = meta_path.name[: -len(".meta.json")]
-        if "_" not in nome:
-            continue
-        simbolo, tf = nome.rsplit("_", 1)
         try:
             with meta_path.open(encoding="utf-8") as f:
                 m = json.load(f)
         except Exception:
             continue
-        metricas = m.get("metrics", {})
-        folds = metricas.get("folds") or []
-        edges = [fo["edge"] for fo in folds if isinstance(fo, dict) and "edge" in fo]
-        rotulo_simbolo = str(m.get("symbol") or simbolo).upper()
-        rotulo_tf = str(m.get("timeframe") or tf).upper()
-        saida.append({
-            "id": nome,
-            # `label` e o texto para a tela. `id` continua sendo o nome do
-            # arquivo, porque e ele que localiza o `.pkl` no disco.
-            "label": rotulo_modelo(rotulo_simbolo, rotulo_tf),
-            "symbol": rotulo_simbolo,
-            "timeframe": rotulo_tf,
-            "publicable": bool(m.get("publicable")),
-            "reason": m.get("publish_reason", ""),
-            "accuracy": metricas.get("accuracy"),
-            "f1": metricas.get("f1_score"),
-            "baseline": metricas.get("baseline"),
-            "edge": metricas.get("edge"),
-            "edge_min": m.get("min_edge"),
-            "edge_folds": edges,
-            "edge_mean": float(np.mean(edges)) if edges else None,
-            "edge_std": float(np.std(edges)) if edges else None,
-            "train_samples": metricas.get("train_samples"),
-            "test_samples": metricas.get("test_samples"),
-            "purged": metricas.get("purged"),
-            "train_date": m.get("train_date"),
-            "feature_version": m.get("feature_version"),
-            "feature_hash": m.get("feature_hash"),
-            "algorithm": m.get("algorithm"),
-            "pkl_present": (MODELOS_DIR / f"{nome}.pkl").exists(),
-            "cpu_threads": cpu_threads(),
-        })
+
+        # O NOME DO ARQUIVO NAO E `SIMBOLO_TF` NOS MULTI (09/10/2026)
+        # =============================================================
+        # MEDIDO: os tres artefatos de classe se chamam `MULTI_METALS`,
+        # `MULTI_FIAT`, `MULTI_CRYPTO` — SEM underscore. Eles treinam sobre a
+        # uniao de varios pares e valem para varios periodos (o
+        # `MULTI_METALS.meta.json` tem `"timeframes": ["M5","M15","H1","H4"]`).
+        #
+        # Este laco os DESCARTAVA: `if "_" not in nome: continue`. O resultado
+        # apareceu na captura de 20:28 do dono como "28 de 28 modelos" e uma
+        # lista sem os tres de maior edge do catalogo — o `MULTI_METALS` tem
+        # edge 0.2497 e 67.678 amostras, o maior de todos. Tres modelos SOMEM
+        # da tela sem erro nenhum, e o contador repete o numero que a lista
+        # devolveu.
+        #
+        # Agora o nome e lido do proprio `symbol`, que e o que o modelo GRAVOU
+        # no treino, e o periodo tambem. Sem `_`, o modelo e de CLASSE, e os
+        # periodos dele sao os que o meta disser.
+        simbolo = str(m.get("symbol") or "").strip().upper()
+        if not simbolo:
+            continue
+        timeframes_do_modelo = m.get("timeframes")
+        if isinstance(timeframes_do_modelo, list) and timeframes_do_modelo:
+            # Modelo de classe: UMA linha por periodo que ele cobre, para a
+            # tabela nao mentir sobre "um nome, um periodo". O `id` continua
+            # sendo o nome do arquivo — e ele que localiza o `.pkl` no disco.
+            for tf_do_meta in [str(t).upper() for t in timeframes_do_modelo]:
+                saida.append(_linha_do_modelo(m, nome, simbolo, tf_do_meta))
+            continue
+
+        tf = str(m.get("timeframe") or "").strip().upper()
+        if not tf and "_" in nome:
+            # Formato antigo, `SIMBOLO_TF`: o nome do arquivo ainda decide.
+            _, tf = nome.rsplit("_", 1)
+            tf = tf.upper()
+        saida.append(_linha_do_modelo(m, nome, simbolo, tf))
     return saida
+
+
+def _linha_do_modelo(
+    m: dict[str, Any],
+    nome: str,
+    simbolo: str,
+    tf: str,
+) -> dict[str, Any]:
+    """Uma linha da lista de modelos, do que o `.meta.json` GRAVOU.
+
+    Separada do laco porque o mesmo artefato agora pode virar VARIAS linhas (o
+    modelo de classe cobre varios periodos), e repetir os 20 campos dentro do
+    laco seria copiar o mesmo bloco tres vezes.
+    """
+    metricas = m.get("metrics", {})
+    folds = metricas.get("folds") or []
+    edges = [fo["edge"] for fo in folds if isinstance(fo, dict) and "edge" in fo]
+    return {
+        "id": nome,
+        "label": rotulo_modelo(simbolo, tf),
+        "symbol": simbolo,
+        "timeframe": tf,
+        "publicable": bool(m.get("publicable")),
+        "reason": m.get("publish_reason", ""),
+        "accuracy": metricas.get("accuracy"),
+        "f1": metricas.get("f1_score"),
+        "baseline": metricas.get("baseline"),
+        "edge": metricas.get("edge"),
+        "edge_min": m.get("min_edge"),
+        "edge_folds": edges,
+        "edge_mean": float(np.mean(edges)) if edges else None,
+        "edge_std": float(np.std(edges)) if edges else None,
+        "train_samples": metricas.get("train_samples"),
+        "test_samples": metricas.get("test_samples"),
+        "purged": metricas.get("purged"),
+        "train_date": m.get("train_date"),
+        "feature_version": m.get("feature_version"),
+        "feature_hash": m.get("feature_hash"),
+        "algorithm": m.get("algorithm"),
+        "pkl_present": (MODELOS_DIR / f"{nome}.pkl").exists(),
+        "cpu_threads": cpu_threads(),
+    }

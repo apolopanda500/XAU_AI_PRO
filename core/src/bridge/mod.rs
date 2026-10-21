@@ -33,11 +33,28 @@ pub struct MT5Bridge {
 }
 
 impl MT5Bridge {
+    /// URL base do gateway Python, com a porta vinda de `XAU_GATEWAY_PORT`.
+    ///
+    /// MEDIDO em 09/10/2026 23:41: com o MT5 aberto, o gateway morria com
+    /// `WinError 10013` ao subir, porque o MT5 tambem escuta em 9001 — o
+    /// `config/assistant.ini` dele tem `[MCP.MetaTrader] Enable=1` com
+    /// `Endpoint=http://127.0.0.1:9001/mcp`. Os dois foram configurados para a
+    /// mesma porta. `XAU_GATEWAY_PORT` e a saida; o Python le a mesma variavel,
+    /// entao as duas pontas andam juntas.
+    pub fn default_gateway_url() -> String {
+        let porta = std::env::var("XAU_GATEWAY_PORT")
+            .ok()
+            .and_then(|v| v.trim().parse::<u16>().ok())
+            .filter(|p| *p > 0)
+            .unwrap_or(9001);
+        format!("http://127.0.0.1:{porta}")
+    }
+
     pub async fn new(config: &MT5Config) -> anyhow::Result<Self> {
         let base_url = config
             .local_api_url
             .clone()
-            .unwrap_or_else(|| "http://127.0.0.1:9001".to_string());
+            .unwrap_or_else(Self::default_gateway_url);
 
         let token = std::env::var("XAU_GATEWAY_TOKEN")
             .ok()

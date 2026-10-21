@@ -27,7 +27,7 @@ import { useCallback, useState } from 'react';
 import { apiBase } from '../lib/api';
 import { useAppStore } from './useAppStore';
 
-const API = `${apiBase()}`;
+// Base resolvida por chamada (13/10/2026), nunca congelada no topo do modulo.
 
 export type DirecaoSinal = 'BUY' | 'SELL' | 'NEUTRAL';
 
@@ -111,7 +111,7 @@ async function pedirPrevisao(
   timeframe: string,
   signal?: AbortSignal,
 ): Promise<ResultadoInferencia> {
-  const url = `${API}/api/ai/predict?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}`;
+  const url = `${apiBase()}/api/ai/predict?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}`;
   let r: Response;
   try {
     r = await fetch(url, { signal: signal ?? AbortSignal.timeout(20000) });
@@ -176,7 +176,7 @@ export async function buscarModelosTreinados(
   signal?: AbortSignal,
 ): Promise<{ modelos: ModeloTreinado[]; cpuThreads: number; erro: string }> {
   try {
-    const r = await fetch(`${API}/api/ai/trained`, {
+    const r = await fetch(`${apiBase()}/api/ai/trained`, {
       signal: signal ?? AbortSignal.timeout(10000),
     });
     if (!r.ok) return { modelos: [], cpuThreads: 0, erro: `HTTP ${r.status}` };
@@ -232,8 +232,48 @@ export function useInferenciaIA(timeframe: string, enabled: boolean) {
   const [disponivel, setDisponivel] = useState(false);
   const setAiStatus = useAppStore((s) => s.setAiStatus);
 
+  /*
+    O INTERRUPTOR `enabled` NAO ERA USADO (05/10/2026).
+
+    O parâmetro existia na assinatura e não aparecia no corpo: o hook inferia
+    sempre e escrevia `aiStatus` sempre. Como nenhum componente o chamava com
+    ligado, o cabeçalho ficava em "AI: Inativo" — o valor inicial do store —
+    mesmo com a IA inteira implementada no EA (`AIConnector`, `AIEngine`,
+    `ModelGovernance`).
+
+    Aqui ele passa a valer, e desligado não escreve NADA: deixar o estado
+    intacto é o que permite ao operador ver o último sinal real depois de
+    pausar, em vez de ver a tela zerar.
+  */
+  const ligar = enabled;
+
   const inferir = useCallback(
     async (symbol: string, signal?: AbortSignal): Promise<ResultadoInferencia> => {
+      if (!ligar) {
+        const parado = {
+          disponivel: false,
+          sinal: null,
+          motivo: 'IA desligada pelo operador',
+        } as unknown as ResultadoInferencia;
+        setMotivo(parado.motivo);
+        /*
+          O MOTIVO NAO SOBRESCREVE O INTERRUPTOR (11/10/2026)
+          ===================================================
+          MEDIDO na captura do dono (12:25 → 12:27, 2 minutos): `AI: Ativa` caiu
+          para `AI: Inativa` sem ninguém tocar no botão. A causa e que
+          `ativar(true)` grava 'Ativa' UMA vez, e o loop seguinte de `inferir()`
+          chama `setAiStatus('IA: ' + motivo)` — que e `IA desligada pelo
+          operador`, `sem inferencia`, ou qualquer outro. O interruptor diz uma
+          coisa, o motivo diz outra, e o ultimo a escrever vence: o operador
+          via o cabecalho mudar sozinho e perdia a confianca nele (§5).
+
+          Aqui o motivo so entra quando a IA esta LIGADA. Desligada, o estado
+          do interruptor e a resposta, e ele prevalece — porque e o dono da
+          tela. A mensagem continua visivel no `motivo` do hook (o painel a
+          mostra), so nao apaga mais o cabecalho.
+        */
+        return parado;
+      }
       setCarregando(true);
       const r = await pedirPrevisao(symbol, timeframe, signal);
       setCarregando(false);
@@ -253,8 +293,22 @@ export function useInferenciaIA(timeframe: string, enabled: boolean) {
       }
       return r;
     },
-    [timeframe, setAiStatus],
+    [timeframe, ligar, setAiStatus],
   );
 
-  return { sinal, carregando, motivo, disponivel, inferir };
+  /*
+    O ESTADO DA IA NO CABEÇALHO, com um interruptor que o operador controla.
+
+    Antes o texto vinha do último `inferir()` — e como ninguém chamava, ficava
+    em "Inativo" para sempre. Agora o texto segue o interruptor, e o status só
+    é escrito quando a IA está ligada.
+  */
+  const ativar = useCallback(
+    (ligado: boolean) => {
+      setAiStatus(ligado ? 'Ativa' : 'Inativa');
+    },
+    [setAiStatus],
+  );
+
+  return { sinal, carregando, motivo, disponivel, inferir, ativar };
 }

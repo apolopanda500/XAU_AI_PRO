@@ -1,0 +1,82 @@
+/*
+  O MENU DO BOTAO DIREITO DO GRAFICO (09/10/2026)
+  ===============================================
+  MEDIDO na captura da XM (`Screenshot 2026-10-09 201959.png`): o menu tem um
+  topo com TRADE em destaque, um separador, e os blocos abaixo em texto menor.
+  Os itens de TRADE sao a area de cor propria — e a unica cor do menu.
+
+  Um menu inteiro vermelho nao distingue nada, e um menu inteiro cinza esconde a
+  acao que move dinheiro. Na XM o TRADE ȩ a area de cor propria, e aqui segue
+  a mesma leitura: so COMPRAR e VENDER sao vermelhos.
+
+  `min-width` fixo: menu que muda de largura a cada item faz o olho procurar o
+  texto de novo. E o `kbd` fica sempre na mesma coluna.
+*/
+
+.menu-grafico {
+  position: absolute;
+  z-index: 60;
+  min-width: 224px;
+  padding: 6px 0;
+  background: var(--bg-elev, #141821);
+  border: 1px solid var(--border, #2a3342);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  font-size: 13px;
+  color: var(--text, #e6e9f0);
+  /* O menu ȩ filho do grafico: nao pode estourar o `overflow` dele. */
+  max-height: calc(100% - 8px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.menu-grafico-titulo {
+  padding: 4px 12px 2px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  color: var(--muted, #8a94a6);
+}
+
+.menu-grafico-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 6px 12px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.menu-grafico-item:hover,
+.menu-grafico-item:focus-visible {
+  background: var(--hover, rgba(255, 255, 255, 0.06));
+  outline: none;
+}
+
+/* A acao que move dinheiro. A UNICA cor do menu. */
+.menu-grafico-item.perigosa {
+  color: var(--warn, #d9a441);
+  font-weight: 600;
+}
+
+.menu-grafico-item kbd {
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--muted, #8a94a6);
+  background: var(--bg-sunken, #0f131a);
+  border: 1px solid var(--border, #2a3342);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+.menu-grafico-sep {
+  height: 1px;
+  margin: 5px 0;
+  background: var(--border, #2a3342);
+}

@@ -13,6 +13,7 @@ from __future__ import annotations
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -51,9 +52,15 @@ def test_disco_ausente_e_falha_com_dica_de_limpeza():
     assert "limpeza_segura.ps1" in resultado.dica
 
 
-def test_disco_justo_no_limite_passa():
-    livre = pf.shutil.disk_usage(pf.ROOT).free / (1024 ** 3)
-    assert pf.checar_disco(minimo_gb=livre * 0.5).estado == pf.ESTADOS["ok"]
+def test_disco_justo_no_limite_passa(monkeypatch):
+    # Medir o disco duas vezes (aqui e dentro de `checar_disco`) deixa o teste
+    # refem do ambiente: qualquer byte gravado entre as duas leituras derruba o
+    # caso de "limite justo" para `aviso`. MEDIDO em 13/10: passava isolado e
+    # falhava na suite inteira. A leitura fica fixa para o teste ser decisivo.
+    monkeypatch.setattr(
+        pf.shutil, "disk_usage", lambda _: SimpleNamespace(free=3 * 1024 ** 3)
+    )
+    assert pf.checar_disco(minimo_gb=1.5).estado == pf.ESTADOS["ok"]
 
 
 def test_disco_entre_o_minimo_e_o_dobro_e_aviso():
@@ -117,10 +124,57 @@ def test_porta_livre_detecta_socket_ocupado():
         assert pf.porta_livre(porta) is False
 
 
-def test_portas_ignoradas_quando_o_app_esta_rodando():
+def test_portas_ignoradas_quando_o_app_esta_rodando(monkeypatch):
     # Com o app instalado e aberto, portas ocupadas sao esperadas.
+    monkeypatch.setattr(pf, "porta_livre", lambda porta: False)
     resultados = pf.checar_portas(esperar_livre=False)
     assert all(r.estado == pf.ESTADOS["ok"] for r in resultados)
+    assert all("app em execucao" in r.detalhe for r in resultados)
+
+
+def test_porta_livre_na_etapa_app_rodando_reprova(monkeypatch):
+    """
+    A etapa `app-rodando` exige o processo escutando. Porta livre ali e defeito.
+
+    MEDIDO em 10/10/2026: com `XAU_GATEWAY_PORT=9011`, o gateway subiu em 9011 e
+    o preflight media 9001 — livre porque o processo estava em outra porta — e
+    respondia `ok`. O teste existente afirmava justamente essa moleza
+    (`all(ok)` com as portas livres), que e o defeito que ele existia para pegar.
+    """
+    monkeypatch.setattr(pf, "porta_livre", lambda porta: True)
+    resultados = pf.checar_portas(esperar_livre=False)
+    assert all(r.estado == pf.ESTADOS["falha"] for r in resultados)
+    assert all("app-rodando" in r.dica for r in resultados)
+
+
+def test_porta_do_gateway_segue_o_ambiente(monkeypatch):
+    """A porta do gateway e a do ambiente, nao a que o preflight escreve."""
+    monkeypatch.setenv("XAU_GATEWAY_PORT", "9011")
+    assert pf.porta_do_gateway() == 9011
+
+    monkeypatch.setenv("XAU_GATEWAY_PORT", "nao-e-porta")
+    assert pf.porta_do_gateway() == pf.PORTA_GATEWAY_PADRAO
+
+    monkeypatch.setenv("XAU_GATEWAY_PORT", "80")
+    assert pf.porta_do_gateway() == pf.PORTA_GATEWAY_PADRAO
+
+    monkeypatch.delenv("XAU_GATEWAY_PORT", raising=False)
+    assert pf.porta_do_gateway() == pf.PORTA_GATEWAY_PADRAO
+
+
+def test_porta_do_gateway_entra_na_medicao(monkeypatch):
+    """Com 9011 no ambiente, a 9011 e perguntada — e a 9001 nao."""
+    monkeypatch.setenv("XAU_GATEWAY_PORT", "9011")
+    perguntadas: list[int] = []
+
+    def falso(porta: int) -> bool:
+        perguntadas.append(porta)
+        return True
+
+    monkeypatch.setattr(pf, "porta_livre", falso)
+    pf.checar_portas(esperar_livre=False)
+    assert 9011 in perguntadas
+    assert 9001 not in perguntadas
 
 
 def test_portas_ocupadas_bloqueiam_operacao_longa(monkeypatch):
@@ -303,12 +357,22 @@ def test_relatorio_sem_falha_libera_operacao():
     assert relatorio.ok_para_operacao_longa() is True
 
 
-def test_executar_nao_levanta():
+def test_executar_nao_levanta(monkeypatch):
+    """
+    Sem `XAU_GATEWAY_PORT`, a porta medida e a padrao.
+
+    MEDIDO em 10/10/2026: este teste afirmava `"porta 9001" in nome` e passava
+    **por acidente** — a porta era fixa. Depois que o preflight passou a ler o
+    ambiente, ele reprovou na maquina do dono, onde `XAU_GATEWAY_PORT=9011`: a
+    asserção antiga media o número que o preflight inventava, e o ambiente
+    mostrava o outro. O `delenv` torna o teste dono do proprio cenario.
+    """
+    monkeypatch.delenv("XAU_GATEWAY_PORT", raising=False)
     relatorio = pf.executar("longa")
     assert relatorio.resultados
     nomes = {r.nome for r in relatorio.resultados}
     assert "guarda MQL5" in nomes
-    assert any("porta 9001" in n for n in nomes)
+    assert any("porta 9001 (gateway)" in n for n in nomes)
 
 
 def test_imprimir_marca_cada_estado(capsys):

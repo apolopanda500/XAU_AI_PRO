@@ -10,7 +10,19 @@ export const MARKET_ENDPOINTS = {
   trades: '/api/universal/trades',
   status: '/api/status',
   capabilities: '/api/capabilities',
+  publicOhlc: '/api/publico/ohlc',
 } as const;
+
+/*
+  QUANTAS VELAS O GRAFICO PEDE (12/10/2026, grafico desbloqueado).
+  =================================================================
+  Decisao do dono: sem limite de 300 — o grafico mostra o maximo que as
+  fontes entregam. 1000 e o teto das venues publicas (Binance/MEXC limitam
+  em 1000 por chamada; Yahoo limita por `range=5d`; o MT5 aceita 2000). Um
+  numero so, num lugar so: tres chamadas com tres numeros e divergencia
+  esperando acontecer.
+*/
+export const LIMITE_VELAS_GRAFICO = 1000;
 
 export type MarketBroker = 'mt5' | 'binance' | 'mexc' | 'bybit' | 'okx';
 export type MarketKind =
@@ -37,6 +49,22 @@ export interface Provenance {
   source: string;
   received_at: string;
   provider_timestamp: string | null;
+  /*
+    DE ONDE VIERAM AS VELAS, QUANDO NAO E DA CORRETORA (12/10/2026).
+    ==================================================================
+    MEDIDO no app instalado: com a corretora fora, o gateway preenche com
+    fonte publica (`_com_fallback_publico`: `fonte`, `fallback_publico`,
+    `execucao: False`) — e a tela continuava escrevendo o nome da CORRETORA
+    no cabecalho, porque a procedencia so lia `source` (quem montou a
+    resposta). Operador lendo "MT5" em cima de dado do Yahoo.
+
+    `source` NAO muda (e identidade do gateway: `main.tsx` e roteamento
+    dependem dela). `fonte` viaja ao lado, e quem mostra e o cabecalho do
+    grafico (ver `AcompanharModelos`).
+  */
+  fonte?: string | null;
+  fallback_publico?: boolean;
+  execucao?: boolean | null;
 }
 
 export interface MarketAsset extends Provenance {
@@ -448,7 +476,14 @@ function sourceFor(raw: Record<string, unknown>, fallback: string, receivedAt: s
   );
   const receivedTimestamp =
     readTimestamp(firstDefined(raw.received_at, raw.receivedAt, raw.received)) ?? receivedAt;
-  return { source, received_at: receivedTimestamp, provider_timestamp: providerTimestamp };
+  return {
+    source,
+    received_at: receivedTimestamp,
+    provider_timestamp: providerTimestamp,
+    fonte: readString(raw.fonte),
+    fallback_publico: raw.fallback_publico === true,
+    execucao: typeof raw.execucao === 'boolean' ? (raw.execucao as boolean) : null,
+  };
 }
 
 function responseSource(
@@ -1292,6 +1327,81 @@ export async function getCandles(
     .sort((a, b) => a.time - b.time)
     .filter((row, index, rows) => index === 0 || row.time !== rows[index - 1].time);
   return { ...provenance, ...expected, timeframe: safeTimeframe, candles };
+}
+
+/*
+  VELAS LIVRES, SEM CORRETORA (12/10/2026, grafico sempre vivo).
+  ================================================================
+  Decisao do dono: o grafico nao pode depender de ninguem — com MT5 fechado
+  e sem chave de exchange, ele continua vivo com valores reais de fonte
+  publica. Esta funcao le `/api/publico/ohlc` (que nao recebe broker): a
+  resposta traz `fonte`, `observacao` e `execucao: false` junto.
+
+  Simbolo vazio e RECUSA com motivo (AGENTS.md 3), nunca busca generica. E
+  `execucao` e SEMPRE falso aqui: quem arma ordem sobre preco publico esta
+  violando a regra do modulo de fonte publica — ver `AcompanharModelos`.
+*/
+export type CandlesLivres = {
+  candles: MarketCandle[];
+  symbol: string;
+  timeframe: string;
+  fonte: string;
+  observacao?: string;
+  execucao: false;
+};
+export async function getCandlesLivres(
+  symbol: string,
+  timeframe = 'M5',
+  limit = 300,
+  options: MarketRequestOptions = {},
+): Promise<CandlesLivres> {
+  const simbolo = String(symbol ?? '').trim().toUpperCase();
+  if (!simbolo) {
+    throw new MarketApiError('Informe o par: sem símbolo não há série.', 'invalid', MARKET_ENDPOINTS.publicOhlc);
+  }
+  const safeTimeframe = String(timeframe ?? '').trim().toUpperCase() || 'M5';
+  const safeLimit = Math.max(10, Math.min(2000, Math.floor(Number(limit) || 300)));
+  const result = await requestJson(
+    MARKET_ENDPOINTS.publicOhlc,
+    { symbol: simbolo, timeframe: safeTimeframe, limit: safeLimit },
+    options,
+  );
+  const fonte = readString(result.payload.fonte) || 'publica';
+  const observacao = readString(result.payload.observacao) ?? undefined;
+  const candles = responseRows(result.payload, ['candles', 'data', 'result', 'items'], MARKET_ENDPOINTS.publicOhlc)
+    .map((row) => {
+      const values = candleValues(row);
+      if (!values) return null;
+      const timestamp = readTimestamp(values.time);
+      const time = timestamp ? Math.floor(new Date(timestamp).getTime() / 1000) : null;
+      const open = readNumber(values.open);
+      const high = readNumber(values.high);
+      const low = readNumber(values.low);
+      const close = readNumber(values.close);
+      if (time === null || open === null || high === null || low === null || close === null) {
+        return null;
+      }
+      // `as never`: vela publica nao tem corretora, e o tipo exige uma. O
+      // campo viaja vazio de proposito — e `execucao: false` abaixo que
+      // impede qualquer caminho de ordem de le-lo como venue.
+      const vela: MarketCandle = {
+        ...sourceFor(result.payload, fonte, result.receivedAt),
+        broker: '' as never,
+        market: 'other',
+        symbol: simbolo,
+        time,
+        open,
+        high,
+        low,
+        close,
+        volume: readNumber(values.volume),
+      };
+      return vela;
+    })
+    .filter((row): row is MarketCandle => row !== null)
+    .sort((a, b) => a.time - b.time)
+    .filter((row, index, rows) => index === 0 || row.time !== rows[index - 1].time);
+  return { candles, symbol: simbolo, timeframe: safeTimeframe, fonte, observacao, execucao: false as const };
 }
 
 export async function getDepth(

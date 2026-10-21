@@ -52,7 +52,43 @@ from backend import gateway_server
 from Python.model_registry import model_catalog
 
 HOST = "127.0.0.1"
-PORT = 9001
+
+
+def _porta_gateway() -> int:
+    """Porta do gateway, por `XAU_GATEWAY_PORT`, padrao 9001.
+
+    MEDIDO em 09/10/2026 23:41: com o MT5 aberto, o app abria a janela e o
+    gateway morria logo depois de subir:
+
+        PermissionError: [WinError 10013]
+          mt5_gateway.py -> gateway_server.py:147 criar_servidor -> server_bind
+
+    Quem ocupava `127.0.0.1:9001` era `terminal64`, porque
+    `config/assistant.ini` do MT5 tem `[MCP.MetaTrader] Enable=1` com
+    `Endpoint=http://127.0.0.1:9001/mcp` — o MT5 sobe o servidor MCP dele
+    exatamente na porta que este gateway usa. Nao e o MT5 "roubando" a porta: os
+    dois foram configurados para o mesmo numero.
+
+    Valor invalido cai no padrao em vez de derrubar o gateway: porta errada
+    leitura em silencio e' pior que porta errada recusada. `XAU_GATEWAY_PORT`
+    segue o mesmo spirit do token de sessao (AGENTS.md §4): o ambiente vence o
+    `.env`.
+    """
+    bruto = os.environ.get("XAU_GATEWAY_PORT", "").strip()
+    if not bruto:
+        return 9001
+    try:
+        porta = int(bruto)
+    except ValueError:
+        print(f"[gateway] XAU_GATEWAY_PORT invalido: {bruto!r} -> usando 9001")
+        return 9001
+    if not (1 <= porta <= 65535):
+        print(f"[gateway] XAU_GATEWAY_PORT fora da faixa: {porta} -> usando 9001")
+        return 9001
+    return porta
+
+
+PORT = _porta_gateway()
 
 
 def _gateway_build() -> str:
@@ -93,8 +129,62 @@ REAL_EMERGENCY_STOP = Path(os.getenv("XAU_REAL_EMERGENCY_FILE", str(Path(__file_
 COMMON_FILES = Path(os.getenv("XAU_MT5_COMMON_FILES", str(Path(os.environ.get("APPDATA", "")) / "MetaQuotes" / "Terminal" / "Common" / "Files")))
 CONFIG_FILE = Path(os.getenv("XAU_APP_CONFIG", str(Path(os.environ.get("APPDATA", "")) / "XAU_AI_PRO" / "config.json")))
 AUDIT_FILE = Path(os.getenv("XAU_AUDIT_FILE", str(Path(os.environ.get("APPDATA", "")) / "XAU_AI_PRO" / "audit.jsonl")))
+# =============================================================================
+# TOKEN: AMBIENTE PRIMEIRO, `.env` DEPOIS
+# =============================================================================
+# POR QUE ISTO EXISTE (medido em 05/10/2026)
+# ==========================================
+# O token vinha SO de `os.getenv`. Subir o gateway pela linha de comando
+# (`python -m backend.fastapi_gateway`) dava `API_TOKEN = ""`, e o gateway
+# ficava fail-closed: TODO request recebia 401, inclusive com o token CORRETO.
+# Quem carrega o `.env` e o Tauri (`main.rs:628`, `.env("XAU_GATEWAY_TOKEN",
+# token)`), entao o gateway so tinha token quando lancado pelo app.
+#
+# O EA precisa do MESMO token que o app injeta, para que o `WebRequest` dele
+# seja aceito. Com o token so no ambiente do Tauri, o operador teria que
+# descobrir qual era — e o valor muda por sessao.
+#
+# A ORDEM IMPORTA: o ambiente vence o `.env`. O Tauri injeta o token da
+# sessao, e ele tem de prevalecer sobre o arquivo — senao uma sessao nova
+# ficaria com o token do arquivo enquanto o app usa outro, e a UI perderia o
+# acesso ao proprio backend.
+#
+# SEM `python-dotenv`: o `.env` deste projeto tem `FIGMA_TOKEN`,
+# `XAU_GATEWAY_TOKEN` e credenciais de exchange. O leitor e minimo de proposito
+# (ignora comentario, apara espacos, nao sobrescreve o que ja existe), e nao
+# importa o pacote extra.
+
+def _token_do_ambiente_ou_dotenv(nome: str) -> str:
+    """`nome` do ambiente; se faltar, do `.env` da raiz do repo."""
+    do_ambiente = os.getenv(nome, "").strip()
+    if do_ambiente:
+        return do_ambiente
+
+    try:
+        raiz = Path(__file__).resolve().parent.parent
+        arq = raiz / ".env"
+        if not arq.is_file():
+            return ""
+        for linha in arq.read_text(encoding="utf-8", errors="replace").splitlines():
+            limpa = linha.strip()
+            if not limpa or limpa.startswith("#") or "=" not in limpa:
+                continue
+            chave, valor = limpa.split("=", 1)
+            if chave.strip() != nome:
+                continue
+            valor = valor.strip().strip('"').strip("'")
+            if valor:
+                return valor
+    except (OSError, ValueError):
+        # Sem `.env` legivel, o token fica vazio e o gateway segue fail-closed.
+        # Isso e o comportamento correto: sem token, ninguem autentica; com token
+        # pela metade, alguem autentica errado.
+        return ""
+    return ""
+
+
 # Segurança de exposição: token opcional e rate limit (pré-requisito p/ acesso remoto/Android).
-API_TOKEN = os.getenv("XAU_GATEWAY_TOKEN", "").strip()
+API_TOKEN = _token_do_ambiente_ou_dotenv("XAU_GATEWAY_TOKEN")
 #: Motivos de `_autorizado` que sao FALHA DE AUTENTICACAO (HTTP 401), e nao
 #: excesso de cota (429). "sem token configurado" entrou na lista quando o
 #: gateway passou a ser fail-closed; sem isso, a falta de token caia no ramo
@@ -106,7 +196,20 @@ RATE_LIMIT_CMD_MAX = int(os.getenv("XAU_RATE_LIMIT_CMD", "0") or 0)  # comandos/
 _RATE_STATE = {"count": 0, "window": 0.0}
 _RATE_STATE_CMD = {"count": 0, "window": 0.0}
 CONFIG_DEFAULTS = {"theme": "dark", "language": "pt-BR", "precision": 2, "marketAutoRefresh": True, "dashboardAutoRefresh": True, "historyAutoRefresh": True}
-DEFAULT_CORS_ORIGINS = {"http://127.0.0.1:1420", "http://localhost:1420", "http://127.0.0.1:3000", "http://localhost:3000", "http://127.0.0.1:9001", "http://localhost:9001", "http://tauri.localhost", "https://tauri.localhost"}
+DEFAULT_CORS_ORIGINS = {
+    "http://127.0.0.1:1420",
+    "http://localhost:1420",
+    "http://127.0.0.1:3000",
+    "http://localhost:3000",
+    # A origem da propria porta do gateway entra derivando de `PORT`: com a
+    # porta movida por `XAU_GATEWAY_PORT`, um CORS fixo em 9001 deixaria de
+    # valer e o symptom seria "o navegador bloqueia" — o mesmo defeito de
+    # nome e medida, so que agora do outro lado (AGENTS.md §5).
+    f"http://127.0.0.1:{PORT}",
+    f"http://localhost:{PORT}",
+    "http://tauri.localhost",
+    "https://tauri.localhost",
+}
 CORS_ORIGINS = {item.strip() for item in os.getenv("XAU_CORS_ORIGINS", "").split(",") if item.strip()} or set(DEFAULT_CORS_ORIGINS)
 
 def _safe_number(value) -> float:
@@ -598,8 +701,29 @@ def _assets_from_raw(broker: str, market: str, raw: object, endpoint: str = "exc
             restrictions.append("close_only")
         availability = "unavailable" if enabled is False else "unverified" if enabled is None else "restricted" if restrictions else "available"
         capability_status = "unsupported" if availability == "unavailable" else "unverified" if availability == "unverified" else "available"
+        # ------------------------------------------------------------------
+        # `model_symbol`: O NOME QUE O MODELO USA (07/10/2026)
+        # ---------------------------------------------------------------
+        # MEDIDO na conta 391773676 (XMGlobal-MT5 14): o catalogo publica o
+        # ouro com um nome, e `XAUUSD` NAO EXISTE no terminal XM
+        # (`symbol_info("XAUUSD")` devolve `None`). Os artefatos do app se
+        # chamam `XAUUSD_H1/H4/M15/M5`. Entao o par escolhido na tela e o par
+        # do modelo NAO se encontram em lugar nenhum, e o frontend nao tinha
+        # como saber que sao o mesmo metal.
+        #
+        # O campo ja vem pronto de `discover_assets`, que tem a ficha e o mapa.
+        # Recalcular aqui duplicaria a traducao em dois lugares do backend — e
+        # dois lugares que divergem e o AGENTS.md 5.
+        #
+        # `para_corretora` (o outro sentido) e o que esta rota e as de leitura
+        # usam, e o que o caminho de ordem usa para enviar. Aqui quem pergunta
+        # e a TELA, e ela precisa do nome com que o `.meta.json` foi gravado.
+        nome_modelo = first_value(row, "model_symbol", "modelSymbol")
         assets.append({
             "symbol": str(symbol).upper(),
+            # `None` nao e "mesmo simbolo": e "nenhum modelo com este nome".
+            "model_symbol": str(nome_modelo).upper() if nome_modelo else None,
+            "has_model": bool(nome_modelo),
             "display_name": first_value(row, "display_name", "displayName", "description", "baseAsset", "base_ccy", "name"),
             "base_asset": first_value(row, "baseAsset", "base", "base_ccy", "baseCcy"),
             "quote_asset": first_value(row, "quoteAsset", "quote", "quote_ccy", "quoteCcy", "settleCurrency"),
@@ -614,6 +738,13 @@ def _assets_from_raw(broker: str, market: str, raw: object, endpoint: str = "exc
             "point": optional_number(first_value(row, "point", "tickSize", "priceTick")),
             "digits": optional_number(first_value(row, "digits", "pricePrecision"), integer=True),
             "trade_mode": trade_mode,
+            # Ficha de especificacao (pagina de simbolo da XM): contrato,
+            # spread em pontos e swaps. Vem do discover do MT5 ou do
+            # exchange_info; ausente = nao informado, nunca zero presumido.
+            "contract_size": optional_number(first_value(row, "contract_size", "contractSize")),
+            "spread_points": optional_number(first_value(row, "spread_points", "spread"), integer=True),
+            "swap_long": optional_number(first_value(row, "swap_long", "swapLong")),
+            "swap_short": optional_number(first_value(row, "swap_short", "swapShort")),
             "availability": availability,
             "restrictions": restrictions,
             "capabilities": list(broker_capabilities),
@@ -633,6 +764,50 @@ def _assets_from_raw(broker: str, market: str, raw: object, endpoint: str = "exc
         symbols=assets,
         count=len(assets),
     )
+
+
+#: Tipo do deal no MT5: 0 = compra, 1 = venda.
+_LADO_DE_DEAL = {0: "BUY", 1: "SELL"}
+
+
+def _lado_de_deal(tipo: Any) -> str | None:
+    """Traduz o `type` INTEIRO do MT5 para `BUY`/`SELL`.
+
+    POR QUE ISTO EXISTE (05/10/2026)
+    ================================
+    A tabela de operacoes do historico tinha uma coluna "Operacao" que mostrava
+    `0` e `1` no lugar de comprar e vender, e caia no ramo "--" do filtro de
+    cor.
+
+    Motivo: o MT5 devolve `type` como INTEIRO (0 = compra, 1 = venda), e as
+    exchanges devolvem `side` como TEXTO ("BUY"/"SELL"). O gateway repassava
+    o valor cru do MT5, entao o mesmo campo tinha dois tipos no mesmo payload
+    dependendo da corretora — e o frontend so lidava com `/buy/i`, que nunca
+    casa com `0`.
+
+    Traduzir AQUI e o certo: este e o ponto onde o contrato de uma camada vira
+    o contrato da outra, e e o unico lugar que conhece os dois formatos.
+
+    Um valor ja em texto passa direto. Isso importa porque o mesmo campo pode
+    chegar de outra rota com o rotulo ja pronto.
+
+    BOOLEANO E RECUSADO DE PROPOSITO (achado pelo teste, 05/10/2026)
+    ===============================================================
+    Em Python `True == 1`, e `1` e a chave de "SELL". Um `type: true` vindo de
+    qualquer payload viraria VENDA na tela — uma operacao verde que nunca
+    aconteceu. `isinstance(tipo, bool)` tem de ser testado ANTES de comparar
+    com o dicionario, porque `bool` herda de `int`.
+    """
+    if isinstance(tipo, bool):
+        return None
+    if isinstance(tipo, str):
+        limpo = tipo.strip().upper()
+        return limpo or None
+    # `int` exato, e nao `float`: 1.0 nao e um deal type do MT5, e aceitar
+    # float deixaria 1.0 virar SELL por igualdade de valor.
+    if isinstance(tipo, int) and tipo in _LADO_DE_DEAL:
+        return _LADO_DE_DEAL[tipo]
+    return None
 
 
 def _universal_history(broker: str, market: str, symbol: str = "", days: int = 0, account_id: str = "") -> dict:
@@ -667,16 +842,71 @@ def _universal_history(broker: str, market: str, symbol: str = "", days: int = 0
             # gateway manda `grossPnl`), o PnL caia em 0 para todas as linhas e
             # win-rate/fator de lucro davam sempre zero. Era por isso que a aba
             # Historico aparecia "generica", sem numeros.
+            #
+            # MOVIMENTACAO DE SALDO NAO TEM PnL REALIZADO (06/10/2026)
+            # -------------------------------------------------------
+            # MEDIDO no app instalado, conta 391773676: o rodape da tabela
+            # unica mostrava `Lucro: +13,25` — 2,01 da operacao + 5,62 + 5,62
+            # das duas movimentacoes. Somar entrada de saldo em lucro e o que o
+            # AGENTS.md 10 proibe.
+            #
+            # A causa: esta rota preenchia `realizedPnl` para TODOS os deals, e
+            # `ehMovimentacao` (frontend) trata o campo PRESENTE como prova de
+            # execucao de ordem. Um deposito com `realizedPnl` classifica como
+            # operacao e vai para o Lucro.
+            #
+            # Por isso o `realizedPnl` so existe para deal de OPERACAO. A
+            # movimentacao leva `profit`, que e o valor que entrou ou saiu — e
+            # e o que o rodape soma em `Credito`/`Recarregar`/`Retirada`.
+            eh_movimentacao = row.get("categoria") == "movimentacao"
             realized = None
-            if profit is not None:
-                realized = profit - (commission or 0.0) - (swap or 0.0) - (fee or 0.0)
+            if profit is not None and not eh_movimentacao:
+                # COMISSAO, SWAP E TAXA JA VEM COM SINAL (06/10/2026)
+                # -------------------------------------------------------
+                # A formula era `profit - commission - swap - fee`. No MT5 o
+                # `commission` e o `fee` ja vem NEGATIVOS quando ha cobranca, e
+                # o `swap` vem negativo quando e devedor. Subtrair um negativo
+                # SOMA o custo: uma operacao de lucro 2,01 com 0,70 de
+                # comissao aparecia como 2,71 — 0,70 a mais do que rendeu.
+                #
+                # O resultado do MT5 e a SOMA direta: lucro, mais os custos que
+                # ja vem negativos. E o que a aba Historico do proprio MT5
+                # escreve na coluna Lucro, e o que o operador confere batendo
+                # com a corretora.
+                #
+                # Nao se "corrige" com `abs()`: um `swap` credito (positivo) tem
+                # de SOMAR, e `abs()` transformaria ganho de swap em perda.
+                realized = profit + (commission or 0.0) + (swap or 0.0) + (fee or 0.0)
             deals.append({
                 "id": str(row.get("ticket", "")),
                 "broker": "mt5",
                 "accountId": mt5_account_id,
                 "market": market or "other",
                 "symbol": row.get("symbol") or symbol or None,
-                "side": row.get("type"),
+                "side": _lado_de_deal(row.get("type")),
+                # ------------------------------------------------------------
+                # OS CINCO CAMPOS QUE A TABELA LE (06/10/2026)
+                # ------------------------------------------------------
+                # MEDIDO no app instalado: `Bilhete`, `Tipo` e `Comentario`
+                # sairam VAZIOS nas quatro linhas, e o `Lucro` do rodape somou
+                # movimentacao. A tela estava correta e o dado nao chegava.
+                #
+                # `_history` (linha 1702) JA traduz o enum em `_TIPOS_DEAL`,
+                # classifica em `_movimentacao_de` e traz `comment` e `ticket`.
+                # Esta rota montava o `deals` final e REPASSAVA APENAS `id`,
+                # `side`, `quantity`, `price` e `profit` — os cinco campos que a
+                # tabela unica depende atravessavam fora do payload.
+                #
+                # `id` e `ticket` sao o mesmo numero, e nao e redundancia: `id`
+                # e a chave de deduplicacao da tela, e `ticket` e o numero que o
+                # operador abre na corretora.
+                # ------------------------------------------------------------
+                "ticket": row.get("ticket"),
+                "position_id": row.get("position_id"),
+                "type": row.get("type"),
+                "categoria": row.get("categoria") or "operacao",
+                "movimentacao": row.get("movimentacao") or "",
+                "comment": row.get("comment") or "",
                 "entry": row.get("entry"),
                 "status": "FILLED",
                 "quantity": optional_number(row.get("volume")),
@@ -688,10 +918,39 @@ def _universal_history(broker: str, market: str, symbol: str = "", days: int = 0
                 "swap": swap,
                 "fee": fee,
                 "realizedPnl": realized,
+                # Preco de ABERTURA da posicao, quando o deal de fechamento o
+                # traz. E o que permite a coluna `Mudanca` do MT5; sem ele a
+                # celula fica vazia, e vazio e melhor que "0,00%".
+                "open_price": optional_number(row.get("open_price")),
+                "sl": optional_number(row.get("sl")),
+                "tp": optional_number(row.get("tp")),
                 "executedAt": timestamp_iso(row.get("time")),
                 "source": "mt5_gateway",
             })
-        return canonical_market_response(broker="mt5", market=market, source="mt5_gateway", status="ok", deals=deals, count=len(deals), days=days or 30)
+        return canonical_market_response(
+            broker="mt5", market=market, source="mt5_gateway", status="ok",
+            deals=deals, count=len(deals), days=days or 30,
+            # ----------------------------------------------------------
+            # `connected` DIZ SE O DADO FOI LIDO (06/10/2026)
+            # ----------------------------------------------------------
+            # MEDIDO na conta 391773676: com o `terminal64` fechado,
+            # `history_deals_get` volta vazio, e `deals: []` e INDISTINGUIVEL
+            # de "a conta nao tem operacao nesse periodo". O frontend mostrava
+            # "Nenhum registro no periodo" — uma tela de SUCESSO com zero
+            # linhas — e o operador foi procurar erro na conta. Nao havia erro:
+            # havia um programa nao aberto.
+            #
+            # `ok: true` continua verdadeiro: a LEITURA foi bem-sucedida, e o
+            # resultado foi vazio. O que muda e que o consumidor agora sabe que
+            # o vazio tem causa, e nao pode apresentar "nenhum registro" como se
+            # fosse uma verdade sobre a conta.
+            #
+            # E a razao de o campo ser `connected` e nao `terminal_connected`:
+            # este ja existe no payload de `/api/live` com outro significado (o
+            # terminal estah em socket, o que NAO e sessao de login). Aqui e
+            # sessao de CONTA, que e o que `history_deals_get` exige.
+            connected=bool(_mt5_connected()),
+        )
     # Bybit e OKX estavam fora daqui, mas os quatro clientes implementam
     # `history(symbol, limit)` e o bloco de normalizacao abaixo e generico
     # (`first_value` por nome de campo). A interface oferecia as duas na lista
@@ -810,12 +1069,113 @@ def _universal_candles(broker: str, market: str, symbol: str, timeframe: str = "
     if broker not in READ_BROKERS:
         return canonical_unavailable(broker=broker, market=market, source="universal_gateway", reason="corretora não suportada", status="unsupported", symbol=symbol, candles=[], count=0)
     key = ("candles", broker, market, symbol, str(timeframe or "M5").upper(), int(limit))
+    # Alias modelo -> corretora (`XAUUSD` -> `GOLD` na XM): a leitura usa o
+    # simbolo que a corretora entende. Config do operador, nunca codigo.
+    try:
+        from backend.symbol_aliases import para_corretora as _para_corretora
+
+        leitura = _para_corretora(broker, symbol) or symbol
+    except Exception:
+        leitura = symbol
+
+    def _leitura_mt5() -> dict:
+        """
+        O MOTIVO E O DA SESSAO, NAO UM GENERICO (11/10/2026)
+        ====================================================
+        MEDIDO na captura das 12:24, MT5 fechado: a tela dizia "candles
+        ausentes ou inválidos no upstream" — o texto generico de
+        `_candles_from_raw` —, e o motivo REAL estava sendo JOGADO FORA aqui:
+        `_mt5_candles` ja separa "terminal MT5 nao conectado ou nao autorizado"
+        (`terminal_disconnected`) de "sem candles para o simbolo"
+        (`no_candles_for_symbol`), mas so o `.get("candles", [])` era repassado,
+        e a lista vazia virava o generico do outro lado.
+
+        E o AGENTS.md 5 na forma mais cara: o operador le "upstream" e culpa a
+        corretora, quando a resposta certa — "abra o MetaTrader 5" — ja tinha
+        sido escrita uma funcao acima. O sintoma aponta pro lado errado.
+        """
+        interna = _mt5_candles(leitura, timeframe, limit)
+        linhas = interna.get("candles", []) if isinstance(interna, dict) else (interna or [])
+        if linhas:
+            return _candles_from_raw("mt5", market, symbol, linhas, timeframe, "copy_rates_from_pos")
+        resposta = _candles_from_raw("mt5", market, symbol, [], timeframe, "copy_rates_from_pos")
+        if isinstance(interna, dict):
+            motivo = str(interna.get("error") or "").strip()
+            codigo = str(interna.get("reason_code") or "").strip()
+            if motivo or codigo:
+                if motivo:
+                    resposta["error"] = motivo
+                if codigo:
+                    resposta["reason_code"] = codigo
+        return resposta
+
+    resposta_mt5 = _cached_market(key, _leitura_mt5)
     if broker == "mt5":
-        return _cached_market(key, lambda: _candles_from_raw("mt5", market, symbol, _mt5_candles(symbol, timeframe, limit).get("candles", []), timeframe, "copy_rates_from_pos"))
+        return _com_fallback_publico(resposta_mt5, symbol, timeframe, limit)
     client = _exchange_client(broker, market)
     if not hasattr(client, "klines"):
         return canonical_unavailable(broker=broker, market=market, source=f"{broker}_api", reason="candles não implementados", symbol=symbol, candles=[], count=0)
-    return _cached_market(key, lambda: _candles_from_raw(broker, market, symbol, client.klines(symbol, interval=timeframe, limit=limit), timeframe))
+
+    def _leitura_exchange() -> dict:
+        # A LEITURA DA EXCHANGE NAO PODE DERRUBAR A ROTA (12/10/2026, grafico
+        # sempre vivo). Se `klines` lancar (fora do ar, par suspenso,
+        # timeout), a resposta carrega o motivo e cai no fallback publico
+        # abaixo — nunca excecao para o handler, nunca grafico morto sem
+        # motivo. A leitura fica DENTRO do loader para o cache de 1s continuar
+        # valendo: fora dele, cada chamada bateria na API mesmo com cache.
+        try:
+            brutas = client.klines(symbol, interval=timeframe, limit=limit)
+        except Exception as exc:  # noqa: BLE001 - qualquer falha de leitura vira motivo
+            brutas = []
+            motivo_exchange = f"{broker} não respondeu: {exc}"
+        else:
+            motivo_exchange = ""
+        resposta = _candles_from_raw(broker, market, symbol, brutas, timeframe)
+        if motivo_exchange and not resposta.get("candles"):
+            resposta["error"] = motivo_exchange
+        return resposta
+
+    resposta = _cached_market(key, _leitura_exchange)
+    return _com_fallback_publico(resposta, symbol, timeframe, limit)
+
+
+#: Prefixo das fontes publicas na tela. A procedencia viaja JUNTO do dado.
+FONTE_PUBLICA = "publica"
+
+
+def _com_fallback_publico(resposta: dict, symbol: str, timeframe: str, limit: int) -> dict:
+    """Se a CORRETORA nao devolveu vela, tenta fonte publica — e DECLARA.
+
+    MEDIDO em 05/10/2026: o grafico do Robo aparecia PRETO quando o terminal MT5
+    nao estava logado ou quando o simbolo da corretora nao tinha historico. O
+    container desenhava e o operador via um retangulo vazio.
+
+    A regra que nao se quebra aqui:
+      - o dado publico NUNCA entra como preco de EXECUCAO. `execucao: false`
+        viaja junto, e e o que permite recusar ordem montada sobre preo de
+        terceiro;
+      - a procedencia viaja junto (`fonte`), e a tela escreve de onde veio;
+      - se a fonte publica tambem falhar, devolve a resposta da corretora como
+        estava. Falhar duas vezes nao e motivo para inventar vela.
+    """
+    if (resposta.get("candles") or []):
+        return resposta
+    try:
+        from backend import mercado_publico as _pub
+
+        publico = _pub.ohlc_publico(symbol, timeframe, limit)
+    except Exception:
+        # Sem fonte publica, a resposta da corretora volta intacta: e melhor
+        # dizer "sem dado" do que servir numero de origem desconhecida.
+        return resposta
+    resposta["candles"] = publico.get("candles") or []
+    resposta["count"] = len(resposta["candles"])
+    resposta["fonte"] = publico.get("fonte")
+    resposta["fonte_url"] = publico.get("fonte_url")
+    resposta["execucao"] = False
+    resposta["fallback_publico"] = True
+    resposta["observacao"] = publico.get("observacao")
+    return resposta
 
 
 def _universal_depth(broker: str, market: str, symbol: str, limit: int = 20) -> dict:
@@ -1009,7 +1369,14 @@ def _universal_quotes(broker: str, market: str, symbols: list[str]) -> dict:
     for symbol in requested:
         if broker == "mt5":
             try:
-                raw = _quote(symbol)
+                # Alias modelo -> corretora na leitura (`XAUUSD` -> `GOLD`).
+                try:
+                    from backend.symbol_aliases import para_corretora as _para_corretora
+
+                    leitura = _para_corretora(broker, symbol) or symbol
+                except Exception:
+                    leitura = symbol
+                raw = _quote(leitura)
             except Exception as exc:
                 errors.append({"symbol": symbol, "error": str(exc)})
                 unavailable.append(symbol)
@@ -1296,6 +1663,29 @@ def _payload() -> dict:
                 "margin_free": optional_number(getattr(info, "margin_free", None)),
                 "margin_level": optional_number(getattr(info, "margin_level", None)),
                 "currency": getattr(info, "currency", None),
+                # ------------------------------------------------------------
+                # A ALAVANCAGEM DA CONTA (06/10/2026)
+                # ------------------------------------------------------------
+                # MEDIDO na conta 391773676 (XMGlobal-MT5 14, Hedge): o painel
+                # `Gerir` da XM escreve `Alavancagem 1000:1`, e
+                # `account_info().leverage` devolve `1000`. Sao o mesmo numero,
+                # medido de dois lados.
+                #
+                # Por que ela precisa VIR: o `Requisito de margem` do painel de
+                # ordem e `nocional / alavancagem`, e sem a alavancagem o app
+                # teria de usar um chute — que e o "numero inventado no painel
+                # vira limite real" que o proprio painel proibe.
+                #
+                # Conferido com o numero da XM: `0,01 BTCUSD` a 85.523 tem
+                # nocional `0,01 x 1 x 85.523 = 855,23` (contract_size do BTCUSD
+                # e 1,0 — MEDIDO), e `855,23 / 1000 = 0,855`. A XM escreve
+                # `$0.85`. Confere.
+                #
+                # `None` quando o campo nao existe na conta: e ausencia medida,
+                # e nao zero. Com `None` a tela nao mostra requisito de margem,
+                # em vez de mostrar `0,00` e o operador acreditar que a ordem
+                # e gratuita.
+                "leverage": optional_number(getattr(info, "leverage", None)),
                 "trade_allowed": bool(getattr(ti, "trade_allowed", False)) if ti else False,
                 "terminal_connected": bool(getattr(ti, "connected", False)) if ti else False,
                 "mode": account_mode,
@@ -1436,6 +1826,36 @@ def _quote(symbol: str) -> dict:
 
 
 def _symbols() -> dict:
+    # A SESSAO MT5, QUE A ROTA DE CANDLES JA EXIGIA E ESTA NAO EXIGIA
+    # =============================================================
+    # MEDIDO em 08/10/2026, conta 391773676 (XMGlobal-MT5 14):
+    #
+    #   terminal sem sessao:  symbols_get() -> None   -> count=0  unavailable
+    #   terminal com sessao: symbols_get() -> 1640    -> count=1640  ok
+    #
+    # A MESMA rota, os MESMOS argumentos. `discover_assets` le `symbols_get()`,
+    # e `symbols_get()` devolve `None` — sem lancar — quando a sessao nao foi
+    # aberta neste processo. Da entao: `status=unavailable`,
+    # `error="catalogo de ativos ausente no upstream"`, `count=0`.
+    #
+    # A rota de candles JA tinha a guarda, em :2036 e :2087:
+    #
+    #     inicializar = getattr(_mt5(), "initialize", None)
+    #     if callable(inicializar) and not _mt5_connected():
+    #         _ensure_mt5()
+    #
+    # Esta rota nao tinha. E por isso que o catalogo dependia da ORDEM: se a
+    # rota de candles rodasse antes, ela abria a sessao e o catalogo
+    # funcionava; se o catalogo fosse o primeiro a pedir, devolvia zero. O
+    # operador via o seletor "aparecer sozinho" as vezes, e a tela dava
+    # `Identidade de mercado invalida` as outras — e culpava o frontend.
+    #
+    # A guarda e `getattr`, e nao acesso direto, pelo mesmo motivo da de
+    # candles: os dubles de teste injetam um modulo MT5 minimo, sem
+    # `initialize`.
+    inicializar = getattr(_mt5(), "initialize", None)
+    if callable(inicializar) and not _mt5_connected():
+        _ensure_mt5()
     mt5 = _mt5()
     rows = discover_assets(mt5, include_hidden=True)
     return {
@@ -1450,23 +1870,143 @@ def _symbols() -> dict:
 
 
 
+# ============================================================
+# MOVIMENTACOES DE SALDO (deposito, saque, credito, bonus)
+# ============================================================
+# POR QUE ISTO EXISTE
+# ------------------
+# A linha `type` abaixo era um ternario de dois estados:
+#
+#     "type": "BUY" if deal_type == DEAL_TYPE_BUY else "SELL",
+#
+# O MT5 tem DEZ tipos de deal (medido no pacote 5.x desta maquina):
+# 0 BUY, 1 SELL, 2 BALANCE, 3 CREDIT, 4 CHARGE, 5 CORRECTION,
+# 6 BONUS, 7 COMMISSION, 8 e 9 comissao diaria/agente.
+#
+# Entao `type` nao era rotulo de operacao: era "SELL" para TUDO que nao fosse
+# compra. Um DEPOSITO de USD 5,62 chegava ao frontend como uma VENDA de 5,62
+# sem simbolo, e o operador lia "vendi ouro" num registro que era credito.
+#
+# MEDIDO NA CONTA REAL 391773676 (XMGlobal-MT5 14), 05/10/2026, com
+# `history_deals_get` de 10 anos:
+#
+#     type=0 BUY     -> 1
+#     type=1 SELL    -> 1
+#     type=2 BALANCE -> 2   CD-AST-PIC 265376085 (+5,52)
+#                               EXP05-AST-PIC 265376085 (+0,10)
+#     type=3 CREDIT  -> 1   Credit-In-100%-$100-NewClients (+5,62)
+#
+# Tres das CINCO linhas do historico da conta nao eram operacao: eram
+# movimentacao de saldo. As tres apareciam como "SELL".
+#
+# O SENTIDO (entrada ou saida) NAO vem do tipo: `DEAL_TYPE_BALANCE` (2) cobre
+# deposito E saque; e `DEAL_TYPE_CREDIT` (3) e credito de entrada. O que separa
+# entrada de saida e o VALOR em `profit`.
+#
+# ESTA LEITURA E SOMENTE LEITURA. Nada aqui movimenta dinheiro: saque e
+# transferencia seguem desligados em todo o codigo (ver AGENTS.md).
+
+#: Tipo MT5 -> nome verdadeiro. Medido no MetaTrader5 5.x desta maquina.
+_TIPOS_DEAL: dict[int, str] = {
+    0: "BUY",
+    1: "SELL",
+    2: "BALANCE",
+    3: "CREDIT",
+    4: "CHARGE",
+    5: "CORRECTION",
+    6: "BONUS",
+    7: "COMMISSION",
+    8: "COMMISSION_DAILY",
+    9: "COMMISSION_AGENT",
+}
+
+
+def _tipo_deal(deal: object) -> int:
+    """`deal.type` como inteiro; -1 quando ausente ou invalido."""
+    try:
+        return int(getattr(deal, "type"))  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return -1
+
+
+def _movimentacao_de(deal: object) -> str:
+    """Rotulo da movimentacao de saldo, ou "" quando o deal e operacao."""
+    tipo = _tipo_deal(deal)
+    if tipo in (0, 1):
+        return ""
+    valor = optional_number(getattr(deal, "profit", None))
+    if valor is None:
+        valor = 0.0
+    if tipo == 2:
+        return "Deposito" if valor >= 0 else "Saque"
+    if tipo == 3:
+        return "Credito" if valor >= 0 else "Estorno de credito"
+    if tipo == 4:
+        return "Cobranca" if valor >= 0 else "Devolucao"
+    if tipo == 6:
+        return "Bonus"
+    if tipo == 5:
+        return "Correcao" if valor >= 0 else "Ajuste"
+    if tipo in (7, 8, 9):
+        return "Comissao"
+    return _TIPOS_DEAL.get(tipo, f"TIPO_{tipo}")
+
+
 def _history(days: int = 30, symbol: str = "") -> dict:
     mt5 = _mt5()
     days = max(1, min(int(days), 3650))
     end = datetime.now()
     start = end.replace(hour=0, minute=0, second=0, microsecond=0) if days == 1 else end - timedelta(days=days)
-    deals = mt5.history_deals_get(start, end, group=f"*{symbol}*") if symbol else mt5.history_deals_get(start, end)
+    deals = mt5.history_deals_get(start, end)
+    # FILTRAR AQUI, E NAO NO `group` DO MT5 (06/10/2026)
+    # =====================================================
+    # MEDIDO no app instalado, conta 391773676 XM: a aba Historico abria com
+    # "Nenhum registro no periodo" e `0 operacoes`, com o MT5 mostrando 2
+    # operacoes de BTCUSD no mesmo dia. A tela estava filtrando por simbolo e
+    # nao encontrava nada.
+    #
+    # A causa e o `group=f"*{symbol}*"`. O MT5 casa o padrao CONTRA o nome que a
+    # corretora publica, e a XM publica em MINUSCULA — a aba Historico do proprio
+    # MT5 mostra `btcusd`. O app normaliza simbolo em MAIUSCULA (o mesmo
+    # `normalizeSymbol` do frontend devolve `BTCUSD`), entao `*BTCUSD*` nao casa
+    # com `btcusd`, e a busca volta vazia SEM ERRO.
+    #
+    # E o AGENTS.md 5: o produtor e o consumidor discordando do nome, e o
+    # sintoma — historico vazio — apontava para o login, para a corretora e para
+    # o filtro de periodo. Nenhum deles era a causa.
+    #
+    # Por que comparar aqui e nao no `group`: o filtro por caixa e um `casefold`
+    # de uma linha, e o preco e o MESMO da consulta sem filtro — que e o que ja
+    # acontecia quando o operador nao digitava simbolo. O `group` ainda trazia um
+    # defeito de fundo: `*` casa em QUALQUER posicao, entao digitar `USD` trazia
+    # EURUSD, e `BTC` trazia BTCUSD. Um filtro de substring silencioso e pior que
+    # nenhum: o operador acha que esta vendo um par e esta vendo tres.
+    #
+    # Entao: IGUALDADE SEM CAIXA, e nada mais. Ver a nota sobre substring acima:
+    # o operador que digita `EUR` esta pedindo EUR, e um filtro que responde EURUSD
+    # sem avisar e o AGENTS.md 3 — presumir o par em vez de recusar.
+    alvo = str(symbol or "").strip()
+    busca = alvo.casefold()
+
     rows = []
     for deal in deals or []:
-        deal_type = getattr(deal, "type", None)
+        tipo = _tipo_deal(deal)
+        movimentacao = _movimentacao_de(deal)
         entry = getattr(deal, "entry", None)
-        deal_time = optional_number(getattr(deal, "time", None), integer=True)
+        if busca and str(getattr(deal, "symbol", None) or "").casefold() != busca:
+            continue
         rows.append({
             "ticket": optional_number(getattr(deal, "ticket", None), integer=True),
             "order": optional_number(getattr(deal, "order", None), integer=True),
             "position_id": optional_number(getattr(deal, "position_id", None), integer=True),
             "symbol": getattr(deal, "symbol", None),
-            "type": "BUY" if deal_type == getattr(mt5, "DEAL_TYPE_BUY", 0) else "SELL",
+            # O nome VERDADEIRO do tipo. Antes era "BUY"/"SELL" para tudo.
+            "type": _TIPOS_DEAL.get(tipo, f"TIPO_{tipo}"),
+            # `categoria` e o que separa operacao de movimentacao no frontend:
+            # e o campo que impede um deposito de aparecer como uma venda.
+            "categoria": "movimentacao" if movimentacao else "operacao",
+            "movimentacao": movimentacao,
+            "comment": getattr(deal, "comment", None),
             "entry": "IN" if entry == getattr(mt5, "DEAL_ENTRY_IN", 0) else "OUT" if entry == getattr(mt5, "DEAL_ENTRY_OUT", 1) else entry,
             "volume": optional_number(getattr(deal, "volume", None)),
             "price": optional_number(getattr(deal, "price", None)),
@@ -1475,7 +2015,7 @@ def _history(days: int = 30, symbol: str = "") -> dict:
             "swap": optional_number(getattr(deal, "swap", None)),
             "fee": optional_number(getattr(deal, "fee", None)),
             "magic": optional_number(getattr(deal, "magic", None), integer=True),
-            "time": timestamp_iso(deal_time),
+            "time": timestamp_iso(optional_number(getattr(deal, "time", None), integer=True)),
         })
     rows.sort(key=lambda row: row.get("time") or "", reverse=True)
     return {"deals": rows, "count": len(rows), "days": days, "source": "mt5_gateway"}
@@ -1483,7 +2023,37 @@ def _history(days: int = 30, symbol: str = "") -> dict:
 
 
 
-_TIMEFRAME_MAP = {"M1": 1, "M5": 5, "M15": 15, "M30": 30, "H1": 16385, "H4": 16388, "D1": 16408}
+# A JANELA DE TEMPOS DO GRAFICO (09/10/2026)
+# ===========================================
+# MEDIDO na XM (`my.xm.com/pt/symbol-info/BTCUSD`): a barra de baixo do
+# grafico e `1H 1D 1W 1M 3M 1Y MAX`. Aqui eram sete botoes, de M1 a D1, e o
+# operador nao conseguia ver a semana nem o mes — que sao os periodos em que a
+# maior parte das decisoes deForex e tomada.
+#
+# MEDIDO no MT5 desta maquina, conta 391773676 (XMGlobal-MT5 14):
+#
+#     TIMEFRAME_W1  = 32769   -> GOLD W1  = 5 barras
+#     TIMEFRAME_MN1 = 49153   -> GOLD MN1 = 5 barras
+#
+# Entao o terminal aceita, e a tela e que nao oferecia. Um timeframe no botao
+# que o gateway recusa e o AGENTS.md §9 pelo avesso: controle que promete e nao
+# entrega.
+#
+# `3M` e `1Y` NAO entraram, e a razao e medida: o MT5 nao tem agregacao propria
+# de trimestre nem de ano (`TIMEFRAME_*` vai de M1 a MN1). Um `3M` aqui seria
+# soma de 12 semanas feita na mao, e o preco viria de uma vela que o operador
+# nao consegue ver. `MAX` tambem nao: e um intervalo, nao um timeframe.
+_TIMEFRAME_MAP = {
+    "M1": 1,
+    "M5": 5,
+    "M15": 15,
+    "M30": 30,
+    "H1": 16385,
+    "H4": 16388,
+    "D1": 16408,
+    "W1": 32769,
+    "MN1": 49153,
+}
 
 # Instante em que ESTE processo subiu. O arquivo de telemetria e um historico
 # permanente que sobrevive a reinicios e a troca de conta; o high-water mark do
@@ -1508,24 +2078,58 @@ def _economic_alerts_within(hours: float = 6.0, tz: str = "BRT") -> list[dict]:
 
 
 def _economic_calendar(limit: int = 30, tz: str = "BRT", days: int = 14) -> dict:
-    """Agenda economica real (tabela local recorrente) — nunca retorna mock.
+    """Agenda economica: semana corrente REAL + semanas seguintes ESTIMADAS.
 
-    Fonte unica: app/economic_calendar.py. Os horarios sao estimativas baseadas
-    em padroes de calendario; o payload marca isso explicitamente em 'disclaimer'.
+    POR QUE A FONTE MUDOU (05/10/2026)
+    ==================================
+    A tela tinha tres colunas — Anterior, Previsao e Real — e as tres eram
+    permanentemente `--`, porque a fonte era so a tabela local de
+    `planos/economic_calendar.py`. Aquela tabela sabe QUANDO o evento acontece e
+    nada mais; nao existe valor anterior nem consensus na fonte.
+
+    Coluna que nunca pode ter dado e pior que coluna ausente: faz o operador
+    desconfiar de todo o resto da tela.
+
+    AGORA
+    -----
+    A semana corrente vem do feed publico sem chave
+    (`backend/economic_calendar_publica.py`), que entrega anterior, previsao e
+    real. As semanas seguintes continuam vindo da tabela local, porque o feed
+    cobre so a semana corrente — `ff_calendar_nextweek.json` responde 404
+    (medido em 05/10/2026).
+
+    NENHUM DOS DOIS E APRESENTADO COMO REAL QUANDO NAO E. Cada evento leva
+    `fonte` e `estimado`, e a tela mostra. O disclaimer deixou de valer para a
+    semana corrente e passou a valer so para o que ainda e estimativa.
     """
     from backend.planos.economic_calendar import upcoming_events
+    from backend import economic_calendar_publica as publica
 
     limit = max(1, min(int(limit), 200))
     days = max(1, min(int(days), 60))
-    events = upcoming_events(limit=limit, days=days, tz=tz or "BRT", relevance="all")
+    estimados = upcoming_events(limit=limit * 2, days=days, tz=tz or "BRT", relevance="all")
+    try:
+        combinado = publica.suplementar(estimados)
+        eventos = combinado["events"][:limit]
+        fontes = combinado["fontes"]
+    except publica.CalendarUnavailable as exc:
+        # Sem feed, a agenda local ainda responde — marcada como estimativa.
+        eventos = estimados[:limit]
+        fontes = {"reais": 0, "estimados": len(eventos), "feed_disponivel": False, "erro": str(exc)}
+
     return {
         "ok": True,
-        "events": events,
-        "count": len(events),
+        "events": eventos,
+        "count": len(eventos),
         "timezone": (tz or "BRT").upper(),
         "days": days,
-        "source": "app.economic_calendar",
-        "disclaimer": "Horarios estimados por padrao de calendario; confirme na agenda oficial do broker antes de operar.",
+        "source": "feed-publico+estimativa-local",
+        "fontes": fontes,
+        "disclaimer": (
+            "Semana corrente: dados publicados (anterior, previsao e real). "
+            "Semanas seguintes: horarios estimados por padrao de calendario, "
+            "sem valor — confirme na agenda oficial do broker antes de operar."
+        ),
     }
 
 
@@ -1837,8 +2441,31 @@ def _trade_order(payload: dict) -> dict:
     volume = float(payload.get("volume", 0) or 0)
     sl = float(payload.get("sl", 0) or 0)
     tp = float(payload.get("tp", 0) or 0)
-    if not symbol or side not in {"BUY", "SELL"} or not (0 < volume <= 0.10) or sl <= 0 or tp <= 0:
-        raise ValueError("symbol, side, volume <= 0.10, sl e tp validos sao obrigatorios")
+    # SL E TP NAO SAO MAIS OBRIGATORIOS (decisao do dono, 07/10/2026).
+    #
+    # MEDIDO na conta 391773676 (XMGlobal-MT5 14): o painel obrigava SL e TP e
+    # escrevia "Preencha SL e TP para ligar o AUTO", enquanto as colunas S/L e T/P
+    # do historico saiam VAZIAS em todas as 10 operacoes mostradas. O acoplamento
+    # nao existia: o painel recusava sem os dois campos e o que saia era uma
+    # ordem a mercado sem os dois. O risco e do operador - e da IA quando ela
+    # sugere.
+    #
+    # O QUE NAO MUDOU: `symbol`, `side` e `volume` continuam obrigatorios; quando
+    # o operador PREENCHE sl ou tp, o valor continua tendo de ser > 0; e a ordem
+    # continua exigindo `confirm=true`, `request_id` idempotente, `risk_gate`,
+    # `intent_log` e `audit_log`. O que muda e a obrigatoriedade, nao a trilha.
+    if not symbol or side not in {"BUY", "SELL"} or not (0 < volume <= 0.10):
+        raise ValueError("symbol, side e volume entre 0 e 0.10 sao obrigatorios")
+    if sl < 0 or tp < 0:
+        raise ValueError("sl e tp, quando informados, tem de ser maiores que zero")
+    # Alias modelo -> corretora (`XAUUSD` -> `GOLD` na XM): a ordem manual
+    # sai com o simbolo que o terminal entende. Config do operador.
+    try:
+        from backend.symbol_aliases import para_corretora as _para_corretora
+
+        symbol = _para_corretora("mt5", symbol) or symbol
+    except Exception:
+        pass
     # Risco REAL do dia: perda diaria e exposicao lidas do MT5 (nao mais 0.0 fixo).
     # Antes desta correcao o risk_gate recebia daily_loss_pct=0.0 e exposure_pct=0.0,
     # o que desarmava os dois limites mais importantes em conta de dinheiro real.
@@ -1918,7 +2545,7 @@ def _universal_execute(payload: dict, action: str) -> dict:
     Agora:
         - broker mt5  -> roteia para _trade_order/_trade_close/_trade_manage/
           _trade_cancel_orders, que ja trazem as travas de verdade
-          (XAU_ENABLE_TRADE_COMMANDS, confirm=true, SL/TP obrigatorios,
+          (XAU_ENABLE_TRADE_COMMANDS, confirm=true, request_id, risk_gate,
           order_check antes do order_send, risk_gate).
         - demais      -> adaptador da propria corretora, que aplica
           XAU_ENABLE_<BROKER>_EXECUTION e devolve o motivo dele. Antes o
@@ -2064,8 +2691,12 @@ def _trade_pending_order(payload: dict) -> dict:
         raise ValueError("symbol e side (BUY/SELL) validos sao obrigatorios")
     if order_kind not in {"limit", "stop"}:
         raise ValueError("kind deve ser 'limit' ou 'stop'")
-    if volume <= 0 or volume > 0.10 or sl <= 0 or tp <= 0 or price <= 0:
-        raise ValueError("volume <= 0.10, sl/tp > 0 e price > 0 obrigatorios")
+    # Mesma regra da ordem a mercado (decisao do dono, 07/10/2026): o preco do
+    # gatilho e obrigatorio porque e ele que define a ordem; sl e tp nao sao.
+    if volume <= 0 or volume > 0.10 or price <= 0:
+        raise ValueError("volume entre 0 e 0.10 e price > 0 sao obrigatorios")
+    if sl < 0 or tp < 0:
+        raise ValueError("sl e tp, quando informados, tem de ser maiores que zero")
 
     risk = _risk_state(mt5)
     if not mt5.symbol_select(symbol, True):
@@ -2553,6 +3184,22 @@ class Handler(BaseHTTPRequestHandler):
         # leitura informativa: falha aqui nunca bloqueia operacao, e uma
         # corretora sem resposta devolve `ms: None` — nunca 0, porque 0 ms e
         # mentira que a tela repetiria como se fosse medida.
+        if parsed.path == "/api/publico/ohlc":
+            from backend import mercado_publico as _pub
+            from urllib.parse import parse_qs as _pq
+            q = _pq(parsed.query)
+            try:
+                self._send(200, _pub.ohlc_publico(
+                    (q.get("symbol") or [""])[0],
+                    (q.get("timeframe") or ["M5"])[0],
+                    int((q.get("limit") or ["300"])[0]),
+                )); return
+            except ValueError as ex:
+                self._send(400, {"ok": False, "error": str(ex)}); return
+            except Exception as ex:
+                # "nao consegui perguntar" e diferente de "nao tem dado", e a
+                # tela precisa saber a diferenca para nao fingir estabilidade.
+                self._send(503, {"ok": False, "error": str(ex), "fonte": None}); return
         if parsed.path == "/api/latencia":
             from backend import latencia as _latencia
             self._send(200, _latencia.medir_todas()); return
@@ -2934,7 +3581,40 @@ class Handler(BaseHTTPRequestHandler):
         if THIRD_PARTY_READ_ONLY:
             self._send(403, {"ok": False, "status": "blocked", "error": "perfil de compatibilidade somente leitura", "commands_enabled": False, "execution_enabled": False})
             return
-        if urlparse(self.path).path != "/api/config": self._send(404, {"ok": False, "error": "not_found"}); return
+        parsed = urlparse(self.path)
+        # TROCAR CREDENCIAL DE CONEXAO (05/10/2026)
+        # =======================================
+        # Antes a tela so sabia criar conexao, e o unico caminho para trocar a
+        # chave era excluir e cadastrar de novo com o mesmo nome: dois cliques
+        # com a conta sem credencial no meio, e sem volta se o cadastro novo
+        # falhasse.
+        #
+        # O `id` vem do PATH e sobrescreve qualquer `id` do corpo. Sem isso um
+        # corpo divergente criaria conexao nova e a antiga continuaria ativa
+        # com a chave velha — o operador acharia que trocou e usaria a antiga.
+        if self.command == "PUT" and parsed.path.startswith("/api/connections/"):
+            bruto = parsed.path[len("/api/connections/"):]
+            if bruto.endswith("/"):
+                self._send(404, {"ok": False, "error": "Conexao inexistente.", "credentials_exposed": False})
+                return
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                corpo = json.loads(self.rfile.read(length) or b"{}")
+                if not isinstance(corpo, dict): corpo = {}
+                resultado = connection_service.update({**corpo, "id": unquote(bruto)})
+                conexao = next((x for x in list_connections() if x["id"] == unquote(bruto)), None)
+                self._send(200, {**resultado, "connection": conexao})
+            except LookupError as exc:
+                self._send(404, {"ok": False, "error": str(exc), "credentials_exposed": False})
+            except ValueError as exc:
+                self._send(422, {"ok": False, "error": str(exc), "credentials_exposed": False})
+            except Exception:
+                # Nunca refletir erro externo: pode conter credencial.
+                self._send(503, {"ok": False, "error": "Falha ao atualizar conexao.", "credentials_exposed": False})
+            return
+        if parsed.path != "/api/config":
+            self._send(404, {"ok": False, "error": "not_found"})
+            return
         try:
             length = int(self.headers.get("Content-Length", "0")); body = json.loads(self.rfile.read(length) or b"{}")
             if not isinstance(body, dict): raise ValueError("configuração deve ser objeto")
@@ -3079,7 +3759,7 @@ class Handler(BaseHTTPRequestHandler):
         # com o gateway local (9001, ver `apiBase()`): apertar "Ligar" devolvia
         # 404 e a operacao automatica NUNCA era ligada pelo app. A ordem continua
         # indo para `mt5.order_send()` — o mercado e real, em conta DEMO.
-        if parsed.path in ("/api/auto/config", "/api/auto/start", "/api/auto/stop", "/api/auto/tick"):
+        if parsed.path in ("/api/auto/config", "/api/auto/start", "/api/auto/stop", "/api/auto/tick", "/api/auto/sugerir-limites"):
             length = int(self.headers.get("Content-Length", "0") or 0)
             try:
                 corpo = json.loads(self.rfile.read(length) or b"{}") if length else {}
@@ -3097,6 +3777,19 @@ class Handler(BaseHTTPRequestHandler):
                     self._send(200, m.ligar()); return
                 if parsed.path == "/api/auto/stop":
                     self._send(200, m.desligar()); return
+
+                # /api/auto/sugerir-limites: a IA estuda o cenario e SUGERE.
+                # Nao grava nada e nao liga nada: quem grava e o operador pelo
+                # "Aplicar". E leitura com corpo (par+periodo+escopo), por isso
+                # POST — e sem gate de plano, pelo mesmo motivo do `config`:
+                # declarar/sugerir nao executa.
+                if parsed.path == "/api/auto/sugerir-limites":
+                    self._send(200, auto_engine.sugerir_limites(
+                        str(corpo.get("simbolo") or ""),
+                        str(corpo.get("timeframe") or ""),
+                        str(corpo.get("broker") or ""),
+                        str(corpo.get("market") or ""),
+                    )); return
 
                 # /api/auto/tick: UM ciclo sob demanda, sem depender da thread.
                 import pandas as pd

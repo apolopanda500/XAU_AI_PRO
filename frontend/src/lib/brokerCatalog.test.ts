@@ -130,6 +130,26 @@ describe('parseAssetCatalog', () => {
     const rows = parseAssetCatalog({ assets: [{ symbol: 'BTCUSDT' }] });
     expect(rows[0].availability).toBe('unverified');
   });
+
+  it('le o has_model declarado pela corretora, sem deduzir pelo nome', () => {
+    const rows = parseAssetCatalog({
+      assets: [
+        { symbol: 'GOLD', model_symbol: 'XAUUSD', has_model: true },
+        { symbol: 'EURUSD' },
+      ],
+    });
+    expect(rows[0].hasModel).toBe(true);
+    expect(rows[0].modelSymbol).toBe('XAUUSD');
+    expect(rows[1].hasModel).toBe(false);
+  });
+
+  it('PROVA NEGATIVA: has_model nao-booleano nao vira true', () => {
+    const rows = parseAssetCatalog({
+      assets: [{ symbol: 'X', has_model: 'sim' }, { symbol: 'Y', has_model: 1 }],
+    });
+    expect(rows[0].hasModel).toBe(false);
+    expect(rows[1].hasModel).toBe(false);
+  });
 });
 
 describe('isTradable', () => {

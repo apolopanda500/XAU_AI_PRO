@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """O contrato universal e o motor automatico falam o mesmo idioma.
 
 O QUE ESTE TESTE TRAVA
@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import pytest
 
-from backend.auto_engine import LimitesAuto, MotorAuto
+from backend.auto_engine import LimitesAuto, MotorAuto, pedido_para_router
 from backend.universal_contracts import UniversalOrderRequest
 
 ATIVO = "XAUUSD"
@@ -168,3 +168,103 @@ class TestMotorEntregaContratoValido:
         assert decisao.agir is True, decisao.motivo
         assert "envio falhou" not in decisao.motivo
         assert decisao.resultado.get("order") == 1
+
+
+
+class TestTraducaoParaORouter:
+    """A traducao do payload precisa ser testada no codigo REAL.
+
+    POR QUE ESTE TESTE EXISTE
+    ========================
+    A traducao vivia dentro de `_loop.enviar`, marcado `# pragma: no cover`.
+    Nenhum teste a executava, e nela `payload["volume"]` continuava lendo uma
+    chave que a montagem nao produz. O operador via `envio falhou: 'volume'`.
+
+    A primeira versao deste teste REPLICAVA a traducao dentro do proprio
+    teste — e por isso passava com o codigo real quebrado. Medido em
+    04/10/2026: reintroduzir `payload["volume"]` deixou os 50 testes verdes.
+    Um duble que repete a logica prova que a logica foi escrita, nao que ela
+    esta no caminho.
+
+    A REGRA: quem verifica traducao importa a funcao, nao reescreve o corpo.
+    """
+
+    def _payload(self, **extra):
+        base = {
+            "request_id": "auto-teste", "symbol": ATIVO, "side": "BUY",
+            "quantity": 0.02, "stop_loss": 4000.0, "take_profit": 4100.0,
+            "confirm": True,
+        }
+        base.update(extra)
+        return base
+
+    def test_a_traducao_usa_o_nome_canonico(self):
+        pedido = pedido_para_router(self._payload(), "mt5", "forex", "conta-1")
+        assert pedido["quantity"] == pytest.approx(0.02)
+        assert "volume" not in pedido
+
+    def test_o_pedido_survive_ao_contrato_universal(self):
+        """O pedido final tem de passar no contrato de verdade, nao num duble."""
+        pedido = pedido_para_router(self._payload(), "mt5", "forex", "conta-1")
+        r = UniversalOrderRequest.from_payload(pedido)
+        assert r.quantity == pytest.approx(0.02)
+        assert r.symbol == ATIVO
+
+    def test_o_lado_compra_vira_buy(self):
+        pedido = pedido_para_router(self._payload(side="BUY"), "mt5", "forex", "c")
+        assert pedido["side"] == "buy"
+
+    def test_o_lado_venda_vira_sell(self):
+        pedido = pedido_para_router(self._payload(side="SELL"), "mt5", "forex", "c")
+        assert pedido["side"] == "sell"
+
+    def test_a_conta_vem_do_argumento_e_nao_do_payload(self):
+        """A conta e resolvida pela corretora ativa; o `Decisao` nao a tem.
+
+        Antes era `payload.get("account_id", "")`, sempre vazio: toda ordem
+        morria em "account_id e obrigatorio" no contrato universal.
+        """
+        pedido = pedido_para_router(self._payload(), "mt5", "forex", "conta-real")
+        assert pedido["account_id"] == "conta-real"
+
+
+class TestCicloInteiroNaoDaKeyError:
+    """Do `ciclo_unico` ate o router: nenhuma excecao no caminho."""
+
+    def test_o_ciclo_completo_monta_e_traduz(self):
+        m = motor_pronto()
+        m.broker = "mt5"
+        m.market = "forex"
+        pedidos: list[dict] = []
+
+        def _enviar(payload):
+            # Usa a traducao REAL do modulo.
+            pedido = pedido_para_router(payload, "mt5", "forex", "conta-1")
+            UniversalOrderRequest.from_payload(pedido)
+            pedidos.append(pedido)
+            return {"ok": True, "order": 11}
+
+        decisao = m.ciclo_unico(lambda s, t: InferenciaFalsa(), _enviar, risco_ok)
+        assert "envio falhou" not in decisao.motivo, decisao.motivo
+        assert decisao.agir is True, decisao.motivo
+        assert pedidos and pedidos[0]["quantity"] == pytest.approx(decisao.volume)
+
+    def test_erro_de_traducao_vira_recusa_com_motivo_nao_crash(self):
+        """Excecao na traducao precisa virar `Decisao(agir=False)` com motivo.
+
+        Sem o `except`, um nome errado derrubaria a thread do `_loop` e o
+        operador veria o motor ligado e nenhum ciclo acontecendo — sem uma
+        linha de log que explicasse.
+        """
+        m = motor_pronto()
+
+        def _enviar(payload):
+            pedido = pedido_para_router(
+                {k: v for k, v in payload.items() if k != "quantity"},
+                "mt5", "forex", "conta-1")
+            return {"ok": True}
+
+        decisao = m.ciclo_unico(lambda s, t: InferenciaFalsa(), _enviar, risco_ok)
+        assert decisao.agir is False
+        assert "quantity" in decisao.motivo
+

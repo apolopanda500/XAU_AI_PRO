@@ -29,27 +29,61 @@ export type CapaModelo = {
   f1?: number | null;
   publicable?: boolean;
   pklPresent?: boolean;
+  /*
+    A CLASSE, quando quem chama souber.
+
+    MEDIDO (09/10/2026): esta capa tinha um `classeDe(simbolo)` que adivinhava
+    a classe pelo NOME — `/XAU|XAG|GOLD|.../`, `/BTC|ETH|SOL|.../`,
+    `/US30|US500|NAS|.../` e `forex` no resto. E exatamente o que o AGENTS.md §3
+    proibe: "a classe de um ativo vem da HIERARQUIA que a corretora preenche,
+    nao de palavra solta no nome", porque `SOL` casa dentro de `SOLVAR`.
+
+    Adivinhar a classe erra a cor da capa — e pior, faz o operador achar que um
+    par de forex e um indice porque a tela coloriu como indice.
+
+    Agora a classe VEM DE FORA, do catalogo da corretora ou do `.meta.json`.
+    Sem ela, a capa usa a cor NEUTRA. Nada e inventado.
+  */
+  assetClass?: string | null;
 };
 
-type ClasseAtivo = 'metal' | 'cripto' | 'forex' | 'indice';
+/**
+ * As classes que a corretora publica, e mais nada.
+ *
+ * O `Literal` e o que o app SUPORTA, nao uma lista de ativos. Classe nova
+ * entra aqui com o nome que a corretora usa.
+ */
+type ClasseAtivo = 'metal' | 'cripto' | 'forex' | 'indice' | 'indefinida';
 
-// A ordem importa: "XAUUSD" tem 6 letras e cairia em forex se a regra fosse
-// "6 letras = forex". Metal e cripto sao testados antes.
-function classeDe(simbolo: string): ClasseAtivo {
-  const s = String(simbolo || '').toUpperCase();
-  if (/XAU|XAG|GOLD|SILVER|XPT/.test(s)) return 'metal';
-  if (/BTC|ETH|SOL|XRP|DOGE/.test(s)) return 'cripto';
-  if (/US30|US500|NAS|SPX|DAX|HK50|USTEC/.test(s)) return 'indice';
-  return 'forex';
+/**
+ * O nome da classe como a corretora escreve, para a cor da capa.
+ *
+ * Nao ha ramo de nome: se a corretora nao mandou a classe, devolve
+ * `indefinida`. A cor neutra existe justamente para esse caso — uma capa cinza
+ * e honesta, e uma capa colorida errada engana.
+ */
+function classeDe(assetClass: string | null | undefined): ClasseAtivo {
+  const c = String(assetClass ?? '')
+    .trim()
+    .toLowerCase();
+  if (c === 'metal' || c === 'metals' || c === 'commodity' || c === 'commodities') {
+    return 'metal';
+  }
+  if (c === 'crypto' || c === 'crypto-spot' || c === 'crypto_futures') return 'cripto';
+  if (c === 'forex' || c === 'fx') return 'forex';
+  if (c === 'index' || c === 'indices' || c === 'indice') return 'indice';
+  return 'indefinida';
 }
 
 // Metal = dourado, cripto = ciano, forex = azul frio, indice = violeta.
 // Nenhuma distincao depende so de cor: o glifo e o timeframe tambem separam.
+// `indefinida` = cinza, que diz "a corretora nao me contou a classe".
 const PALETA: Record<ClasseAtivo, { base: string; borda: string; glifo: string }> = {
   metal: { base: '#3a2a08', borda: '#c99400', glifo: '#ffd24a' },
   cripto: { base: '#062b33', borda: '#00b8c4', glifo: '#3ee6f0' },
   forex: { base: '#0d2136', borda: '#2f7fd1', glifo: '#7fc0ff' },
   indice: { base: '#241436', borda: '#8b5cf6', glifo: '#c4a6ff' },
+  indefinida: { base: '#141821', borda: '#3a4252', glifo: '#8a94a6' },
 };
 
 const TF_CURTO: Record<string, string> = {
@@ -78,26 +112,71 @@ export default function ModelCover({
   selecionado?: boolean;
   onSelect?: (id: string) => void;
 }) {
-  const classe = classeDe(modelo.symbol);
+  /*
+    A classe vem de `modelo.assetClass` — de quem tem a ficha da corretora, nao
+    do nome. Sem ela: `indefinida`, e a capa fica cinza em vez de chutar.
+  */
+  const classe = classeDe(modelo.assetClass);
   const paleta = PALETA[classe];
+  /*
+    A SIGLA TOLERA O PLURAL DO TREINO (13/10/2026).
+    =================================================
+    MEDIDO: os cards MULTI_CRYPTO nasciam sem sigla — `classeDe` devolve
+    `cripto` (o nome em portugues da paleta) e o mapa de siglas so conhece
+    `crypto` (o que a corretora escreve). `assetIcon` direto no original
+    tambem falha para `metals`. A ordem e: original, depois o nome da
+    paleta traduzido de volta. Sem sigla continua sem selo (neutro honesto).
+  */
+  const sigla =
+    assetIcon(modelo.assetClass) || assetIcon(classe === 'cripto' ? 'crypto' : classe);
+  /*
+    A ARTE DO FUNDO (13/10/2026, "efeitos nos cards").
+    ===================================================
+    Cada modelo ganha um matiz proprio, derivado do `id` — decoracao
+    deterministica, NAO informacao: nao diz classe, periodo nem qualidade
+    (isso esta no nome, no topo e nas metricas). Dois modelos diferentes nunca
+    dividem a mesma cara, e nenhum dado e inventado para isso.
+  */
+  const matiz = [...String(modelo.id ?? '')].reduce((a, c) => a + c.charCodeAt(0), 0) % 360;
   const tf =
     TF_CURTO[String(modelo.timeframe || '').toUpperCase()] ??
     String(modelo.timeframe || '').toUpperCase();
+  /*
+    A SIGLA E OPCIONAL (09/10/2026), pela decisao do dono: "deixar o catalogo
+    sem icone apenas lista opcional".
+
+    `assetIcon` agora recebe SO a classe — ele nem ve o nome do ativo, e por isso
+    nao tem como adivinhar. Sem classe conhecida nao vem sigla, e o selo nao e
+    desenhado: o topo da capa fica so com o periodo. Ver `sigla` acima (tolerancia
+    ao plural do treino).
+  */
   const edge = modelo.edge;
   const temEdge = edge !== null && edge !== undefined && Number.isFinite(edge) && edge > 0;
 
   const conteudo = (
     <>
+      <span
+        className="mc-arte"
+        aria-hidden="true"
+        style={{
+          background: `linear-gradient(135deg, hsl(${matiz} 60% 22%) 0%, hsl(${(matiz + 40) % 360} 65% 12%) 60%, transparent 100%)`,
+        }}
+      />
       <span className="mc-topo" style={{ background: paleta.base, borderColor: paleta.borda }}>
-        <span className="mc-glifo" style={{ color: paleta.glifo }} aria-hidden="true">
-          {assetIcon(modelo.symbol, classe)}
-        </span>
+        {sigla && (
+          <span className="mc-glifo" style={{ color: paleta.glifo }} aria-hidden="true">
+            {sigla}
+          </span>
+        )}
         <span className="mc-tf" style={{ color: paleta.glifo }}>
           {tf}
         </span>
       </span>
       <span className="mc-corpo">
-        <span className="mc-nome">{modelo.symbol}</span>
+        {/* O nome que o operador le: o rotulo do treino, nao o simbolo. O
+            simbolo ja esta no Par e no `alt` da imagem; repetir aqui era a
+            redundancia MODELO == PAR que o dono apontou. */}
+        <span className="mc-nome">{modelo.label ?? modelo.id}</span>
         <span className="mc-metricas">
           <span title="Acurácia no treino">
             acc <b className="num">{pct(modelo.accuracy)}</b>

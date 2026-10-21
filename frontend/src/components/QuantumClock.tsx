@@ -1,3 +1,5 @@
+import { offsetMinutos, horaNaZona, rotuloOffset } from '../lib/fuso';
+import { zonaAtual } from '../hooks/useFuso';
 /**
  * QuantumClock — Relógio digital LED neon quântico
  * Hora, data, fuso, com efeito de brilho e dígitos animados
@@ -23,20 +25,44 @@ export const QuantumClock: React.FC<Props> = ({
     return () => clearInterval(interval);
   }, []);
 
+  /*
+    O FUSO ESCOLHIDO PELA TELA (05/10/2026)
+
+    MEDIDO na XM: o rodape mostra `21:01:24 UTC-3` — o OFFSET, nao a cidade, e
+    `auto` em azul como padrao. Antes isto era
+    `Intl.DateTimeFormat().resolvedOptions().timeZone`, ou seja, o fuso do
+    NAVEGADOR e nada mais: nao havia escolha nenhuma para o dono fazer.
+
+    A hora tambem mudou de origem: era `now.getHours()`, que ignora a escolha.
+  */
+  const zona = zonaAtual();
+
   const pad = (n: number) => n.toString().padStart(2, '0');
 
-  const hours = pad(now.getHours());
-  const minutes = pad(now.getMinutes());
-  const seconds = pad(now.getSeconds());
+  /*
+    A HORA vem de `horaNaZona(zona)`, e nao de `now.getHours()`.
 
-  const dateStr = now.toLocaleDateString('pt-BR', {
+    MEDIDO: `getHours()` devolve a hora do NAVEGADOR, que ignora a escolha. Com
+    o fuso em Londres e o navegador em Sao Paulo, o relogio marcaria a hora de
+    Sao Paulo enquanto o rotulo diria `UTC+1` — relogio e rotulo discordando na
+    mesma linha, que e o pior formato possivel.
+  */
+  const hhmm = horaNaZona(zona, now).split(':');
+  const hours = hhmm[0];
+  const minutes = hhmm[1];
+  const seconds = hhmm[2];
+
+  /** `UTC-3` — o que a XM escreve no rodape. */
+  const rotuloFuso = rotuloOffset(offsetMinutos(zona, now));
+
+  const dateStr = new Intl.DateTimeFormat('pt-BR', {
     weekday: 'short',
     day: '2-digit',
     month: 'short',
     year: 'numeric',
-  });
+    timeZone: zona,
+  }).format(now);
 
-  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   if (compact) {
     return (
@@ -46,6 +72,7 @@ export const QuantumClock: React.FC<Props> = ({
           {hours}:{minutes}
         </span>
         {showSeconds && <span className="clock-secs">{seconds}</span>}
+        <span className="clock-fuso">{rotuloFuso}</span>
       </div>
     );
   }
@@ -65,14 +92,15 @@ export const QuantumClock: React.FC<Props> = ({
           )}
         </div>
         <div className="clock-date">{dateStr}</div>
-        <div className="clock-tz">{tz}</div>
+        <div className="clock-tz">{zona}</div>
       </div>
       <div className="clock-leds">
         {Array.from({ length: 12 }).map((_, i) => (
           <span key={i} className={`clock-led ${i % 2 === 0 ? 'on' : ''}`} />
         ))}
       </div>
-    </div>
+              <span className="clock-fuso">{rotuloFuso}</span>
+</div>
   );
 };
 

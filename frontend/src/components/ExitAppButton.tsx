@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
+import { IconeEnergia } from './Icones';
 
 export default function ExitAppButton() {
   const [closing, setClosing] = useState(false);
@@ -25,7 +26,15 @@ export default function ExitAppButton() {
         onClick={() => void exit()}
         disabled={closing}
       >
-        {closing ? 'Fechando…' : '⏻ Sair do aplicativo'}
+        {closing ? (
+          'Fechando…'
+        ) : (
+          <>
+            {/* `⏻` saia como quadrado: glifo de fonte, nao desenho. */}
+            <IconeEnergia />
+            Sair do aplicativo
+          </>
+        )}
       </button>
     </div>
   );

@@ -1,4 +1,5 @@
 import { isGatewayRequest } from './api';
+import { ehGatewayLocal } from './portas';
 
 // Detecta se o frontend esta rodando dentro do webview do Tauri
 export const isTauri = (): boolean =>
@@ -8,17 +9,24 @@ export const isTauri = (): boolean =>
 type FetchInput = Parameters<typeof fetch>[0];
 type FetchInit = Parameters<typeof fetch>[1];
 
+/*
+  O GATEWAY LOCAL, EM QUALQUER PORTA (09/10/2026)
+  ================================================
+  MEDIDO: com `XAU_GATEWAY_PORT=9011`, este era
+  `url.port === '9001' && loopback`. A requisicao do proprio app deixava de ser
+  reconhecida como local, o `Authorization: Bearer` nao era injetado, e o
+  gateway respondia 401 em TUDO. O sintoma seria "o app perdeu a sessao" — e
+  o servidor estaria certo: e o cliente que checava a porta errada (AGENTS.md
+  §5). A sessao e o token que protegem a conta; um 401 aqui nao e cosmetics.
+
+  Agora a comparacao e com a base que o Tauri mandou (`lib/portas.ts`).
+*/
 export function isLocalGatewayRequest(input: FetchInput): boolean {
   const raw =
     typeof Request !== 'undefined' && input instanceof Request ? input.url : String(input);
   if (!/^https?:\/\//i.test(raw)) return false;
   try {
-    const url = new URL(raw);
-    return (
-      url.protocol === 'http:' &&
-      url.port === '9001' &&
-      (url.hostname === '127.0.0.1' || url.hostname === 'localhost')
-    );
+    return ehGatewayLocal(new URL(raw));
   } catch {
     return false;
   }

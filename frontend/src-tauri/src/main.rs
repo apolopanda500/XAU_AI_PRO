@@ -391,11 +391,98 @@ fn request_json(port: u16, path: &str, token: &str) -> Result<serde_json::Value,
     serde_json::from_str(body).map_err(|err| err.to_string())
 }
 
+/// Portas dos servicos locais, por variavel de ambiente.
+///
+/// MEDIDO em 09/10/2026 23:41: com o MT5 aberto, o app abria a janela e nao
+/// subia backend nenhum. O gateway Python morria logo depois de comecar:
+///
+///     PermissionError: [WinError 10013]
+///       mt5_gateway.py -> gateway_server.py:147 criar_servidor -> server_bind
+///
+/// Quem ocupava `127.0.0.1:9001` era `terminal64`, porque o
+/// `config/assistant.ini` do MT5 tem `[MCP.MetaTrader] Enable=1` com
+/// `Endpoint=http://127.0.0.1:9001/mcp`. MT5 e gateway estavam configurados
+/// para a mesma porta; quem subisse primeiro ganhava, e o app perdia sempre.
+///
+/// Estas funcoes e o Python leem as MESMAS variaveis, entao as duas pontas
+/// andam juntas. Valor ausente, nao numerico ou zero cai no padrao: porta errada
+/// lida em silencio e pior que porta errada recusada.
+fn porta_gateway() -> u16 {
+    std::env::var("XAU_GATEWAY_PORT")
+        .ok()
+        .and_then(|v| v.trim().parse::<u16>().ok())
+        .filter(|p| *p > 0)
+        .unwrap_or(9001)
+}
+
+fn porta_core() -> u16 {
+    std::env::var("XAU_HTTP_PORT")
+        .ok()
+        .and_then(|v| v.trim().parse::<u16>().ok())
+        .filter(|p| *p > 0)
+        .unwrap_or(9003)
+}
+
+fn porta_ws() -> u16 {
+    std::env::var("XAU_WS_PORT")
+        .ok()
+        .and_then(|v| v.trim().parse::<u16>().ok())
+        .filter(|p| *p > 0)
+        .unwrap_or(9002)
+}
+
+/// A PORTA DO GATEWAY, EXPOSTA AO FRONTEND (09/10/2026)
+/// =====================================================
+/// MEDIDO: com `XAU_GATEWAY_PORT=9011`, o app instalado abria uma janela
+/// **preta** com uma frase so — "Falha ao inicializar o ambiente local
+/// seguro" — e nao subia backend nenhum.
+///
+/// A CAUSA, e ela e nome de medida, nao de numero
+/// =================================================
+/// As tres funcoes acima resolveram a porta para o **Rust** e para o **Python**.
+/// O **frontend** ficou de fora, e era ele quem decidia se o app vivia:
+///
+///     frontend/src/main.tsx:66
+///       await fetch('http://127.0.0.1:9001/api/health')      <- fixa
+///     frontend/src/lib/api.ts:36
+///       return 'http://127.0.0.1:9001'                       <- fixa
+///     frontend/src/lib/tauri.ts:19 e api.ts:142
+///       url.port === '9001'                                  <- fixa
+///
+/// Com o gateway em 9011, o `fetch` batia no `terminal64` (que escuta em 9001
+/// por causa do `[MCP.MetaTrader]`), nao recebia a identidade do gateway, e o
+/// bootstrap caia no `catch` sem motivo. A tela preta era o frontend falando
+/// com a porta errada — nao o gateway recusando.
+///
+/// Sem este comando o frontend nao tem como descobrir a porta: `porta_gateway()`
+/// ficava privada do Rust. As duas pontas precisam ler a MESMA variavel, e o
+/// valor tem de sair de um lugar so.
+#[tauri::command]
+fn porta_gateway_command() -> u16 {
+    porta_gateway()
+}
+
+/// A PORTA DO WEBSOCKET DE MERCADO, EXPOSTA AO FRONTEND (09/10/2026)
+/// ===============================================================
+/// MEDIDO: `cargo check` acusava `porta_ws is never used`, e o compilador
+/// estava certo. O frontend tinha `ws://127.0.0.1:9002` escrito a mao em
+/// `lib/api.ts`, com consumidor real (`useMarketWebSocket.ts:122`).
+///
+/// Funcionava por ACASO — `XAU_WS_PORT` nao estava definido, entao o padrao do
+/// Rust e o do frontend eram o mesmo numero. No dia em que o dono movesse o
+/// WebSocket, o Rust subiria na porta nova e o preço deixaria de atualizar, sem
+/// erro no console. E o AGENTS.md §9: um controle que nada lê e pior que a
+/// ausencia dele — `porta_ws` era exatamente isso.
+#[tauri::command]
+fn porta_ws_command() -> u16 {
+    porta_ws()
+}
+
 fn bridge_atual_ativo() -> bool {
     let Ok(token) = gateway_token() else {
         return false;
     };
-    let Ok(payload) = request_json(9001, "/api/health", &token) else {
+    let Ok(payload) = request_json(porta_gateway(), "/api/health", &token) else {
         return false;
     };
     payload.get("ok").and_then(serde_json::Value::as_bool) == Some(true)
@@ -410,7 +497,7 @@ fn core_atual_ativo() -> bool {
     let Ok(token) = gateway_token() else {
         return false;
     };
-    let Ok(payload) = request_json(9003, "/health", &token) else {
+    let Ok(payload) = request_json(porta_core(), "/health", &token) else {
         return false;
     };
     payload.get("ok").and_then(serde_json::Value::as_bool) == Some(true)
@@ -941,6 +1028,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             start_core,
             gateway_token_command,
+            porta_gateway_command,
+            porta_ws_command,
             ensure_config,
             get_app_dirs,
             save_auth,

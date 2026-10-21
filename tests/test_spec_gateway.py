@@ -98,6 +98,71 @@ def test_modulos_do_vip_estao_declarados():
         )
 
 
+def test_modulos_do_calendario_estao_declarados():
+    """Trava especifica: o calendario deste ciclo (05/10/2026).
+
+    `economic_calendar_publica` e `planos.economic_calendar` sao importados
+    DENTRO de `_economic_calendar`, e o PyInstaller so enxerga import de topo.
+    Sem esta declaracao o gateway congelado sobe normal e a rota
+    `/api/economic/calendar` responde "agenda indisponivel" — sem excecao e sem
+    log. E o mesmo modo de falha do VIP, que por isso ganhou trava propria.
+    """
+    declarados = _hidden_imports_do_spec()
+    for modulo in ("backend.economic_calendar_publica", "backend.planos.economic_calendar"):
+        assert modulo in declarados, (
+            f"{modulo} ausente do hiddenimports. O app instalado sobe sem o calendario."
+        )
+
+
+def _modulos_do_planos() -> set[str]:
+    """Todo `backend/planos/<modulo>.py` do fonte que precisa estar no bundle."""
+    return {
+        f"backend.planos.{p.stem}"
+        for p in (RAIZ / "backend" / "planos").glob("*.py")
+        if p.stem != "__init__"
+    }
+
+
+def test_nenhum_modulo_do_planos_fica_de_fora_do_bundle():
+    """O buraco do `test_nenhum_modulo_do_backend_fica_de_fora_do_bundle`: ele
+    so varre `backend/*.py`, e o pacote `backend/planos/` passava inteiro sem
+    ninguem olhar.
+
+    MEDIDO no app instalado em 11/10/2026, aba Configuracoes → Plano:
+
+        Assinatura indisponível: Failed to fetch
+        Catálogo de planos indisponível: Failed to fetch
+
+    `backend.planos.subscriptions` (e `caminhos`, `social_paper`) nunca
+    entraram em `hiddenimports`: nenhum import de topo os alcanca — o
+    `__init__.py` do pacote e vazio e todos os imports sao DENTRO de funcao.
+    No `.exe` congelado a rota cai a conexao sem resposta, e a tela le
+    TypeError ("Failed to fetch") em vez de 401/422. Tudo o mais funciona, e
+    por isso o defeito parece "so da aba Plano".
+    """
+    declarados = _hidden_imports_do_spec()
+    esquecidos = sorted(_modulos_do_planos() - declarados)
+    assert not esquecidos, (
+        "modulos de backend/planos/ fora do hiddenimports do mt5-gateway.spec — "
+        "o app instalado vai subir sem eles, e as rotas caem a conexao sem "
+        "resposta (a tela le 'Failed to fetch'):\n  " + "\n  ".join(esquecidos)
+    )
+
+
+def test_modulos_das_assinaturas_estao_declarados():
+    """Trava especifica: as rotas `/api/subscriptions/*` e `/api/social/*`."""
+    declarados = _hidden_imports_do_spec()
+    for modulo in (
+        "backend.planos.subscriptions",
+        "backend.planos.caminhos",
+        "backend.planos.social_paper",
+    ):
+        assert modulo in declarados, (
+            f"{modulo} ausente do hiddenimports. O app instalado sobe sem ele "
+            "e a aba Plano le 'Failed to fetch'."
+        )
+
+
 @pytest.mark.parametrize("modulo", ["backend.metas_vip", "backend.acesso"])
 def test_modulo_existe_no_fonte(modulo: str):
     """O `__name__` precisa bater com um arquivo real."""

@@ -49,13 +49,44 @@ export default function DeclaracoesConfianca({ statusGateway }: Props) {
   const [conta, setConta] = useState<{ login?: string; broker?: string; servidor?: string } | null>(
     null,
   );
+  /*
+    A rota antiga `/api/mt5/account` nao aparece mais neste arquivo, e o teste
+    `tests/test_endpoints_e_seguranca.py::test_rota_chamada_existe` garante
+    isso: ele compara as rotas que o frontend chama com as que o backend
+    declara, arquivo a arquivo. Se alguem voltar a escrever a rota morta aqui,
+    o teste reprova em vez de a tela voltar a mostrar "nenhuma conta".
+  */
 
+  /*
+    ROTA QUE EXISTE: `/api/mt5/account` (05/10/2026)
+    ===============================================
+    A tela chamava `/api/mt5/account`, que o gateway NAO trata em nenhuma
+    camada. O `.catch(() => {})` engolia o 404 e a conta ficava sempre nula —
+    a tela de declaracoes de confianca mostrava "nenhuma conta" mesmo com o
+    terminal logado. Falha silenciosa: a tela Parecia funcionar.
+
+    A rota real e `/api/status`, que devolve `account` no payload
+    (`_status_snapshot`). E a mesma que o `detectTerminal()` da tela de conexoes
+    usa.
+
+    Este e o tipo de erro que o teste `tests/test_endpoints_e_seguranca.py`
+    agora pega: ele compara as rotas que o frontend chama com as que o backend
+    declara, arquivo a arquivo.
+  */
   useEffect(() => {
     let vivo = true;
-    fetch(`${api}/api/mt5/account`, { signal: AbortSignal.timeout(5000) })
+    fetch(`${api}/api/status`, { signal: AbortSignal.timeout(5000) })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (vivo && d) setConta(d);
+        const conta = d?.account as
+          | { login?: number; server?: string; name?: string }
+          | undefined;
+        if (!vivo || !conta) return;
+        setConta({
+          login: conta.login !== undefined ? String(conta.login) : undefined,
+          broker: conta.name,
+          servidor: conta.server,
+        });
       })
       .catch(() => {
         /* sem conta e um estado legitimo */

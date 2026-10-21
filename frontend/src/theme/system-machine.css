@@ -1,45 +1,141 @@
-/* Sistema: leitura da maquina em tabela, sem os blocos de saude do app. */
+/*
+  SISTEMA ESTILO MT5 (05/10/2026)
+  ================================
+  O dono pediu: "aba sistema tem muitos --- nao poluir tela e melhor core 1 core 2
+  core 3 core 4 estilo mt5".
 
-.sys-grid th,
-.sys-grid td {
-  padding: 5px 10px;
+  DUAS MUDANÇAS, E POR QUE CADA UMA
+  ================================
+  1. SEM CARD, SEM TABELA. A aba usava DOIS cartões com tabela de 6 colunas, e
+     quatro colunas eram quase sempre "--". Virou uma lista de medidas em
+     CORES numeradas: o MT5 nomeia as janelas e o operador sabe onde está sem
+     ler cabeçalho. O numero é o que dá a ordem de leitura, não enfeite.
+
+  2. AUSÊNCIA É LINHA A MENOS. Nada de trace. Se o Windows não expõe
+     temperatura para aquele processador, a linha some — e o vídeo continua
+     aparecendo com "não exposto pelo sistema", porque essa ausência FOI
+     consultada e respondeida.
+
+  O que NÃO mudou: os valores são os mesmos campos de antes. Nada foi inventado
+  para preencher espaço, e nenhuma seção foi criada sem dado — as quatro têm
+  consumidor real (Core 4 é procedência: quando e de onde veio o número).
+*/
+
+.sys-page {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* A linha de espera. Aparece SO durante a primeira leitura, e é o que o dono
+   via antes como "travando": a tabela inteira nascia com trace. */
+.sys-esperando {
+  margin: 0;
+  padding: 10px 2px;
   font-size: 12.5px;
-  white-space: nowrap;
-}
-
-.sys-grid thead th {
-  font-size: 10.5px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--muted);
-  border-bottom: 1px solid var(--border);
-}
-
-.sys-grid .num {
-  text-align: right;
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
-}
-
-.sys-grid td.muted,
-.sys-grid .muted {
   color: var(--muted);
 }
 
-.sys-th-bar {
-  width: 30%;
+.sys-sem-dado {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
 }
 
-.sys-bar-cell {
+/* ---------- A caixa de um núcleo ---------- */
+.sys-core {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 3px);
+  background: var(--surface, #0f172a);
+  overflow: hidden;
+}
+
+.sys-core > h2 {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-width: 150px;
+  margin: 0;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--primary) 10%, var(--surface, #0f172a));
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* O NÚMERO do núcleo. Fixo e monoespaçado, para as quatro caixas ficarem
+   alinhadas na mesma coluna — é o que faz a lista parecer um índice. */
+.sys-core-num {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--primary, #00c6fb);
+}
+
+.sys-core-nome {
+  flex: 1 1 auto;
+}
+
+/* ---------- Lista de medidas ---------- */
+.sys-lista {
+  display: flex;
+  flex-direction: column;
+}
+
+.sys-medida,
+.sys-recurso {
+  display: grid;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 10px;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+/* Rótulo com LARGURA FIXA: é a coluna que alinha todos os valores. */
+.sys-medida {
+  grid-template-columns: 150px minmax(0, 1fr);
+}
+
+.sys-medida-rotulo {
+  color: var(--muted);
+}
+
+.sys-medida-valor {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Recursos: nome · barra · % · detalhe. */
+.sys-recurso {
+  grid-template-columns: 74px minmax(90px, 1fr) 42px minmax(0, 210px);
+}
+
+.sys-recurso-nome {
+  color: var(--muted);
+}
+
+.sys-recurso-uso {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.sys-recurso-detalhe {
+  font-size: 11.5px;
+  color: var(--muted);
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sys-bar {
-  flex: 1 1 auto;
   height: 6px;
   border-radius: 3px;
   background: color-mix(in srgb, var(--text) 10%, transparent);
@@ -62,12 +158,11 @@
   background: var(--danger);
 }
 
-.sys-bar-num {
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
-  font-size: 11.5px;
-  min-width: 34px;
-  text-align: right;
+.sys-erro {
+  padding: 8px 10px;
+  font-size: 12.5px;
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
 }
 
 .sys-note {
@@ -77,9 +172,15 @@
   color: var(--muted);
 }
 
-.sys-erro {
-  padding: 8px 10px;
-  font-size: 12.5px;
-  color: var(--danger);
-  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+/* Em janela estreita o detalhe cai para baixo em vez de ser espremido em uma
+   coluna de 0 px — o número continua legível, que é o que importa. */
+@media (max-width: 760px) {
+  .sys-recurso {
+    grid-template-columns: 68px minmax(70px, 1fr) 40px;
+  }
+
+  .sys-recurso-detalhe {
+    grid-column: 1 / -1;
+    text-align: left;
+  }
 }
