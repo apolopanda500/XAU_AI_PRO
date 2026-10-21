@@ -80,8 +80,8 @@ Prova negativa local: com catálogo, os mesmos testes passam.
 
 ## Simulação real do gateway (porta 9099, processo próprio)
 
-Token de teste, `XAU_MCP_TRADING=0`, rate limit desligado para não mascarar
-resposta com 429:
+Autenticado com token descartável; `XAU_MCP_TRADING=0` e rate limit desligado
+para não mascarar resposta com 429:
 
 | Chamada | Resultado |
 |---|---|
