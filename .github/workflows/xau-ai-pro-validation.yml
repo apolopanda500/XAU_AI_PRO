@@ -21,84 +21,35 @@ jobs:
           extra_args: --results=verified,unknown
 
   quality:
-    runs-on: ubuntu-latest
+    # O Super-Linter foi substituido pelas ferramentas DO PROJETO (20/10/2026).
+    #
+    # MEDIDO em 7 dias seguidos: o job reprovava em TODO push com 228 erros do
+    # ESLint ("Can't resolve 'vitest/config'") porque o Super-Linter roda sem
+    # `node_modules`; os flags `*_PRETTIER: false` nao existem no v8 (o nome
+    # correto e `VALIDATE_*`), entao Prettier e Biome continuavam rodando; e o
+    # summary de 6 MB estourava o limite de 1 MB do GitHub, derrubando o job
+    # mesmo quando nada no codigo estava errado.
+    #
+    # O repositorio ja tem as ferramentas certas, com a configuracao dele:
+    # `npm run lint` (ESLint com backend/eslint.config.mjs) no backend,
+    # `npx tsc --noEmit` e `npm test` (vitest) no frontend. E isso que roda.
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          # Super-Linter valida `GITHUB_BEFORE_SHA` contra o historico. Sem
-          # isto o checkout e superficial (shallow), o SHA antes do push nao
-          # existe localmente e o linter morre em:
-          #   [FATAL] Error while initializing GITHUB_BEFORE_SHA
-          # O job `security` acima ja usava fetch-depth: 0 pelo mesmo motivo.
-          fetch-depth: 0
-      - name: Super-Linter
-        # >= 8.3.1 corrige CVE-2026-25761 (GHSA-r79c-pqj3-577x): injecao de
-        # comando via nome de arquivo com sintaxe $(...) em pull requests.
-        # Quem abre o PR escolhe o nome do arquivo, entao nao exige acesso
-        # previo ao repositorio. @v7 fica em >= 6.0.0 e < 8.3.1, vulneravel.
-        # O subdiretorio slim/ foi confirmado no tag v8.7.0.
-        uses: super-linter/super-linter/slim@v8.7.0
-        env:
-          DEFAULT_BRANCH: develop
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # PRETTIER DESLIGADO, DE PROPOSITO
-          #
-          # Com Prettier ligado o job reprovava em "Code style issues found
-          # in 228 files" — e a causa nao era estilo nosso: o repositorio
-          # nao tem `.prettierrc`, entao o Prettier aplica os DEFAUTS dele
-          # (2 espacos, ponto e virgula, LF) sobre um projeto escrito com
-          # outra convencao. 228 arquivos, dos quais este ciclo tocou 5.
-          #
-          # Alem disso o proprio Super-Linter avisa que Prettier e Biome
-          # "might conflict with each other" em JSON, YAML, Markdown, CSS,
-          # TS e TSX. O projeto JA tem as ferramentas certas e elas rodam
-          # com a configuracao do projeto: `npm run lint` (eslint) no
-          # backend e `npx tsc` + vitest no frontend.
-          #
-          # Chamar `prettier --write` em 228 arquivos seria reescrever o
-          # repositorio inteiro por causa de um arquivo de configuracao que
-          # nunca existiu. Isso e decisao do dono, nao um fix de workflow.
-          #
-          # O nome da variavel e POR LINTER. `PRETTIER: false` NAO
-          # desliga nada — o Super-Linter ignorou silenciosamente e o job
-          # continuou reprovando. Cada linter do Prettier tem nome proprio.
-          #
-          # PARA LIGAR DE VOLTA: criar `.prettierrc` com a convencao real do
-          # projeto e rodar `prettier --write` em um commit proprio.
-          YAML_PRETTIER: false
-          MARKDOWN_PRETTIER: false
-          JSON_PRETTIER: false
-          TYPESCRIPT_PRETTIER: false
-          JAVASCRIPT_PRETTIER: false
-          JSX_PRETTIER: false
-          TSX_PRETTIER: false
-          CSS_PRETTIER: false
-          SCSS_PRETTIER: false
-          HTML_PRETTIER: false
-          # `VUE_PRETTIER` faltava na lista acima. O log do job mostrava
-          # `[VUE_PRETTIER] prettier: 3.8.4` como linter carregado, e o
-          # Super-Linter ainda acusava "Code style issues found in N files".
-          # Mesmo razao dos demais Prettier: o repositorio nao tem `.prettierrc`.
-          VUE_PRETTIER: false
-
-          # JSCPD DESLIGADO, DE PROPOSITO
-          #
-          # O log do job trazia, sem nenhuma correcao de codigo no caminho:
-          #     ERROR: jscpd found too many duplicates (2.2%) over threshold (0.0%)
-          #
-          # O threshold 0,0% nao e uma meta: e o valor padrao do jscpd, que
-          # considera QUALQUER bloco repetido uma falha. Num repositorio com
-          # handlers de erro repetidos por padrao (`except ImportError:`,
-          # blocos `try/except` de fallback), 2,2% de duplicata e o estado
-          # normal do codigo, nao um sinal de copia-mala.
-          #
-          # Diferente do Prettier, aqui nao ha nem configuracao faltando nem
-          # ferramenta alternativa rodando: desligar e a unica forma de o job
-          # distinguir "duplicata que atrapalha" de "padrao legitimo".
-          #
-          # PARA LIGAR DE VOLTA: criar `.jscpd.json` com `threshold` realista
-          # (por exemplo 5) e medir antes de exigir.
-          JSCPD: false
+          node-version: "22"
+      - name: Lint do backend
+        working-directory: backend
+        run: |
+          npm ci
+          npm run lint
+      - name: Typecheck e testes do frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npx tsc --noEmit
+          npm test
 
   validate:
     runs-on: windows-latest

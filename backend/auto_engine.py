@@ -782,11 +782,23 @@ class MotorAuto:
         try:
             from backend.broker_registry import normalize_read_scope as _escopo
             _escopo(self.broker, self.market or "")
-        except ValueError as exc:
+        except ValueError:
+            # O texto da excecao NAO vai para a resposta: e dado interno e o
+            # CodeQL o trata como vazamento (py/stack-trace-exposure). O motivo
+            # continua util para o operador porque nomeia o par e os mercados
+            # que a corretora realmente aceita, sem repassar a mensagem crua.
+            from backend.broker_registry import get_broker as _ficha
+            _definicao = _ficha(self.broker)
+            _aceitos = ", ".join(_definicao.markets) if _definicao else ""
+            _detalhe = (
+                f"mercados aceitos por {self.broker}: {_aceitos}"
+                if _aceitos
+                else f"corretora desconhecida: {self.broker}"
+            )
             return {
                 "ok": False,
                 "error": f"combinação corretora/mercado não suportada "
-                         f"({self.broker}/{self.market or '—'}): {exc}",
+                         f"({self.broker}/{self.market or '—'}); {_detalhe}",
             }
         with self._lock:
             if self._thread is not None and self._thread.is_alive():
