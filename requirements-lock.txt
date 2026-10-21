@@ -101,7 +101,7 @@ pandas==3.0.5
 pbs-installer==2026.9.1
 pefile==2024.8.26
 pfzy==0.3.4
-pillow==12.3.0
+pillow==13.0.0
 pkginfo==1.13
 platformdirs==4.11.7
 plotly==7.0.0
