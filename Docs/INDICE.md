@@ -85,7 +85,6 @@ Estas descrevem regras que **continuam valendo**. Não são registros de sessão
 | `TESTE_APK_EMULADOR.md`                 | Teste do APK no emulador        |
 | `PRODUCAO_ANDROID.md`                   | Produção Android                |
 | `DEPLOY_GATEWAY_REMOTO_ANDROID.md`      | Deploy do gateway remoto        |
-| `VERCEL_INTEGRACAO.md`                  | Integração Vercel               |
 | `endurance_test_plan.md`                | Plano do teste de endurance     |
 | `production_readiness.md`               | Prontidão para produção         |
 | `production_gate_etapa24.md`            | Gate de produção                |

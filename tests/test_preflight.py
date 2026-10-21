@@ -13,6 +13,7 @@ from __future__ import annotations
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -51,9 +52,15 @@ def test_disco_ausente_e_falha_com_dica_de_limpeza():
     assert "limpeza_segura.ps1" in resultado.dica
 
 
-def test_disco_justo_no_limite_passa():
-    livre = pf.shutil.disk_usage(pf.ROOT).free / (1024 ** 3)
-    assert pf.checar_disco(minimo_gb=livre * 0.5).estado == pf.ESTADOS["ok"]
+def test_disco_justo_no_limite_passa(monkeypatch):
+    # Medir o disco duas vezes (aqui e dentro de `checar_disco`) deixa o teste
+    # refem do ambiente: qualquer byte gravado entre as duas leituras derruba o
+    # caso de "limite justo" para `aviso`. MEDIDO em 13/10: passava isolado e
+    # falhava na suite inteira. A leitura fica fixa para o teste ser decisivo.
+    monkeypatch.setattr(
+        pf.shutil, "disk_usage", lambda _: SimpleNamespace(free=3 * 1024 ** 3)
+    )
+    assert pf.checar_disco(minimo_gb=1.5).estado == pf.ESTADOS["ok"]
 
 
 def test_disco_entre_o_minimo_e_o_dobro_e_aviso():

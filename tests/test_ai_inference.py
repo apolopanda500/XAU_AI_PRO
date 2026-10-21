@@ -255,6 +255,15 @@ class TestNenhumAtivoPresumido:
             )
 
 
+@pytest.mark.skipif(
+    not ai.MODELOS_DIR.exists() or not any(ai.MODELOS_DIR.glob("*.meta.json")),
+    reason=(
+        "sem catalogo de modelos neste checkout: os .pkl e .meta.json sao "
+        "artefatos de treino e nao vao no git (.gitignore). O CI roda o "
+        "checkout limpo e nao tem o catalogo; o inventario real e verificado "
+        "por scripts/auditar_governanca_modelos.py na maquina de operacao."
+    ),
+)
 class TestQuoteDaCorretora:
     """O par da exchange resolve para o modelo do terminal, sem trocar de ativo.
 
@@ -426,6 +435,15 @@ class TestNenhumAtivoRealFicaPreso:
 # "28 de 28 modelos" e nenhum dos tres.
 
 
+@pytest.mark.skipif(
+    not ai.MODELOS_DIR.exists() or not any(ai.MODELOS_DIR.glob("*.meta.json")),
+    reason=(
+        "sem catalogo de modelos neste checkout: os .pkl e .meta.json sao "
+        "artefatos de treino e nao vao no git (.gitignore). O CI roda o "
+        "checkout limpo e nao tem o catalogo; o inventario real e verificado "
+        "por scripts/auditar_governanca_modelos.py na maquina de operacao."
+    ),
+)
 class TestModelosMultiClasseAparecem:
     def test_os_tres_multi_estao_na_lista(self):
         ms = ai.listar_modelos()
@@ -452,6 +470,15 @@ class TestModelosMultiClasseAparecem:
         assert len({m["label"] for m in linhas}) == len(linhas)
 
 
+@pytest.mark.skipif(
+    not ai.MODELOS_DIR.exists() or not any(ai.MODELOS_DIR.glob("*.meta.json")),
+    reason=(
+        "sem catalogo de modelos neste checkout: os .pkl e .meta.json sao "
+        "artefatos de treino e nao vao no git (.gitignore). O CI roda o "
+        "checkout limpo e nao tem o catalogo; o inventario real e verificado "
+        "por scripts/auditar_governanca_modelos.py na maquina de operacao."
+    ),
+)
 class TestTabelaNaoRepeteOMesmoNome:
     """
     O que o dono apontou na captura de 20:28: `MULTI_METALS | MULTI_METALS |
@@ -467,7 +494,11 @@ class TestTabelaNaoRepeteOMesmoNome:
         assert multi, "nenhum multi na lista"
         for m in multi:
             assert m["label"] != m["symbol"], "label repete o simbolo"
-            # O rotulo usa a forma curta ("5M"), que e o que a tela le.`r`n            assert any(t in m["label"] for t in (m["timeframe"], ai._ROTULO_TF.get(m["timeframe"], ""))), "o periodo tem de estar no label"
+            # O rotulo usa a forma curta ("5M"), que e o que a tela le.
+            assert any(
+                t in m["label"]
+                for t in (m["timeframe"], ai._ROTULO_TF.get(m["timeframe"], ""))
+            ), "o periodo tem de estar no label"
 
     def test_modelo_single_mantem_o_label_com_periodo(self):
         ms = [m for m in ai.listar_modelos() if m["symbol"] == "AUDUSD"]
