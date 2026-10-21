@@ -1,15 +1,21 @@
 # Índice de Docs — XAU AI PRO
 
-Atualizado em **11/10/2026**. Este mapa existe porque a pasta chegou a ter
+Atualizado em **21/10/2026**. Este mapa existe porque a pasta chegou a ter
 61 arquivos com quatro "FINAL" e cinco "HANDOFF" disputando o mesmo assunto.
 
-**Comece por:** [`CONVERSA_20261011_TEMAS_RENOMEADOS_E_ESTADO_MEDIDO.md`](./CONVERSA_20261011_TEMAS_RENOMEADOS_E_ESTADO_MEDIDO.md) —
+**Comece por:** [`CONVERSA_20261021_SEGURANCA_ZERADA_VALIDACAO_100.md`](./CONVERSA_20261021_SEGURANCA_ZERADA_VALIDACAO_100.md) —
+**o ciclo de 21/10**: Dependabot **34 → 0**, Code Scanning **2 → 0**, CI
+**100% verde** em `main` e `develop`, `Manutencao Automatica Segura` verde pela
+primeira vez desde 15/10 (issue #31 fechada) e a simulação real do gateway
+(401 sem token, `withdrawals/transfers=false`, ordem em `stage=validated`).
+`1360 passed`, `916 vitest`, `cargo` limpo, preflight sem falha.
+Depois: [`CONVERSA_20261011_TEMAS_RENOMEADOS_E_ESTADO_MEDIDO.md`](./CONVERSA_20261011_TEMAS_RENOMEADOS_E_ESTADO_MEDIDO.md) —
 **o ciclo de 11/10**: app novo rodando pelo atalho, `0 falhas bloqueantes`, e a
 lacuna fechada — a pergunta de temas com nome de ativo (`xau_dark`/`btc_dark`) que
 o ciclo anterior deixou em aberto **já estava resolvida no código**
 (`dourado_dark`/`laranja_dark`, com migração da preferência) e só faltava
 documentar. Sem commit: é decisão do dono.
-Depois: [`CONVERSA_20261010_VALIDACAO_COMPLETA_E_APROVACAO.md`](./CONVERSA_20261010_VALIDACAO_COMPLETA_E_APROVACAO.md) —
+Antes: [`CONVERSA_20261010_VALIDACAO_COMPLETA_E_APROVACAO.md`](./CONVERSA_20261010_VALIDACAO_COMPLETA_E_APROVACAO.md) —
 **o ciclo de 10/10 que fechou tudo**: as 82 imagens lidas, o build 7/7, a
 reinstalação limpa (hash da ponte medido, 1,39 GB de resíduo removidos), as
 telas medidas uma por uma e **dois defeitos a mais** — o preflight que media
@@ -30,7 +36,8 @@ Segurança: [`CODE_SCANNING.md`](./CODE_SCANNING.md) — os 19 alertas do CodeQL
 
 | Documento | Quando | Sobre |
 | --------- | ------ | ----- |
-| **`CONVERSA_20261011_TEMAS_RENOMEADOS_E_ESTADO_MEDIDO.md`** | 11/10 | **Leitura de entrada.** App novo rodando pelo atalho, `0 falhas`, e a **lacuna fechada**: a pergunta de temas `xau_dark`/`btc_dark` já estava resolvida no código (`dourado_dark`/`laranja_dark`, com migração da preferência) — este ciclo só documentou. Sem commit. |
+| **`CONVERSA_20261021_SEGURANCA_ZERADA_VALIDACAO_100.md`** | 21/10 | **Leitura de entrada.** Dependabot 34→0, Code Scanning 2→0 (#69/#70), `validação universal` e `Manutencao` verdes, simulação real do gateway (401 sem token, `withdrawals/transfers=false`, ordem em `stage=validated`). `1360 passed`, `916 vitest`, `29243c9` em `develop` e `main`. |
+| **`CONVERSA_20261011_TEMAS_RENOMEADOS_E_ESTADO_MEDIDO.md`** | 11/10 | **Ciclo anterior.** App novo rodando pelo atalho, `0 falhas`, e a **lacuna fechada**: a pergunta de temas `xau_dark`/`btc_dark` já estava resolvida no código (`dourado_dark`/`laranja_dark`, com migração da preferência) — este ciclo só documentou. Sem commit. |
 | **`CONVERSA_20261010_VALIDACAO_COMPLETA_E_APROVACAO.md`** | 10/10 tarde | Build 7/7, reinstalação limpa com hash medido, cada tela validada, e os 2 defeitos achados na validação (preflight com porta fixa — corrigido; app que fecha sozinho — medido). `1315 passed`, `874 vitest`, 9,51 GB livres. |
 | **`CONVERSA_20261010_AMBIENTE_LIVRE_E_CORRECOES.md`** | 10/10 | **Os 6 defeitos da fila** (IA que desligava, `max 0`, `MULTI_METALS`, menu do botão direito, excedente sob o gráfico, fuso) e a decisão do dono sobre ícone. |
 | **`PASSAGEM_20261008_MONITOR_GRAFICO_CALENDARIO.md`** | 08/10 | **Leitura de entrada.** Os três defeitos medidos, as quatro provas negativas, e **o app no ar sem backend** (porta 9001 sem dono). `1283 passed`, `773 vitest`, `tsc` limpo. |
