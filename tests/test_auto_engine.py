@@ -11,12 +11,30 @@ toca MT5 de verdade.
 """
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from dataclasses import asdict
+from pathlib import Path
 
 from backend.auto_engine import LimitesAuto, MotorAuto
 from backend import ai_inference as ai
+
+
+def _gravar_conexoes(tmp_path: Path, dados: dict) -> None:
+    """Grava o store de conexoes num APPDATA isolado.
+
+    JSON direto, sem DPAPI: `resolve_connection` so LE a listagem
+    (`list_connections`), que nunca desprotege credencial — entao o teste
+    exercita o resolve REAL sem tocar no arquivo do operador e sem exigir
+    Windows.
+    """
+    pasta = tmp_path / "XAU AI PRO"
+    pasta.mkdir(parents=True, exist_ok=True)
+    (pasta / "connections.dpapi.json").write_text(
+        json.dumps(dados, ensure_ascii=False), encoding="utf-8"
+    )
 
 
 class InferenciaFalsa:
@@ -628,13 +646,24 @@ class TestRoteamentoPorCorretora:
         assert r["ok"] is False
         assert m.ativo is False
 
-    def test_ligar_aceita_par_suportado(self, monkeypatch):
+    def test_ligar_aceita_par_suportado(self, monkeypatch, tmp_path):
         """O par valido liga de verdade — a trava nao tranca a porta certa.
 
         `_loop` e thread de producao com rede: aqui ele e neutralizado para o
         teste medir SO a porta, sem ciclo e sem gateway.
+
+        A CONTA TAMBEM E PORTA (22/10/2026): a resolucao da conexao roda antes
+        da thread nascer, entao o teste isola o `APPDATA` e grava UMA conexao
+        mexc ativa — a resolucao unica passa pelo store REAL, nao por um duble.
         """
         monkeypatch.setattr(MotorAuto, "_loop", lambda self: None)
+        _gravar_conexoes(tmp_path, {
+            "mexc:crypto-spot:principal": {
+                "broker": "mexc", "market": "crypto-spot", "active": True,
+                "credential_source": "api_key",
+            },
+        })
+        monkeypatch.setenv("APPDATA", str(tmp_path))
         m = motor_pronto()
         m.broker = "mexc"
         m.market = "crypto-spot"
@@ -643,6 +672,75 @@ class TestRoteamentoPorCorretora:
         assert m.ativo is True
         m.desligar()
         assert m.ativo is False
+
+    def test_ligar_com_duas_contas_exige_account_id(self, monkeypatch, tmp_path):
+        """Duas contas ativas sem escolha = recusa NA PORTA, nunca ciclo morto.
+
+        MEDIDO na maquina real (22/10/2026): duas contas MT5 ativas (real e
+        demo), motor "ligado" e cada ciclo morrendo com "account_id e
+        obrigatorio quando ha mais de uma conta ativa". A recusa era correta;
+        o lugar era errado — ligar para morrer em loop e o mesmo defeito do
+        par invalido medido em 12/10/2026.
+        """
+        monkeypatch.setattr(MotorAuto, "_loop", lambda self: None)
+        _gravar_conexoes(tmp_path, {
+            "mt5:forex:XMGlobal": {
+                "broker": "mt5", "market": "forex", "active": True,
+                "credential_source": "session",
+            },
+            "mt5:forex:Demo": {
+                "broker": "mt5", "market": "forex", "active": True,
+                "credential_source": "session",
+            },
+        })
+        monkeypatch.setenv("APPDATA", str(tmp_path))
+        m = motor_pronto()
+        m.broker = "mt5"
+        m.market = "forex"
+        r = m.ligar()
+        assert r["ok"] is False
+        assert "account_id" in r["error"]
+        assert m.ativo is False, "a porta recusou mas o motor ficou 'ligado'"
+
+    def test_ligar_com_account_id_escolhido_liga(self, monkeypatch, tmp_path):
+        """A escolha do operador (via /api/auto/config) atravessa a porta."""
+        monkeypatch.setattr(MotorAuto, "_loop", lambda self: None)
+        _gravar_conexoes(tmp_path, {
+            "mt5:forex:XMGlobal": {
+                "broker": "mt5", "market": "forex", "active": True,
+                "credential_source": "session",
+            },
+            "mt5:forex:Demo": {
+                "broker": "mt5", "market": "forex", "active": True,
+                "credential_source": "session",
+            },
+        })
+        monkeypatch.setenv("APPDATA", str(tmp_path))
+        m = motor_pronto()
+        m.broker = "mt5"
+        m.market = "forex"
+        m.account_id = "mt5:forex:Demo"
+        r = m.ligar()
+        assert r["ok"] is True, r.get("error")
+        assert m.ativo is True
+        m.desligar()
+
+    def test_configurar_grava_a_conta_e_o_snapshot_a_expoe(self):
+        """O caminho do painel: conta escolhida chega pelo payload e aparece
+        no estado — sem expor segredo (so o ID, que ja e publico na tela)."""
+        m = MotorAuto()
+        r = m.configurar({"account_id": "mt5:forex:Demo"})
+        assert r["ok"] is True, r.get("error")
+        assert r["account_id"] == "mt5:forex:Demo"
+        assert m.snapshot()["account_id"] == "mt5:forex:Demo"
+
+    def test_configurar_sem_account_id_mantem_a_escolha_anterior(self):
+        """O barra de timeframe manda SO timeframe; nao pode apagar a conta."""
+        m = MotorAuto()
+        m.configurar({"account_id": "mt5:forex:Demo"})
+        r = m.configurar({"timeframe": "H4"})
+        assert r["ok"] is True, r.get("error")
+        assert m.account_id == "mt5:forex:Demo"
 
 
 class TestMultiAlvos:

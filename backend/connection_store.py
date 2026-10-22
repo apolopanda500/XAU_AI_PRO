@@ -79,13 +79,41 @@ def list_connections() -> list[dict[str, object]]:
 
 
 def resolve_connection(account_id: str, broker: str, market: str) -> dict[str, object]:
+    """Acha a conexao ativa de uma corretora e mercado.
+
+    CORRETORA DE SESSAO (MT5) IGNORA O MERCADO GRAVADO
+    -------------------------------------------------
+    MEDIDO em 22/10/2026: duas conexoes MT5 ativas, ambas gravadas como
+    `market=forex` (a tela pede um market ao cadastrar, e o operador escolhe
+    forex). XAUUSD e `metal` na hierarquia da corretora, e o motor chamava
+    `resolve_connection("", "mt5", "metals")` — 0 matches, LookupError, e o
+    ciclo morria antes de enviar. O sintoma era "conexao ativa nao
+    encontrada" para uma conta que existia e estava logada.
+
+    A credencial de uma corretora de sessao e o TERMINAL LOGADO, e o terminal
+    serve todos os mercados da corretora (forex, metals, indices, ...). O
+    `market` gravado na conexao e o rotulo do que o operador escolheu ao
+    cadastrar, nao um filtro de acesso. Por isso, para `credential_source ==
+    "session"`, o mercado nao participa do match — so o broker e o estado
+    ativo.
+
+    Para corretora de API key (binance, mexc, bybit, okx) o mercado CONTINUA
+    sendo filtro: spot e futuros sao endpoints diferentes, com permissões e
+    riscos diferentes.
+    """
     normalized_broker = str(broker or "").strip().lower()
     normalized_market = str(market or "").strip().lower()
     matches = [
         item for item in list_connections()
         if item["broker"].lower() == normalized_broker
-        and item["market"].lower() == normalized_market
         and bool(item.get("active", True))
+        and (
+            # Sessao: o terminal serve todos os mercados; o rotulo gravado
+            # nao e filtro.
+            str(item.get("credential_source", "")) == "session"
+            # API key: spot e futuros sao mundos diferentes.
+            or item["market"].lower() == normalized_market
+        )
     ]
     requested = str(account_id or "").strip()
     if requested:

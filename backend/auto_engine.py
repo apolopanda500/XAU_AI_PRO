@@ -483,6 +483,9 @@ class MotorAuto:
         # significa MT5/forex, o unico caminho que funcionava ate aqui.
         self.broker = ""
         self.market = ""
+        # Conta da corretora escolhida pelo operador. Vazio = resolver
+        # automaticamente (so funciona quando ha UMA conta ativa).
+        self.account_id = ""
         self.decisoes: list[Decisao] = []
         self.ciclo = 0
         # request_id por decisao, para idempotencia: o mesmo ciclo nao pode
@@ -506,6 +509,7 @@ class MotorAuto:
                 # ainda nao foi escolhida nenhuma corretora.
                 "broker": self.broker or "",
                 "market": self.market or "",
+                "account_id": self.account_id or "",
                 "alvos": [dict(a) for a in self.alvos],
                 "ciclo": self.ciclo,
                 "limites": asdict(self.limites),
@@ -561,6 +565,12 @@ class MotorAuto:
                 from backend.broker_registry import normalize_market
 
                 self.market = normalize_market(str(payload["market"]))
+            # Conta da corretora: escolha do operador quando ha mais de uma
+            # ativa. Sem ela o `resolve_connection` recusa com "account_id e
+            # obrigatorio quando ha mais de uma conta ativa" — comportamento
+            # correto, mas o motor precisa de onde pegar a escolha.
+            if "account_id" in payload:
+                self.account_id = str(payload.get("account_id") or "").strip()
             # A classe de mercado precisa existir NA CORRETORA escolhida. Binance
             # so faz cripto (spot e futuros); MT5 faz forex, metals, indices e
             # mais. Aceitar "binance + metals" deixaria o operador descobrir o
@@ -657,6 +667,7 @@ class MotorAuto:
                 "limites": asdict(self.limites),
                 "broker": self.broker or "",
                 "market": self.market or "",
+                "account_id": self.account_id or "",
                 "alvos": [dict(a) for a in self.alvos],
             }
 
@@ -799,6 +810,37 @@ class MotorAuto:
                 "ok": False,
                 "error": f"combinação corretora/mercado não suportada "
                          f"({self.broker}/{self.market or '—'}); {_detalhe}",
+            }
+        # A CONTA TAMBEM E VALIDADA NA PORTA (22/10/2026).
+        # MEDIDO com duas contas MT5 ativas (real e demo) no mesmo terminal:
+        # o motor ligava e CADA ciclo morria com "account_id e obrigatorio
+        # quando ha mais de uma conta ativa". A recusa do `resolve_connection`
+        # era correta — escolher entre duas contas e decisao do operador —,
+        # mas o lugar era errado: ligar para morrer em loop e o mesmo defeito
+        # do par invalido medido em 12/10/2026 (acima). A resolucao acontece
+        # antes da thread nascer, com o MESMO mercado que o ciclo vai usar
+        # (`mercado_do_ativo`), para a porta nao recusar o que o ciclo
+        # aceitaria nem aceitar o que o ciclo rejeitaria.
+        try:
+            from backend.connection_store import resolve_connection
+
+            resolve_connection(
+                self.account_id, self.broker,
+                mercado_do_ativo(self.broker, self.market, self.simbolo),
+            )
+        except LookupError as exc:
+            # O texto vem do STORE e e fixo ("account_id e obrigatorio...",
+            # "conexao ativa nao encontrada"): motivo proprio para o
+            # operador, nunca dado interno nem excecao crua de terceiro.
+            return {"ok": False, "error": str(exc)}
+        except (OSError, ValueError):
+            # Arquivo de conexoes ilegivel (permisao, JSON corrompido). O
+            # caminho do arquivo nao vai para a resposta — e o motivo tambem
+            # nao precisa dele: o operador sabe onde as conexoes moram.
+            return {
+                "ok": False,
+                "error": "não foi possível ler as conexões gravadas; "
+                         "reabra Configurações → Conexões e reative a conta",
             }
         with self._lock:
             if self._thread is not None and self._thread.is_alive():
@@ -1296,11 +1338,20 @@ class MotorAuto:
             e essa recusa e o comportamento correto: escolher entre duas
             contas do mesmo par e uma decisao do operador. O motor so
             escolhe sozinho quando a escolha e unica.
+
+            A ESCOLHA DO OPERADOR AGORA CHEGA AQUI (22/10/2026)
+            ----------------------------------------------------
+            MEDIDO: com duas contas MT5 ativas (real e demo), o motor mandava
+            `""` e morria em toda iteracao com a recusa acima — correto no
+            ponto, porem o painel nao tinha campo de conta, entao a escolha
+            era impossivel de fazer. `self.account_id` e o que o painel grava
+            via `/api/auto/config`; vazio continua significando "resolver
+            sozinho", que so funciona quando a conta e unica.
             """
             from backend.connection_store import resolve_connection
 
             try:
-                conta = resolve_connection("", broker, market)
+                conta = resolve_connection(self.account_id, broker, market)
             except LookupError as exc:
                 raise RuntimeError(str(exc)) from exc
             account_id = str(conta.get("id", "")).strip()
