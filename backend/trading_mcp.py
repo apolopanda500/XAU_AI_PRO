@@ -2,8 +2,9 @@
 """MCP Server de trading do XAU AI PRO (stdio, JSON-RPC 2.0, stdlib puro).
 
 Permite que clientes MCP (Claude, Codex, outros) operem e consultem a mesa do
-trader passando OBRIGATORIAMENTE pelo gateway local (9001) - herdando assim
-risk_gate, auditoria e emergency-stop ja existentes.
+trader passando OBRIGATORIAMENTE pelo gateway local - herdando assim
+risk_gate, auditoria e emergency-stop ja existentes. A porta e a do proprio
+gateway (`XAU_GATEWAY_PORT`), exceto quando `XAU_MCP_GATEWAY` e explícito.
 
 Seguranca (3 freios independentes):
   1. Toda ordem nasce em dry-run (execute=False -> so registra e valida).
@@ -24,7 +25,31 @@ import urllib.error
 import urllib.request
 from typing import Any
 
-GATEWAY = os.environ.get("XAU_MCP_GATEWAY", "http://127.0.0.1:9001").rstrip("/")
+
+def gateway_padrao(environ) -> str:
+    """URL base do gateway: `XAU_MCP_GATEWAY` manda, senao a porta do gateway.
+
+    MEDIDO em 22/10/2026: o gateway ativo escutava em **9011**
+    (`XAU_GATEWAY_PORT` no ambiente do usuario, documentado em
+    `frontend/src/tauri.ts` e `portas.ts`) e o MCP continuava no padrao 9001,
+    respondendo `gateway inacessivel` para toda leitura enquanto o gateway
+    devolvia 401 na 9011 - dois lados do mesmo dado (a porta) divergindo,
+    exatamente o defeito do §5 do AGENTS.md: o relatorio mandava o dono
+    investigar o "gateway fora do ar" que estava no ar.
+
+    A porta so e aceita se for numerica e pertencer a faixa valida; valor
+    estranho volta para 9001, que e o padrao do proprio gateway.
+    """
+    explicito = str(environ.get("XAU_MCP_GATEWAY", "")).strip().rstrip("/")
+    if explicito:
+        return explicito
+    bruto = str(environ.get("XAU_GATEWAY_PORT", "")).strip()
+    if bruto.isdigit() and 1 <= int(bruto) <= 65535:
+        return f"http://127.0.0.1:{int(bruto)}"
+    return "http://127.0.0.1:9001"
+
+
+GATEWAY = gateway_padrao(os.environ)
 # Padrao desbloqueado: `XAU_MCP_TRADING=0` volta a exigir dry-run.
 TRADING_HABILITADO = os.environ.get("XAU_MCP_TRADING", "1") == "1"
 PROTOCOL_VERSION = "2024-11-05"

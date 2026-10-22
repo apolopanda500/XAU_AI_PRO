@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -152,3 +153,42 @@ def test_emergency_resume_bloqueado_sem_trava(http_stub, monkeypatch):
 def test_metodo_desconhecido_erro_rpc():
     resposta = mcp.processar({"jsonrpc": "2.0", "id": 9, "method": "metodo/que/nao/existe"})
     assert resposta["error"]["code"] == -32601
+
+
+# ---------------------------------------------------------------------------
+# Porta do gateway: um dado, uma fonte (AGENTS.md §5 - dois lados divergindo)
+# ---------------------------------------------------------------------------
+
+
+def test_gateway_padrao_segue_a_porta_do_gateway():
+    """MEDIDO 22/10/2026: gateway em 9011, MCP em 9001 = tools mortos."""
+    url = mcp.gateway_padrao({"XAU_GATEWAY_PORT": "9011"})
+    assert url == "http://127.0.0.1:9011"
+    # prova negativa: o padrao antigo (9001) e exatamente o defeito medido.
+    assert url != "http://127.0.0.1:9001"
+
+
+def test_gateway_explicito_vence_a_porta():
+    url = mcp.gateway_padrao({"XAU_MCP_GATEWAY": "http://127.0.0.1:9001/",
+                              "XAU_GATEWAY_PORT": "9011"})
+    assert url == "http://127.0.0.1:9001"
+
+
+def test_porta_invalida_volta_para_o_padrao():
+    for estranho in ("9011abc", "0", "70000", "-1", " "):
+        url = mcp.gateway_padrao({"XAU_GATEWAY_PORT": estranho})
+        assert url == "http://127.0.0.1:9001", (estranho, url)
+
+
+def test_ambiente_sem_nada_cai_no_padrao():
+    assert mcp.gateway_padrao({}) == "http://127.0.0.1:9001"
+
+
+def test_gateway_do_modulo_coerente_com_o_ambiente():
+    """O valor carregado no import tem de ser o que a funcao calcula hoje."""
+    assert mcp.GATEWAY == mcp.gateway_padrao(os.environ)
+
+
+def test_gateway_do_modulo_e_uma_url_local():
+    """Prova negativa: fora de loopback o MCP nao fala com ninguem."""
+    assert mcp.GATEWAY.startswith("http://127.0.0.1:")
