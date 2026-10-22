@@ -5,10 +5,12 @@
 > não. Se um número aqui divergir do que o comando medir, **o comando vence**;
 > corrija o número.
 
-> **ESTADO DE HOJE: [`Docs/CONVERSA_20261021_SEGURANCA_ZERADA_VALIDACAO_100.md`](Docs/CONVERSA_20261021_SEGURANCA_ZERADA_VALIDACAO_100.md)**
+> **ESTADO DE HOJE: [`Docs/CONVERSA_20261022_BATERIAS_FIXADAS_CI_VERDE_E_DEPLOY.md`](Docs/CONVERSA_20261022_BATERIAS_FIXADAS_CI_VERDE_E_DEPLOY.md)**
 > O que fazer primeiro, os números medidos e o que está aberto. Leia antes de
 > mexer em qualquer coisa — este arquivo diz as regras, aquele diz o estado.
-> (O ciclo anterior, com o app rodando pelo atalho e os temas medidos, está em
+> (O ciclo anterior, com a segurança zerada e a validação 100%, está em
+> [`CONVERSA_20261021_SEGURANCA_ZERADA_VALIDACAO_100.md`](Docs/CONVERSA_20261021_SEGURANCA_ZERADA_VALIDACAO_100.md);
+> o ciclo de 11/10 com os temas medidos, em
 > [`CONVERSA_20261011_TEMAS_RENOMEADOS_E_ESTADO_MEDIDO.md`](Docs/CONVERSA_20261011_TEMAS_RENOMEADOS_E_ESTADO_MEDIDO.md).)
 
 ## 1. O que este projeto é

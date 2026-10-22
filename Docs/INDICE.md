@@ -1,9 +1,17 @@
 # Índice de Docs — XAU AI PRO
 
-Atualizado em **21/10/2026**. Este mapa existe porque a pasta chegou a ter
+Atualizado em **22/10/2026**. Este mapa existe porque a pasta chegou a ter
 61 arquivos com quatro "FINAL" e cinco "HANDOFF" disputando o mesmo assunto.
 
-**Comece por:** [`CONVERSA_20261021_SEGURANCA_ZERADA_VALIDACAO_100.md`](./CONVERSA_20261021_SEGURANCA_ZERADA_VALIDACAO_100.md) —
+**Comece por:** [`CONVERSA_20261022_BATERIAS_FIXADAS_CI_VERDE_E_DEPLOY.md`](./CONVERSA_20261022_BATERIAS_FIXADAS_CI_VERDE_E_DEPLOY.md) —
+**o ciclo de 22/10**: as 3 baterias de simulação passaram a valer em qualquer
+máquina (token, rate limit e dublô de `MetaTrader5` fixados — antes só passavam
+onde existia `.env`), a lista de rotas saiu de dentro do FastAPI (5 rotas
+escritas a mão não existiam), **CI 8/8 verde** de novo em `main`, MCP de trading
+corrigido da 9001 para a porta real 9011 (prova viva: 401 em vez de conexão
+recusada) e **deploy instalado e conferido por hash** (core divergia 1.024
+bytes). `1474 passed`, `916 vitest`, preflight `exit 0`, app no ar.
+Depois: [`CONVERSA_20261021_SEGURANCA_ZERADA_VALIDACAO_100.md`](./CONVERSA_20261021_SEGURANCA_ZERADA_VALIDACAO_100.md) —
 **o ciclo de 21/10**: Dependabot **34 → 0**, Code Scanning **2 → 0**, CI
 **100% verde** em `main` e `develop`, `Manutencao Automatica Segura` verde pela
 primeira vez desde 15/10 (issue #31 fechada) e a simulação real do gateway
@@ -36,7 +44,8 @@ Segurança: [`CODE_SCANNING.md`](./CODE_SCANNING.md) — os 19 alertas do CodeQL
 
 | Documento | Quando | Sobre |
 | --------- | ------ | ----- |
-| **`CONVERSA_20261021_SEGURANCA_ZERADA_VALIDACAO_100.md`** | 21/10 | **Leitura de entrada.** Dependabot 34→0, Code Scanning 2→0 (#69/#70), `validação universal` e `Manutencao` verdes, simulação real do gateway (401 sem token, `withdrawals/transfers=false`, ordem em `stage=validated`). `1360 passed`, `916 vitest`, `29243c9` em `develop` e `main`. |
+| **`CONVERSA_20261022_BATERIAS_FIXADAS_CI_VERDE_E_DEPLOY.md`** | 22/10 | **Leitura de entrada.** Baterias fixadas por medição (1474 passed, 2 skip documentado), CI 8/8 verde, MCP na porta certa do gateway, deploy instalado e conferido por hash, preflight `exit 0`, prontidão 5/6. `13422de` em `develop` e `main`. |
+| **`CONVERSA_20261021_SEGURANCA_ZERADA_VALIDACAO_100.md`** | 21/10 | **Ciclo anterior.** Dependabot 34→0, Code Scanning 2→0 (#69/#70), `validação universal` e `Manutencao` verdes, simulação real do gateway (401 sem token, `withdrawals/transfers=false`, ordem em `stage=validated`). `1360 passed`, `916 vitest`, `29243c9` em `develop` e `main`. |
 | **`CONVERSA_20261011_TEMAS_RENOMEADOS_E_ESTADO_MEDIDO.md`** | 11/10 | **Ciclo anterior.** App novo rodando pelo atalho, `0 falhas`, e a **lacuna fechada**: a pergunta de temas `xau_dark`/`btc_dark` já estava resolvida no código (`dourado_dark`/`laranja_dark`, com migração da preferência) — este ciclo só documentou. Sem commit. |
 | **`CONVERSA_20261010_VALIDACAO_COMPLETA_E_APROVACAO.md`** | 10/10 tarde | Build 7/7, reinstalação limpa com hash medido, cada tela validada, e os 2 defeitos achados na validação (preflight com porta fixa — corrigido; app que fecha sozinho — medido). `1315 passed`, `874 vitest`, 9,51 GB livres. |
 | **`CONVERSA_20261010_AMBIENTE_LIVRE_E_CORRECOES.md`** | 10/10 | **Os 6 defeitos da fila** (IA que desligava, `max 0`, `MULTI_METALS`, menu do botão direito, excedente sob o gráfico, fuso) e a decisão do dono sobre ícone. |
