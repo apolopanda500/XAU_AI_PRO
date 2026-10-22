@@ -700,7 +700,30 @@ class TestRoteamentoPorCorretora:
         r = m.ligar()
         assert r["ok"] is False
         assert "account_id" in r["error"]
+        assert "obrigatório quando há mais de uma" not in r["error"]
         assert m.ativo is False, "a porta recusou mas o motor ficou 'ligado'"
+
+    def test_ligar_nao_expoe_detalhes_da_excecao_da_conexao(self, monkeypatch):
+        from backend import connection_store
+
+        monkeypatch.setattr(
+            connection_store,
+            "resolve_connection",
+            lambda *_: (_ for _ in ()).throw(LookupError("internal/path-and-details")),
+        )
+        m = motor_pronto()
+        m.broker = "mexc"
+        m.market = "crypto-spot"
+
+        r = m.ligar()
+
+        assert r == {
+            "ok": False,
+            "error": "selecione uma conta ativa compatível com a corretora e o mercado; "
+                     "se houver mais de uma, escolha a conta pelo account_id",
+        }
+        assert "internal/path-and-details" not in r["error"]
+        assert m.ativo is False
 
     def test_ligar_com_account_id_escolhido_liga(self, monkeypatch, tmp_path):
         """A escolha do operador (via /api/auto/config) atravessa a porta."""
