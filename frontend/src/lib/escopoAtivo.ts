@@ -13,6 +13,30 @@ import { compatibleMarket } from './brokerCatalog';
 
 export const CHAVE_CONTA_ATIVA = 'xau-active-account';
 
+/**
+ * O ID da conexao escolhida, em CHAVE SEPARADA (22/10/2026).
+ *
+ * MEDIDO: `xau-active-account` guarda `broker:market` — o ROTULO do par — e o
+ * ID da conexao se perdia na ativacao. Com duas contas MT5 ativas no mesmo
+ * terminal (real e demo), o motor recusava com "account_id e obrigatorio
+ * quando ha mais de uma conta ativa": a recusa era correta, mas nao existia
+ * jeito de fazer a escolha, porque o painel nao tinha de onde pegar o ID.
+ *
+ * CHAVE SEPARADA de proposito: `xau-active-account` tem formato assertado em
+ * testes (`'mt5:metals'`) e e lido por oito componentes. Mexer nele mudaria um
+ * contrato ja travado para ganhar um campo. Aqui o ID anda ao lado.
+ */
+export const CHAVE_CONTA_ID = 'xau-active-account-id';
+
+/** O ID da conexao escolhida, ou '' quando o operador nao escolheu uma. */
+export function contaAtivaId(): string {
+  try {
+    return (window.localStorage.getItem(CHAVE_CONTA_ID) || '').trim();
+  } catch {
+    return '';
+  }
+}
+
 export interface EscopoAtivo {
   broker: string;
   market: string;
@@ -54,10 +78,24 @@ export function escopoAtivo(): EscopoAtivo {
   };
 }
 
-/** Grava a conta ativa. Usado pelos paineis de conexao. */
-export function definirEscopoAtivo(broker: string, market: string): void {
+/**
+ * Grava a conta ativa. Usado pelos paineis de conexao.
+ *
+ * O `contaId` e OPCIONAL e vem do ID da conexao que o operador acabou de
+ * ativar. Sem ele a chave de ID e APAGADA — de proposito: um ID velho de uma
+ * conexao anterior nunca pode sobreviver a uma nova escolha sem ID. O pior
+ * resultado possivel aqui seria o motor operando a conta ERRADA em silencio;
+ * sem ID o motor cai na resolucao unica (e recusa com motivo se houver duas).
+ */
+export function definirEscopoAtivo(broker: string, market: string, contaId?: string): void {
   try {
     window.localStorage.setItem(CHAVE_CONTA_ATIVA, `${broker}:${market}`);
+    const id = (contaId || '').trim();
+    if (id) {
+      window.localStorage.setItem(CHAVE_CONTA_ID, id);
+    } else {
+      window.localStorage.removeItem(CHAVE_CONTA_ID);
+    }
   } catch {
     // localStorage indisponivel (modo privado). O app segue com o default.
   }
@@ -72,6 +110,9 @@ export function definirEscopoAtivo(broker: string, market: string): void {
 export function limparEscopoAtivo(): void {
   try {
     window.localStorage.removeItem(CHAVE_CONTA_ATIVA);
+    // O ID anda junto: apagar a escolha sem apagar o ID deixaria um
+    // account_id orfao que o proximo motor leria como escolha valida.
+    window.localStorage.removeItem(CHAVE_CONTA_ID);
   } catch {
     // Sem chave, sem escopo: o estado final e o mesmo.
   }

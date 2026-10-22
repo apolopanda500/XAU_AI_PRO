@@ -152,6 +152,10 @@ beforeEach(() => {
   estado.chamadas = [];
   estado.preco = 4140.6;
   window.localStorage.setItem('xau-active-account', 'mt5:metals');
+  // A escolha de CONTA (id) e estado deste arquivo tambem: sem a limpeza, o
+  // ID gravado por um teste sobreviveria ao proximo (localStorage e por
+  // origem, nao por teste).
+  window.localStorage.removeItem('xau-active-account-id');
   vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
     const body = JSON.parse(String(init?.body ?? '{}'));
     estado.chamadas.push({ url: String(url), body });
@@ -616,6 +620,27 @@ describe('OperacaoAutomatica — a logica que ja funcionava', () => {
     const cfg = estado.chamadas.find((c) => c.url.includes('/api/auto/config'))!;
     expect(Number(cfg.body.sl_preco)).toBeCloseTo(4136.46, 2);
     expect(Number(cfg.body.tp_preco)).toBeCloseTo(4144.74, 2);
+  });
+
+  it('o ligar MANDA a conta escolhida (account_id) — 22/10/2026', async () => {
+    /*
+    O MOTOR RECUSAVA "account_id é obrigatório" (MEDIDO com duas contas MT5
+    ativas: XMGlobal real + MetaQuotes-Demo) e nao existia campo de conta no
+    painel — a escolha era impossivel de fazer. Agora ela vem da mesma chave
+    que Configurações → Conexões grava ao ativar, e este caso prova que o
+    corpo do `/api/auto/config` a CARREGA. Sem aqui, um retrocesso no
+    frontend voltaria a mandar o motor sem conta e tudo continuaria verde.
+    */
+    window.localStorage.setItem('xau-active-account-id', 'mt5:forex:MetaQuotes-Demo');
+    renderPainel();
+    await ticketMontado();
+    await ticketComPadrao11();
+    fireEvent.click(screen.getByRole('switch', { name: 'Operação automática' }));
+    await waitFor(() =>
+      expect(estado.chamadas.some((c) => c.url.includes('/api/auto/config'))).toBe(true),
+    );
+    const cfg = estado.chamadas.find((c) => c.url.includes('/api/auto/config'))!;
+    expect(cfg.body.account_id).toBe('mt5:forex:MetaQuotes-Demo');
   });
 
   it('PROVA NEGATIVA: sem preco ao vivo o AUTO nao manda SL zero', async () => {

@@ -410,6 +410,17 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-sm, 3px);
   background: var(--surface, #0f172a);
+  /* O PAINEL OCUPA A SUB-ABA INTEIRA (22/10/2026)
+     ==================================================
+     MEDIDO: `.robo` e flex-column com `min-height: 100%`, mas `.robo-modelos`
+     nao tinha `flex` — o painel media so o que os cards pediam, e o resto da
+     sub-aba era papel de parede (o mesmo vazio que o `max-height` da grade
+     abaixo tentava tapar por fora). Agora o painel e o item que crece, a
+     cabeca fica no topo e a grade recebe o resto via `flex: 1`. */
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .robo-modelos-cabeca {
@@ -500,12 +511,20 @@
   grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
   gap: 8px;
   padding: 10px;
-  /* Ocupa a tela em vez de deixar o vazio (13/10/2026): a grade curta
-     deixava ~40% de papel de parede abaixo dos cards. */
-  max-height: min(54vh, 640px);
+  /* A GRADE PREENCHE, O TETO ERA O DEFEITO (22/10/2026)
+     =====================================================
+     O `max-height: min(54vh, 640px)` de 13/10 era um teto disfarcado de
+     preenchimento: num monitor alto a grade parava aos 640px e deixava o
+     resto da sub-aba vazio; num monitor baixo, 54vh podia cortar cards.
+     Com `.robo-modelos` agora flex-column (acima), `flex: 1` + `min-height:
+     0` da a grade exatamente o espaco que sobra depois da cabeca — e o
+     `overflow: auto` rola so quando os cards realmente nao cabem (28
+     publicaveis ja rolam). Nada aqui decide a altura: o espaco da sub-aba
+     decide.
+     `perspective` continua no pai para os cards inclinarem juntos. */
+  flex: 1;
+  min-height: 0;
   overflow: auto;
-  /* Palco do 3D (13/10/2026, pedido do dono): a perspectiva mora no pai para
-     os cards inclinarem no mesmo espaco. */
   perspective: 1200px;
 }
 

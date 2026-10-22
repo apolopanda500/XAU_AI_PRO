@@ -170,7 +170,7 @@ export default function ConnectionSettings() {
         nao existia. Sincronizar o terminal E a escolha: passou no teste de
         leitura, virou a conta ativa da ROBO.
       */
-      definirEscopoAtivo('mt5', market);
+      definirEscopoAtivo('mt5', market, id);
       setStatus(
         `MT5 sincronizado: ${current.login} · ${current.server}. Conexão registrada como as demais e marcada como conta ativa.`,
       );
@@ -185,8 +185,9 @@ export default function ConnectionSettings() {
       await connectionAction(id, 'test');
       setVerified((values) => ({ ...values, [id]: 'Leitura validada' }));
       // Salvar + validar TAMBEM escolhe (mesmo motivo do MT5 acima): quem
-      // acabou de provar a credencial escolheu operar por ela.
-      definirEscopoAtivo(broker, market);
+      // acabou de provar a credencial escolheu operar por ela. O ID da
+      // conexao vai junto — mesma razao do caminho MT5 acima.
+      definirEscopoAtivo(broker, market, id);
       setStatus(
         'Credenciais salvas e leitura da conta validada — marcada como conta ativa. Nenhuma ordem foi enviada.',
       );
@@ -211,7 +212,10 @@ export default function ConnectionSettings() {
     */
     if (command === 'activate') {
       const linha = rows.find((r) => r.id === id);
-      if (linha) definirEscopoAtivo(linha.broker, linha.market);
+      // O ID da linha e a escolha EXPLICITA de conta (22/10/2026): duas
+      // contas MT5 ativas se distinguem so pelo ID, e e ele que o motor
+      // recebe via `/api/auto/config` na hora de ligar.
+      if (linha) definirEscopoAtivo(linha.broker, linha.market, linha.id);
     } else if (command === 'deactivate') {
       const linha = rows.find((r) => r.id === id);
       const atual = escopoAtivo();

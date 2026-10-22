@@ -31,7 +31,7 @@ import { useAppStore } from '../hooks/useAppStore';
 import { useAutoState } from '../hooks/queries';
 import { useIaLigada } from '../hooks/useIaLigada';
 import { notify } from '../lib/notify';
-import { escopoAtivo as contaAtiva } from '../lib/escopoAtivo';
+import { escopoAtivo as contaAtiva, contaAtivaId } from '../lib/escopoAtivo';
 import { unidadeDeVolume, fichaDoAtivo, faixaDoAtivo, rotuloQuantidade, mercadoDoAtivo } from '../lib/volumeUnidade';
 import { valorDoNivel, nivelParaValor, contratoUtilizavel, SEM_CONTRATO } from '../lib/risco';
 import { useCatalogoAtivos } from '../hooks/useCatalogoAtivos';
@@ -836,6 +836,12 @@ export default function OperacaoAutomatica({
         timeframe,
         broker,
         market,
+        // A CONTA ESCOLHIDA (22/10/2026): com duas contas MT5 ativas o
+        // motor recusava "account_id e obrigatorio" — correto, mas sem
+        // este campo a escolha era impossivel de fazer. O ID vem da mesma
+        // chave que a Configuracoes → Conexoes grava ao ativar; vazio
+        // significa "unica conta ativa", que o motor resolve sozinho.
+        account_id: contaAtivaId(),
         ...limitesNumericos(),
       };
       if (modoDinheiro) {
