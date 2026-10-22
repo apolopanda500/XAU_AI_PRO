@@ -1,4 +1,4 @@
-# STATUS ATUAL DO PROJETO
+﻿# STATUS ATUAL DO PROJETO
 
 **Data:** 22/10/2026
 **Versão:** 1.2.4
@@ -19,16 +19,16 @@ Diz o que mudou, o que foi medido e o que ficou aberto. Este arquivo é o resumo
 
 | | |
 |---|---|
-| `pytest -q` | **1482 passed, 2 skipped** (262,55 s) |
+| `pytest -q` | **1499 passed, 2 skipped** (201,62 s) |
 | `scripts/medir_artefato_gateway.py` | **exit 0** — o `.exe` instalável medido de verdade |
-| `vitest run` | **916 passed** (72 arquivos) |
+| `vitest run` | **921 passed** (72 arquivos) |
 | `tsc --noEmit` | **exit 0** |
 | backend `npm run lint` | **exit 0** |
 | `pytest -q tests/test_mql5_compila.py` | **2 passed** (MetaEditor invocado) |
 | Workflows do push em `main` | **8/8 verdes** (`ad45e74`) |
 | preflight `--etapa app-rodando` | **exit 0** (1 aviso: disco 5,95 GB) |
 | `validar_prontidao_real.py` | **5/6** — só `credencial de conta real` |
-| branch | `develop` = `main` = `8e24ad4` |
+| branch | `develop` = `main` = commit deste ciclo (ver doc) |
 | arquivos pendentes no git | **0** |
 | app no ar | app 1764 · gateway 9011 · core 9002/9003 |
 | ponte/core instalados vs build | **IGUAIS por hash** |
@@ -50,7 +50,9 @@ medido. Não mascaram erro.
 | Artefato congelado | só o fonte era medido; o `.exe` já saiu do ar com entry point errado | **bateria do `.exe`** (fail-closed, saque/transferência `False`, `gateway_build`, dry-run) |
 | CI em `main` | `ci` ✗ e `Validacao e Empacotamento` ✗ | **8/8 ✓** |
 | Deploy | ponte e core antigos (core divergia por 1.024 bytes) | instalado por NSIS e **conferido por hash** |
-| Disco | 1,34 GB (preflight reprovava) | **5,95 GB** |
+| Disco | 1,34 GB (preflight reprovava) | **5,34 GB** |
+| Ponte instalada | **87 de 5.211 arquivos**, `.exe` velho → gateway morria com `FileNotFoundError` | reinstalação limpa: **5.211**, hash igual ao build, gateway pronto antes do Core |
+| Conexão MT5 duplicada | linha `XMGlobal-MT5 14` mostrava o login da `MetaQuotes-Demo` | linha de outra conta vira **`offline`**; `connected` mede só a sessão atual |
 
 ---
 
@@ -67,6 +69,8 @@ medido. Não mascaram erro.
 4. **EA no gráfico**: se for operar por EA, reanexar — `.mq5` não foi tocado
    neste ciclo, então não houve recompilação.
 5. **Fechamento espontâneo do app** em sessão longa: medido em 10/10, sem log.
+6. **Conexão XMGlobal antiga** segue gravada como ativa. Hoje ela aparece
+   `offline` no overview; apagar a conexão é decisão do dono (dado dele).
 
 ---
 
