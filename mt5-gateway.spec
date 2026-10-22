@@ -196,6 +196,15 @@ a = Analysis(
         'backend.remote_auth',
         'backend.remote_gateway',
         'backend.third_party_ea',
+        # MODO DA CONTA (2026-10-21)
+        #
+        # `account_mode` e a fonte unica do rotulo DEMO/CONTEST/REAL. O
+        # PyInstaller nao o pega sozinho: `mt5_gateway`, `copilot` e
+        # `copilot_data` importam o modulo no TOPO, mas `account_mode` importa
+        # `MetaTrader5` DENTRO da funcao — e sem esta linha o app instalado
+        # sobe sem o modulo e o `import` levanta ModuleNotFoundError na
+        # primeira leitura de conta, sem tela e sem log util.
+        'backend.account_mode',
         'backend.ea_map',
         'backend.ea_manager',
         'backend.ea_deploy',

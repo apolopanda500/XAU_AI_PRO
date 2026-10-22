@@ -43,6 +43,7 @@ from backend.universal_contracts import (
     utc_now,
 )
 from backend.audit_log import record as record_audit
+from backend.account_mode import modo_da_conta
 from backend.guardian_engine import guardian_set, guardian_remove, guardian_status, guardian_tick, start_guardian_loop
 from backend.third_party_ea import READ_ONLY_CAPABILITIES, evaluate_all as evaluate_third_party_ea
 from backend import intent_log
@@ -1641,16 +1642,11 @@ def _payload() -> dict:
     try:
         info = mt5.account_info()
         if info:
-            demo_mode = getattr(mt5, "ACCOUNT_TRADE_MODE_DEMO", 0)
-            trade_mode = getattr(info, "trade_mode", None)
-            if isinstance(trade_mode, str):
-                account_mode = trade_mode.upper()
-            elif trade_mode is None:
-                account_mode = "UNKNOWN"
-            elif trade_mode == demo_mode:
-                account_mode = "DEMO"
-            else:
-                account_mode = "REAL"
+            # Rotulo vem de `backend.account_mode` (fonte unica). O bloco
+            # anterior usava `getattr(mt5, "ACCOUNT_TRADE_MODE_DEMO", 0)` e
+            # classificava tudo que nao fosse demo como REAL — o que rotulava
+            # a conta CONTEST (1) como REAL.
+            account_mode = modo_da_conta(getattr(info, "trade_mode", None))
             out["account"] = {
                 "login": getattr(info, "login", None),
                 "name": getattr(info, "name", None),
@@ -2915,8 +2911,10 @@ def _conta_kind(info) -> str:
             return mode.upper()
         if mode is None:
             return "UNKNOWN"
-        # MetaTrader: 0 = REAL, 1 = DEMO, 2 = CONTEST
-        return {0: "REAL", 1: "DEMO", 2: "CONTEST"}.get(int(mode), "UNKNOWN")
+        # MetaTrader: 0 = DEMO, 1 = CONTEST, 2 = REAL. As constantes oficiais
+        # estao em `backend.account_mode`; o mapa numerico fixo que existia
+        # aqui era INVERTIDO e rotulava a conta demo como REAL.
+        return modo_da_conta(mode)
     except Exception:  # noqa: BLE001 - rotulo informativo jamais derruba resposta
         return "UNKNOWN"
 
@@ -2947,7 +2945,7 @@ def _trade_read(kind: str) -> dict:
         rows = list(raw_rows)
         return {"ok": True, "orders": [{"ticket": int(o.ticket), "symbol": str(o.symbol), "type": int(o.type), "volume": float(o.volume_current), "price": float(o.price_open), "sl": float(o.sl), "tp": float(o.tp), "time_setup": int(o.time_setup)} for o in rows], "count": len(rows), "account_mode": _conta_kind(info), "source": "mt5_gateway"}
     payload = _payload()
-    return {"ok": True, "gateway": "online", "mt5_connected": bool(payload.get("account")), "ea_heartbeat": payload.get("ea_heartbeat"), "positions": len(payload.get("positions", [])), "account_mode": "DEMO", "last_command": LAST_COMMAND, "source": "mt5_gateway"}
+    return {"ok": True, "gateway": "online", "mt5_connected": bool(payload.get("account")), "ea_heartbeat": payload.get("ea_heartbeat"), "positions": len(payload.get("positions", [])), "account_mode": _conta_kind_atual(), "last_command": LAST_COMMAND, "source": "mt5_gateway"}
 
 
 def _ea_status() -> dict:
@@ -2987,7 +2985,7 @@ def _ea_command(payload: dict, command: str) -> dict:
     if ticket > 0:
         lines.append(f"ticket={ticket}")
     command_file.write_text("\n".join(lines) + "\n", encoding="ascii")
-    return {"ok": True, "accepted": True, "command": command, "value": value, "ticket": ticket, "status": "queued", "trade": True, "account_mode": "DEMO", "source": "mt5_common_files"}
+    return {"ok": True, "accepted": True, "command": command, "value": value, "ticket": ticket, "status": "queued", "trade": True, "account_mode": _conta_kind_atual(), "source": "mt5_common_files"}
 
 
 def capabilities_contract() -> dict:

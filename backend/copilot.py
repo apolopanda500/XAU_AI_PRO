@@ -40,6 +40,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 
 from backend import ea_map
+from backend.account_mode import modo_da_conta
 
 # Limite de caracteres por resposta, para a UI nao virar um texto sem fim.
 LIMITE_RESPOSTA = 6000
@@ -466,7 +467,7 @@ def responder_conta(ctx: Contexto, _pergunta: str) -> str:
         linhas.append(
             f"- login {conta.get('login', '?')} · servidor {conta.get('server', '?')}\n"
             f"- modo: {conta.get('trade_mode', '?')} "
-            f"({'DEMO' if conta.get('trade_mode') == 1 else 'REAL' if conta.get('trade_mode') == 0 else 'desconhecido'})\n"
+            f"({modo_da_conta(conta.get('trade_mode')).replace('UNKNOWN', 'desconhecido')})\n"
             f"- moeda {conta.get('currency', '?')}"
         )
     else:

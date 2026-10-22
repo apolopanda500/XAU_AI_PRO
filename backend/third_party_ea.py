@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from backend.account_mode import modo_da_conta
+
 READ_ONLY_CAPABILITIES = frozenset({"assets", "quotes", "candles", "account", "positions", "orders", "history", "journal"})
 FORBIDDEN_CAPABILITIES = frozenset({"order", "orders_write", "close", "modify", "cancel", "execution", "commands", "control", "protection", "withdrawals", "transfers"})
 ADAPTER_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]{1,63}$")
@@ -221,8 +223,9 @@ def evaluate_adapter(raw: Any, snapshot: dict[str, Any], now: datetime | None = 
         "account_login": account.get("login"),
         "account_server": account.get("server"),
         "account_currency": account.get("currency"),
-        # MetaTrader: trade_mode 0 = REAL, 1 = DEMO, 2 = CONTEST.
-        "account_mode": {0: "REAL", 1: "DEMO", 2: "CONTEST"}.get(account.get("trade_mode")) if account.get("trade_mode") is not None else None,
+        # MetaTrader: trade_mode 0 = DEMO, 1 = CONTEST, 2 = REAL. Ver
+        # `backend.account_mode` — o mapa fixo que estava aqui era invertido.
+        "account_mode": modo_da_conta(account.get("trade_mode")) if account.get("trade_mode") is not None else None,
         "age_seconds": age_seconds,
         "ttl_seconds": adapter.get("ttl_seconds"),
         "sequence": adapter.get("sequence"),

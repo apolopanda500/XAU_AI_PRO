@@ -40,6 +40,7 @@ from typing import Any
 # ocupado com inferencia. Nao ha retry: repetir so pioraria a espera.
 TIMEOUT = 3.0
 from backend.mt5_gateway import _porta_gateway
+from backend.account_mode import modo_da_conta
 BASE_PADRAO = f"http://127.0.0.1:{_porta_gateway()}"
 
 # Token do gateway. O Tauri gera um token aleatorio POR SESSAO e o passa aos
@@ -290,7 +291,7 @@ def resumo_do_ambiente() -> dict[str, Any]:
         "saldo": _num(c.get("balance")),
         "patrimonio": _num(c.get("equity")),
         "disponivel_margem": _num(c.get("margin_free")),
-        "modo": "DEMO" if c.get("trade_mode") == 1 else "REAL" if c.get("trade_mode") == 0 else "desconhecido",
+        "modo": modo_da_conta(c.get("trade_mode")).replace("UNKNOWN", "desconhecido"),
     }
 
     p = posicoes()
