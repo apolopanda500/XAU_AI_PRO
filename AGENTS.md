@@ -227,6 +227,24 @@ Remove-Item "$env:LOCALAPPDATA\XAU AI PRO\bridge" -Recurse -Force
 
 Só depois rodar o instalador. Sem isso, `exit 0` do instalador não prova nada.
 
+### O ARTEFATO E O QUE O OPERADOR EXECUTA, NAO O FONTE (MEDIDO 22/10/2026)
+
+A suite inteira do gateway sobe `backend/mt5_gateway.py` pelo fonte. O que o
+app executa é o `dist/mt5-gateway/mt5-gateway.exe`, e já saiu do ar com o
+entry point trocado (`fastapi_gateway` em vez de `mt5_gateway`) e sem
+`Docs/version.json` (tela branca no bootstrap) — dois defeitos que um teste de
+fonte **não vê**.
+
+```powershell
+.\.venv\Scripts\python.exe scripts\medir_artefato_gateway.py
+```
+
+Sobe o `.exe` em porta efemera e reprova se ele aceitar chamada sem token,
+aceitar token errado, liberar saque/transferência ou executar ordem
+`execute=false`. A trava fica em `tests/test_artefato_congelado.py`, que
+**importa** a medição em vez de repetir o código; o CI Windows roda o mesmo
+script logo depois do PyInstaller.
+
 ---
 
 ## 8. Desenvolvimento
@@ -277,6 +295,7 @@ disco cheio antes de qualquer teste.
 | Mudanca | Validacao minima |
 |---|---|
 | gateway / adaptador | `pytest -q tests/test_execution_adapters.py tests/test_universal_execution.py tests/test_broker_coverage.py` |
+| gateway / `.spec` / empacotamento | `.\.venv\Scripts\python.exe scripts\medir_artefato_gateway.py` (exit 0) |
 | historico / movimentacao | `pytest -q tests/test_movimentacoes.py` |
 | EA (`.mq5`/`.mqh`) | `pytest -q tests/test_mql5_compila.py` **e** reanexar no grafico |
 | frontend | `npx tsc --noEmit` **e** `npx vitest run` |

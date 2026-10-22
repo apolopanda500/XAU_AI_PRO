@@ -113,6 +113,16 @@ jobs:
           }
       - name: Empacotar gateway
         run: python -m PyInstaller --noconfirm mt5-gateway.spec
+      # Existe so para "o exe foi gerado". Um `.spec` com entry point trocado
+      # (`fastapi_gateway` em vez de `mt5_gateway`) ou sem `Docs/version.json`
+      # também gera um exe — e é o binário que o operador executa. A medição
+      # sobe o `.exe` em porta efemera e reprova se ele aceitar chamada sem
+      # token, aceitar token errado, liberar saque/transferência ou executar
+      # ordem `execute=false`. O runner não tem MT5 nem os `.pkl` de treino;
+      # ambos são opcionais no boot e o gateway continua no modo universal.
       - name: Verificar artefato do gateway
         shell: pwsh
-        run: if (!(Test-Path 'dist/mt5-gateway/mt5-gateway.exe')) { throw 'Gateway não foi gerado' }
+        run: |
+          if (!(Test-Path 'dist/mt5-gateway/mt5-gateway.exe')) { throw 'Gateway não foi gerado' }
+          python scripts/medir_artefato_gateway.py
+          if ($LASTEXITCODE -ne 0) { throw "Medição do artefato reprovou (exit $LASTEXITCODE)" }
