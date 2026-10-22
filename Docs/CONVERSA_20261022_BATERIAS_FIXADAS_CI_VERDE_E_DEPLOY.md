@@ -141,6 +141,37 @@ dois.
 4. **Frontend/backend/core**: nenhum código deles mudou neste ciclo; números
    de `tsc`/`vitest`/lint foram re-meditados só para reportar estado atual.
 
+## Continuação (mesma sessão, depois do deploy)
+
+### 8. A suíte toda mede o gateway **pelo fonte**; o operador executa o `.exe`
+
+Medido no artefato desta build, subido em porta efemera
+(`scripts/medir_artefato_gateway.py`, exit **0**):
+
+| Medida no `dist/mt5-gateway/mt5-gateway.exe` | Resultado |
+|---|---|
+| sem token em `/api/health`, `/api/capabilities`, `/api/positions`, `/api/universal/overview`, `/api/status` | **401 em 5/5** |
+| **token errado** em `/api/health` | **401** (prova negativa) |
+| com token nas mesmas 5 rotas + `/api/boot` | **200** |
+| `gateway_build` no `/api/health` | `xau-ai-pro-1.2.4-universal-20260928` — lido do `Docs/version.json` **dentro do pacote**, igual ao do fonte |
+| `withdrawals_enabled` / `transfers_enabled` | **False / False** no binário |
+| ordem `execute=false` | `accepted=true, stage=validated` (sem efeito) |
+
+O `.spec` já teve o entry point trocado (empacotava `fastapi_gateway` em vez
+de `mt5_gateway`) e já saiu sem `version.json` — defeitos invisíveis para um
+teste que só sobe o fonte. Agora `tests/test_artefato_congelado.py` **importa**
+a medição do script (não repete o código) e roda em **3,71 s**.
+
+### 9. Números finais do ciclo
+
+| Medida | Depois da continuação |
+|---|---|
+| `pytest -q tests` | **1482 passed, 2 skipped** (262,55 s) |
+| `scripts/medir_artefato_gateway.py` | **exit 0** |
+| backend `npm run lint` | **exit 0** |
+| `pytest -q tests/test_mql5_compila.py` | **2 passed** (MetaEditor invocado de verdade) |
+| Workflows do `main` | verdes para `ad45e74`; `8e24ad4` em avaliação no push |
+
 ## Aberto (pergunta ao dono, não suposição)
 
 1. **Credencial de conta real**: posso deixar `XAU_ACCOUNT_KIND=real` quando

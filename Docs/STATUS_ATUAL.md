@@ -19,14 +19,16 @@ Diz o que mudou, o que foi medido e o que ficou aberto. Este arquivo é o resumo
 
 | | |
 |---|---|
-| `pytest -q` | **1474 passed, 2 skipped** (213,58 s) |
+| `pytest -q` | **1482 passed, 2 skipped** (262,55 s) |
+| `scripts/medir_artefato_gateway.py` | **exit 0** — o `.exe` instalável medido de verdade |
 | `vitest run` | **916 passed** (72 arquivos) |
 | `tsc --noEmit` | **exit 0** |
 | backend `npm run lint` | **exit 0** |
-| Workflows do push em `main` (`13422de`) | **8/8 verdes** |
+| `pytest -q tests/test_mql5_compila.py` | **2 passed** (MetaEditor invocado) |
+| Workflows do push em `main` | **8/8 verdes** (`ad45e74`) |
 | preflight `--etapa app-rodando` | **exit 0** (1 aviso: disco 5,95 GB) |
 | `validar_prontidao_real.py` | **5/6** — só `credencial de conta real` |
-| branch | `develop` = `main` = `13422de` |
+| branch | `develop` = `main` = `8e24ad4` |
 | arquivos pendentes no git | **0** |
 | app no ar | app 1764 · gateway 9011 · core 9002/9003 |
 | ponte/core instalados vs build | **IGUAIS por hash** |
@@ -45,6 +47,7 @@ medido. Não mascaram erro.
 | Lista de rotas nos testes | escrita a mao, com 5 rotas que não existem | **lida do FastAPI app** + testes contra lista vazia |
 | Dublô de `MetaTrader5` | vazio → `AttributeError` → **500** em `/api/assets` | `tests/_dublo_mt5.py` devolve `None` (terminal sem sessão, o estado real) |
 | MCP de trading | porta 9001 enquanto o gateway está em 9011 → `gateway inacessivel` | **segue `XAU_GATEWAY_PORT`**; prova viva: **401 fail-closed** |
+| Artefato congelado | só o fonte era medido; o `.exe` já saiu do ar com entry point errado | **bateria do `.exe`** (fail-closed, saque/transferência `False`, `gateway_build`, dry-run) |
 | CI em `main` | `ci` ✗ e `Validacao e Empacotamento` ✗ | **8/8 ✓** |
 | Deploy | ponte e core antigos (core divergia por 1.024 bytes) | instalado por NSIS e **conferido por hash** |
 | Disco | 1,34 GB (preflight reprovava) | **5,95 GB** |
