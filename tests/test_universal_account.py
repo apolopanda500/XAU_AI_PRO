@@ -215,3 +215,52 @@ def test_overview_passes_each_exact_connection_id(monkeypatch):
     result = gateway_module._universal_overview()
     assert seen == ["binance:crypto-spot:a", "binance:crypto-spot:b"]
     assert [row["id"] for row in result["connections"]] == ["binance:crypto-spot:a", "binance:crypto-spot:b"]
+
+def test_overview_nao_atribui_conta_atual_a_conexao_de_outra_conta(monkeypatch):
+    """A sessao MT5 e UMA; a linha de outra conta nao pode fingir que e ela.
+
+    MEDIDO em 22/10/2026: com `... @ XMGlobal-MT5 14` e `... @ MetaQuotes-Demo`
+    gravadas como ativas, as duas linhas do overview apareciam `conectada` com
+    o login 113568614 da MetaQuotes-Demo. A prova negativa e `connected == 1`:
+    se o filtro morrer, voltam duas.
+    """
+    connections = [
+        {"id": "mt5:forex:Henrique Carvalho @ XMGlobal-MT5 14", "broker": "mt5", "market": "forex", "active": True},
+        {"id": "mt5:forex:Henrique Carvalho @ MetaQuotes-Demo", "broker": "mt5", "market": "forex", "active": True},
+    ]
+    monkeypatch.setattr(gateway_module, "list_connections", lambda: connections)
+    monkeypatch.setattr(gateway_module, "_payload", lambda: {
+        "account": {"login": 113568614, "name": "Henrique Carvalho", "server": "MetaQuotes-Demo"},
+        "positions": [{"ticket": 1}],
+    })
+
+    result = gateway_module._universal_overview()
+    rows = {row["id"]: row for row in result["connections"]}
+
+    atual = rows["mt5:forex:Henrique Carvalho @ MetaQuotes-Demo"]
+    assert atual["status"] == "conectada"
+    assert atual["account"]["login"] == 113568614
+    assert atual["positions"] == [{"ticket": 1}]
+
+    antiga = rows["mt5:forex:Henrique Carvalho @ XMGlobal-MT5 14"]
+    assert antiga["status"] == "offline"
+    assert antiga["account"] is None
+    assert "sessao atual" in antiga["error"]
+
+    assert result["connected"] == 1
+
+
+def test_overview_id_sem_identidade_continua_conectado(monkeypatch):
+    """ID legado sem ` @ ` nao e marcado como outra conta (nao ha com o que comparar)."""
+    connections = [
+        {"id": "mt5:forex:legado", "broker": "mt5", "market": "forex", "active": True},
+    ]
+    monkeypatch.setattr(gateway_module, "list_connections", lambda: connections)
+    monkeypatch.setattr(gateway_module, "_payload", lambda: {
+        "account": {"login": 1, "name": "N", "server": "MetaQuotes-Demo"},
+        "positions": [],
+    })
+
+    result = gateway_module._universal_overview()
+    assert result["connections"][0]["status"] == "conectada"
+    assert result["connected"] == 1

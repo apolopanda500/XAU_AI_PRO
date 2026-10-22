@@ -1315,8 +1315,23 @@ def _universal_overview() -> dict:
         try:
             if broker == "mt5":
                 payload = _payload()
-                if payload.get("account"):
-                    row.update(status="conectada", account=payload.get("account"), positions=payload.get("positions", []), source="mt5_gateway")
+                account = payload.get("account")
+                if account:
+                    # A SESSAO MT5 E UMA: o terminal logado.
+                    # MEDIDO em 22/10/2026 com duas conexoes ativas gravadas
+                    # (`... @ XMGlobal-MT5 14` e `... @ MetaQuotes-Demo`): as
+                    # DUAS linhas apareciam "conectada" com o MESMO login
+                    # 113568614 da MetaQuotes-Demo. A linha da XMGlobal
+                    # mostrava a conta de outra corretora como se fosse dela —
+                    # o operador nao tinha como saber qual linha era a real.
+                    # Uma conexao gravada de outra conta nao se apresenta
+                    # conectada com os dados da sessao atual.
+                    identidade = f"{account.get('name') or ''} @ {account.get('server') or ''}".strip()
+                    connection_id = str(connection.get("id", ""))
+                    if " @ " in connection_id and identidade and not connection_id.endswith(identidade):
+                        row.update(status="offline", error="conta nao e a sessao atual do terminal")
+                    else:
+                        row.update(status="conectada", account=account, positions=payload.get("positions", []), source="mt5_gateway")
                 else:
                     row.update(status="offline", error="MT5 não conectado; demais corretoras continuam disponíveis")
             elif broker in {"mexc", "binance"}:
