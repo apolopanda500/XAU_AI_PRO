@@ -16,10 +16,12 @@ Uso:
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import os
 import subprocess
 import sys
+import tokenize
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -113,25 +115,91 @@ def _verificar_backtest() -> tuple[bool, str]:
     return True, "decisao vem do .pkl publicado, heuristica removida"
 
 
-def _verificar_saque() -> tuple[bool, str]:
-    """A trava permanente: saque e transferencia bloqueados."""
+# Codigos de token que nao dizem nada sobre o programa: quebra de linha,
+# indentacao e comentario. Removidos antes de comparar o que e CODIGO.
+_SEM_SIGNIFICADO = {
+    tokenize.COMMENT, tokenize.NL, tokenize.NEWLINE, tokenize.INDENT,
+    tokenize.DEDENT, tokenize.ENCODING, tokenize.ENDMARKER,
+}
+
+
+def _tokens_significativos(codigo: str) -> list[tokenize.TokenInfo]:
+    try:
+        tokens = tokenize.generate_tokens(io.StringIO(codigo).readline)
+        return [t for t in tokens if t.type not in _SEM_SIGNIFICADO]
+    except (tokenize.TokenError, IndentationError, SyntaxError):
+        # Fonte quebrado nao e "saque desligado": o chamador decide o que fazer.
+        raise
+
+
+def _linhas_com_saque_ligado(codigo: str) -> list[int]:
+    """Linhas onde `withdrawals_enabled` esta LIGADO no codigo, nao no texto.
+
+    MEDIDO em 22/10/2026: a versao anterior desta checagem usava
+    `git grep -E withdrawals_enabled[\"']?\\s*[:=]\\s*True` e reprovava
+    `tests/test_metas_vip.py:146`, que faz
+
+        assert '"withdrawals_enabled": True' not in fonte
+
+    — uma assercao que PROIBE a string. O regex le o conteudo de string como se
+    fosse codigo (§6 do AGENTS.md). O `tokenize` separa os dois: em
+    `{"withdrawals_enabled": True}` a chave e um token STRING seguido de `:`
+    e `True`; no assert inteiro e UM UNICO token STRING.
+
+    Dois formatos contam como ligacao: o par em dicionario
+    (`"withdrawals_enabled": True`) e a atribuicao (`withdrawals_enabled=True`).
+    """
+    signif = _tokens_significativos(codigo)
+    linhas: list[int] = []
+    for i, tok in enumerate(signif[:-2]):
+        if tok.type == tokenize.STRING:
+            chave = tok.string.strip("\"'")
+        elif tok.type == tokenize.NAME:
+            chave = tok.string
+        else:
+            continue
+        if chave != "withdrawals_enabled":
+            continue
+        sep, valor = signif[i + 1], signif[i + 2]
+        if sep.string in {":", "="} and valor.type == tokenize.NAME and valor.string == "True":
+            linhas.append(tok.start[0])
+    return linhas
+
+
+def _arquivos_com_saque() -> list[Path]:
     try:
         resultado = subprocess.run(
-            ["git", "grep", "-l", "withdrawals_enabled"],
+            ["git", "grep", "-l", "--", "withdrawals_enabled", "*.py"],
             cwd=str(RAIZ), capture_output=True, text=True, timeout=60,
         )
     except (OSError, subprocess.SubprocessError) as exc:
-        return False, f"nao consegui varrer: {exc}"
-    arquivos = [a for a in resultado.stdout.split() if a.endswith(".py")]
+        raise RuntimeError(f"nao consegui varrer: {exc}") from exc
+    return [RAIZ / a for a in resultado.stdout.splitlines() if a.strip()]
+
+
+def _verificar_saque() -> tuple[bool, str]:
+    """A trava permanente: saque e transferencia bloqueados."""
+    try:
+        arquivos = _arquivos_com_saque()
+    except RuntimeError as exc:
+        return False, str(exc)
     if not arquivos:
         return False, "nenhuma ocorrencia de withdrawals_enabled — trava ausente"
-    ligados = subprocess.run(
-        ["git", "grep", "-n", "-E", r"withdrawals_enabled[\"']?\s*[:=]\s*True"],
-        cwd=str(RAIZ), capture_output=True, text=True, timeout=60,
-    )
-    if ligados.stdout.strip():
-        return False, f"encontrei saque habilitado: {ligados.stdout.strip()[:200]}"
-    return True, f"{len(arquivos)} arquivos, nenhuma ligacao de saque"
+    achados: list[str] = []
+    ilegiveis: list[str] = []
+    for caminho in arquivos:
+        try:
+            codigo = caminho.read_text(encoding="utf-8", errors="replace")
+            linhas = _linhas_com_saque_ligado(codigo)
+        except (OSError, tokenize.TokenError, IndentationError, SyntaxError):
+            ilegiveis.append(caminho.name)
+            continue
+        achados.extend(f"{caminho.name}:{n}" for n in linhas)
+    if achados:
+        return False, f"encontrei saque habilitado: {', '.join(achados[:10])}"
+    if ilegiveis:
+        return False, f"nao consegui ler: {', '.join(ilegiveis[:10])}"
+    return True, f"{len(arquivos)} arquivos, nenhuma ligacao de saque (medido por tokenize)"
 
 
 def _verificar_forward_test() -> tuple[bool, str]:
