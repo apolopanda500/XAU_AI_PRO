@@ -828,11 +828,12 @@ class MotorAuto:
                 self.account_id, self.broker,
                 mercado_do_ativo(self.broker, self.market, self.simbolo),
             )
-        except LookupError as exc:
-            # O texto vem do STORE e e fixo ("account_id e obrigatorio...",
-            # "conexao ativa nao encontrada"): motivo proprio para o
-            # operador, nunca dado interno nem excecao crua de terceiro.
-            return {"ok": False, "error": str(exc)}
+        except LookupError:
+            return {
+                "ok": False,
+                "error": "selecione uma conta ativa compatível com a corretora e o mercado; "
+                         "se houver mais de uma, escolha a conta pelo account_id",
+            }
         except (OSError, ValueError):
             # Arquivo de conexoes ilegivel (permisao, JSON corrompido). O
             # caminho do arquivo nao vai para a resposta — e o motivo tambem
