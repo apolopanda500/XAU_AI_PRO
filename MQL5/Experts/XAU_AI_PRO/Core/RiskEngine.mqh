@@ -19,14 +19,42 @@ double CalculateLotByRisk(double riskPercent,int stopPoints)
    );
 }
 
+//==================================================
+// NORMALIZACAO DE VOLUME PELO STEP DO SIMBOLO
+//==================================================
+// MEDIDO em 23/10/2026: o retorno era `NormalizeDouble(lot, 2)`. Em corretora
+// com `SYMBOL_VOLUME_STEP = 0,001` (cripto), 0,001 vira 0,00 — a ordem sai com
+// volume zero ou com o dobro do pretendido. As casas decimais vem do STEP, que
+// e a unica fonte que sabe a unidade daquele simbolo.
+double NormalizarVolume(double volume, double step)
+{
+   if(step <= 0.0)
+      return(NormalizeDouble(volume, 2));
+
+   volume = MathFloor(volume / step + 1e-8) * step;
+
+   int casas = 0;
+   double s = step;
+
+   while(casas < 8 && MathAbs(s - MathRound(s)) > 1e-9)
+   {
+      s *= 10.0;
+      casas++;
+   }
+
+   return(NormalizeDouble(volume, casas));
+}
+
 double CalculateLotByRisk(
    string symbol,
    double riskPercent,
    int stopPoints
 )
 {
+   // Simbolo vazio e RECUSA, nunca um lote padrao. MEDIDO: a versao anterior
+   // devolvia 0.01 aqui, ou seja, inventava um ativo para o risco.
    if(symbol=="")
-      return 0.01;
+      return(0.0);
 
    if(stopPoints<=0)
       stopPoints=100;
@@ -118,7 +146,7 @@ double CalculateLotByRisk(
 
    lot=MathMin(maxLot,lot);
 
-   lot=MathFloor(lot/step)*step;
+   lot=NormalizarVolume(lot, step);
 
    Print("RISK CALC | Balance=", DoubleToString(balance, 2), 
          " | Equity=", DoubleToString(equity, 2),
@@ -126,7 +154,7 @@ double CalculateLotByRisk(
          " | Risk%=", DoubleToString(adjustedRisk, 2),
          " | Lot=", DoubleToString(lot, 2));
 
-   return NormalizeDouble(lot,2);
+   return(lot);
 }
 
 #endif

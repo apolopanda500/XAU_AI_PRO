@@ -72,7 +72,30 @@ _CAMINHO_PARA_CLASSE: tuple[tuple[tuple[str, ...], str], ...] = (
     (("Thematic Indices",), "index"),
     (("ETF Derivatives",), "index"),
     (("Turbo Stocks",), "equity"),
-    (("Stocks",), "equity"),
+    (("Stocks", "Shares"), "equity"),
+    # A RAIZ QUE FALTAVA (23/10/2026)
+    # ------------------------------
+    # MEDIDO no MetaQuotes-Demo (conta 113568614), com `symbol_info`:
+    #
+    #   XAUUSD -> path='Metals\\XAUUSD'  base='XAU' profit='USD'
+    #   EURUSD -> path='Forex\\EURUSD'   -> forex
+    #
+    # `Metals` nao estava em mapa nenhum: a raiz caia no palpite por palavra,
+    # e o texto do palpite era `name + path + base + profit` = "XAUUSD METALS
+    # XAUUSD XAU USD" — sem a palavra GOLD, que so existe na `description`
+    # ("Gold vs US Dollar"). Resultado: `asset_class="other"` para o OURO.
+    #
+    # Consequencia medida no app instalado 1.2.7: `mercadoDoAtivo("other")` e
+    # `null`, o painel ficava sem mercado, e o grafico caia para
+    # `/api/publico/ohlc` — a tela mostrava o ouro do Yahoo (~4.025) com o
+    # MT5 servindo 4.016,46 no mesmo minuto. O motor ligava com o mercado do
+    # ESCOPO (`forex`), que nao e o mercado do ativo.
+    #
+    # A raiz e a hierarquia que a CORRETORA publicou — nao um nome de ativo.
+    (("Metals", "Metal", "Precious Metals", "Commodities"), "metal"),
+    (("Indices",), "index"),
+    (("Bonds",), "bond"),
+    (("Energies", "Energy"), "commodity"),
     (("Derivatives",), "cfd"),
 )
 
@@ -102,7 +125,7 @@ def _por_palavra(texto: str) -> str | None:
     return None
 
 
-def _asset_class(name: str, path: str, base: str, profit: str) -> str:
+def _asset_class(name: str, path: str, base: str, profit: str, description: str = "") -> str:
     """Classe do ativo, lida da HIERARQUIA que a corretora publica.
 
     A raiz do `path` e comparada INTEIRA, nunca por substring: e o que
@@ -113,20 +136,42 @@ def _asset_class(name: str, path: str, base: str, profit: str) -> str:
     """
     raiz = path.strip().split("\\")[0].strip().lower() if path else ""
     for raizes, classe in _CAMINHO_PARA_CLASSE:
-        if raiz in raizes:
+        # OS DOIS LADOS EM MINUSCULO (23/10/2026)
+        # --------------------------------------
+        # MEDIDO: `raiz` sempre veio em minusculo (`metals`), e o mapa tem a
+        # raiz como a corretora publica (`Metals`). A comparacao NUNCA casava
+        # e TODA classificacao vinha do palpite por palavra — o mapa de
+        # hierarquia era codigo morto que passava nos testes porque os testes
+        # usavam `_por_palavra` e nomes com a palavra certa. `XAUUSD` com
+        # `path=Metals\\XAUUSD` nao tem "METAL" no texto: virava `other`.
+        if raiz in {r.lower() for r in raizes}:
             # `Derivatives` cobre metais E oil; o segundo nivel desempata.
             if classe == "cfd":
-                segundo = path.strip().split("\\")[1].strip().lower() if "\\" in path else ""
-                if "metal" in segundo:
+                # O DESEMPATE E NO CAMINHO INTEIRO (23/10/2026)
+                # --------------------------------------------
+                # MEDIDO: `AUS200Cash` tem `path=Derivatives\\Cash\\Cash
+                # Indices\\AUS200Cash` — o "indices" esta no TERCEIRO nivel, e
+                # a versao anterior so olhava o SEGUNDO ("cash"). Resultado:
+                # um indice classificado como `cfd`, sem mercado, e a tela
+                # sem preco da corretora.
+                abaixo = [parte.strip().lower() for parte in path.strip().split("\\")[1:]]
+                if any("metal" in parte for parte in abaixo):
                     return "metal"
-                if "index" in segundo:
+                if any("index" in parte or "indices" in parte for parte in abaixo):
                     return "index"
-                if "future" in segundo:
+                if any("future" in parte for parte in abaixo):
                     return "future"
                 return "cfd"
             return classe
 
-    texto = f"{name} {path} {base} {profit}".upper()
+    # A `description` E DA CORRETORA, NAO NOSSA (23/10/2026)
+    # ----------------------------------------------------
+    # "Gold vs US Dollar" e o texto que o MT5 publica para `Metals\XAUUSD`.
+    # Sem ele, o palpite so via "XAUUSD METALS XAUUSD XAU USD" e nao achava
+    # GOLD — o ouro ficava `other`. A descricao entra DEPOIS da hierarquia:
+    # quem tem `path` continua classificado pela raiz, e a palavra so decide
+    # onde a corretora nao publicou hierarquia.
+    texto = f"{name} {path} {base} {profit} {description}".upper()
     return _por_palavra(texto) or "other"
 
 
@@ -198,7 +243,13 @@ def discover_assets(mt5, include_hidden: bool = True) -> list[dict]:
             "description": _value(item, "description", None),
             "path": path or None,
             "visible": visible,
-            "asset_class": _asset_class(symbol, path, base, profit),
+            "asset_class": _asset_class(
+                symbol,
+                path,
+                base,
+                profit,
+                str(_value(item, "description", "") or ""),
+            ),
             "currency_base": base or None,
             "currency_profit": profit or None,
             "digits": _integer(_value(item, "digits", None)),

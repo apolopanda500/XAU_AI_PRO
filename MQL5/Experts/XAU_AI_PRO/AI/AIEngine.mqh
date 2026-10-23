@@ -130,6 +130,13 @@ double GetAIConfidence(int signal,string symbol="")
          score+=10;
    }
 
+   // Fallback NAO e IA. MEDIDO 23/10/2026: sem gateway, o score chegava a 85
+   // (50 de base + 15 tendencia + 10 RSI + 10 ADX), o multiplicador de lote ia
+   // a 1,00 e o piso de veto (50) passava sem nenhum modelo responder. O
+   // numero era de indicador com nome de IA.
+   if(!AllowTradeWithoutAI)
+      score = MathMin(score, AIUnavailableConfidenceCap);
+
    score *= MemoryBoost(symbol);
 
    if(score>100)
@@ -415,14 +422,42 @@ bool FinalAIAllow(int signal, string symbol="")
    if(symbol == "")
       symbol = _Symbol;
 
+   // Sem IA nao ha veto; e sem veto nao ha entrada. `AllowTradeWithoutAI=true`
+   // e o caminho do Strategy Tester, onde o pipeline Python nao roda.
+   if(!AllowTradeWithoutAI)
+   {
+      if(!LoadAIPrediction(symbol) || AI_Signal=="UNAVAILABLE" || AI_Signal=="ERROR")
+      {
+         static datetime lastNoAI = 0;
+         datetime agora = TimeCurrent();
+
+         if(agora - lastNoAI >= 60)
+         {
+            lastNoAI = agora;
+            Print("[ADV AI] BLOQUEADO | IA indisponivel (", AI_Signal, ") | ", symbol);
+         }
+
+         return false;
+      }
+   }
+
    double score = AdvancedAIScore(signal, symbol);
 
-   PrintFormat(
-      "[ADV AI] Score %.2f | Min %.2f | Symbol %s",
-      score,
-      MinAIConfidence,
-      symbol
-   );
+   // Este log era impresso a CADA tick, por simbolo: 11 simbolos x ~20 ticks/s
+   // viravam milhares de linhas por minuto no journal. Throttle de 1/min.
+   static datetime lastScoreLog = 0;
+   datetime logNow = TimeCurrent();
+
+   if(logNow - lastScoreLog >= 60)
+   {
+      lastScoreLog = logNow;
+      PrintFormat(
+         "[ADV AI] Score %.2f | Min %.2f | Symbol %s",
+         score,
+         MinAIConfidence,
+         symbol
+      );
+   }
 
    return(score >= MinAIConfidence);
 }

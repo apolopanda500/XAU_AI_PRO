@@ -12,7 +12,7 @@
 // Antes dizia "1.20", que e diferente de 1.2.0 e de 1.2.4 — tres respostas
 // diferentes para "qual versao". `sync_version.py --check` nao pegava porque o
 // `.mq5` nao esta na lista de manifestos dele.
-#property version "1.240"
+#property version "1.280"
 
 #include <Trade/Trade.mqh>
 
@@ -36,7 +36,7 @@ CTrade trade;
 #include "Core/PathManager.mqh"
 #include "Core/TimeFrameManager.mqh"
 
-// ETAPA 11: AuditLog ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â© incluÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­do cedo porque NewsFilter/DecisionEngine
+// ETAPA 11: o AuditLog e incluido cedo porque NewsFilter/DecisionEngine
 // precisam registrar o motivo do bloqueo por noticias (AuditLogSimple).
 #include "Monitoring/AuditLog.mqh"
 
@@ -712,7 +712,7 @@ void PerformanceSave()
 int OnInit()
   {
    Print("========================================");
-   Print("        XAU_AI_PRO v1.2.4");
+   Print("        XAU_AI_PRO v1.2.8");
    Print("========================================");
 
    Print("Conta.............: ", AccountInfoInteger(ACCOUNT_LOGIN));
@@ -1046,6 +1046,50 @@ void OnTick()
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//| Risco em DINHEIRO de uma posicao, lido do SL do deal de entrada.  |
+//| Devolve 0.0 quando o broker nao devolve SL no deal: quem consome   |
+//| trata 0.0 como "nao sei" e nao inventa R.                          |
+//+------------------------------------------------------------------+
+double RiscoDaPosicao(ulong positionId, double volumeFechado)
+{
+   if(positionId == 0 || volumeFechado <= 0.0)
+      return(0.0);
+
+   if(!HistorySelectByPosition(positionId))
+      return(0.0);
+
+   for(int i = HistoryDealsTotal() - 1; i >= 0; i--)
+   {
+      ulong d = HistoryDealGetTicket(i);
+      if(d == 0)
+         continue;
+      if((ENUM_DEAL_ENTRY)HistoryDealGetInteger(d, DEAL_ENTRY) != DEAL_ENTRY_IN)
+         continue;
+
+      double sl    = HistoryDealGetDouble(d, DEAL_SL);
+      double price = HistoryDealGetDouble(d, DEAL_PRICE);
+      string sym   = HistoryDealGetString(d, DEAL_SYMBOL);
+
+      if(sl <= 0.0 || price <= 0.0 || sym == "")
+         return(0.0);
+
+      double point    = SymbolInfoDouble(sym, SYMBOL_POINT);
+      double tickVal  = SymbolInfoDouble(sym, SYMBOL_TRADE_TICK_VALUE);
+      double tickSize = SymbolInfoDouble(sym, SYMBOL_TRADE_TICK_SIZE);
+
+      if(point <= 0.0 || tickVal <= 0.0 || tickSize <= 0.0)
+         return(0.0);
+
+      double valorPorPonto = (tickVal / tickSize) * point;
+      double distancia     = MathAbs(price - sl) / point;
+
+      return(distancia * valorPorPonto * volumeFechado);
+   }
+
+   return(0.0);
+}
+
 void OnTradeTransaction(
    const MqlTradeTransaction &trans,
    const MqlTradeRequest &request,
@@ -1135,7 +1179,7 @@ void OnTradeTransaction(
 
       if(EnableDatabase)
         {
-         int type = 0;
+         int type = (int)HistoryDealGetInteger(deal, DEAL_TYPE);
          CDatabaseManager::Connect();
 
          CDatabaseManager::InsertTrade(
@@ -1148,8 +1192,6 @@ void OnTradeTransaction(
             TradeComment
          );
         }
-
-      StatisticsRegisterTrade(0.0);
 
       // ETAPA 15/16 - registra modelo usado neste trade (auditoria)
       ModelLogTradeUsage((ulong)HistoryDealGetInteger(deal, DEAL_POSITION_ID), symbol);   // ETAPA 15/16
@@ -1190,7 +1232,7 @@ void OnTradeTransaction(
          // ETAPA 13 - forward test: registra entrada de posicion
          ForwardLogTrade(symbol, "OPEN",
             (dType == DEAL_TYPE_BUY) ? 1 : -1,
-            MarketScore,
+            GetMarketScoreFor(symbol),
             DoubleToString(AIConfidence, 2),
             (dType == DEAL_TYPE_BUY) ? "BUY" : "SELL",
             HistoryDealGetDouble(deal, DEAL_VOLUME),
@@ -1254,11 +1296,17 @@ void OnTradeTransaction(
 // Saida
 //------------------------------------------------
 
-   if(entry == DEAL_ENTRY_OUT)
+   if(entry == DEAL_ENTRY_OUT || entry == DEAL_ENTRY_OUT_BY)
      {
       //------------------------------------------------
       // Performance
       //------------------------------------------------
+
+      ulong posIdRisco  = HistoryDealGetInteger(deal, DEAL_POSITION_ID);
+      double riscoPos   = RiscoDaPosicao(posIdRisco, volume);
+      double rMultiplo  = (riscoPos > 0.0) ? (profit / riscoPos) : 0.0;
+
+      HistoryDealSelect(deal);   // RiscoDaPosicao troca a selecao de historico
 
       RegisterTradePerformance(profit);
 
@@ -1388,7 +1436,7 @@ void OnTradeTransaction(
       StatisticsRegisterTrade(profit);
 
       // ETAPA 14 - matriz quantitativa: registra resultado p/ Avg R
-      QuantRecordResult(profit, 0.0);
+      QuantRecordResult(profit, rMultiplo);
 
       //------------------------------------------------
       // ETAPA 6 - AUDITORIA (saida)
@@ -1400,7 +1448,7 @@ void OnTradeTransaction(
 
          AuditLogTrackExit(
             positionId,
-            (profit > 0.0 ? "WIN" : "LOSS"),
+            (profit > 0.0 ? "WIN" : (profit < 0.0 ? "LOSS" : "BE")),
             profit
          );
 
@@ -1408,7 +1456,7 @@ void OnTradeTransaction(
             symbol,
             positionId,
             profit,
-            (profit > 0.0 ? "WIN" : "LOSS")
+            (profit > 0.0 ? "WIN" : (profit < 0.0 ? "LOSS" : "BE"))
          );
 
          // ETAPA 13 - forward test: registra saida/close de posicion
@@ -1417,7 +1465,7 @@ void OnTradeTransaction(
           ForwardLogDeal(symbol,
              positionId,
              (exType == DEAL_TYPE_BUY) ? 1 : -1,
-             MarketScore,
+             GetMarketScoreFor(symbol),
              DoubleToString(AIConfidence, 2),
              (exType == DEAL_TYPE_BUY) ? "BUY" : "SELL",
              HistoryDealGetDouble(deal, DEAL_VOLUME),
@@ -1445,7 +1493,7 @@ void OnTradeTransaction(
             GetADX(symbol),
             GetRSI(symbol),
             AIScore,
-            (profit > 0.0 ? "WIN" : "LOSS"),
+            (profit > 0.0 ? "WIN" : (profit < 0.0 ? "LOSS" : "BE")),
             profit
          );
         }
@@ -1465,7 +1513,7 @@ void OnTradeTransaction(
          CNotificationCenter::SendTradeClose(
             symbol,
             profit,
-            (profit > 0.0 ? "WIN" : "LOSS")
+            (profit > 0.0 ? "WIN" : (profit < 0.0 ? "LOSS" : "BE"))
          );
         }
 

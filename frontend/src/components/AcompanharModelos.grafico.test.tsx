@@ -575,10 +575,12 @@ describe('o timeframe e DO OPERADOR (09/10/2026)', () => {
     fireEvent.click(screen.getByRole('button', { name: /W1/ }));
     expect(screen.getByTestId('timeframe').textContent).toBe('W1');
 
-    // O par novo entra pelo MODELO: e ele que decide o par na tela aqui.
+    // O par novo entra pela LISTA (o operador clicando), com o motor parado:
+    // e a escolha da tela que decide, e o periodo anterior nao pode sobreviver.
+    estado.parDaTela = 'EURUSD';
     estado.auto = {
       ativo: false,
-      simbolo: 'EURUSD',
+      simbolo: '',
       broker: 'mt5',
       market: 'crypto-spot',
       timeframe: 'M15',

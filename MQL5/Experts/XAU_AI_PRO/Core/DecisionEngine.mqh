@@ -21,6 +21,48 @@
 
 double MarketScore=0.0;
 
+//==================================================
+// NOTA POR SIMBOLO
+//==================================================
+// O `MarketScore` global guarda apenas o ULTIMO simbolo avaliado. Com 11
+// simbolos no pipeline, o `OnTradeTransaction` registrava no forward log o
+// score de outro ativo — dois lados do mesmo dado discordando (AGENTS.md §5).
+// Aqui a nota passa a ter dono: o simbolo que a gerou.
+string g_msSymbols[];
+double g_msValues[];
+
+void SetMarketScore(string symbol, double score)
+{
+   if(symbol == "")
+      return;
+
+   for(int i = 0; i < ArraySize(g_msSymbols); i++)
+   {
+      if(g_msSymbols[i] == symbol)
+      {
+         g_msValues[i] = score;
+         return;
+      }
+   }
+
+   int n = ArraySize(g_msSymbols);
+   ArrayResize(g_msSymbols, n + 1);
+   ArrayResize(g_msValues, n + 1);
+   g_msSymbols[n] = symbol;
+   g_msValues[n] = score;
+}
+
+double GetMarketScoreFor(string symbol)
+{
+   for(int i = 0; i < ArraySize(g_msSymbols); i++)
+   {
+      if(g_msSymbols[i] == symbol)
+         return(g_msValues[i]);
+   }
+
+   return(0.0);
+}
+
 
 //==================================================
 // MARKET SCORE
@@ -325,6 +367,8 @@ double CalculateMarketScore(
          score,
          2
       );
+
+   SetMarketScore(symbol, MarketScore);
 
 
    //================================================

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import EditarConexao from './EditarConexao';
-import { definirEscopoAtivo, escopoAtivo, limparEscopoAtivo } from '../lib/escopoAtivo';
+import { contaAtivaId, definirEscopoAtivo, escopoAtivo, limparEscopoAtivo } from '../lib/escopoAtivo';
 import {
   connectionAction,
   detectTerminal,
@@ -198,6 +198,35 @@ export default function ConnectionSettings() {
       );
     }
   };
+  /*
+    ESCOLHER A CONTA E UMA ACAO PROPRIA (22/10/2026)
+    =================================================
+    MEDIDO no app instalado: as tres conexoes apareciam como ativas, o botao de
+    cada linha dizia "Desativar" e NAO existia como dizer qual delas o app usa.
+    A escolha so era gravada dentro de `action('activate')`, que so acontece no
+    caminho inverso (linha desativada -> "Ativar"). Com tudo ativo, o operador
+    nao tinha esse caminho: a ROBO ficava sem escopo, a faixa dizia "sem
+    corretora", o seletor nao listava o catalogo e o AUTO recusava com "sem
+    catalogo da corretora". A recusa estava certa; a acao para sair dela nao
+    existia na tela.
+
+    "Usar esta conta" grava o escopo (broker + market) e o ID da conexao, que e
+    o que o motor le depois. Nao mexe em `active` do gateway: desativar uma
+    conta e outra coisa, e o codigo ja tratava as duas como uma so.
+  */
+  const escolherConta = (linha: { id: string; broker: string; market: string }) => {
+    definirEscopoAtivo(linha.broker, linha.market, linha.id);
+    setStatus(`${linha.id.split(':').slice(2).join(':') || linha.id} passa a ser a conta usada pelo app.`);
+    void load();
+  };
+
+  const escopo = escopoAtivo();
+  const idEscolhido = contaAtivaId();
+  const emUso = (linha: { id: string; broker: string; market: string }) =>
+    Boolean(escopo.broker) &&
+    linha.broker === escopo.broker &&
+    (idEscolhido ? idEscolhido === linha.id : linha.market === escopo.market);
+
   const action = async (id: string, command: 'test' | 'activate' | 'deactivate') => {
     setVerified((values) => ({ ...values, [id]: 'Não verificada' }));
     await connectionAction(id, command);
@@ -477,7 +506,7 @@ export default function ConnectionSettings() {
         {status}
       </p>
       <div className="table-scroll">
-        <table className="tbl compact-table">
+        <table className="tbl compact-table tabela-conexoes">
           <thead>
             <tr>
               <th>Conexão</th>
@@ -508,6 +537,20 @@ export default function ConnectionSettings() {
                     Testar leitura
                   </button>
                   <EditarConexao linha={row} aoTerminar={load} />
+                  {emUso(row) ? (
+                    <span className="chip ok" title="A conta que o ROBÔ usa">
+                      Em uso
+                    </span>
+                  ) : (
+                    <button
+                      disabled={busy}
+                      className="btn xs"
+                      onClick={() => escolherConta(row)}
+                      title="O ROBÔ passa a usar esta conta"
+                    >
+                      Usar esta conta
+                    </button>
+                  )}
                   <button
                     disabled={busy}
                     className="btn xs ghost"

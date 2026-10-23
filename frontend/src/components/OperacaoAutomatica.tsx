@@ -32,6 +32,7 @@ import { useAutoState } from '../hooks/queries';
 import { useIaLigada } from '../hooks/useIaLigada';
 import { notify } from '../lib/notify';
 import { escopoAtivo as contaAtiva, contaAtivaId } from '../lib/escopoAtivo';
+import { parNaTela } from '../lib/parNaTela';
 import { unidadeDeVolume, fichaDoAtivo, faixaDoAtivo, rotuloQuantidade, mercadoDoAtivo } from '../lib/volumeUnidade';
 import { valorDoNivel, nivelParaValor, contratoUtilizavel, SEM_CONTRATO } from '../lib/risco';
 import { useCatalogoAtivos } from '../hooks/useCatalogoAtivos';
@@ -220,7 +221,31 @@ export default function OperacaoAutomatica({
     da tela como reserva. O payload de `ligar` já manda `simbolo`, então o
     motor passa a ter o mesmo par ao ligar.
   */
-  const simbolo = String(auto?.simbolo || parEscolhido || '').toUpperCase();
+  const parDoMotor = String(auto?.simbolo ?? '').toUpperCase();
+  /*
+    O PAR DA TELA E O QUE O OPERADOR ESCOLHEU (22/10/2026)
+    =====================================================
+    MEDIDO no app instalado: a barra inferior dizia `BTCUSD` e o seletor
+    "Par para operar" dizia `XAUUSD`, na mesma janela, na mesma sessao. A
+    queixa do dono foi exata: "na lista da barra inferior tem um ativo
+    selecionado, e na lista de cima tem outro".
+
+    A CAUSA era esta linha, `auto?.simbolo` primeiro: o motor guardava
+    `BTCUSD` de uma configuracao antiga, e um valor gravado vencia a escolha
+    que o operador acabara de fazer. Ele trocava o par na tela, a tela
+    continuava mostrando o par do motor - e o `ligar()` mandava o par do
+    MOTOR junto com o mercado derivado dele. `BTCUSD` nao existe no
+    MetaQuotes-Demo, a ficha vinha vazia, o mercado ia vazio e o gateway
+    recusava com "escolha o mercado": o AUTO nunca ligava, e a recusa
+    apontava um controle que nao existe nesta tela.
+
+    Regra agora, uma so: DESLIGADO, o par da tela e a escolha do operador
+    (o motor nao esta operando nada, entao o par dele nao vale); LIGADO, o
+    par e o do motor, porque e o que ele esta operando de verdade. Nunca os
+    dois valores misturados no mesmo cabecalho.
+  */
+  const motorLigado = Boolean(auto?.ativo);
+  const simbolo = parNaTela(auto, parEscolhido);
   const timeframe = String(auto?.timeframe ?? '').toUpperCase();
 
   const [lote, setLote] = useState('0.01');
@@ -740,6 +765,31 @@ export default function OperacaoAutomatica({
       // operar", alimentado pelo catálogo da corretora). A mensagem aponta para
       // o lugar certo porque é o lugar onde o controle está.
       setStatus('Escolha o par em "Par para operar", logo acima, antes de ligar o AUTO.');
+      return;
+    }
+    /*
+      SEM FICHA, SEM LIGAR - E A RECUSA NOMEIA O QUE FALTA (22/10/2026)
+      ================================================================
+      MEDIDO: "Configurado, mas nao ligou: escolha o mercado antes de ligar a
+      operacao automatica: nenhum mercado e padrao". A frase vem do gateway e
+      manda escolher um mercado - mas nao existe campo "Mercado" neste painel:
+      ele era derivado da ficha do ativo. O par era `BTCUSD`, que o
+      MetaQuotes-Demo nao publica, entao a ficha vinha vazia, o mercado ia
+      vazio e o operador recebia uma instrucao impossivel (AGENTS.md §5).
+
+      A recusa honesta e aqui, com o nome do par e da corretora. Sem catalogo
+      nenhum a causa e outra: nao ha conta ativa, e a mensagem diz onde
+      escolher. Nunca mandar `market: ''` para o gateway adivinhar.
+    */
+    if (!market) {
+      setStatus(
+        catalogo.length === 0
+          ? 'Sem catálogo da corretora: ative a conta em Configurações → Conexões (botão Ativar) antes de ligar o AUTO.'
+          : `A corretora ${broker ? broker.toUpperCase() : ''} não publica ${simbolo}. Escolha outro par em "Par para operar".`.replace(
+              '  ',
+              ' ',
+            ),
+      );
       return;
     }
     const loteN = num(lote);

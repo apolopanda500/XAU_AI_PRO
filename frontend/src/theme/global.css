@@ -189,6 +189,18 @@ a {
      que o anel de foco tenha a mesma forma em toda a app - antes ele era
      herdado do navegador e mudava de thicken entre botao e link. */
   --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--primary);
+
+  /*
+    ALIAS DE TOKENS DE FOLHA ANTIGA (MEDIDO 22/10/2026).
+    `--panel-2` aparece em 8 pontos (history, settings, mini-terminal,
+    market) e `--surface` em 9 (robo, system-machine, history-grid), e NENHUM
+    tema definia esses nomes: todos caiam no valor de reserva ESCURO. No tema
+    claro isso virava painel escuro com texto escuro - a mancha que o dono
+    viu. Aqui os nomes antigos passam a apontar para o que os temas trocam.
+  */
+  --panel-2: var(--panel2);
+  --surface: var(--panel);
+  --surface-2: var(--panel2);
 }
 
 /* ---------- Temas ---------- */
@@ -607,8 +619,8 @@ a {
   text-shadow: 0 0 12px #39caff;
 }
 .robot-command-panel .grid.cols-4 > .card {
-  border-color: rgba(120, 170, 200, 0.22);
-  background: rgba(17, 31, 47, 0.72);
+  border-color: var(--border);
+  background: var(--panel2);
 }
 .robot-command-panel .btn.primary {
   box-shadow: 0 0 14px rgba(36, 188, 255, 0.22);
@@ -1863,9 +1875,9 @@ a {
   min-width: 0;
   min-height: 78px;
   padding: 12px;
-  border: 1px solid rgba(95, 145, 180, 0.22);
+  border: 1px solid var(--border);
   border-radius: 8px;
-  background: rgba(17, 31, 47, 0.72);
+  background: var(--panel2);
   overflow: hidden;
 }
 .inventory-panel .grid.cols-4 strong,
@@ -1891,9 +1903,9 @@ a {
   width: 100%;
   overflow-x: auto;
   overflow-y: hidden;
-  border: 1px solid rgba(95, 145, 180, 0.24);
+  border: 1px solid var(--border);
   border-radius: 8px;
-  background: rgba(9, 15, 24, 0.7);
+  background: var(--panel2);
   scrollbar-width: thin;
 }
 .tbl {
@@ -1908,9 +1920,9 @@ a {
   top: 0;
   z-index: 1;
   padding: 10px 12px;
-  color: #9bb5c7;
-  background: #142131;
-  border-bottom: 1px solid rgba(75, 192, 239, 0.32);
+  color: var(--muted);
+  background: var(--panel2);
+  border-bottom: 1px solid var(--border);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -1919,18 +1931,18 @@ a {
 }
 .tbl tbody td {
   padding: 10px 12px;
-  color: #d6e4ed;
-  border-bottom: 1px solid rgba(95, 145, 180, 0.13);
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
   vertical-align: middle;
   line-height: 1.35;
   white-space: nowrap;
 }
 .tbl tbody tr:nth-child(even) td {
-  background: rgba(22, 39, 57, 0.28);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
 }
 .tbl tbody tr:hover td,
 .tbl tbody tr.selected td {
-  background: rgba(35, 157, 210, 0.13);
+  background: color-mix(in srgb, var(--primary) 13%, transparent);
 }
 .tbl tbody tr:last-child td {
   border-bottom: 0;
@@ -2181,18 +2193,18 @@ input {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 1px;
   margin-top: 14px;
-  border: 1px solid rgba(34, 211, 238, 0.28);
-  background: rgba(34, 211, 238, 0.2);
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--primary) 18%, transparent);
 }
 .strategy-rule-grid > div {
   min-width: 0;
   padding: 11px;
-  background: rgba(9, 17, 32, 0.96);
-  border-left: 2px solid rgba(250, 204, 21, 0.72);
+  background: var(--panel2);
+  border-left: 2px solid color-mix(in srgb, var(--warn) 72%, transparent);
 }
 .strategy-rule-grid strong {
   display: block;
-  color: #facc15;
+  color: var(--warn);
   font-family: 'Cascadia Mono', 'Consolas', monospace;
   font-size: 12px;
   text-transform: uppercase;
@@ -2201,7 +2213,7 @@ input {
 .strategy-rule-grid span {
   display: block;
   margin-top: 5px;
-  color: #cbd5e1;
+  color: var(--text);
   font-size: 12px;
   line-height: 1.45;
 }
@@ -2225,30 +2237,30 @@ input {
   line-height: 1.25;
 }
 .tbl tbody tr {
-  background: rgba(15, 23, 42, 0.72);
-  box-shadow: inset 2px 0 0 rgba(34, 211, 238, 0.48);
+  background: color-mix(in srgb, var(--panel2) 82%, transparent);
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--primary) 48%, transparent);
 }
 .tbl tbody tr:nth-child(even) {
-  background: rgba(20, 30, 52, 0.82);
-  box-shadow: inset 2px 0 0 rgba(250, 204, 21, 0.58);
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--warn) 58%, transparent);
 }
 .tbl tbody tr:hover {
-  background: rgba(30, 64, 100, 0.65);
-  box-shadow: inset 3px 0 0 #67e8f9;
+  background: color-mix(in srgb, var(--primary) 14%, var(--panel2));
+  box-shadow: inset 3px 0 0 var(--primary);
 }
 .tbl th {
-  color: #a5f3fc;
-  background: rgba(8, 15, 29, 0.96);
-  border-bottom: 1px solid rgba(34, 211, 238, 0.4);
+  color: var(--primary);
+  background: var(--panel2);
+  border-bottom: 1px solid var(--border);
   font-size: 11px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 .tbl-wrap {
-  border: 1px solid rgba(103, 232, 249, 0.18);
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 4px;
-  background: rgba(2, 6, 23, 0.35);
+  background: var(--panel);
 }
 .tbl {
   font-size: 12px;
@@ -2276,7 +2288,7 @@ input {
 }
 .tbl tbody tr,
 .tbl tbody tr:nth-child(even) {
-  box-shadow: inset 1px 0 0 rgba(103, 232, 249, 0.34);
+  box-shadow: inset 1px 0 0 color-mix(in srgb, var(--primary) 34%, transparent);
 }
 .tbl tbody tr:nth-child(4n + 2),
 .tbl tbody tr:nth-child(4n + 3) {
@@ -3832,7 +3844,7 @@ input:focus-visible {
   position: sticky;
   top: 0;
   z-index: 2;
-  background: #111827;
+  background: var(--panel2);
 }
 [class*='table'] table,
 .tbl {
@@ -4370,3 +4382,20 @@ input:focus-visible {
 [data-theme='light'] .history-tab .tbl-wrap::before {
   color: var(--text);
 }
+
+/* ACOES DA CONEXAO (22/10/2026)
+   MEDIDO no app instalado: a coluna ACOES tinha quatro botoes em linha,
+   estourava a largura do cartao e o ultimo - "Ativar" - ficava FORA da area
+   visivel, atras do overflow horizontal. Sem esse botao o operador nao
+   conseguia escolher a conta ativa, e o motor recusava o "ligar" para sempre.
+   Um controle que existe no DOM e nao aparece e o mesmo que nao existir. */
+.conexao-acoes {display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;}
+.tabela-conexoes {table-layout: fixed;}
+.tabela-conexoes td:first-child {max-width: 26ch;
+  white-space: normal;
+  overflow-wrap: anywhere;}
+.tabela-conexoes td:last-child {min-width: 22rem;
+  white-space: normal;}

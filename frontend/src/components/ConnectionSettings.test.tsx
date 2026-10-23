@@ -243,3 +243,47 @@ describe('ConnectionSettings — escolher a conta grava a conta ativa', () => {
     expect(window.localStorage.getItem('xau-active-account')).toBe('mt5:forex');
   });
 });
+
+/*
+  ESCOLHER A CONTA E UMA ACAO QUE EXISTE (22/10/2026)
+  ===================================================
+  MEDIDO no app instalado: as tres conexoes estavam ATIVAS, o botao de cada
+  linha dizia "Desativar" e nao havia como dizer qual delas o app usa. A
+  escolha so era gravada no caminho `activate`, alcancavel apenas quando a
+  linha estava desativada. Resultado: a ROBO ficava sem escopo e o AUTO
+  recusava com "sem catalogo da corretora" - uma recusa correta para uma tela
+  sem saida.
+
+  Este caso mede o botao que faltava, com as linhas ATIVAS (o estado real).
+*/
+describe('escolher a conta que o ROBO usa', () => {
+  it('PROVA: com as conexoes ativas, "Usar esta conta" grava o escopo', async () => {
+    M.conexoes = [
+      { id: 'mt5:forex:Henrique Carvalho @ XMGlobal-MT5 14', broker: 'mt5', market: 'forex', active: true },
+      { id: 'mt5:forex:Henrique Carvalho @ MetaQuotes-Demo', broker: 'mt5', market: 'forex', active: true },
+    ];
+    window.localStorage.removeItem('xau-active-account');
+    window.localStorage.removeItem('xau-active-account-id');
+    render(<ConnectionSettings />);
+    const botoes = await screen.findAllByRole('button', { name: 'Usar esta conta' });
+    expect(botoes).toHaveLength(2);
+    fireEvent.click(botoes[1]);
+    await waitFor(() =>
+      expect(window.localStorage.getItem('xau-active-account-id')).toBe(
+        'mt5:forex:Henrique Carvalho @ MetaQuotes-Demo',
+      ),
+    );
+    expect(window.localStorage.getItem('xau-active-account')).toBe('mt5:forex');
+  });
+
+  it('PROVA NEGATIVA: a conta em uso NAO oferece o mesmo botao', async () => {
+    M.conexoes = [
+      { id: 'mt5:forex:Henrique Carvalho @ MetaQuotes-Demo', broker: 'mt5', market: 'forex', active: true },
+    ];
+    window.localStorage.setItem('xau-active-account', 'mt5:forex');
+    window.localStorage.setItem('xau-active-account-id', 'mt5:forex:Henrique Carvalho @ MetaQuotes-Demo');
+    render(<ConnectionSettings />);
+    await screen.findAllByText('Em uso');
+    expect(screen.queryByRole('button', { name: 'Usar esta conta' })).toBeNull();
+  });
+});

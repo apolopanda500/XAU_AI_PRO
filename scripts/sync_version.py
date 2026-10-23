@@ -104,6 +104,49 @@ def _patch_app_version(path: Path, version: str) -> bool:
     return True
 
 
+def build_esperado(version: str) -> str:
+    """A MESMA string que `backend/mt5_gateway.py::_gateway_build()` produz.
+
+    MEDIDO 22/10/2026: main.rs e main.tsx traziam `xau-ai-pro-1.2.4-...`
+    escrito a mao. Na 1.2.5 o gateway passou a responder
+    `xau-ai-pro-1.2.5-universal-20261022`, os dois clientes compararam com a
+    string velha, recusaram a identidade e o app abriu com a tela preta
+    "Falha ao inicializar o ambiente local seguro". Uma fonte, tres leitores:
+    quem deriva e o gateway, e os clientes recebem o valor daqui.
+    """
+    data = json.loads(VERSION_FILE.read_text(encoding="utf-8"))
+    suffix = str(data.get("gateway_build_suffix", "universal")).strip() or "universal"
+    updated = str(data.get("updated_at", "")).strip().replace("-", "")
+    stamp = updated if len(updated) == 8 and updated.isdigit() else "20260928"
+    return f"xau-ai-pro-{version}-{suffix}-{stamp}"
+
+
+def _patch_gateway_build(path: Path, build: str) -> bool:
+    """version.ts: a identidade que o frontend exige do gateway."""
+    if not path.exists():
+        return False
+    text = path.read_text(encoding="utf-8")
+    linha = f"export const GATEWAY_BUILD = '{build}';"
+    if "export const GATEWAY_BUILD" in text:
+        new, n = re.subn(
+            r"export const GATEWAY_BUILD = '[^']*'", linha, text, count=1
+        )
+        if n == 0 or new == text:
+            return False
+        path.write_text(new, encoding="utf-8")
+        return True
+    if not text.endswith("\n"):
+        text += "\n"
+    path.write_text(
+        text
+        + "\n/** Build do gateway exigido pelo bootstrap; gerado por sync_version.py. */\n"
+        + linha
+        + "\n",
+        encoding="utf-8",
+    )
+    return True
+
+
 def _patch_version(path: Path, version: str) -> bool:
     new = version + "\n"
     current = path.read_text(encoding="utf-8").strip()
@@ -158,6 +201,25 @@ def main() -> int:
             continue
         changed = patch(path, version)
         print(f"{label:<40} {'atualizado' if changed else 'ja correto'} -> {version}")
+
+    if args.check and divergences:
+        print(f"\n{len(divergences)} divergencia(s) encontrada(s).")
+        print("Rode sem --check para corrigir.")
+        return 1
+
+    # A identidade do gateway sai da MESMA fonte. O Rust le via build.rs e o
+    # frontend via `version.ts`; nenhum dos dois pode escrever a string a mao.
+    build = build_esperado(version)
+    alvo_ts = ROOT / "frontend" / "src" / "version.ts"
+    if args.check:
+        texto = alvo_ts.read_text(encoding="utf-8") if alvo_ts.exists() else ""
+        ok = f"GATEWAY_BUILD = '{build}'" in texto
+        print(f"{'frontend/src/version.ts (build)':<40} {'OK' if ok else 'DIVERGENTE'}")
+        if not ok:
+            divergences.append("frontend/src/version.ts (build)")
+    else:
+        mudou = _patch_gateway_build(alvo_ts, build)
+        print(f"{'frontend/src/version.ts (build)':<40} {'atualizado' if mudou else 'ja correto'} -> {build}")
 
     if args.check and divergences:
         print(f"\n{len(divergences)} divergencia(s) encontrada(s).")

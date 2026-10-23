@@ -66,6 +66,7 @@ import { apiBase } from '../lib/api';
 import { useAppStore } from '../hooks/useAppStore';
 import { useAutoState } from '../hooks/queries';
 import { escopoAtivo } from '../lib/escopoAtivo';
+import { parNaTela } from '../lib/parNaTela';
 import LatenciaBar from './LatenciaBar';
 import '../theme/status-bar.css';
 
@@ -96,7 +97,20 @@ export default function StatusBar() {
   const selectedSymbol = useAppStore((s) => s.selectedSymbol);
   const setSelectedSymbol = useAppStore((s) => s.setSelectedSymbol);
 
-  const simbolo = String(autoQ.data?.simbolo || selectedSymbol || '').toUpperCase();
+  /*
+    O PAR DA BARRA E O MESMO DA LISTA DE CIMA (22/10/2026)
+    =====================================================
+    MEDIDO no app instalado: a barra dizia `BTCUSD` e o seletor "Par para
+    operar" dizia `XAUUSD`. Eram dois valores do mesmo dado, e o da barra
+    vinha de `auto.simbolo` - o par GRAVADO no motor por uma configuracao
+    antiga. O motor nao estava ligado: um par que ninguem esta operando
+    vencia a escolha que o operador acabara de fazer na tela.
+
+    Com o motor LIGADO a barra mostra o par dele, porque e o que esta sendo
+    operado de verdade. Desligado, mostra a escolha da tela - a mesma que o
+    seletor exibe e que o `ligar()` envia.
+  */
+  const simbolo = parNaTela(autoQ.data, selectedSymbol);
   const timeframe = String(autoQ.data?.timeframe || '').toUpperCase();
 
   /*

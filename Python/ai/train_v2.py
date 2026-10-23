@@ -146,7 +146,14 @@ def reamostrar(df: pd.DataFrame, timeframe: str) -> pd.DataFrame:
     if alvo < base:
         raise ValueError("nao e possivel reamostrar para granularidade menor que a do dataset")
     if alvo == base:
-        return df.reset_index(drop=True).copy()
+        # MEDIDO 22/10/2026: aqui havia um `return` direto, e o M5 pulava TODA
+        # a derivacao abaixo. Um dataset com ATR zerado (o export do MT5, por
+        # exemplo) chegava ao target com ATR=0; `atr_seguro` caia no piso de
+        # 1e-9, o rotulo perdia a faixa neutra e a acuracia de duas classes
+        # (0,50) era comparada com o palpite de tres (0,33) - edge falso de
+        # +0,16. M5 passa pelo mesmo passo de derivacao dos demais timeframes.
+        agrupado = df.reset_index(drop=True).copy()
+        return _derivar_indicadores(agrupado)
 
     agrupado = (
         df.set_index("Time")
@@ -179,14 +186,50 @@ def reamostrar(df: pd.DataFrame, timeframe: str) -> pd.DataFrame:
         if coluna not in agrupado.columns:
             agrupado[coluna] = 0.0
 
+    return _derivar_indicadores(agrupado)
+
+
+def _derivar_indicadores(agrupado: pd.DataFrame) -> pd.DataFrame:
+    """Completa Spread/ATR/ADX/RSI quando a fonte nao os trouxe.
+
+    Fonte que traz o valor real e respeitada (`abs().sum() > 0`); fonte zerada
+    recebe a derivacao de Wilder. O mesmo passo serve M5 e timeframes
+    agregados - antes so os agregados passavam por aqui.
+    """
+    for coluna in ("Spread",):
+        if coluna not in agrupado.columns:
+            agrupado[coluna] = 0.0
+
     for coluna, derivadora in (
         ("ATR", _atr_de_wilder),
         ("ADX", _adx_de_wilder),
         ("RSI", _rsi_de_wilder),
     ):
-        if coluna in agrupado.columns and agrupado[coluna].abs().sum() > 0:
-            continue  # a fonte trouxe; respeita o valor dela
-        derivadora(agrupado)
+        if coluna not in agrupado.columns:
+            agrupado[coluna] = 0.0
+    if agrupado.empty:
+        return agrupado
+
+    # PREENCHIMENTO PARCIAL, NAO POR COLUNA INTEIRA (MEDIDO 22/10/2026).
+    # A regra antiga era `se a coluna tem QUALQUER valor, nao deriva nada`.
+    # O dataset combinado (legado + export do MT5) tem 1,2% das barras com ATR
+    # do legado e 98,8% zeradas vindas do MT5: a soma dava > 0, a derivacao era
+    # pulada e o rotulo era montado com ATR zero em quase toda a serie. Por
+    # isso o alvo perdia a faixa NEUTRA e a acuracia de duas classes era
+    # comparada com o palpite de tres - edge falso de +0,16.
+    # Agora a fonte e respeitada LINHA A LINHA: onde ela trouxe valor, fica;
+    # onde veio zero, entra a derivacao de Wilder.
+    for coluna, derivadora in (
+        ("ATR", _atr_de_wilder),
+        ("ADX", _adx_de_wilder),
+        ("RSI", _rsi_de_wilder),
+    ):
+        faltando = agrupado[coluna].isna() | (agrupado[coluna] == 0)
+        if not bool(faltando.any()):
+            continue  # a fonte trouxe tudo; respeita
+        copia = agrupado[["High", "Low", "Close"]].copy()
+        derivadora(copia)
+        agrupado.loc[faltando, coluna] = copia.loc[faltando, coluna]
     return agrupado
 
 
@@ -303,12 +346,34 @@ def construir_features(df: pd.DataFrame) -> pd.DataFrame:
 # ------------------------------------------------------------------- target
 
 
-def construir_target(df: pd.DataFrame, lookahead: int) -> pd.DataFrame:
+def custo_rel_de_spread(df: pd.DataFrame, ponto: float) -> pd.Series:
+    """Custo de ida e volta em fracao do preco, a partir do Spread em pontos.
+
+    MEDIDO 22/10/2026: a coluna Spread do dataset e o spread do MT5 em
+    **pontos inteiros** (EURUSD M5: 18). Sem converter por `ponto` ela nao tem
+    unidade de preco, e comparar 18 com um retorno de 0,0006 e comparar
+    maca com laranja. Aqui a conversao e explicita e quem chama diz o `ponto`
+    do simbolo (`symbol_info(symbol).point`).
+    """
+    if "Spread" not in df.columns:
+        return pd.Series(0.0, index=df.index)
+    pontos = pd.to_numeric(df["Spread"], errors="coerce").fillna(0.0)
+    return (pontos * float(ponto) / df["Close"]).clip(lower=0.0)
+
+
+def construir_target(
+    df: pd.DataFrame, lookahead: int, custo_rel: pd.Series | None = None
+) -> pd.DataFrame:
     """Rotulo de 3 classes (SELL/NEUTRAL/BUY) normalizado por ATR.
 
     O piso de ATR e um **percentil expansivo**: so olha para o passado de cada
     linha. A versao anterior usava `quantile` sobre a serie inteira, o que
     vazava o periodo de teste para o rotulo de treino.
+
+    Se `custo_rel` for informado (fracao do preco, ex.: spread), o movimento
+    tem de PAGAR o custo para virar direcao: uma alta de 0,03% com custo de
+    0,04% e NEUTRA, porque operar nela perde dinheiro. Sem isso o rotulo
+    ensina o modelo a perseguir movimento que o operador nao recebe.
     """
     d = df.copy()
     futuro = d["Close"].shift(-lookahead) / d["Close"] - 1.0
@@ -322,6 +387,13 @@ def construir_target(df: pd.DataFrame, lookahead: int) -> pd.DataFrame:
     atr_seguro = atr_rel.clip(lower=piso.clip(lower=1e-9))
 
     norm = (combinado / atr_seguro).clip(-ATR_CLIP, ATR_CLIP)
+    if custo_rel is not None:
+        custo = pd.Series(custo_rel, index=d.index) if not isinstance(custo_rel, pd.Series) else custo_rel.reindex(d.index)
+        custo_norm = (custo.astype(float) / atr_seguro).fillna(0.0).clip(lower=0.0)
+        # O custo so existe quando ha posicao: desconta-se do modulo e mantem-se
+        # o sinal. Movimento que nao paga o custo cai na faixa neutra.
+        norm = np.sign(norm) * (norm.abs() - custo_norm).clip(lower=0.0)
+        norm = pd.Series(norm, index=d.index).clip(-ATR_CLIP, ATR_CLIP)
     condicoes = [norm >= FORTE_TH, norm >= DIRECAO_TH, norm >= -DIRECAO_TH, norm >= -FORTE_TH]
     d["Target"] = pd.Series(np.select(condicoes, [2, 2, 1, 0], default=0), index=d.index)
     return d.replace([np.inf, -np.inf], np.nan).dropna(subset=["Target"])
@@ -374,8 +446,12 @@ def walk_forward(
         )
         modelo.fit(X_train, y_train)
         acc = float(accuracy_score(y_test, modelo.predict(X_test)))
-        classes = int(base["Target"].nunique())
-        palpite = 1.0 / max(classes, 2)
+        # O PALPITE E A CLASSE MAJORITARIA DA FATIA DE TESTE, nao 1/n_classes.
+        # MEDIDO 22/10/2026: um alvo com 50,6% de compra, 49,1% de venda e 0,3%
+        # de neutro era comparado com 1/3 = 0,3333, e acuracia de 0,50 virava
+        # "+0,17 de edge" sem prever nada. Com a classe majoritaria, acertar a
+        # moeda da 0,00 de edge - que e a verdade.
+        palpite = float(y_test.value_counts(normalize=True).max()) if len(y_test) else 0.0
         folds.append(
             {
                 "fold": k + 1,
@@ -415,6 +491,7 @@ def treinar(
     min_amostras: int = 800,
     min_edge: float = PUBLICACAO_MIN_EDGE,
     seed: int = 42,
+    ponto: float | None = None,
 ) -> ResultadoTreino:
     """Treina e valida com split cronologico e purga na fronteira.
 
@@ -440,7 +517,8 @@ def treinar(
         return resultado
 
     base = construir_features(base)
-    base = construir_target(base, LOOKAHEAD.get(timeframe, 1))
+    custo = custo_rel_de_spread(base, ponto) if ponto else None
+    base = construir_target(base, LOOKAHEAD.get(timeframe, 1), custo_rel=custo)
     base = base.replace([np.inf, -np.inf], np.nan).dropna(subset=FEATURES)
 
     if len(base) < min_amostras:
@@ -473,8 +551,8 @@ def treinar(
 
     acc = float(accuracy_score(y_test, modelo.predict(X_test)))
     f1 = float(f1_score(y_test, modelo.predict(X_test), average="weighted"))
-    classes = int(y.nunique())
-    palpite = 1.0 / max(classes, 2)
+    # Mesma regra do walk_forward: palpite honesto = classe majoritaria.
+    palpite = float(y_test.value_counts(normalize=True).max()) if len(y_test) else 0.0
     edge = acc - palpite
 
     resultado.Treinou = True

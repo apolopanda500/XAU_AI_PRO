@@ -5,13 +5,13 @@
 > não. Se um número aqui divergir do que o comando medir, **o comando vence**;
 > corrija o número.
 
-> **ESTADO DE HOJE: [`Docs/CONVERSA_20261022_BATERIAS_FIXADAS_CI_VERDE_E_DEPLOY.md`](Docs/CONVERSA_20261022_BATERIAS_FIXADAS_CI_VERDE_E_DEPLOY.md)**
+> **ESTADO DE HOJE: [`Docs/CONVERSA_20261023_CATALOGO_CLASSIFICADO_GRAFICO_MT5_E_128.md`](Docs/CONVERSA_20261023_CATALOGO_CLASSIFICADO_GRAFICO_MT5_E_128.md)**
 > O que fazer primeiro, os números medidos e o que está aberto. Leia antes de
 > mexer em qualquer coisa — este arquivo diz as regras, aquele diz o estado.
-> (O ciclo anterior, com a segurança zerada e a validação 100%, está em
-> [`CONVERSA_20261021_SEGURANCA_ZERADA_VALIDACAO_100.md`](Docs/CONVERSA_20261021_SEGURANCA_ZERADA_VALIDACAO_100.md);
-> o ciclo de 11/10 com os temas medidos, em
-> [`CONVERSA_20261011_TEMAS_RENOMEADOS_E_ESTADO_MEDIDO.md`](Docs/CONVERSA_20261011_TEMAS_RENOMEADOS_E_ESTADO_MEDIDO.md).)
+> (Os ciclos anteriores, com os modelos sem edge e as baterias fixadas, estão em
+> [`CONVERSA_20261022_MODELOS_SEM_EDGE_MEDIDO.md`](Docs/CONVERSA_20261022_MODELOS_SEM_EDGE_MEDIDO.md),
+> [`CONVERSA_20261022_BATERIAS_FIXADAS_CI_VERDE_E_DEPLOY.md`](Docs/CONVERSA_20261022_BATERIAS_FIXADAS_CI_VERDE_E_DEPLOY.md)
+> e [`CONVERSA_20261021_SEGURANCA_ZERADA_VALIDACAO_100.md`](Docs/CONVERSA_20261021_SEGURANCA_ZERADA_VALIDACAO_100.md).)
 
 ## 1. O que este projeto é
 

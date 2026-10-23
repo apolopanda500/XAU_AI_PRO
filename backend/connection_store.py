@@ -19,6 +19,16 @@ def _unprotect(value: str) -> str:
     try: return ctypes.string_at(out.pbData, out.cbData).decode()
     finally: ctypes.windll.kernel32.LocalFree(out.pbData)
 
+def protect_secret(value: str) -> str:
+    """Envelope DPAPI de um segredo. Publico para quem guarda credencial fora
+    deste store (o login automatico do MT5 usa o mesmo envelope)."""
+    return _protect(value)
+
+
+def unprotect_secret(value: str) -> str:
+    return _unprotect(value)
+
+
 def _path() -> Path:
     return Path(os.environ.get("APPDATA", Path.home())) / "XAU AI PRO" / "connections.dpapi.json"
 

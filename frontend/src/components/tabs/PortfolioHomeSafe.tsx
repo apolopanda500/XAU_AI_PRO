@@ -1,16 +1,21 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiBase } from '../../lib/api';
 import { brokerLabel, MARKET_LABELS } from '../../lib/brokerCatalog';
+import { clsPnl, fmtSigned } from '../../lib/format';
 
 // Base resolvida por chamada (13/10/2026), nunca congelada no topo do modulo.
 
 /**
- * Fontes do patrimonio, derivadas do catalogo de corretoras.
+ * Fontes do patrimonio.
  *
- * Antes esta lista era hardcoded aqui (MT5/MEXC/Binance) e repetida em outros
- * 13 arquivos. Bybit e OKX constavam no catalogo mas nao apareciam no patrimonio,
- * entao o usuario via duas respostas diferentes para "quais contas existem".
- * Agora a lista sai de uma fonte unica e o catalogo passa a valer.
+ * Os ROTULOS vem do catalogo (`brokerCatalog`), para que o nome da corretora
+ * seja o mesmo em todas as telas. A lista de corretoras/missoes continua
+ * explicita porque `market` NAO e decorativo na chamada: no MT5 a conta e
+ * agregada e o mercado correto e `other` (pedir `forex` filtraria as posicoes
+ * so para forex, escondendo metais e cripto); nas exchanges a leitura de conta
+ * exige `crypto-spot`. Derivar o mercado do primeiro item do catalogo trocaria
+ * o silencio de uma linha por uma posicao FALTANDO na soma — e aqui a regra do
+ * projeto vale: dois lados do mesmo dado nao podem discordar do nome.
  */
 const SOURCES: ReadonlyArray<{ broker: string; market: string }> = [
   { broker: 'mt5', market: 'other' },
@@ -31,7 +36,7 @@ type Row = {
   available: string;
   currency: string;
   positions: string;
-  pnl: string;
+  pnl: number | null;
 };
 const empty = (name: string, market: string, broker: string): Row => ({
   name,
@@ -41,11 +46,20 @@ const empty = (name: string, market: string, broker: string): Row => ({
   available: '--',
   currency: broker === 'mt5' ? 'USD' : 'USDT',
   positions: '--',
-  pnl: '--',
+  pnl: null,
 });
+/*
+  SALDO PODE SER NEGATIVO, E O `--` ESCONDIA ISSO (23/10/2026)
+
+  A versao anterior exigia `n >= 0` para formatar. Conta em margem pode ficar
+  negativa, e o operador lia `--` - que significa "o gateway nao mandou" em
+  toda esta app. O mesmo `--` aparecia no resultado aberto, entao uma posicao
+  perdedora era indistinguivel de uma conta sem dados. Aqui o numero sempre
+  aparece quando o gateway o entregou; quem decide o sinal e o valor.
+*/
 const money = (v: unknown) => {
   const n = Number(v);
-  return Number.isFinite(n) && n >= 0 && n < 1e15
+  return Number.isFinite(n) && Math.abs(n) < 1e15
     ? n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     : '--';
 };
@@ -77,13 +91,11 @@ async function loadPortfolio(): Promise<Row[]> {
           positions: p.ok && Array.isArray(pd.positions) ? String(pd.positions.length) : '--',
           pnl:
             p.ok && Array.isArray(pd.positions)
-              ? money(
-                  (pd.positions as Array<Record<string, unknown>>).reduce(
-                    (sum, position) => sum + (Number(position.profit) || 0),
-                    0,
-                  ),
+              ? (pd.positions as Array<Record<string, unknown>>).reduce(
+                  (sum, position) => sum + (Number(position.profit) || 0),
+                  0,
                 )
-              : '--',
+              : null,
         };
       } catch {
         return { ...empty(name, market, broker), status: 'Indisponível' };
@@ -164,6 +176,7 @@ export default function PortfolioHomeSafe() {
                 <th className="num">Disponível</th>
                 <th>Moeda</th>
                 <th className="num">Posições</th>
+                <th className="num">Resultado aberto</th>
                 <th>Saques</th>
               </tr>
             </thead>
@@ -183,6 +196,9 @@ export default function PortfolioHomeSafe() {
                   <td className="num">{r.available}</td>
                   <td>{r.currency}</td>
                   <td className="num">{r.positions}</td>
+                  <td className={`num ${r.pnl === null ? '' : clsPnl(r.pnl)}`.trim()}>
+                    {r.pnl === null ? '--' : fmtSigned(r.pnl, 2)}
+                  </td>
                   <td>
                     <span className="chip warn">Bloqueados</span>
                   </td>

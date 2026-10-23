@@ -326,6 +326,24 @@ input int    NewsMinutesAfter      = 30;
 //==================================================
 input double MinAIConfidence    = 50.0;
 
+//----------------------------------------------
+// IA AUSENTE x CONFIANCA (23/10/2026)
+//----------------------------------------------
+// MEDIDO: quando o gateway nao responde, `GetAIConfidence` caia no fallback
+// local e devolvia ate 85 (50 de base + 15 tendencia + 10 RSI + 10 ADX). Com
+// 85 o multiplicador de lote era 1,00 e o filtro de IA (piso 50) passava sem
+// nenhuma IA existir. O painel dizia "IA", o numero vinha dos indicadores.
+//
+// `AllowTradeWithoutAI=false` (padrao) faz a ausencia de IA ser MOTIVO DE
+// BLOQUEIO para novas entradas: a IA veta, e sem ela nao ha veto — logo nao
+// ha entrada. Posicoes ja abertas continuam sendo geridas normalmente.
+//
+// `true` existe para o Strategy Tester, onde o pipeline Python nao roda.
+// Nesse modo o fallback e CAPADO em `AIUnavailableConfidenceCap`, para que o
+// numero nao volte a mentir sobre a existencia de uma IA.
+input bool   AllowTradeWithoutAI           = false;
+input double AIUnavailableConfidenceCap    = 40.0;
+
 //==================================================
 // IA - AUTORIDADE DE SINAL (05/10/2026)
 //==================================================
@@ -555,12 +573,22 @@ input string Symbols=
 // outro com outro — e o sintoma seria o mesmo que ja-investigamos: o cliente
 // lendo um nome e o servidor entregando outra medida.
 //
-// `distancia = risco_usd / (contrato x volume x point)`
-//
 // `SYMBOL_TRADE_CONTRACT_SIZE` e propriedade DOUBLE, nao enum inteiro: no MT5 o
 // tamanho de contrato pode ser fracionario, e o compilador rejeita com
 // "cannot convert enum" quando ele e pedido como `SymbolInfoInteger`. Medido
 // em 08/10/2026: e o primeiro erro que aparece ao compilar este trecho.
+//
+// MEDIDO em 23/10/2026: a formula antiga era `risco / (contrato x volume x
+// point)`, e ela so vale quando a moeda de COTACAO e a moeda da conta. Em
+// USDJPY (point 0,001, contrato 100.000, 0,01 lote) ela devolvia 2 pontos para
+// US$ 2,00 de risco — 0,2 pip, dentro do spread. O valor real de 1 ponto em
+// USDJPY e ~US$ 0,66 por lote, nao US$ 100,00; a razao e o proprio cambio
+// (100 / 0,66 = ~151x). USDJPY, USDSEK, USDCNH e USDBRL estao na lista padrao
+// de simbolos, entao o defeito abria stop colado no preco em 4 dos 11.
+//
+// A fonte correta e a ficha do simbolo: `TICK_VALUE` ja vem na MOEDA DA CONTA.
+// O fallback por contrato continua existindo, mas DEPOIS, e so quando a ficha
+// nao responde — nunca como primeira escolha.
 double DistanciaPontosParaRiscoUSD(
    string symbol,
    double volume,
@@ -570,13 +598,118 @@ double DistanciaPontosParaRiscoUSD(
    if(risco_usd <= 0.0 || volume <= 0.0)
       return(0.0);
 
-   double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
+   double point    = SymbolInfoDouble(symbol, SYMBOL_POINT);
+   double tickVal  = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE);
+   double tickSize = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_SIZE);
+
+   if(point <= 0.0)
+      return(0.0);
+
+   if(tickVal > 0.0 && tickSize > 0.0)
+   {
+      double valorPorPonto = (tickVal / tickSize) * point;
+
+      if(valorPorPonto <= 0.0)
+         return(0.0);
+
+      return(risco_usd / (valorPorPonto * volume));
+   }
+
    double contrato = SymbolInfoDouble(symbol, SYMBOL_TRADE_CONTRACT_SIZE);
 
-   if(point <= 0.0 || contrato <= 0.0)
+   if(contrato <= 0.0)
       return(0.0);
 
    return(risco_usd / (contrato * volume * point));
+}
+
+//==================================================
+// ORCAMENTO DIARIO x RISCO POR OPERACAO
+//==================================================
+// `RiskPerTradeUsd` e um valor ABSOLUTO: ele nao acompanha o tamanho da conta.
+// Quando ele passa do orcamento do dia (`MaxDailyLossPercent` do saldo), UMA
+// operacao estoura o limite que o `SafetyManager` usa para parar de operar.
+//
+// MEDIDO em 08/10/2026: risco de US$ 3,00 contra orcamento de US$ 0,61 numa
+// conta de US$ 12,13. A correcao da epoca trocou o numero para US$ 2,00 e NAO
+// criou a comparacao — o defeito de escala continuou, so que menor.
+//
+// A trava compara os DOIS numeros que o sistema ja possui. `MaxTradeRiskPctOfBudget`
+// diz quanto do orcamento do dia uma unica entrada pode consumir (100 = o dia
+// inteiro; 50 = metade). Para desligar a comparacao, use um valor <= 0.
+input double MaxTradeRiskPctOfBudget = 100.0;
+
+double OrcamentoDiarioPerda()
+{
+   double balance = AccountInfoDouble(ACCOUNT_BALANCE);
+
+   if(balance <= 0.0 || MaxDailyLossPercent <= 0.0)
+      return(0.0);
+
+   return(balance * MaxDailyLossPercent / 100.0);
+}
+
+// Valor em dinheiro de uma distancia em PONTOS, para um lote. Mesma fonte da
+// distancia (TICK_VALUE/TICK_SIZE), no sentido inverso: quem dimensiona a
+// ordem e quem cobra o orcamento leem a MESMA unidade.
+double RiscoEmDinheiroDaOrdem(
+   string symbol,
+   double volume,
+   double pontos
+)
+{
+   if(volume <= 0.0 || pontos <= 0.0)
+      return(0.0);
+
+   double point    = SymbolInfoDouble(symbol, SYMBOL_POINT);
+   double tickVal  = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE);
+   double tickSize = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_SIZE);
+
+   if(point <= 0.0 || tickVal <= 0.0 || tickSize <= 0.0)
+      return(0.0);
+
+   double valorPorPonto = (tickVal / tickSize) * point;
+
+   if(valorPorPonto <= 0.0)
+      return(0.0);
+
+   return(pontos * valorPorPonto * volume);
+}
+
+bool RiscoCabeNoOrcamento(double risco_usd, string &motivo)
+{
+   motivo = "";
+
+   if(risco_usd <= 0.0)
+   {
+      motivo = "risco por operacao invalido (0)";
+      return(false);
+   }
+
+   if(MaxTradeRiskPctOfBudget <= 0.0)
+      return(true);
+
+   double orcamento = OrcamentoDiarioPerda();
+
+   // Limite diario desligado (MaxDailyLossPercent <= 0): nao ha o que comparar.
+   if(orcamento <= 0.0)
+      return(true);
+
+   double teto = orcamento * MaxTradeRiskPctOfBudget / 100.0;
+
+   if(risco_usd > teto + 1e-8)
+   {
+      motivo = StringFormat(
+         "risco US$ %.2f > teto US$ %.2f (%.0f%% do orcamento diario %.2f%% de saldo %.2f)",
+         risco_usd,
+         teto,
+         MaxTradeRiskPctOfBudget,
+         MaxDailyLossPercent,
+         AccountInfoDouble(ACCOUNT_BALANCE));
+      return(false);
+   }
+
+   return(true);
 }
 
 //==================================================
