@@ -37,7 +37,18 @@ posicoes** (gerencia as existentes normalmente). Antes ele abria com uma
 | `npx vitest run` | **950 passed** (77 arquivos) |
 | `.ex5` gerado | 23/10/2026, recompilado depois do fonte |
 
-## 4. Nao feito, e por que
+## 4. Build 1.2.9 (concluido)
+
+| Artefato | Bytes | SHA256 |
+|---|---|---|
+| `release/1.2.9/XAU AI PRO_1.2.9_x64-setup.exe` | 244.782.411 | `87209EEDD5C81A67A9854DD308FB58DDBEDF73FBED53597DB62ED7A5E72CB472` |
+| `release/1.2.9/XAU AI PRO_1.2.9_x64_en-US.msi` | 382.501.010 | `6AA87F314E52FFC39B3158EC9DAA304135E3AE47C36AECA6593395619AE1CB61` |
+
+O build passou por `sync_version.py` (1.2.9), frontend, core Rust, PyInstaller
+do gateway, Tauri (17m58s) e os dois bundles. O `core/Cargo.lock` precisou ser
+regenerado porque o `--locked` recusa o `Cargo.toml` novo — commit `a241a4d`.
+
+## 5. Nao feito, e por que
 
 1. **Bateria no Strategy Tester**: o tester roda dentro do terminal logado; a
    automacao headless nao foi executada neste ciclo. O EA compila e a logica de
