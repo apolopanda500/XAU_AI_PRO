@@ -1,4 +1,4 @@
-// XAU_AI_PRO v1.2.0
+// XAU_AI_PRO v1.2.9
 // BacktestAnalyzer - ETAPA 8 (v2.0)
 // Registra cada trade do tester em BacktestReport.csv
 // (FILE_COMMON) e calcula metricas completas: win rate,

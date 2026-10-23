@@ -1,7 +1,7 @@
 //+------------------------------------------------------------------+
 //|                                         PositionSynchronizer.mqh |
 //|                                  Smart Execution Engine - Sync   |
-//|                                            XAU_AI_PRO v1.2.0       |
+//|                                            XAU_AI_PRO v1.2.9       |
 //+------------------------------------------------------------------+
 
 #ifndef POSITION_SYNCHRONIZER_MQH

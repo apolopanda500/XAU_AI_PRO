@@ -1,6 +1,6 @@
 // recompile-trigger 19:40:47
 //==================================================
-// XAU_AI_PRO v1.2.0
+// XAU_AI_PRO v1.2.9
 //==================================================
 
 #property strict
@@ -12,7 +12,7 @@
 // Antes dizia "1.20", que e diferente de 1.2.0 e de 1.2.4 — tres respostas
 // diferentes para "qual versao". `sync_version.py --check` nao pegava porque o
 // `.mq5` nao esta na lista de manifestos dele.
-#property version "1.280"
+#property version "1.290"
 
 #include <Trade/Trade.mqh>
 
@@ -712,7 +712,7 @@ void PerformanceSave()
 int OnInit()
   {
    Print("========================================");
-   Print("        XAU_AI_PRO v1.2.8");
+   Print("        XAU_AI_PRO v" + EA_VERSION_STRING);
    Print("========================================");
 
    Print("Conta.............: ", AccountInfoInteger(ACCOUNT_LOGIN));

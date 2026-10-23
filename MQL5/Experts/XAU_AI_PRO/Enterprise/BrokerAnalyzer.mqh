@@ -1,6 +1,6 @@
 ﻿//+------------------------------------------------------------------+
 //|                                               BrokerAnalyzer.mqh |
-//|                       XAU_AI_PRO v1.2.0 Professional               |
+//|                       XAU_AI_PRO v1.2.9 Professional               |
 //+------------------------------------------------------------------+
 #ifndef BROKER_ANALYZER_MQH
 #define BROKER_ANALYZER_MQH

@@ -1,4 +1,4 @@
-﻿// XAU_AI_PRO v1.2.0
+﻿// XAU_AI_PRO v1.2.9
 #ifndef DATASET_MQH
 #define DATASET_MQH
 
