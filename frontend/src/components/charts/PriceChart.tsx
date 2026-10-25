@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { GraficoIndicador } from './GraficoIndicador';
+import { bollingerValores, smaValores, vwapValores } from '../../lib/indicadores';
 import MenuGrafico, { type AcaoDoMenu } from './MenuGrafico';
 import SeletorFuso from '../SeletorFuso';
 import '../../theme/market.css';
@@ -158,6 +159,11 @@ export type EstadoGrafico = {
   rsi: boolean;
   macd: boolean;
   ema: boolean;
+  /** Overlays calculados dos candles exibidos. Opcionais: passos antigos de
+   *  desfazer continuam validos sem eles. */
+  sma?: boolean;
+  bollinger?: boolean;
+  vwap?: boolean;
 };
 
 export function emaValores(fechamentos: number[], periodo: number): Array<number | null> {
@@ -520,6 +526,7 @@ export default function PriceChart({
   const linhasRef = useRef<Array<ReturnType<ISeriesApi<'Candlestick'>['createPriceLine']>>>([]);
   const linhasOrdemRef = useRef<Array<ReturnType<ISeriesApi<'Candlestick'>['createPriceLine']>>>([]);
   const emaRef = useRef<Array<ISeriesApi<'Line'>>>([]);
+  const overlaysRef = useRef<Record<string, ISeriesApi<'Line'>>>({});
   const volumeRef = useRef<ISeriesApi<'Histogram'> | null>(null);
   const legendaRef = useRef<HTMLDivElement>(null);
   /*
@@ -634,6 +641,53 @@ export default function PriceChart({
   const [rsiInterno, setRsiInterno] = useState(false);
   const [macdInterno, setMacdInterno] = useState(false);
   const [emaInterno, setEmaInterno] = useState(false);
+  /*
+    SMA, BOLLINGER E VWAP (23/10/2026)
+    ----------------------------------
+    A barra de indicadores so tinha EMA, RSI e MACD. Estes tres sao os que o
+    MT5 traz de fabrica e que o operador usa para entrada e saida. Ficam em
+    estado proprio porque nao vem do pai (nao ha prop para eles) e sao
+    recalculados dos candles EXIBIDOS, como os demais.
+  */
+  const [extras, setExtras] = useState({ sma: false, bollinger: false, vwap: false });
+  /*
+    TELA CHEIA (23/10/2026)
+    -----------------------
+    O pedido foi "botao full tela". Um botao que chama `requestFullscreen` numa
+    janela do Tauri funciona no Chromium embutido; quando a API nao existir, o
+    botao fica DESABILITADO e o `title` diz o motivo — controle que parece
+    funcionar e nao funciona e o defeito que o AGENTS.md §9 descreve.
+  */
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [telaCheia, setTelaCheia] = useState(false);
+  const suportaTelaCheia =
+    typeof document !== 'undefined' && Boolean(document.documentElement.requestFullscreen);
+  const alternarTelaCheia = useCallback(() => {
+    const el = wrapRef.current;
+    if (!el || !suportaTelaCheia) return;
+    if (document.fullscreenElement) {
+      void document.exitFullscreen?.().catch(() => undefined);
+      return;
+    }
+    void el.requestFullscreen?.().catch(() => undefined);
+  }, [suportaTelaCheia]);
+
+  useEffect(() => {
+    const aoMudar = () => {
+      setTelaCheia(document.fullscreenElement === wrapRef.current);
+      // O canvas do lightweight-charts nao escuta o container: sem este
+      // `resize`, sair da tela cheia devolveria um grafico com a largura da
+      // tela inteira dentro de uma coluna estreita.
+      const el = containerRef.current;
+      const chart = chartRef.current;
+      if (el && chart) {
+        const { width, height } = el.getBoundingClientRect();
+        if (width > 0 && height > 0) chart.resize(width, height);
+      }
+    };
+    document.addEventListener('fullscreenchange', aoMudar);
+    return () => document.removeEventListener('fullscreenchange', aoMudar);
+  }, []);
   const [loadedCandles, setLoadedCandles] = useState<MarketCandle[]>([]);
   const [loadedError, setLoadedError] = useState('');
   /*
@@ -833,17 +887,39 @@ const activeMarket = mercadoParaConsulta(market, broker);
           onEscolherPreco?.(acao === 'stop' ? 'sl' : 'tp', preco);
           return;
         case 'zoom-mais':
-          if (ts) ts.fitContent();
+        case 'zoom-menos': {
+          /*
+            ZOOM DE VERDADE (23/10/2026).
+            Antes os dois itens chamavam `fitContent()` — "Aproximar" e
+            "Afastar" faziam a MESMA coisa, e nenhuma era zoom. Agora a janela
+            visivel e escalada em torno do centro.
+          */
+          const faixa = ts?.getVisibleLogicalRange();
+          if (!ts || !faixa) return;
+          const fator = acao === 'zoom-mais' ? 0.8 : 1.25;
+          const centro = (faixa.from + faixa.to) / 2;
+          const meia = ((faixa.to - faixa.from) * fator) / 2;
+          ts.setVisibleLogicalRange({ from: centro - meia, to: centro + meia });
           return;
-        case 'zoom-menos':
-          if (ts) ts.fitContent();
+        }
+        case 'ir-para-agora':
+          ts?.scrollToRealTime();
           return;
+        case 'tela-cheia':
+          alternarTelaCheia();
+          return;
+        case 'copiar-preco': {
+          const valor = preco ?? displayCandles[displayCandles.length - 1]?.close;
+          if (valor === undefined || !Number.isFinite(valor)) return;
+          void navigator.clipboard?.writeText(String(valor)).catch(() => undefined);
+          return;
+        }
         case 'ajustar':
           ts?.fitContent();
           return;
       }
     },
-    [onOperarNoMenu, onEscolherPreco],
+    [onOperarNoMenu, onEscolherPreco, alternarTelaCheia, displayCandles],
   );
 
   /*
@@ -1208,6 +1284,74 @@ useEffect(() => {
       emaRef.current = [];
     }
     /*
+      OVERLAYS: SMA 20, BOLLINGER (20, 2) E VWAP.
+      `null` vira buraco no desenho: ponto que o indicador ainda nao pode
+      calcular nao e zero, e ligar os pontos por cima inventaria valor.
+    */
+    const fechasOverlay = displayCandles.map((c) => c.close);
+    const desenharOverlay = (
+      id: string,
+      cor: string,
+      valores: Array<number | null>,
+      largura: 1 | 2 = 1,
+    ) => {
+      const pontos = displayCandles
+        .map((c, i) =>
+          valores[i] === null || valores[i] === undefined
+            ? null
+            : { time: c.time as UTCTimestamp, value: valores[i] as number },
+        )
+        .filter((ponto): ponto is { time: UTCTimestamp; value: number } => ponto !== null);
+      const existente = overlaysRef.current[id];
+      if (!pontos.length) {
+        if (existente) {
+          try {
+            chartRef.current?.removeSeries(existente);
+          } catch {
+            /* ja removida */
+          }
+          delete overlaysRef.current[id];
+        }
+        return;
+      }
+      if (existente) {
+        existente.setData(pontos);
+        return;
+      }
+      if (!chartRef.current) return;
+      const serie = chartRef.current.addLineSeries({
+        color: cor,
+        lineWidth: largura,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+      });
+      serie.setData(pontos);
+      overlaysRef.current[id] = serie;
+    };
+    const boll = bollingerValores(fechasOverlay, 20, 2);
+    if (extras.sma) desenharOverlay('sma20', '#3b82f6', smaValores(fechasOverlay, 20));
+    if (extras.bollinger) {
+      desenharOverlay('boll-sup', 'rgba(167,139,250,.65)', boll.superior);
+      desenharOverlay('boll-inf', 'rgba(167,139,250,.65)', boll.inferior);
+      desenharOverlay('boll-med', '#a78bfa', boll.media);
+    }
+    if (extras.vwap) desenharOverlay('vwap', '#f59e0b', vwapValores(displayCandles));
+    for (const id of Object.keys(overlaysRef.current)) {
+      if (id.startsWith('sma20') && !extras.sma) {
+        try { chartRef.current?.removeSeries(overlaysRef.current[id]); } catch { /* ja removida */ }
+        delete overlaysRef.current[id];
+      }
+      if (id.startsWith('boll') && !extras.bollinger) {
+        try { chartRef.current?.removeSeries(overlaysRef.current[id]); } catch { /* ja removida */ }
+        delete overlaysRef.current[id];
+      }
+      if (id === 'vwap' && !extras.vwap) {
+        try { chartRef.current?.removeSeries(overlaysRef.current[id]); } catch { /* ja removida */ }
+        delete overlaysRef.current[id];
+      }
+    }
+    /*
     AJUSTAR A ESCALA SO QUANDO O NUMERO DE CANDLES MUDA.
 
     MEDIDO (06/10/2026, app instalado): o dono reportou "quando eu desloco, depois
@@ -1227,7 +1371,7 @@ useEffect(() => {
     candlesEnquadrados.current = data.length;
     chartRef.current?.timeScale().fitContent();
   }
-  }, [chartReady, displayCandles, markers, lines, emaExterno, tipoGrafico, seriesAtivo]);
+  }, [chartReady, displayCandles, markers, lines, emaExterno, tipoGrafico, seriesAtivo, extras]);
 
   // Arrastar SL/TP estilo MT5. So linhas com ticket+kind sao moveis; a
   // entrada nunca arrasta. O preco segue o mouse via rAF (sem travar) e
@@ -1718,6 +1862,11 @@ useEffect(() => {
               setRsi(novo.atual.rsi);
               setMacd(novo.atual.macd);
               if (emaProp === undefined) setEmaInterno(novo.atual.ema);
+              setExtras({
+                sma: Boolean(novo.atual.sma),
+                bollinger: Boolean(novo.atual.bollinger),
+                vwap: Boolean(novo.atual.vwap),
+              });
               onIndicadoresChange?.(novo.atual);
               setPassos(novo.passos.length);
               setRefaziveis(novo.refazer.length);
@@ -1743,6 +1892,11 @@ useEffect(() => {
               setRsi(novo.atual.rsi);
               setMacd(novo.atual.macd);
               if (emaProp === undefined) setEmaInterno(novo.atual.ema);
+              setExtras({
+                sma: Boolean(novo.atual.sma),
+                bollinger: Boolean(novo.atual.bollinger),
+                vwap: Boolean(novo.atual.vwap),
+              });
               onIndicadoresChange?.(novo.atual);
               setPassos(novo.passos.length);
               setRefaziveis(novo.refazer.length);
@@ -1785,6 +1939,62 @@ useEffect(() => {
             title="MACD (12, 26, 9), dos candles exibidos"
           >
             MACD
+          </button>
+          {/*
+            SMA, BOLLINGER E VWAP (23/10/2026): a lista do MT5.
+            `aria-pressed` mostra o estado sem precisar clicar; o `title` diz o
+            periodo usado, porque "Bollinger" sem o (20, 2) e um nome sem
+            parametro — e parametro diferente muda a linha.
+          */}
+          {([
+            ['sma', 'SMA 20', 'Media movel simples de 20 candles'],
+            ['bollinger', 'Bollinger', 'Bandas de Bollinger (20, 2)'],
+            ['vwap', 'VWAP', 'Preco medio ponderado pelo volume, desde o primeiro candle exibido'],
+          ] as Array<[keyof typeof extras, string, string]>).map(([chave, rotulo, ajuda]) => (
+            <button
+              key={chave}
+              type="button"
+              className={`btn sm ${extras[chave] ? 'primary' : 'ghost'}`}
+              aria-pressed={extras[chave]}
+              onClick={() => {
+                const proximo = { ...extras, [chave]: !extras[chave] };
+                setExtras(proximo);
+                // Entra no desfazer: um indicador que liga e nao desliga no
+                // "desfazer" e controle que mente.
+                registrarPasso(
+                  {
+                    tipo: tipoGrafico,
+                    timeframe: activeTimeframe,
+                    rsi: rsiExterno,
+                    macd: macdExterno,
+                    ema: emaExterno,
+                    ...proximo,
+                  },
+                  proximo[chave] ? `ligar ${rotulo}` : `desligar ${rotulo}`,
+                );
+              }}
+              title={ajuda}
+            >
+              {rotulo}
+            </button>
+          ))}
+        </div>
+        <div className="btn-row" role="group" aria-label="Tela do grafico">
+          <button
+            type="button"
+            className={`btn sm ${telaCheia ? 'primary' : 'ghost'}`}
+            aria-pressed={telaCheia}
+            onClick={alternarTelaCheia}
+            disabled={!suportaTelaCheia}
+            title={
+              suportaTelaCheia
+                ? telaCheia
+                  ? 'Sair da tela cheia (Esc)'
+                  : 'Grafico em tela cheia (F)'
+                : 'Este ambiente nao permite tela cheia'
+            }
+          >
+            {telaCheia ? 'Sair da tela' : 'Tela cheia'}
           </button>
         </div>
         <div className="btn-row" role="group" aria-label="Timeframe do gráfico">
@@ -1871,7 +2081,7 @@ useEffect(() => {
           e a camada do `x` fica por cima, sem capturar ponteiro — senao ela
           transparenta o crosshair, o arraste e o clique que arma a ordem.
         */}
-      <div className="market-chart-wrap">
+      <div className="market-chart-wrap" ref={wrapRef}>
         <div
           ref={containerRef}
           className="market-chart-canvas"
@@ -1992,7 +2202,20 @@ useEffect(() => {
                   .reverse()
                   .map((candle) => (
                     <tr key={candle.time}>
-                      <td>{new Date(candle.time * 1000).toLocaleString('pt-BR')}</td>
+                      <td>
+                        {/*
+                          HORA DO SERVIDOR, NAO DO FUSO DA MAQUINA.
+                          O `time` do candle do MT5 e a hora de parede do
+                          servidor codificada como epoch. Converter para o fuso
+                          da maquina (UTC-3) mostrava 6 h a menos que o MT5
+                          nesta conta (servidor UTC+3), e perto da meia-noite
+                          trocava o DIA. `timeZone: 'UTC'` reproduz o mesmo
+                          carimbo que o eixo do grafico ja desenha.
+                        */}
+                        {new Date(candle.time * 1000).toLocaleString('pt-BR', {
+                          timeZone: 'UTC',
+                        })}
+                      </td>
                       <td>{candle.open}</td>
                       <td>{candle.high}</td>
                       <td>{candle.low}</td>

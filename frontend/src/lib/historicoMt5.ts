@@ -60,8 +60,17 @@ export type LinhaMt5 = {
    * Vazio nas operacoes — uma compra nao tem forma de deposito.
    */
   forma: string;
-  /** Horario da ABERTURA. */
+  /** Horario da ABERTURA (ISO). Usado para ordenar e calcular. */
   horario: string;
+  /**
+   * O MESMO horario como o MT5 escreve (`2026.10.05 01:46:43`), ou vazio.
+   *
+   * Existe porque o epoch do MT5 e a hora de PAREDE do servidor: formatar o
+   * ISO no fuso da maquina mostrava 6 h a menos nesta conta (servidor UTC+3,
+   * maquina UTC-3). A tela prefere este campo; `horario` continua sendo o
+   * valor de maquina.
+   */
+  horarioServidor: string;
   /**
    * Volume da operacao, ou `null`.
    *
@@ -87,6 +96,8 @@ export type LinhaMt5 = {
    * que a posicao ja tinha fechado.
    */
   horarioFim: string;
+  /** Horario do FECHAMENTO como o MT5 escreve, ou vazio. */
+  horarioFimServidor: string;
   /** Preco do fechamento, ou `null`. Vazio pelo mesmo motivo de `horarioFim`. */
   precoFim: number | null;
   /**
@@ -385,6 +396,7 @@ export function linhasMt5(deals: readonly Deal[]): LinhaMt5[] {
       comentario: String(ultimo.comment ?? primeiro.comment ?? '').trim(),
       forma: mov ? formaMovimentacao(ultimo) : '',
       horario: String(primeiro.executedAt ?? primeiro.close_time ?? ''),
+      horarioServidor: String(primeiro.time_server ?? ''),
       preco: mov || !preco ? null : preco,
       volume: mov || !volume ? null : volume,
       sl: mov ? null : slPreco,
@@ -399,6 +411,7 @@ export function linhasMt5(deals: readonly Deal[]): LinhaMt5[] {
         abertura ali diria que ela fechou no minuto em que abriu.
       */
       horarioFim: saida ? String(saida.executedAt ?? '') : '',
+      horarioFimServidor: saida ? String(saida.time_server ?? '') : '',
       precoFim: saida && toNumber(saida.price) ? toNumber(saida.price) : null,
       lucro: mov ? null : lista.reduce((acc, d) => acc + dealPnl(d), 0),
       mudanca:

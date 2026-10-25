@@ -48,7 +48,10 @@ export type AcaoDoMenu =
   | 'alvo'
   | 'zoom-mais'
   | 'zoom-menos'
-  | 'ajustar';
+  | 'ajustar'
+  | 'ir-para-agora'
+  | 'copiar-preco'
+  | 'tela-cheia';
 
 type Item = {
   chave: AcaoDoMenu;
@@ -76,6 +79,9 @@ const VISUAL: Item[] = [
   { chave: 'zoom-mais', rotulo: 'Aproximar', atalho: '+' },
   { chave: 'zoom-menos', rotulo: 'Afastar', atalho: '-' },
   { chave: 'ajustar', rotulo: 'Ajustar a janela' },
+  { chave: 'ir-para-agora', rotulo: 'Ir para o preco atual' },
+  { chave: 'tela-cheia', rotulo: 'Tela cheia' },
+  { chave: 'copiar-preco', rotulo: 'Copiar preco do ponto' },
 ];
 
 export type MenuGraficoProps = {
