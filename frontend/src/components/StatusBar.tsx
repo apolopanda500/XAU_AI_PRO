@@ -61,7 +61,7 @@
 // Não escolhe corretora. O escopo vem de `escopoAtivo()`, o mesmo do terminal
 // e do gráfico: um seletor próprio aqui foi o defeito que fez a ordem ir para a
 // corretora errada — a tela afirmava uma e o dinheiro ia para outra.
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { apiBase } from '../lib/api';
 import { useAppStore } from '../hooks/useAppStore';
 import { useAutoState } from '../hooks/queries';
@@ -128,6 +128,28 @@ export default function StatusBar() {
   const [erro, setErro] = useState('');
   const caixa = useRef<HTMLDivElement>(null);
 
+  /*
+    A LISTA DE ATIVO SAIO DO CAMPO DE TEXTO (25/10/2026, pedido do dono)
+    ====================================================================
+    "remover barra de pesquisar ativo na parte inferior do app, manter apenas
+    uma lista". O campo digitavel aceitava QUALQUER simbolo — e um simbolo que
+    a corretora nao tem vira motivo de recusa do gateway (§3: nenhum ativo e
+    presumido; quem lista e a corretora, nao o app).
+
+    A lista vem de `/api/ai/trained` (ai_inference._linha_do_modelo): sao os
+    MODELOS treinados, com `pkl_present` dizendo se o artefato esta REALMENTE
+    no disco. "Os modelos validar real todos": todo modelo aparece e recebe a
+    marca do que e — `real` quando o .pkl existe, `sem artefato` desativado
+    quando nao. Nada de esconder ou fingir validacao.
+  */
+  const [modelos, setModelos] = useState<Array<{
+    symbol: string;
+    timeframe: string;
+    pkl_present: boolean;
+    publicable: boolean;
+  }>>([]);
+  const [modelosCarregados, setModelosCarregados] = useState(false);
+
   // Fecha ao clicar fora e no `Escape`, como a lista de latência. Sem isso a
   // lista ficaria aberta por cima da tela depois que o operador mudou de aba.
   useEffect(() => {
@@ -145,6 +167,60 @@ export default function StatusBar() {
       document.removeEventListener('keydown', esc);
     };
   }, [listaAberta]);
+
+  /*
+    Um `fetch` POR ABERTURA NAO: a lista desmontava a cada reabertura e o
+    gateway recebia um pedido a clique. Carrega uma vez e reutiliza.
+  */
+  useEffect(() => {
+    if (!listaAberta || modelosCarregados) return undefined;
+    const controller = new AbortController();
+    fetch(`${apiBase()}/api/ai/trained`, { signal: controller.signal })
+      .then((r) => (r.ok ? r.json() : { models: [] }))
+      .then((d: { models?: Array<Record<string, unknown>> }) => {
+        if (!controller.signal.aborted) {
+          setModelos(
+            (d.models ?? []).map((m) => ({
+              symbol: String(m.symbol ?? ''),
+              timeframe: String(m.timeframe ?? ''),
+              pkl_present: Boolean(m.pkl_present),
+              publicable: Boolean(m.publicable),
+            })),
+          );
+          setModelosCarregados(true);
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setErro('Nao foi possivel ler os modelos.');
+          setModelosCarregados(true);
+        }
+      });
+    return () => controller.abort();
+  }, [listaAberta, modelosCarregados]);
+
+  /*
+    O MESMO PAR PODE TER VARIOS MODELOS (M5, M15, H1...). A "lista" que o dono
+    pediu e de PARES: um item por simbolo, sem repeticao. A marca diz a
+    situacao pior entre os modelos do par — par com um modelo real e um sem
+    disco e "real", porque o operavel existe; tudo sem disco e "sem artefato".
+  */
+  const pares = useMemo(() => {
+    const porPar = new Map<string, { real: boolean; tfs: string[] }>();
+    for (const m of modelos) {
+      const par = m.symbol.toUpperCase();
+      if (!par) continue;
+      const atual = porPar.get(par) ?? { real: false, tfs: [] };
+      porPar.set(par, {
+        // real = pelo menos um modelo do par com artefato no disco.
+        real: atual.real || m.pkl_present,
+        tfs: [...new Set([...atual.tfs, m.timeframe].filter(Boolean))],
+      });
+    }
+    return [...porPar.entries()]
+      .map(([par, v]) => ({ par, real: v.real, tfs: v.tfs }))
+      .sort((a, b) => a.par.localeCompare(b.par));
+  }, [modelos]);
 
   /**
     * Trocar o PAR grava na tela E no motor (13/10/2026).
@@ -275,40 +351,49 @@ export default function StatusBar() {
 
                 Aqui a lista é a mesma: o campo fica no topo, o timeframe embaixo.
               */}
-              <div className="status-tf-ativo" onClick={(e) => e.stopPropagation()}>
-                <label className="status-tf-ativo-rotulo" htmlFor="status-ativo-campo">
-                  Ativo
-                </label>
-                <input
-                  id="status-ativo-campo"
-                  className="status-tf-ativo-input"
-                  defaultValue={simbolo}
-                  /*
-                    Nem exemplo no placeholder (09/10/2026).
-
-                    MEDIDO: era `placeholder="ex.: XAUUSD"`. Um nome de ativo
-                    no codigo — ainda que so como exemplo — e um ativo preso no
-                    produto: ele aparece quebrado em conta que nao o tem
-                    (MEDIDO em `volumeUnidade.ts:31`: XAUUSD NAO EXISTE no
-                    terminal XM) e sugere que o app conhece um ativo que nao
-                    conhece.
-
-                    O campo fica LIVRE: quem manda a lista e o catalogo da
-                    corretora, e o placeholder so explica o que fazer com o
-                    campo — sem nunca nomear um ativo.
-                  */
-                  placeholder="digite ou escolha da lista"
-                  autoFocus
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      void gravarPar(e.currentTarget.value, true);
-                    }
-                    if (e.key === 'Escape') setListaAberta(false);
-                  }}
-                  onBlur={(e) => {
-                    void gravarPar(e.currentTarget.value, false);
-                  }}
-                />
+              <div className="status-tf-ativos" onClick={(e) => e.stopPropagation()}>
+                {/*
+                  O ATIVO DE HOJE SEMPRE APARECE, mesmo sem modelo (o mesmo
+                  cuidado que `SeletorModelo` tomou): esconder o par escolhido
+                  faria quem opera um par sem modelo ver a lista mentir sobre
+                  o estado.
+                */}
+                {!pares.some((p) => p.par === simbolo) && (
+                  <span className="status-tf-atual" aria-current="true">
+                    <span className="status-tf-nome">{simbolo || '—'}</span>
+                    <span className="status-tf-marca">em uso</span>
+                  </span>
+                )}
+                {modelos.length === 0 && (
+                  <span className="status-tf-atual">
+                    <span className="status-tf-nome">sem modelo carregado</span>
+                    <span className="status-tf-marca">—</span>
+                  </span>
+                )}
+                {pares.map((item) => {
+                  return (
+                    <button
+                      key={item.par}
+                      type="button"
+                      role="option"
+                      aria-selected={item.par === simbolo}
+                      disabled={!item.real}
+                      aria-disabled={!item.real}
+                      className={`status-tf-item status-ativo-item${
+                        item.par === simbolo ? ' is-ativo' : ''
+                      }${item.real ? '' : ' sem-disco'}`}
+                      onClick={() => void gravarPar(item.par, true)}
+                      title={
+                        item.real
+                          ? `${item.par} ${item.tfs.join(' · ')} — modelo real no disco; troca o par da tela e do motor`
+                          : `${item.par} — modelo listado sem artefato no disco: não operável`
+                      }
+                    >
+                      <span className="status-tf-nome">{item.par}</span>
+                      <span className="status-tf-marca">{item.real ? `${item.tfs.join('/')} · real` : `${item.tfs.join('/')} · sem artefato`}</span>
+                    </button>
+                  );
+                })}
               </div>
               {MT5_ACEITA.map((tf) => {
                 const soGrafico = !MODELO_ACEITA.has(tf);

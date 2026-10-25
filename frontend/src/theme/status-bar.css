@@ -254,6 +254,41 @@ button.status-item:disabled {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary, #00c6fb) 20%, transparent);
 }
 
+/*
+  A LISTA DE ATIVOS (modelos), no lugar do campo de texto (25/10/2026).
+  =====================================================================
+  O dono pediu: "remover barra de pesquisar ativo ... manter apenas uma lista".
+  A lista e rolavel: 28 modelos treinados nao cabem numa faixa de rodape, e a
+  lista-up da barra (+bottom) tem limite de altura fixo aqui.
+*/
+.status-tf-ativos {
+  display: flex;
+  flex-direction: column;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 4px 2px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 2px;
+}
+
+/* O par em uso SEM modelo: referencia do estado, nao clicavel. */
+.status-tf-atual {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 5px 8px;
+}
+
+.status-tf-item.sem-disco {
+  color: var(--text-muted, #68778c);
+  cursor: not-allowed;
+}
+
+.status-tf-item.sem-disco .status-tf-marca {
+  color: var(--danger, #ff6161);
+}
+
 .status-tf-item {
   display: flex;
   align-items: center;

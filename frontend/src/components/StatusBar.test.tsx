@@ -67,6 +67,20 @@ beforeEach(() => {
   estado.simbolo = 'GOLD';
   vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
     chamadas.push({ url: String(url), body: JSON.parse(String(init?.body ?? '{}')) });
+    if (String(url).includes('/api/ai/trained')) {
+      return {
+        ok: true,
+        json: async () => ({
+          models: [
+            { symbol: 'BTCUSD', timeframe: 'H1', pkl_present: true, publicable: true },
+            { symbol: 'BTCUSD', timeframe: 'H4', pkl_present: true, publicable: true },
+            { symbol: 'ETHUSD', timeframe: 'H1', pkl_present: true, publicable: true },
+            { symbol: 'XAGUSD', timeframe: 'H4', pkl_present: false, publicable: false },
+            { symbol: '', timeframe: 'H1', pkl_present: true, publicable: true },
+          ],
+        }),
+      };
+    }
     return { ok: true, json: async () => ({ ok: true }) };
   });
 });
@@ -103,49 +117,86 @@ describe('StatusBar — um item para ativo e timeframe', () => {
   });
 });
 
-describe('StatusBar — trocar o ativo sem prompt', () => {
-  it('o campo de texto esta no topo da lista', async () => {
-    // O `window.prompt` era bloqueante, somia atras da janela do navegador e
-    // nao aceitava colar com o botao direito.
+describe('StatusBar — trocar o ativo pela LISTA (25/10/2026)', () => {
+  /*
+    PEDIDO DO DONO: "remover barra de pesquisar ativo na parte inferior do app,
+    manter apenas uma lista e os modelos validar real todos". O campo digitavel
+    aceitava qualquer simbolo (§3: nenhum ativo e presumido; quem lista e a
+    corretora). A lista vem de `/api/ai/trained` e cada modelo MarCA o que e:
+    `real` (artefato no disco) ou `sem artefato` (nao operavel).
+  */
+  it('PROVA NEGATIVA: nao existe mais campo de texto para digitar simbolo', async () => {
     render(<StatusBar />);
     await abrir();
-    const campo = document.getElementById('status-ativo-campo') as HTMLInputElement;
-    expect(campo).toBeTruthy();
-    expect(campo.value).toBe('GOLD');
-    // Com foco: quem abriu a lista quer digitar.
-    expect(document.activeElement).toBe(campo);
+    expect(document.getElementById('status-ativo-campo')).toBeNull();
+    expect(document.querySelector('.status-tf-ativo-input')).toBeNull();
   });
 
-  it('Enter grava o par em maiuscula e fecha a lista', async () => {
+  it('a lista traz os modelos reais de /api/ai/trained, um por par', async () => {
     render(<StatusBar />);
     await abrir();
-    const campo = document.getElementById('status-ativo-campo') as HTMLInputElement;
-    fireEvent.change(campo, { target: { value: '  btcusdt ' } });
-    fireEvent.keyDown(campo, { key: 'Enter' });
-    await waitFor(() => expect(document.querySelector('.status-tf-lista')).toBeNull());
-    expect(estado.simbolo).toBe('BTCUSDT');
+    await waitFor(() => expect(document.querySelectorAll('.status-ativo-item').length).toBeGreaterThan(0));
+    const nomes = Array.from(document.querySelectorAll('.status-ativo-item')).map(
+      (n) => n.querySelector('.status-tf-nome')?.textContent,
+    );
+    expect(new Set(nomes).size).toBe(nomes.length);
+    expect(nomes).toContain('BTCUSD');
   });
 
-  it('campo em branco nao apaga o par', async () => {
+  it('modelo SEM artefato nao e operavel e diz a falta', async () => {
     render(<StatusBar />);
     await abrir();
-    const campo = document.getElementById('status-ativo-campo') as HTMLInputElement;
-    fireEvent.change(campo, { target: { value: '   ' } });
-    fireEvent.keyDown(campo, { key: 'Enter' });
-    await waitFor(() => expect(document.querySelector('.status-tf-lista')).toBeNull());
-    expect(estado.simbolo).toBe('GOLD');
+    await waitFor(() =>
+      expect(document.querySelector('.status-ativo-item.sem-disco')).toBeTruthy(),
+    );
+    const morto = document.querySelector('.status-ativo-item.sem-disco') as HTMLButtonElement;
+    expect(morto.disabled).toBe(true);
+    expect(morto.textContent).toContain('sem artefato');
+  });
+
+  it('PROVA: clicar no par real busca o motor com SO o simbolo', async () => {
+    render(<StatusBar />);
+    await abrir();
+    const item = await waitFor(() =>
+      (
+        Array.from(document.querySelectorAll('.status-ativo-item')).find(
+          (n) => n.querySelector('.status-tf-nome')?.textContent === 'BTCUSD',
+        ) ?? null
+      ) as HTMLButtonElement | null,
+    );
+    fireEvent.click(item!);
+    await waitFor(() => {
+      const cfg = chamadas.find((c) => c.url.includes('/api/auto/config'));
+      expect(cfg?.body).toEqual({ simbolo: 'BTCUSD' });
+    });
+    expect(estado.simbolo).toBe('BTCUSD');
+  });
+
+  it('PROVA NEGATIVA: par em uso sem modelo continua na lista', async () => {
+    render(<StatusBar />);
+    await abrir();
+    await waitFor(() => expect(document.querySelector('.status-tf-lista')).toBeTruthy());
+    const atual = document.querySelector('.status-tf-atual') as HTMLElement;
+    expect(atual.textContent).toContain('GOLD');
+    expect(atual.textContent).toContain('em uso');
   });
 });
 
 describe('StatusBar — o timeframe', () => {
-  it('a lista tem os 7 timeframes que o MT5 le', async () => {
+  /** Espera a lista de MODELOS carregar, e devolve os itens de TIMEFRAME. */
+  async function abreComModelos() {
     render(<StatusBar />);
     await abrir();
-    const opcoes = document.querySelectorAll('.status-tf-item');
+    await waitFor(() => expect(document.querySelectorAll('.status-ativo-item').length).toBe(3));
+    return Array.from(document.querySelectorAll('.status-tf-item:not(.status-ativo-item)'));
+  }
+
+  it('a lista tem os 7 timeframes que o MT5 le', async () => {
     // So os que o MT5 sabe ler. O backend recusa o resto, e botao que nao
     // funciona e pior que botao ausente.
+    const opcoes = await abreComModelos();
     expect(opcoes.length).toBe(7);
-    const nomes = Array.from(opcoes).map((n) => n.querySelector('.status-tf-nome')?.textContent);
+    const nomes = opcoes.map((n) => n.querySelector('.status-tf-nome')?.textContent);
     expect(nomes).toEqual(['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1']);
   });
 
@@ -153,8 +204,7 @@ describe('StatusBar — o timeframe', () => {
     // `TIMEFRAMES_VALIDOS` em `ai_inference.py` = M5, M15, H1, H4. M1, M30 e
     // D1 o MT5 le, mas a inferencia recusa. Escolher D1 sem aviso ligaria um
     // motor que nao infere.
-    render(<StatusBar />);
-    await abrir();
+    await abreComModelos();
     const soGrafico = Array.from(document.querySelectorAll('.status-tf-item.so-grafico')).map(
       (n) => n.querySelector('.status-tf-nome')?.textContent,
     );
@@ -164,29 +214,29 @@ describe('StatusBar — o timeframe', () => {
   it('manda SO o timeframe — nao toca em lote, SL e TP', async () => {
     // `configurar()` mescla campo a campo. Enviar o resto sobrescreveria a
     // protecao que o operador configurou, sem ele ter pedido.
-    render(<StatusBar />);
-    await abrir();
-    const d1 = Array.from(document.querySelectorAll('.status-tf-item')).find(
+    await abreComModelos();
+    const d1 = Array.from(document.querySelectorAll('.status-tf-item:not(.status-ativo-item)')).find(
       (n) => n.querySelector('.status-tf-nome')?.textContent === 'D1',
     ) as HTMLButtonElement;
     fireEvent.click(d1);
-    await waitFor(() => expect(chamadas.length).toBe(1));
-    expect(chamadas[0].url).toContain('/api/auto/config');
-    expect(chamadas[0].body).toEqual({ timeframe: 'D1' });
+    await waitFor(() => {
+      const configs = chamadas.filter((c) => c.url.includes('/api/auto/config'));
+      expect(configs.length).toBe(1);
+      expect(configs[0].body).toEqual({ timeframe: 'D1' });
+    });
     for (const campo of ['lote', 'sl_preco', 'tp_preco', 'simbolo', 'broker', 'market']) {
-      expect(campo in chamadas[0].body).toBe(false);
+      expect(campo in chamadas.find((c) => c.url.includes('/api/auto/config'))!.body).toBe(false);
     }
   });
 
   it('nao chama o gateway ao escolher o timeframe que ja esta', async () => {
-    render(<StatusBar />);
-    await abrir();
-    const h1 = Array.from(document.querySelectorAll('.status-tf-item')).find(
+    await abreComModelos();
+    const h1 = Array.from(document.querySelectorAll('.status-tf-item:not(.status-ativo-item)')).find(
       (n) => n.querySelector('.status-tf-nome')?.textContent === 'H1',
     ) as HTMLButtonElement;
     fireEvent.click(h1);
     await waitFor(() => expect(document.querySelector('.status-tf-lista')).toBeNull());
-    expect(chamadas.length).toBe(0);
+    expect(chamadas.filter((c) => c.url.includes('/api/auto/config')).length).toBe(0);
   });
 
   it('a lista fecha no Escape', async () => {
@@ -235,15 +285,20 @@ describe('StatusBar — o ponto de conexao', () => {
 });
 
 describe('StatusBar � o par da barra configura o motor', () => {
-  it('PROVA: Enter com par novo avisa o motor com SO o simbolo', async () => {
+  it('PROVA: clicar num par da lista avisa o motor com SO o simbolo', async () => {
     // MEDIDO na captura (par EURUSD na barra, grafico em BTCUSD): a barra
-    // gravava so a tela. Agora o gesto configura, e `configurar` mescla �
+    // gravava so a tela. Agora o gesto configura, e `configurar` mescla —
     // lote, SL, TP e timeframe ficam como estao.
     render(<StatusBar />);
     await abrir();
-    const campo = document.getElementById('status-ativo-campo') as HTMLInputElement;
-    fireEvent.change(campo, { target: { value: 'ethusd' } });
-    fireEvent.keyDown(campo, { key: 'Enter' });
+    const item = await waitFor(() =>
+      (
+        Array.from(document.querySelectorAll('.status-ativo-item')).find(
+          (n) => n.querySelector('.status-tf-nome')?.textContent === 'ETHUSD',
+        ) ?? null
+      ) as HTMLButtonElement | null,
+    );
+    fireEvent.click(item!);
     await waitFor(() => {
       const cfg = chamadas.find((c) => String(c.url).includes('/api/auto/config'));
       expect(cfg?.body).toEqual({ simbolo: 'ETHUSD' });
@@ -251,14 +306,18 @@ describe('StatusBar � o par da barra configura o motor', () => {
     expect(estado.simbolo).toBe('ETHUSD');
   });
 
-  it('PROVA NEGATIVA: par igual ao atual nao chama o gateway', async () => {
+  it('PROVA NEGATIVA: par igual ao da lista nao chama o gateway', async () => {
+    estado.simbolo = 'ETHUSD';
     render(<StatusBar />);
     await abrir();
-    const campo = document.getElementById('status-ativo-campo') as HTMLInputElement;
-    fireEvent.change(campo, { target: { value: 'GOLD' } });
-    fireEvent.keyDown(campo, { key: 'Enter' });
+    await waitFor(() => expect(document.querySelectorAll('.status-ativo-item').length).toBe(3));
+    const item = Array.from(document.querySelectorAll('.status-ativo-item')).find(
+      (n) => n.querySelector('.status-tf-nome')?.textContent === 'ETHUSD',
+    ) as HTMLButtonElement | null;
+    expect(item).toBeTruthy();
+    fireEvent.click(item!);
     await waitFor(() => expect(document.querySelector('.status-tf-lista')).toBeNull());
-    expect(chamadas.length).toBe(0);
+    expect(chamadas.filter((c) => String(c.url).includes('/api/auto/config')).length).toBe(0);
   });
 });
 
