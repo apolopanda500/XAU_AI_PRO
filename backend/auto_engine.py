@@ -1592,20 +1592,20 @@ def sugerir_limites(simbolo: str, timeframe: str, broker: str, market: str) -> d
     # Faixas iniciais (conservadoras). Cada uma tem o motivo em `base`, e a
     # tabela permite ajustar — o padrao da IA e ponto de partida, nao trava.
     if atr_pct < 0.5:
-        risco = 1.0
+        risco = 2.0
     elif atr_pct < 1.5:
-        risco = 0.5
+        risco = 1.0
     elif atr_pct < 3.0:
+        risco = 0.5
+    else:
         risco = 0.3
+    risco = _faixa(risco, 0.1, 5.0)
+    if edge >= 0.10:
+        posicoes, por_dia, perda_dia = 20, 50, 5.0
+    elif edge >= 0.05:
+        posicoes, por_dia, perda_dia = 10, 25, 3.0
     else:
-        risco = 0.2
-    risco = _faixa(risco, 0.1, 2.0)
-    if edge >= 0.15:
-        posicoes, por_dia, perda_dia = 3, 8, 3.0
-    elif edge >= 0.08:
-        posicoes, por_dia, perda_dia = 2, 5, 2.0
-    else:
-        posicoes, por_dia, perda_dia = 1, 3, 1.0
+        posicoes, por_dia, perda_dia = 5, 10, 2.0
     if edge > 0:
         # FOLGA DE 10% ABAIXO DO EDGE MEDIDO: sugerir o minimo EXATAMENTO no
         # medido (0,114 para 0,114) deixa o motor na fronteira — recusa com
