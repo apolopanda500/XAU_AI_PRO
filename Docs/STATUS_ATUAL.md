@@ -1,6 +1,6 @@
 ﻿# STATUS ATUAL DO PROJETO
 
-**Data:** 23/10/2026
+**Data:** 25/10/2026
 **Versão:** 1.2.9
 **Status:** catálogo do MT5 **classificado pela hierarquia** (o ouro deixou de
 ser `other`), gráfico servido **pela corretora**, conexões com escolha explícita
@@ -25,7 +25,8 @@ Diz o que mudou, o que foi medido e o que ficou aberto. Este arquivo é o resumo
 | `tests/test_classificacao_catalogo.py` | **12 passed** |
 | `tests/test_identidade_gateway_build.py` | **5 passed** |
 | `tests/test_mql5_compila.py` | **2 passed** (MetaEditor invocado) |
-| `vitest run` | **950 passed** (77 arquivos) |
+| `tests/test_trading_mcp.py` | **24 passed** (inclui 4 novos: auth header) |
+| `vitest run` | **979 passed** (81 arquivos) |
 | `tsc --noEmit` | **exit 0** |
 | `/api/universal/assets` no artefato | `XAUUSD=metal`, `EURUSD=forex` |
 | gráfico no app 1.2.9 | **"Candles OHLC reais · MT5"** — não mais `yahoo` |
@@ -54,7 +55,7 @@ Os 9 `skip` são os já documentados (CI Linux onde o MetaEditor não existe,
 | Nome da conexão | invadia a coluna CORRETORA | `table-layout: fixed` + quebra |
 | "Casas decimais" | slider com **0 leitores** | removido (slider + campo do store) e documentado |
 | Identidade do build | `1.2.4` escrito à mão em `main.rs` e `main.tsx` | derivada de `Docs/version.json` (`build.rs` + `version.ts`) |
-| Versão do EA | `#property 1.240`, `EA_VERSION_STRING 1.2.4` | **1.2.8** (recompilado pelo MetaEditor via teste) |
+| Versão do EA | `#property 1.240`, `EA_VERSION_STRING 1.2.4` | **1.2.9** (`#property version "1.290"`, `EA_VERSION_STRING "1.2.9"`, log MT5 confirma) |
 | Gate de versão | **vermelho desde 1.2.5** | verde |
 
 ---
@@ -84,24 +85,26 @@ Os 9 `skip` são os já documentados (CI Linux onde o MetaEditor não existe,
 
 ## ABERTO (ação do dono, não do ciclo)
 
-1. **Reanexar o EA no gráfico.** O EA em execução loga `[VERSION] v1.2.0`
-   enquanto a fonte já é 1.2.8. Compilar não reanexa (AGENTS 7).
+1. **~~Reanexar o EA no gráfico~~** ✅ **RESOLVIDO 25/10/2026** — EA em execução loga `[VERSION] v1.2.9 | build 2026.10.23` em múltiplos gráficos (XAUUSD,M5/H1, USDJPY,H1, USDCNH,H1, USDSEK,H1). Fonte: `#property version "1.290"` + `EA_VERSION_STRING "1.2.9"`.
+
 2. **Credencial de conta real**: quando existir, `XAU_ACCOUNT_KIND=real`.
    Hoje a conta é `MetaQuotes-Demo` e o script de prontidão reprova nesse item.
-3. **MCP de trading e o token de sessão**: token aleatório por execução; o do
-   `.env` devolve **401** (fail-closed correto). Expor degrada a segurança —
-   decisão do dono.
+
+3. **MCP de trading e o token de sessão**: token aleatório por execução (Tauri injeta); o do `.env` devolve **401** (fail-closed correto). Expor degrada a segurança — decisão do dono.
+
 4. **Modelos**: 0 de 40 com edge medido acima do mínimo. O AUTO liga e não
    opera sem modelo. Baixar `min_edge` é proibido.
+
 5. **Instalador**: MSI falha nesta máquina (`light.exe`); NSIS é o que funciona.
+
 6. **Backup da instalação anterior**: `Temp\instalacao_anterior_20261022`
    (949 MB) — apagar depois de confirmar o app novo no ar?
+
 7. **Conexão XMGlobal antiga** segue gravada; apagar é decisão do dono.
+
 8. **Fechamento espontâneo do app** em sessão longa: medido em 10/10, sem log.
-9. **Git**: **60 entradas** pendentes em `git status --porcelain` (bump 1.2.8,
-   `build.rs`, `parNaTela`, `asset_registry`, testes novos, `global.css`,
-   `.mq5`/`.mqh`). Commit não foi feito — não pedido; o doc do ciclo lista os
-   arquivos tocados.
+
+9. **Git**: ✅ **COMMITADO + PUSH** (25/10/2026, commit `7ce7043`) — bump 1.2.9, `build.rs`, `parNaTela`, `asset_registry`, testes MCP auth, `global.css`, `.mq5`/`.mqh`.
 
 ---
 
