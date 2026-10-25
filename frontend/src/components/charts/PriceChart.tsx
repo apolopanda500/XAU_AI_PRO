@@ -1400,13 +1400,16 @@ useEffect(() => {
       }
     };
     const perto = (clientY: number) => {
-      const p = yParaPreco(clientY);
-      if (p === null) return null;
+      const rect = el.getBoundingClientRect();
+      const py = clientY - rect.top;
       let melhor: typeof alvo & { dist: number } | null = null;
       for (const l of moveis) {
-        const dist = Math.abs(l.price - p);
-        const tol = Math.max(Math.abs(p) * 0.002, 0.01);
-        if (dist <= tol && (!melhor || dist < melhor.dist)) melhor = { ticket: l.ticket, kind: l.kind, dist };
+        let ly: number | null = null;
+        try { ly = series.priceToCoordinate(l.price); } catch { ly = null; }
+        if (ly === null) continue;
+        const distPx = Math.abs(ly - py);
+        // 8px de tolerancia: pegar a linha e facil, mas nao pega a linha vizinha.
+        if (distPx <= 8 && (!melhor || distPx < melhor.dist)) melhor = { ticket: l.ticket, kind: l.kind, dist: distPx };
       }
       return melhor;
     };
@@ -1554,13 +1557,15 @@ useEffect(() => {
     };
     /** A linha de ordem mais proxima do cursor, para o arraste. */
     const perto = (clientY: number) => {
-      const p = yParaPreco(clientY);
-      if (p === null) return null;
+      const rect = el.getBoundingClientRect();
+      const py = clientY - rect.top;
       let melhor: { papel: LinhaOrdem['papel']; linha: LinhaOrdem; dist: number } | null = null;
       for (const l of removeis) {
-        const dist = Math.abs(l.preco - p);
-        const tol = Math.max(Math.abs(p) * 0.002, 0.01);
-        if (dist <= tol && (!melhor || dist < melhor.dist)) melhor = { papel: l.papel, linha: l, dist };
+        let ly: number | null = null;
+        try { ly = series.priceToCoordinate(l.preco); } catch { ly = null; }
+        if (ly === null) continue;
+        const distPx = Math.abs(ly - py);
+        if (distPx <= 8 && (!melhor || distPx < melhor.dist)) melhor = { papel: l.papel, linha: l, dist: distPx };
       }
       return melhor;
     };
