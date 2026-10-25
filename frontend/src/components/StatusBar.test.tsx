@@ -108,13 +108,6 @@ describe('StatusBar — um item para ativo e timeframe', () => {
     expect(container.querySelector('.status-rotulo')).toBeNull();
   });
 
-  it('a latencia fica no lado direito, como no MT5', () => {
-    const { container } = render(<StatusBar />);
-    const direita = container.querySelector('.status-bar-dir') as HTMLElement;
-    expect(direita.querySelector('[data-testid="latencias"]')).toBeTruthy();
-    const esquerda = container.querySelector('.status-bar-esq') as HTMLElement;
-    expect(esquerda.querySelector('[data-testid="latencias"]')).toBeNull();
-  });
 });
 
 describe('StatusBar — trocar o ativo pela LISTA (25/10/2026)', () => {
@@ -321,20 +314,3 @@ describe('StatusBar � o par da barra configura o motor', () => {
   });
 });
 
-describe('StatusBar — o ms e o da conta ativa', () => {
-  it('PROVA: com conta MEXC ativa, a latencia recebe mexc', () => {
-    window.localStorage.setItem('xau-active-account', 'mexc:crypto-spot');
-    const { container } = render(<StatusBar />);
-    expect(container.querySelector('[data-testid="latencias"]')?.getAttribute('data-ativa')).toBe(
-      'mexc',
-    );
-  });
-
-  it('PROVA NEGATIVA: sem conta ativa, segue a melhor (sem valor)', () => {
-    window.localStorage.removeItem('xau-active-account');
-    const { container } = render(<StatusBar />);
-    expect(container.querySelector('[data-testid="latencias"]')?.getAttribute('data-ativa')).toBe(
-      '',
-    );
-  });
-});

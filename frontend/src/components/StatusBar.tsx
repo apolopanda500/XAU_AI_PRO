@@ -67,7 +67,6 @@ import { useAppStore } from '../hooks/useAppStore';
 import { useAutoState } from '../hooks/queries';
 import { escopoAtivo } from '../lib/escopoAtivo';
 import { parNaTela } from '../lib/parNaTela';
-import LatenciaBar from './LatenciaBar';
 import '../theme/status-bar.css';
 
 /**
@@ -454,10 +453,7 @@ export default function StatusBar() {
             {wsConnected ? 'Tempo real conectado' : 'Reconectando'}
           </span>
         </span>
-        {/* A latência fica no lado direito, como no MT5: é informação de
-            rodapé, e o operador lê sem clicar. */}
-        <LatenciaBar ativa={contaAtiva.broker || undefined} />
-      </div>
+</div>
     </footer>
   );
 }
