@@ -1388,6 +1388,8 @@ useEffect(() => {
     let alvo: { ticket: number | string; kind: 'sl' | 'tp' } | null = null;
     let precoSessao = 0;
     let frame = 0;
+    let pressY = 0;
+    let moveu = false;
     const yParaPreco = (clientY: number): number | null => {
       const rect = el.getBoundingClientRect();
       try {
@@ -1438,6 +1440,7 @@ useEffect(() => {
         el.style.cursor = perto(e.clientY) ? 'ns-resize' : '';
         return;
       }
+      if (Math.abs(e.clientY - pressY) > 3) moveu = true;
       const p = yParaPreco(e.clientY);
       if (p === null) return;
       precoSessao = p;
@@ -1452,6 +1455,7 @@ useEffect(() => {
         window.cancelAnimationFrame(frame);
         frame = 0;
       }
+      if (!moveu) return;
       const p = yParaPreco(e.clientY);
       if (p !== null) onMoveLine(final.ticket, final.kind, Math.round(p * 100) / 100);
     };
@@ -1461,6 +1465,8 @@ useEffect(() => {
         alvo = { ticket: achou.ticket, kind: achou.kind };
         const atual = moveis.find((l) => l.ticket === achou.ticket && l.kind === achou.kind);
         precoSessao = atual ? atual.price : 0;
+        pressY = e.clientY;
+        moveu = false;
         el.style.cursor = 'ns-resize';
         e.preventDefault();
         // A linha de posicao foi segurada: o clique nao arma ordem. Ver
@@ -1596,6 +1602,8 @@ useEffect(() => {
     let alvo: { papel: LinhaOrdem['papel']; linha: LinhaOrdem } | null = null;
     let precoSessao = 0;
     let frame = 0;
+    let pressYOrdem = 0;
+    let moveuOrdem = false;
     const redesenhar = () => {
       frame = 0;
       if (!alvo) return;
@@ -1623,6 +1631,7 @@ useEffect(() => {
         el.style.cursor = perto(e.clientY) ? 'ns-resize' : '';
         return;
       }
+      if (Math.abs(e.clientY - pressYOrdem) > 3) moveuOrdem = true;
       const p = yParaPreco(e.clientY);
       if (p === null) return;
       precoSessao = p;
@@ -1637,6 +1646,7 @@ useEffect(() => {
         window.cancelAnimationFrame(frame);
         frame = 0;
       }
+      if (!moveuOrdem) return;
       const p = yParaPreco(e.clientY);
       if (p !== null) onMoverLinhaOrdem?.(papel, p);
     };
@@ -1691,6 +1701,8 @@ useEffect(() => {
       if (achou) {
         alvo = { papel: achou.papel, linha: achou.linha };
         precoSessao = achou.linha.preco;
+        pressYOrdem = e.clientY;
+        moveuOrdem = false;
         el.style.cursor = 'ns-resize';
         e.preventDefault();
       }
