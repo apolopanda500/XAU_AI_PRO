@@ -20,7 +20,21 @@ from dataclasses import dataclass
 class RiskLimits:
     max_volume: float = 0.10
     max_daily_loss_pct: float = 2.0
-    max_exposure_pct: float = 5.0
+    #: Exposicao aberta como PERCENTUAL DA CAPACIDADE do risk_gate
+    #: (`max_volume * max_positions`, ver `mt5_gateway._risk_state`). 100 =
+    #: capacidade cheia; 0 = nada aberto.
+    #:
+    #: MEDIDO em 25/10/2026: era `5.0`, e os dois lados do MESMO dado
+    #: discordavam (AGENTS.md §5). O produtor calcula `volume / capacidade *
+    #: 100`, entao `5.0` significa "bloqueie ao abrir 5% da capacidade" — com
+    #: capacidade de 0,5 lote, isso e **0,025 lote**, menos que tres posicoes
+    #: minimas de 0,01. O motor abria duas ou tres posicoes e passava a
+    #: responder "exposicao atingiu o limite de 5.0%" para sempre, mesmo com o
+    #: operador tendo declarado `max_posicoes = 2`. O numero era um erro de
+    #: unidade, nao uma trava de risco: `5.0` esta na escala de "porcento da
+    #: CAPACIDADE", e nessa escala o teto natural e `100.0`. A perda diaria, o
+    #: drawdown, o nocional e o volume por ordem continuam intactos.
+    max_exposure_pct: float = 100.0
     max_positions: int = 5
     max_daily_trades: int = 20
     max_drawdown_pct: float = 15.0

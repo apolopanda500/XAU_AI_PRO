@@ -29,7 +29,11 @@ def test_trade_within_limits_is_allowed():
 @pytest.mark.parametrize('overrides', [
     {'volume': 0.11},
     {'daily_loss_pct': 2},
-    {'exposure_pct': 5},
+    # A exposicao e medida como % da CAPACIDADE (0-100). O teto padrao e 100
+    # (capacidade cheia); para provar a trava, o limite de 5% e declarado
+    # explicitamente aqui — o teste mede a REGRA, nao o acidente de default.
+    # Ver `test_exposicao_e_percentual_da_capacidade`.
+    {'exposure_pct': 5, 'limits': RiskLimits(max_exposure_pct=5.0)},
     {'open_positions': 5},
     {'daily_trades': 20},
     {'drawdown_pct': 15},
@@ -85,3 +89,25 @@ def test_notional_negativo_ou_nan_e_recusado():
 def test_spread_zero_e_aceito():
     # Spread zero e legitimo em horario de pico; nao e erro de dado.
     validate_trade(**{**BASE_RISK, 'spread': 0.0})
+
+
+# --- exposicao: % da capacidade, nao um teto magico de 5% --------------------
+#
+# MEDIDO em 25/10/2026: com `max_exposure_pct = 5.0` o motor parava em 0,025
+# lote (5% de 0,5 de capacidade) e respondia "exposicao atingiu o limite de
+# 5.0%" para sempre. Aqui ficam as duas provas: a capacidade cheia passa, e
+# acima dela reprova.
+
+
+def test_exposicao_e_percentual_da_capacidade():
+    # 3 posicoes minimas (0,03 lote) = 6% da capacidade de 0,5: precisa PASSAR.
+    # Era este o caso real que o motor recusava.
+    validate_trade(**{**BASE_RISK, 'exposure_pct': 6.0})
+    # Quase a capacidade cheia ainda passa; o teto `>= 100` fica para o teste
+    # seguinte (quem barra volume e nocional e o proprio `max_volume`).
+    validate_trade(**{**BASE_RISK, 'exposure_pct': 99.99})
+
+
+def test_exposicao_acima_da_capacidade_e_recusada():
+    with pytest.raises(ValueError, match='exposi'):
+        validate_trade(**{**BASE_RISK, 'exposure_pct': 100.01})

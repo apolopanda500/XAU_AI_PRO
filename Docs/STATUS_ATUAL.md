@@ -41,6 +41,22 @@ Os 9 `skip` são os já documentados (CI Linux onde o MetaEditor não existe,
 
 ---
 
+## O QUE FOI FEITO NO CICLO DE 25/10 (exposição do motor)
+
+| item | antes (medido) | agora (medido) |
+|---|---|---|
+| `max_exposure_pct` (risk_gate) | **5.0** — `exposure_pct` é `volume/capacidade*100` (capacidade 0,5 lote) → travava em **0,025 lote** | **100.0** — 100 = capacidade cheia; erros de unidade corrigidos |
+| Síntoma real | motor respondia "exposição atingiu o limite de 5.0%" para sempre com 2–3 posições mínimas | exposição de 6% (3×0,01) passa; só bloqueia acima de 100% |
+| Prova negativa | teste `exposure_pct: 5` "reprovava" por falta de `spread`/`notional` (§6) | teste agora exige spread/notional e usa `RiskLimits(max_exposure_pct=5)` explícito |
+| Gateway no ar | `mt5-gateway.exe` 1.2.9 antigo (5%) | reconstruído, hash idêntico em `dist`/`instalado`/`src-tauri`; `/health` 401 sem token |
+| Testes | — | `risk_gate`+`rejection`+`auto_engine`+`contrato`+`simulation` **183 passed**; gateway **79 passed**; artefato **exit 0** |
+
+> Próximo bloqueio previsto: 3 posições abertas do EA × `max_posicoes = 2` do motor
+> → o motor vai recusar "já há 3 posições (max 2)". Ação do dono: aumentar
+> `Máximo de posições` para ≥ 4 **ou** fechar posições.
+
+---
+
 ## O QUE FOI FEITO NO CICLO DE 23/10
 
 | item | antes (medido) | agora (medido) |
