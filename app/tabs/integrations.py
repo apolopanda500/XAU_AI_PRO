@@ -25,6 +25,7 @@ from app.integrations_client import (
     load_mcp_servers, mcp_server_ping,
     instalados,
     catalogo,
+    catalogo_defeitos,
     mcp_pesquisar,
 )
 from app import updater
@@ -154,14 +155,11 @@ class IntegrationsTab:
             e_key = _entry(form, width=20, show="*")
             e_key.insert(0, server["api_key"])
             e_key.grid(row=row + 1, column=2, columnspan=2, padx=4, pady=(0, 2))
-            # Campo DATABASE_URL extra apenas para o Postgres/SQLite
-            e_db = None
-            if sid == "postgres_sqlite":
-                e_db = _entry(form, width=46)
-                e_db.insert(0, server.get("database_url", ""))
-                e_db.grid(row=row + 2, column=2, columnspan=2, padx=4, pady=(0, 2))
-                tk.Label(form, text="DATABASE_URL", bg=Theme.CARD, fg=Theme.TEXT_SECONDARY,
-                         font=(Theme.FONT_FAMILY, 8)).grid(row=row + 2, column=0, columnspan=2, sticky="w", padx=4)
+            # REMOVIDO em 25/10/2026: campo DATABASE_URL, que so o servidor
+            # `postgres_sqlite` usava. Esse id nao existe no catalogo (nenhum
+            # .json em mcp/servers/) e `call_tool` o recusaria como "nao
+            # aprovado" antes de chegar ao banco - o campo era inalcancavel e
+            # prometia uma capacidade que o app nao tem.
             var = tk.BooleanVar(value=server["enabled"])
             tk.Checkbutton(form, text="Ativo", variable=var, bg=Theme.CARD,
                            fg=Theme.TEXT_SECONDARY, selectcolor=Theme.PANEL,
@@ -171,8 +169,6 @@ class IntegrationsTab:
             res.grid(row=row + 1, column=3, columnspan=2, sticky="w", padx=4, pady=(0, 2))
             self.mcp_server_entries[sid] = {"endpoint": e_end, "api_key": e_key,
                                             "enabled": var, "result": res}
-            if e_db is not None:
-                self.mcp_server_entries[sid]["database_url"] = e_db
             row += 2
         # Botoes de acao
         row_btns = tk.Frame(card.body, bg=Theme.CARD)
@@ -183,12 +179,9 @@ class IntegrationsTab:
     def test_mcp_servers(self) -> None:
         for sid, widgets in self.mcp_server_entries.items():
             server = self.mcp_servers.get(sid, {})
-            extra = {"database_url": ""}
-            if "database_url" in widgets:
-                extra["database_url"] = widgets["database_url"].get().strip()
             server = dict(server, endpoint=widgets["endpoint"].get().strip(),
                           api_key=widgets["api_key"].get().strip(),
-                          enabled=widgets["enabled"].get(), **extra)
+                          enabled=widgets["enabled"].get())
             server_id = sid
 
             def worker(srv: dict[str, Any], sid: str) -> None:
@@ -221,8 +214,6 @@ class IntegrationsTab:
                 "api_key": widgets["api_key"].get().strip(),
                 "enabled": widgets["enabled"].get(),
             }
-            if "database_url" in widgets:
-                rec["database_url"] = widgets["database_url"].get().strip()
             servers[sid] = rec
         c.set("integrations", "mcp", "servers", value=servers)
         self.mcp_servers = load_mcp_servers()
@@ -251,6 +242,13 @@ class IntegrationsTab:
         self._mcp_market_items = []
         tk.Label(card.body, text="Instalados: " + (", ".join(instalados()) or "nenhum"),
                  bg=Theme.CARD, fg=Theme.TEXT_SECONDARY, font=(Theme.FONT_FAMILY, 8)).pack(fill="x", padx=8, pady=(0, 8))
+        # Motivo de arquivo recusado, para nao sumir em silencio.
+        defeitos = catalogo_defeitos()
+        if defeitos:
+            texto = "; ".join(f"{d['id']}: {d['motivo']}" for d in defeitos)
+            tk.Label(card.body, text="Catalogo com problema — " + texto,
+                     bg=Theme.CARD, fg=Theme.DANGER, font=(Theme.FONT_FAMILY, 8),
+                     anchor="w", justify="left", wraplength=900).pack(fill="x", padx=8, pady=(0, 8))
 
     def mcp_market_search(self) -> None:
         q = self.mcp_search_entry.get().strip()
