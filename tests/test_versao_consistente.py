@@ -53,7 +53,17 @@ VERSION_MANAGER = MQ5 / "Enterprise" / "VersionManager.mqh"
 BACKUP_MANAGER = MQ5 / "Enterprise" / "BackupManager.mqh"
 
 RE_PROPERTY = re.compile(r'#property\s+version\s+"([^"]+)"')
-RE_PRINT = re.compile(r'Print\(\s*"[^"]*XAU_AI_PRO\s+v([0-9.]+)"')
+# Duas formas aceitas do Print de versao no log do EA:
+#   1. literal:      Print("XAU_AI_PRO v1.2.9")         -> versao na string;
+#   2. fonte unica:  Print("        XAU_AI_PRO v" + EA_VERSION_STRING)
+#      -> versao e constante que RE_EA_VERSION ja trava contra VERSION.
+#      Aceitar a forma 2 NAO afrouxa a trava: o literal sem numero fica sem
+#      grupo e o teste abaixo so o aceita COM a constante na mesma chamada;
+#      sumir o Print inteiro continua reprovando (`achados` vazio).
+RE_PRINT_LITERAL = re.compile(r'Print\(\s*"[^"]*XAU_AI_PRO\s+v([0-9.]+)"')
+RE_PRINT_CONCAT = re.compile(
+    r'Print\(\s*"[^"]*XAU_AI_PRO\s+v"\s*\+\s*EA_VERSION_STRING'
+)
 RE_EA_VERSION = re.compile(r'#define\s+EA_VERSION_STRING\s+"([^"]+)"')
 RE_MANIFEST_LITERAL = re.compile(r'FileWrite\([^)]*XAU_AI_PRO\s+v([0-9.]+)"', re.DOTALL)
 
@@ -144,13 +154,23 @@ def test_print_de_versao_do_log(versao):
     if not EA.is_file():
         pytest.skip(f"EA nao encontrado: {EA}")
     texto = EA.read_text(encoding="utf-8", errors="replace")
-    achados = RE_PRINT.findall(texto)
-    assert achados, 'o .mq5 nao tem nenhum Print("XAU_AI_PRO v...") — o log nao diz a versao'
-    for declarado in achados:
+    literais = RE_PRINT_LITERAL.findall(texto)
+    # Forma "fonte unica": a versao vem de EA_VERSION_STRING, que o teste
+    # `test_ea_version_string_do_version_manager` ja trava contra VERSION.
+    # O print tem de existir; se for a forma 2, ele nao chega como numero
+    # aqui, mas precisa aparecer a constante na MESMA chamada.
+    ha_print_concatenado = RE_PRINT_CONCAT.search(texto) is not None
+    assert literais or ha_print_concatenado, (
+        'o .mq5 nao tem nenhum Print("XAU_AI_PRO v...") — o log nao diz a versao'
+    )
+    for declarado in literais:
         assert declarado == versao, (
             f'o log do EA anuncia v{declarado} e o produto e v{versao}. '
             "E a primeira coisa que se le quando algo da errado."
         )
+    assert ha_print_concatenado or literais == [versao], (
+        f'o Print do log diz {literais} e o produto e v{versao}'
+    )
 
 
 def test_manifesto_de_backup_usa_a_fonte_unica(versao):
