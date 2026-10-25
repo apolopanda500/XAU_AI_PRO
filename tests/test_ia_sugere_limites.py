@@ -59,9 +59,33 @@ def test_sugestao_traz_limites_e_motivos(monkeypatch) -> None:
     assert esperados <= set(r["limites"])
     # Cada numero tem o motivo: sem ele, a tabela receberia magia.
     assert esperados <= set(r["base"])
-    assert r["limites"]["confianca_minima"] == 82
-    assert r["limites"]["edge_minimo"] == 0.12
+    # CONFIANCA COM FOLGA (25/10/2026): o piso fixo de 50 era o piso que media
+    # 50 para um modelo medido a 36,8% — motor SEMPRE recusando. A sugestao
+    # agora e medida −5 p.p. (77 para 82), nunca acima da medida (o proprio
+    # modelo tem de passar pela sugestao)...
+    assert r["limites"]["confianca_minima"] == 77
+    # ...e edge com folga de 10% para baixo (0,12 para 0,12 exato deixa o motor
+    # na fronteira do proprio edge dois desvios de recusar).
+    assert r["limites"]["edge_minimo"] == 0.108
     assert r["serie"]["velas"] == 100
+    # A base explica o porque: o numero vem acompanhado do metodo.
+    assert "folga" in r["base"]["confianca_minima"]
+    assert "folga" in r["base"]["edge_minimo"]
+
+
+def test_sugestao_nunca_acima_da_medida(monkeypatch) -> None:
+    """PROVA NEGATIVA da trava: sugerir minimo acima do que o modelo mede
+    hoje e o defeito medido no painel do dono (confianca 36,8% minimo 50)."""
+    _cenario(monkeypatch, confianca=36.8, edge=0.114)
+    r = auto_engine.sugerir_limites("EURUSD", "H1", "mt5", "forex")
+    assert r["ok"] is True
+    conf, edge = r["serie"]["confianca"], r["serie"]["edge"]
+    # O MODELO MEDIDO hoje tem de passar pela sugerico: min. <= medida.
+    assert r["limites"]["confianca_minima"] <= conf
+    assert r["limites"]["edge_minimo"] <= edge
+    # Piso de 32: um modelo de 36,8% recebe um limite que ele passa de verdade.
+    assert r["limites"]["confianca_minima"] == 32
+    assert r["limites"]["edge_minimo"] == 0.1026
 
 
 def test_banca_nunca_vem_sugerida(monkeypatch) -> None:

@@ -1576,9 +1576,28 @@ def sugerir_limites(simbolo: str, timeframe: str, broker: str, market: str) -> d
         posicoes, por_dia, perda_dia = 2, 5, 2.0
     else:
         posicoes, por_dia, perda_dia = 1, 3, 1.0
+    if edge > 0:
+        # FOLGA DE 10% ABAIXO DO EDGE MEDIDO: sugerir o minimo EXATAMENTO no
+        # medido (0,114 para 0,114) deixa o motor na fronteira — recusa com
+        # meio desvio do proprio edge (liga hoje, recusa amanha). O teto e o
+        # medido x 0,95: a sugestao nao pode impor um minimo que o
+        # modelo atual nao passa.
+        edge_sugerido = _faixa(round(edge * 0.9, 4), 0.0, round(edge * 0.95, 4))
+    else:
+        edge_sugerido = 0
+    # CONFIANCA COM FOLGA (25/10/2026): o piso fixo de 50 era o comentario que
+    # media 50 para um modelo medido a 36,8% — sugerir o minimo acima da
+    # confianca medida e declarar o motor desligado por desenho (MEDIDO: o
+    # painel do dono mostrava exatamente isso). Sugestao = medida - 5 p.p.,
+    # so no piso de 30 e teto de 60: nunca acima do que o modelo mede hoje,
+    # porque a sugestao nao pode impor um minimo que o modelo atual nao passa.
+    # proteção: o teto e a PROPRIA medida — a sugestao nunca fica acima do
+    # que o modelo consegue hoje (o defeito medido: minim um de 50 p/ medida
+    # de 36,8% = motor desligado por desenho).
+    confianca_sugerida = _faixa(round(conf) - 5, 30, round(conf))
     limites = {
-        "confianca_minima": _faixa(round(conf), 50, 90),
-        "edge_minimo": round(edge, 4) if edge > 0 else 0,
+        "confianca_minima": confianca_sugerida,
+        "edge_minimo": edge_sugerido,
         "risco_por_trade_pct": risco,
         "max_posicoes": posicoes,
         "max_operacoes_dia": por_dia,
@@ -1586,12 +1605,12 @@ def sugerir_limites(simbolo: str, timeframe: str, broker: str, market: str) -> d
         "intervalo_minutos": INTERVALO_POR_TIMEFRAME.get(periodo, 30),
     }
     base = {
-        "confianca_minima": f"confianca atual do modelo: {conf:.0f}%",
-        "edge_minimo": f"edge medido: {edge:.4f}",
+        "confianca_minima": f"confianca medida {conf:.1f}% −5 p.p. de folga (minimo 30; teto: a propria medida)",
+        "edge_minimo": f"edge medido {edge:.4f} −10% de folga, teto medido×0,95",
         "risco_por_trade_pct": f"volatilidade {atr_pct:.2f}% na serie ({len(df)} velas)",
         "max_posicoes": f"faixa por edge {edge:.4f}",
         "max_operacoes_dia": f"faixa por edge {edge:.4f}",
-        "perda_diaria_max_pct": f"faixa por edge {edge:.4f}",
+        "perda_diaria_max_pct": f"faixa por edge {edge:.4f} (ligada a banca, ajuste manual)",
         "intervalo_minutos": f"passo do periodo {periodo}",
     }
     return {
