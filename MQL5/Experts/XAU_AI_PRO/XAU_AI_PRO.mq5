@@ -98,6 +98,7 @@ CTrade trade;
 
 #include "Management/BreakEven.mqh"
 #include "Management/TrailingStop.mqh"
+#include "Management/PartialClose.mqh"
 #include "Management/DailyRisk.mqh"
 #include "Management/EquityProtection.mqh"
 #include "Management/PortfolioManager.mqh"
@@ -1016,9 +1017,10 @@ void OnTick()
 
    ManagePositions();
 
-   // Gestao de posicoes: break-even e trailing stop (por tick).
+   // Gestao de posicoes: break-even, trailing e parcial (por tick).
    CheckBreakEven();
    CheckTrailingStop();
+   CheckPartialClose();
 
 //------------------------------------------------
 // v1.4.0 (Etapa 4): posicoes abertas -> MANAGING
