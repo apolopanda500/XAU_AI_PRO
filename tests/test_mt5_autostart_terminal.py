@@ -25,6 +25,16 @@ import sys
 
 import pytest
 
+# Autostart do terminal e fluxo de `subprocess`/caminho do `terminal64.exe`
+# são API do Windows. No gateway o autostart fica DESLIGADO quando
+# `os.name != "nt"` (por design: `if os.name == "nt"`), então no CI Linux essas
+# condições pedem comportamento Windows e reproduzem sem valor — mesmo motivo
+# dos skips "DPAPI é API do Windows" deste arquivo.
+pytestmark = pytest.mark.skipif(
+    __import__("os").name != "nt",
+    reason="autostart do terminal e API do Windows",
+)
+
 _gateway = importlib.import_module("backend.mt5_gateway")
 
 
