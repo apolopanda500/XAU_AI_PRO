@@ -2185,6 +2185,31 @@ def _movimentacao_de(deal: object) -> str:
     return _TIPOS_DEAL.get(tipo, f"TIPO_{tipo}")
 
 
+def _mt5_hora_servidor(timestamp) -> str | None:
+    """Hora do SERVIDOR da corretora, no formato do MT5 (`2026.10.05 01:46:43`).
+
+    MEDIDO em 23/10/2026 nesta maquina (EURUSD, conta XMGlobal-MT5): o tick
+    voltou com `time` = 2026-10-23T23:14:19 e o UTC real era 20:14:19 — o
+    servidor esta em UTC+3, e o `deal.time` do MT5 carrega a HORA DE PAREDE do
+    servidor codificada como se fosse UTC.
+
+    Consequencia antes desta funcao: `timestamp_iso` escrevia `...T23:14:19Z`,
+    o navegador convertia para o fuso da maquina (UTC-3) e a tela mostrava
+    `17:14:19` enquanto o MT5 mostrava `23:14:19` — seis horas de diferenca e,
+    perto da meia-noite, o DIA errado.
+
+    Nao se subtrai offset aqui de proposito: o operador confere o historico
+    contra o MT5, e o que tem de bater e a hora que o MT5 mostra. `time` (ISO
+    em UTC) continua no payload para ordenar e para calculo.
+    """
+    if timestamp is None:
+        return None
+    try:
+        return datetime.utcfromtimestamp(int(timestamp)).strftime("%Y.%m.%d %H:%M:%S")
+    except (TypeError, ValueError, OSError):
+        return None
+
+
 def _history(days: int = 30, symbol: str = "") -> dict:
     mt5 = _mt5()
     days = max(1, min(int(days), 3650))
@@ -2249,6 +2274,8 @@ def _history(days: int = 30, symbol: str = "") -> dict:
             "fee": optional_number(getattr(deal, "fee", None)),
             "magic": optional_number(getattr(deal, "magic", None), integer=True),
             "time": timestamp_iso(optional_number(getattr(deal, "time", None), integer=True)),
+            "time_server": _mt5_hora_servidor(getattr(deal, "time", None)),
+            "broker": "mt5",
         })
     rows.sort(key=lambda row: row.get("time") or "", reverse=True)
     return {"deals": rows, "count": len(rows), "days": days, "source": "mt5_gateway"}
