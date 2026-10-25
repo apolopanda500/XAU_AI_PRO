@@ -747,6 +747,23 @@ class MotorAuto:
         return resultados
 
     def ligar(self) -> dict[str, Any]:
+        # TUDO AUTOMATIZADO (25/10/2026): se o operador nao declarou o maximo
+        # de posicoes, a IA sugere e aplica antes de ligar — sem botao manual.
+        # A aceitacao do risco fica registrada no audit_log via configurar().
+        if getattr(self.limites, "max_posicoes", 0) < 1:
+            try:
+                sug = self.sugerir_limites_externo() if hasattr(self, "sugerir_limites_externo") else None
+            except Exception:
+                sug = None
+            if sug is None:
+                try:
+                    sug = sugerir_limites(self.simbodo, self.timeframe, self.broker, self.market)
+                except Exception:
+                    sug = {"ok": False}
+            if isinstance(sug, dict) and sug.get("ok"):
+                self.configurar({"simbodo": self.simbodo, "timeframe": self.timeframe,
+                                "broker": self.broker, "market": self.market,
+                                "limites": sug.get("limites") or {}})
         ok, motivo = self.limites.valido()
         if not ok:
             return {"ok": False, "error": motivo}
