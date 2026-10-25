@@ -350,16 +350,7 @@ button.status-item:disabled {
   height: 28px;
 }
 
-/* A lista de latência abre para CIMA pelo mesmo motivo da de timeframe. */
-.status-bar .latencia-lista {
-  bottom: calc(100% + 2px);
-  top: auto;
-}
-
-/* ---------- Sem animação onde atrapalha ---------- */
-/* O rodapé não anima nada por padrão: `status-pisca` e a transição do
- * `latencia-medidor > i` são as duas únicas. Quem tem `prefers-reduced-motion`
- * não vê nenhuma delas. */
+/* A lista de latência saiu com o dropdown (25/10/2026, pedido do dono). */
 @media (prefers-reduced-motion: reduce) {
   .status-bar *,
   .status-bar *::before,

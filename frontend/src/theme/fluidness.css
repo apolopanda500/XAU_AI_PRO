@@ -174,7 +174,6 @@ textarea {
 .kpi-value,
 .metric-card strong,
 .cal-row-time,
-.latencia-ms,
 .latencia-gatilho-ms,
 .price-chart-legend,
 .order-price,
@@ -188,24 +187,13 @@ textarea {
   animation: status-pisca 1.6s ease-in-out infinite;
 }
 
-/* ---------- Latencia: o medidor que MAIS gastava quadro ---------- */
+/* ---------- Latencia: o medidor saiu (25/10/2026) ---------- */
 /*
-   A barra de latencia anima `<i style="width: ...">` a cada 15 s dentro da
-   lista. Com cinco corretoras, sao cinco elementos animados.
-
-   A lista ja e CONDICIONAL no React (`{aberto && ...}`) — quem esta fechada
-   nem existe no DOM. Nao havia animacao ociosa: a ideia de "elemento oculto
-   continua sendo composto" nao se aplica aqui.
-
-   O que E verdade: `width` e propriedade de LAYOUT, entao a transicao reflow a
-   linha a cada quadro. `transform: scaleX()` produz o mesmo desenho movendo um
-   pixel: o compositor cuida, sem recalcular geometria.
+   A lista de latencia e o `<i>` animado foram apagados com o dropdown do
+   rodape — pedido do dono: "deletar a lista, manter o ms da conta". O item
+   unico que ficou e texto puro (`broker · ms`), que entra na regra
+   `transition: none` acima via `.latencia-gatilho-ms`.
    ------------------------------------------------------ */
-.latencia-medidor > i {
-  /* `width` sem transicao: reflow por quadro em elemento que o operador pode
-     estar olhando. O visual e o mesmo, o custo e outro. */
-  transform-origin: left center;
-}
 
 /* ---------- Scroll ---------- */
 /*
