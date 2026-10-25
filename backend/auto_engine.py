@@ -31,6 +31,7 @@ etapa separada e explicita, com credencial propria.
 from __future__ import annotations
 
 import json
+import math
 import os
 import threading
 import time
@@ -385,31 +386,60 @@ def _declarado_impossivel(
 ) -> str:
     """Um campo que o painel PREENCHEU com valor impossivel. "" quando nao ha.
 
-    MEDIDO (09/10/2026): `valido()` comeca com `if self.lote > 0: return True`
-    — o atalho do modo simples. Um pedido com `max_posicoes: 0` e lote
-    preenchido passava por ele como se o limite estivesse apenas AUSENTE, e o
-    motor seguia ligado com limite zero, recusando todo ciclo com
-    "ja ha 0 posicoes (max 0)".
+    JULGA SO O QUE O PEDIDO DECLAROU (25/10/2026)
+    ============================================
+    MEDIDO: na sub-aba Risco o operador preenche confianca/edge/posicoes e
+    aperta "Aplicar limites ao motor". A resposta era
 
-    `valido()` nao pode julgar isso: para ele, zero quer dizer ausente, e
-    ausente e um estado legitimo no modo simples. Quem sabe a diferenca entre
-    "nao mandei" e "mandei zero" e quem le o PEDIDO — e so o `configurar` le o
-    pedido. Por isso esta julgadora vive aqui, e nao no `LimitesAuto`.
+        "defina no painel de operacao automatica: banca, risco por operacao
+         (%), multiplicador de ATR do stop loss, multiplicador de ATR do take
+         profit — nenhum valor vem por padrao"
+
+    e o painel voltava vazio ao trocar de aba. O erro nao era do painel: este
+    bloco chamava `copia.valido()`, que exige o conjunto COMPLETO (banca, risco,
+    ATR, ...). Declarar um limite e um ato; poder ligar o motor e outro. Quem
+    exige o conjunto completo e o `/api/auto/start`, via `ligar()`.
+
+    Aqui cada campo declarado e julgado pela propria faixa — nunca pela
+    ausencia dos que o operador nao tocou. Zero continua sendo AUSENTE, exceto
+    nos campos em que zero nao faz sentido como limite (posicoes, operacoes por
+    dia, intervalo), e esses sao recusados quando vem explicitamente no pedido.
     """
-    impossiveis = [
-        rotulos.get(nome, nome)
-        for nome, valor in declarados.items()
-        if valor < 0 or (nome in ("max_posicoes", "max_operacoes_dia") and valor < 1)
-    ]
-    if impossiveis:
-        return (
-            "valor impossivel em "
-            + ", ".join(impossiveis)
-            + " — escolhido zero, e zero aqui e ausencia de limite"
-        )
-    confianca = declarados.get("confianca_minima")
-    if confianca is not None and confianca != 0 and not 0 < confianca <= 100:
-        return "confianca minima tem de estar entre 0 e 100"
+    faixas = {
+        # campo: (minimo aceito quando declarado, maximo, "zero e ausente?")
+        "banca": (1.0, math.inf, True),
+        "risco_por_trade_pct": (0.0, 100.0, True),
+        "confianca_minima": (0.0, 100.0, True),
+        "edge_minimo": (0.0, 1.0, True),
+        "max_posicoes": (1.0, math.inf, False),
+        "max_operacoes_dia": (1.0, math.inf, False),
+        "perda_diaria_max_pct": (0.0, 100.0, True),
+        "sl_atr": (0.0, math.inf, True),
+        "tp_atr": (0.0, math.inf, True),
+        "intervalo_minutos": (1.0, math.inf, False),
+        "lote": (0.0, math.inf, True),
+        "sl_preco": (0.0, math.inf, True),
+        "tp_preco": (0.0, math.inf, True),
+        "sl_valor": (0.0, math.inf, True),
+        "tp_valor": (0.0, math.inf, True),
+    }
+    for nome, valor in declarados.items():
+        minimo, maximo, zero_e_ausente = faixas.get(nome, (0.0, math.inf, True))
+        if zero_e_ausente and valor == 0:
+            continue
+        if not (minimo <= valor <= maximo):
+            return (
+                f"valor invalido em {rotulos.get(nome, nome)}: {valor} "
+                f"(faixa aceita: {minimo} a {maximo})"
+            )
+
+    # CONTEXTO HISTORICO (09/10/2026): `valido()` comeca com `if self.lote > 0:
+    # return True`. Um pedido com `max_posicoes: 0` e lote preenchido passava
+    # por ele como se o limite estivesse apenas AUSENTE, e o motor seguia
+    # ligado com limite zero, recusando todo ciclo com "ja ha 0 posicoes
+    # (max 0)". Por isso a julgadora do que foi DECLARADO vive aqui, e nao no
+    # `LimitesAuto`: so o `configurar` conhece a diferenca entre "nao mandei" e
+    # "mandei zero".
     return ""
 
 
@@ -638,18 +668,33 @@ class MotorAuto:
                     return {"ok": False, "error": impossivel}
 
                 copia = replace(self.limites, **campos_copia)
-                ok, motivo = copia.valido()
-                if not ok:
-                    # O par e o periodo JA foram gravados: a resposta diz o que
-                    # foi aplicado e o que ainda falta, para a tela nao parecer
-                    # que nada aconteceu.
+                # SL/TP SEM LOTE continua sendo pedido incoerente (prova
+                # negativa em tests/test_auto_escolher_modelo.py). Isto NAO e a
+                # exigencia do conjunto completo: e a relacao entre dois campos
+                # que o proprio pedido declarou. Sem lote nao existe ordem, e
+                # gravar um stop para uma operacao que nao pode existir faria a
+                # tela mostrar "protegido" sem nada para proteger.
+                if any(
+                    campo in declarados
+                    for campo in ("sl_preco", "tp_preco", "sl_valor", "tp_valor")
+                ) and copia.lote <= 0:
                     return {
                         "ok": False,
-                        "error": motivo,
-                        "simbolo": self.simbolo,
-                        "timeframe": self.timeframe,
-                        "aplicado": True,
+                        "error": "defina o lote junto com stop loss e take profit para operar",
                     }
+                # SEM `copia.valido()` AQUI (25/10/2026).
+                #
+                # `valido()` responde "o motor PODE operar com este conjunto?"
+                # — e por isso exige banca, risco, ATR e lote juntos. Declarar
+                # um limite na sub-aba Risco nao e ligar o motor: o painel
+                # promete que campo vazio e "nao declarado", e o risk_gate do
+                # gateway continua limitando de verdade. Exigir o conjunto
+                # completo neste ponto fazia o Aplicar recusar justamente o
+                # caso normal (so os campos de risco preenchidos) e a tela
+                # voltar vazia. Quem exige o conjunto e `ligar()`.
+                #
+                # O que o pedido DECLAROU ja foi julgado campo a campo em
+                # `_declarado_impossivel`, e um valor invalido nao entra.
                 self.limites = copia
             # NAO mexeram nos limites? Entao NAO ha o que julgar.
             #

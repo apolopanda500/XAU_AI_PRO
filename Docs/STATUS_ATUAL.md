@@ -41,6 +41,19 @@ Os 9 `skip` são os já documentados (CI Linux onde o MetaEditor não existe,
 
 ---
 
+## O QUE FOI FEITO NO CICLO DE 25/10 (risco não salvava)
+
+| item | antes (medido) | agora (medido) |
+|---|---|---|
+| "Aplicar limites ao motor" sem lote/banca/ATR | `ok: False` — *"defina no painel ... banca, risco por operacao (%), ATR..."*; campos voltavam vazios ao trocar de aba | **`ok: True`** — `configurar` julga só os campos **declarados** |
+| Causa | `configurar` chamava `copia.valido()`, que responde "o motor PODE operar?" e exige o conjunto completo | completude é exigida só em `ligar()` (`/api/auto/start`), como já dizia o comentário do próprio painel |
+| Prova negativa | — | `test_ligar_continua_exigindo_o_conjunto_completo`; SL/TP sem lote continua recusado (`test_pedido_sem_lote_ainda_recusado`) |
+| Faixas declaradas | confiança 150 passava em alguns caminhos; `banca=0,5` não era julgado | cada campo tem faixa própria; valor fora dela **não entra** (pedido inteiro é recusado) |
+| Gateway no ar | `.exe` anterior (recusava o Aplicar) | reconstruído, hash idêntico `dist`/instalado/`src-tauri`; `/health` 401 sem token |
+| Testes | — | **suite inteira: 1561 passed, 2 skipped**; artefato **exit 0** |
+
+---
+
 ## O QUE FOI FEITO NO CICLO DE 25/10 (exposição do motor)
 
 | item | antes (medido) | agora (medido) |

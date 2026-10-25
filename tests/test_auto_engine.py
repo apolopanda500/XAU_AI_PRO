@@ -967,6 +967,63 @@ class TestProvedorDaFicha:
 # explicava nada ("ja ha 0 posicoes (max 0)").
 
 
+class TestAplicarLimitesSemLigarMotor:
+    """A sub-aba Risco grava limites SEM exigir o conjunto completo (25/10/2026).
+
+    MEDIDO no app: preencher confianca/edge/posicoes e clicar "Aplicar limites
+    ao motor" respondia "defina no painel ... banca, risco por operacao, ATR"
+    e, ao trocar de aba e voltar, os campos vinham vazios. A causa era o
+    `copia.valido()`, que julga se o motor PODE OPERAR, nao se o limite
+    declarado e valido. As duas perguntas sao diferentes: aplicar e um ato,
+    ligar e outro — `ligar()` continua exigindo o conjunto completo.
+    """
+
+    def test_aplicar_so_os_campos_de_risco_e_aceito(self):
+        m = MotorAuto()  # nasce ZERADO: sem lote, banca, ATR, SL/TP
+        r = m.configurar({
+            "confianca_minima": 40.0,
+            "edge_minimo": 0.1319,
+            "max_posicoes": 2,
+            "max_operacoes_dia": 5,
+            "perda_diaria_max_pct": 2.0,
+            "intervalo_minutos": 60,
+        })
+
+        assert r["ok"] is True, r
+        assert m.limites.confianca_minima == 40.0
+        assert m.limites.edge_minimo == 0.1319
+        assert m.limites.max_posicoes == 2
+        assert m.limites.intervalo_minutos == 60
+        # O que nao foi declarado continua ausente, nao virou palpite.
+        assert m.limites.banca == 0.0
+        assert m.limites.lote == 0.0
+
+    def test_ligar_continua_exigindo_o_conjunto_completo(self):
+        """A prova negativa: aplicar aceita, LIGAR nao."""
+        m = MotorAuto()
+        assert m.configurar({"confianca_minima": 40.0})["ok"] is True
+        assert m.simbolo == ""
+        r = m.ligar()
+        assert r["ok"] is False
+        assert m.ativo is False
+
+    def test_limite_declarado_fora_de_faixa_continua_recusado(self):
+        m = MotorAuto()
+        for pedido in (
+            {"confianca_minima": 150},
+            {"edge_minimo": -0.1},
+            {"max_posicoes": 0},
+            {"max_operacoes_dia": 0},
+            {"intervalo_minutos": 0},
+            {"banca": 0.5},
+        ):
+            r = m.configurar(pedido)
+            assert r["ok"] is False, pedido
+            # Um pedido recusado nao aplica metade dele.
+            assert m.limites.max_posicoes == 0
+            assert m.limites.banca == 0.0
+
+
 class TestConfigurarNaoEnvenenaOMotor:
     def test_valor_invalido_nao_entra_no_motor(self):
         """Recusar o pedido e aplicar o pedido nao podem acontecer separados."""
