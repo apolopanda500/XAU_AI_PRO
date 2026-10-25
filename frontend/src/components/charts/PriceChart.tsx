@@ -1458,7 +1458,12 @@ useEffect(() => {
         window.cancelAnimationFrame(frame);
         frame = 0;
       }
-      if (!moveu) return;
+      // CLIQUE PURO = queda no MESMO ponto (mesma folga de 3px do `aoMover`).
+      // O proprio `mouseup` e prova de arraste: queda longe da pressao move,
+      // mesmo sem `mousemove` intermediario — o navegador pode agrupar ou omitir
+      // moves em arraste rapido, e quem consome o evento e o soltar.
+      // 63e4680 quis matar o clique, nao o soltar longe.
+      if (!moveu && Math.abs(e.clientY - pressY) <= 3) return;
       const p = yParaPreco(e.clientY);
       if (p !== null) onMoveLine(final.ticket, final.kind, Math.round(p * 100) / 100);
     };
@@ -1651,7 +1656,9 @@ useEffect(() => {
         window.cancelAnimationFrame(frame);
         frame = 0;
       }
-      if (!moveuOrdem) return;
+      // Mesma regra do arraste de posicao: clique puro e queda no MESMO ponto;
+      // queda longe da pressao prova arraste sem precisar de `mousemove`.
+      if (!moveuOrdem && Math.abs(e.clientY - pressYOrdem) <= 3) return;
       const p = yParaPreco(e.clientY);
       if (p !== null) onMoverLinhaOrdem?.(papel, p);
     };
