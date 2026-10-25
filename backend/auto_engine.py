@@ -947,15 +947,14 @@ class MotorAuto:
         modelo_ciclo = str(getattr(inf, "modelo", "") or "")
 
         # 3. O modelo precisa ter edge e confianca minima.
-        # Modo simples: sem travas de confianca/edge/perda — o operador
-        # decidiu o lote e as protecoes; o risk_gate do gateway limita.
-        simples = bool(limites.get("lote")) and bool(limites.get("sl_preco")) and bool(limites.get("tp_preco"))
-        if not simples and edge is not None and float(edge) < float(limites["edge_minimo"]):
+        # Modo fixo REMOVIDO (25/10/2026): um unico motor, tudo ao vivo com IA.
+        simples = False
+        if edge is not None and float(edge) < float(limites["edge_minimo"]):
             return self._registrar(Decisao(
                 agora, simbolo, timeframe, False,
                 f"edge {float(edge):+.4f} abaixo do minimo {float(limites['edge_minimo']):+.4f}",
                 sinal, confianca, edge, modelo=modelo_ciclo))
-        if not simples and confianca < float(limites["confianca_minima"]):
+        if confianca < float(limites["confianca_minima"]):
             return self._registrar(Decisao(
                 agora, simbolo, timeframe, False,
                 f"confianca {confianca:.1f}% abaixo do minimo {float(limites['confianca_minima']):.1f}%",
