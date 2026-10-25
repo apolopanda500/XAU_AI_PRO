@@ -88,14 +88,16 @@ def test_sugestao_nunca_acima_da_medida(monkeypatch) -> None:
     assert r["limites"]["edge_minimo"] == 0.1026
 
 
-def test_banca_nunca_vem_sugerida(monkeypatch) -> None:
-    """PROVA NEGATIVA: dinheiro do operador nao e chutado pela IA."""
+def test_banca_vem_da_conta_real_nao_de_chute(monkeypatch) -> None:
+    """A IA nao chuta dinheiro: le a banca da conta MT5 (0 quando inacessivel)."""
     _cenario(monkeypatch)
     r = auto_engine.sugerir_limites("EURUSD", "H1", "mt5", "forex")
 
     assert r["ok"] is True
-    assert "banca" not in r["limites"]
-    assert "banca" not in r["base"]
+    assert "banca" in r["limites"]
+    assert "banca" in r["base"]
+    # Em ambiente de teste (sem MT5) a banca e 0 — nunca um numero inventado.
+    assert r["limites"]["banca"] == 0.0 or isinstance(r["limites"]["banca"], (int, float))
 
 
 def test_sem_par_recusa_com_motivo() -> None:

@@ -1572,6 +1572,20 @@ def sugerir_limites(simbolo: str, timeframe: str, broker: str, market: str) -> d
     if not (atr_pct >= 0):
         return {"ok": False, "error": "volatilidade nao medida na serie"}
 
+    # BANCA DESBLOQUEADA (25/10/2026): em vez de chutar dinheiro do operador,
+    # le a banca REAL da conta quando o escopo e MT5. Nao e palpite: e o saldo
+    # que a corretora devolveu. Em corretoras sem conta local (crypto), fica
+    # nao declarada (0) e o operador digita — nunca inventa.
+    banca_real = 0.0
+    if str(broker or "").lower() == "mt5":
+        try:
+            import MetaTrader5 as _mt5
+            info = _mt5.account_info()
+            if info is not None:
+                banca_real = float(getattr(info, "balance", 0.0) or getattr(info, "equity", 0.0) or 0.0)
+        except Exception:  # noqa: BLE001
+            banca_real = 0.0
+
     def _faixa(valor: float, minimo: float, maximo: float) -> float:
         return max(minimo, min(maximo, valor))
 
@@ -1631,6 +1645,7 @@ def sugerir_limites(simbolo: str, timeframe: str, broker: str, market: str) -> d
         "intervalo_minutos": INTERVALO_POR_TIMEFRAME.get(periodo, 30),
         "sl_atr": sl_atr,
         "tp_atr": tp_atr,
+        "banca": round(banca_real, 2) if banca_real > 0 else 0.0,
     }
     base = {
         "confianca_minima": f"confianca medida {conf:.1f}% −5 p.p. de folga (minimo 30; teto: a propria medida)",
@@ -1642,6 +1657,8 @@ def sugerir_limites(simbolo: str, timeframe: str, broker: str, market: str) -> d
         "intervalo_minutos": f"passo do periodo {periodo}",
         "sl_atr": f"ATR {atr_pct:.2f}% → multiplicador {sl_atr}",
         "tp_atr": f"ATR {atr_pct:.2f}% → multiplicador {tp_atr}",
+        "banca": (f"saldo real da conta MT5: {banca_real:.2f}" if banca_real > 0
+                  else "nao declarada (conta nao acessivel)"),
     }
     return {
         "ok": True,
