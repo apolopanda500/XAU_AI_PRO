@@ -1594,6 +1594,16 @@ def sugerir_limites(simbolo: str, timeframe: str, broker: str, market: str) -> d
     # que o modelo consegue hoje (o defeito medido: minim um de 50 p/ medida
     # de 36,8% = motor desligado por desenho).
     confianca_sugerida = _faixa(round(conf) - 5, 30, round(conf))
+    # ATR (dinamico): multiplicadores conservadores pelo regime. O motor opera
+    # so por ATR agora (modo fixo removido) — a IA precisa sugerir isso tambem.
+    if atr_pct < 0.5:
+        sl_atr, tp_atr = 1.0, 2.0
+    elif atr_pct < 1.5:
+        sl_atr, tp_atr = 1.5, 2.5
+    else:
+        sl_atr, tp_atr = 2.0, 3.0
+    sl_atr = _faixa(sl_atr, 0.5, 5.0)
+    tp_atr = _faixa(tp_atr, 1.0, 8.0)
     limites = {
         "confianca_minima": confianca_sugerida,
         "edge_minimo": edge_sugerido,
@@ -1602,6 +1612,8 @@ def sugerir_limites(simbolo: str, timeframe: str, broker: str, market: str) -> d
         "max_operacoes_dia": por_dia,
         "perda_diaria_max_pct": perda_dia,
         "intervalo_minutos": INTERVALO_POR_TIMEFRAME.get(periodo, 30),
+        "sl_atr": sl_atr,
+        "tp_atr": tp_atr,
     }
     base = {
         "confianca_minima": f"confianca medida {conf:.1f}% −5 p.p. de folga (minimo 30; teto: a propria medida)",
@@ -1611,6 +1623,8 @@ def sugerir_limites(simbolo: str, timeframe: str, broker: str, market: str) -> d
         "max_operacoes_dia": f"faixa por edge {edge:.4f}",
         "perda_diaria_max_pct": f"faixa por edge {edge:.4f} (ligada a banca, ajuste manual)",
         "intervalo_minutos": f"passo do periodo {periodo}",
+        "sl_atr": f"ATR {atr_pct:.2f}% → multiplicador {sl_atr}",
+        "tp_atr": f"ATR {atr_pct:.2f}% → multiplicador {tp_atr}",
     }
     return {
         "ok": True,
