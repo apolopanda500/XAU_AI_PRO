@@ -645,6 +645,10 @@ export default function OperacaoAutomatica({
       setStatus('Escolha a conta em Configurações → Conexões antes de pedir sugestão à IA.');
       return;
     }
+    if (!timeframe) {
+      setStatus('IA sem sugestão: escolha o timeframe antes de pedir sugestão à IA.');
+      return;
+    }
     setOcupado(true);
     try {
       const r = await fetch(`${apiBase()}/api/auto/sugerir-limites`, {

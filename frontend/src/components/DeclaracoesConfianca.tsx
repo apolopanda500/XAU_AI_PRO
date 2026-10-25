@@ -19,24 +19,24 @@ const api = apiBase();
 /** A trava unica do projeto. Nenhuma delas muda em nenhum plano. */
 const TRAVAS_FIXAS = [
   {
-    titulo: 'Saque e transferencia inexistentes',
+    titulo: 'Saque e transferencia nao existem',
     texto:
-      'Nao existe rota, botao nem adaptador que mova fundos para fora da corretora. Nao e um recurso bloqueado por plano: nao foi implementado.',
+      'Nao ha rota, botao ou adaptador que mova fundos para fora da corretora — nem desativado, nem "bloqueado por plano". A funcionalidade nao foi implementada, e um teste do repositorio reprova o build se uma rota dessas aparecer no codigo.',
   },
   {
     titulo: 'Execucao real desligada por padrao',
     texto:
-      'O dinheiro real so liga com a variavel de ambiente XAU_ENABLE_REAL_ORDERS=1. O padrao e 0, e o app instalado registra no log qual estado foi carregado.',
+      'Dinheiro real so liga com XAU_ENABLE_REAL_ORDERS=1 — e mesmo com ela ligada, toda ordem exige confirmacao e request idempotente, passando por risco e auditoria. O app registra no log qual estado foi carregado ao iniciar.',
   },
   {
-    titulo: 'API local so',
+    titulo: 'API so na sua maquina',
     texto:
-      'O gateway responde apenas em 127.0.0.1 e exige token de sessao. Sem token, toda rota devolve 401. Servidor nenhum alcanca sua corretora.',
+      'O gateway escuta exclusivamente em 127.0.0.1 e exige um token de sessao que o proprio app gera por sessao. Sem o token, TODA rota devolve 401. Nenhum servidor externo alcanca sua corretora.',
   },
   {
     titulo: 'Credencial nunca sai da maquina',
     texto:
-      'Chaves de corretora e exchange ficam no seu disco. O app nao envia, nao registra e nao inclui em log.',
+      'Chave de corretora e de exchange ficam no seu disco. O app nao envia, nao registra e nao inclui credencial em log.',
   },
 ];
 
@@ -118,9 +118,9 @@ export default function DeclaracoesConfianca({ statusGateway }: Props) {
       <section className="confianca-bloco">
         <h3>O que este app e</h3>
         <p>
-          Terminal local de operacao com governanca de risco para metal e multiplas corretoras. O
-          modelo de IA roda na sua maquina, aponta a direcao, e voce decide se a ordem sai. O app
-          nao negocia sozinho sem voce pedir.
+          Terminal local de operacao com governanca de risco, para ouro/metal e multiplas corretoras.
+          O modelo de IA roda na sua maquina, aponta a direcao e mostra a confianca — voce decide se
+          a ordem sai. O app nao negocia sozinho sem voce pedir.
         </p>
         <p className="muted">
           Conta conectada agora:{' '}
@@ -145,12 +145,15 @@ export default function DeclaracoesConfianca({ statusGateway }: Props) {
         <h3>Se o Windows accuse o instalador</h3>
         <p>
           O aviso aparece porque o binario ainda nao tem certificado de uma autoridade certificadora
-          publica. Isso e esperado em projeto fora da Play Store: o Windows marca qualquer
-          executavel desconhecido como possivelmente perigoso ate que ele seja assinado por uma
-          autoridade que cobra. O app nao contem virus — o codigo-fonte esta neste repositorio e o
-          binario e construido a partir dele na sua frente.
+          publica — e o comportamento padrao do Windows para executavel fora da loja oficial, nao um
+          sinal de virus. O codigo-fonte esta neste repositorio e o binario e construido a partir
+          dele na sua frente.
         </p>
-        <p className="muted">Estado do gateway agora: {statusGateway ?? 'verificando…'}</p>
+        {/* statusGateway nao e passado por caller hoje; o fallback nao finge um teste
+            que nao rodou ("verificando...") — declara o que a tela sabe. */}
+        <p className="muted">
+          Estado do gateway agora: {statusGateway ?? 'não verificado nesta tela'}
+        </p>
       </section>
     </div>
   );

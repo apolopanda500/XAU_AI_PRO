@@ -1150,6 +1150,25 @@ describe('IA sugere limites, operador grava (12/10/2026)', () => {
     expect(corpo.broker).toBe('mt5');
   });
 
+  it('PROVA NEGATIVA: sem timeframe, a IA nem e acionada e a tela diz o que falta', async () => {
+    let acionou = false;
+    vi.stubGlobal('fetch', async (url: string) => {
+      if (String(url).includes('/api/auto/sugerir-limites')) acionou = true;
+      return { ok: true, json: async () => ({ ok: true }) };
+    });
+    estado.auto = { ativo: false, simbolo: 'GOLD', timeframe: '', broker: 'mt5', market: 'metals' };
+    const container = naRisco();
+    await abaRiscoAberta(container);
+
+    fireEvent.click(screen.getByRole('button', { name: 'IA sugere limites' }));
+    await waitFor(() => {
+      const texto = document.querySelector('.robo-observacao')?.textContent ?? '';
+      expect(texto).toContain('escolha o timeframe antes');
+    });
+    await new Promise((resolvi) => setTimeout(resolvi, 50));
+    expect(acionou).toBe(false);
+  });
+
   it('PROVA NEGATIVA: IA sem resposta nao preenche nem apaga nada', async () => {
     vi.stubGlobal('fetch', async (url: string) => {
       if (String(url).includes('/api/auto/sugerir-limites')) {
