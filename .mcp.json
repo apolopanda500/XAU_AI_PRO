@@ -21,8 +21,7 @@
     },
     "xau-trading": {
       "command": ".venv/Scripts/python.exe",
-      "args": ["-m", "backend.trading_mcp"],
-      "env": { "XAU_MCP_GATEWAY": "http://127.0.0.1:9001" }
+      "args": ["-m", "backend.trading_mcp"]
     },
     "figma": {
       "type": "http",

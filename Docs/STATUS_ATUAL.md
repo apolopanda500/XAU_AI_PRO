@@ -1,10 +1,10 @@
 ﻿# STATUS ATUAL DO PROJETO
 
 **Data:** 23/10/2026
-**Versão:** 1.2.8
+**Versão:** 1.2.9
 **Status:** catálogo do MT5 **classificado pela hierarquia** (o ouro deixou de
 ser `other`), gráfico servido **pela corretora**, conexões com escolha explícita
-de conta, build 1.2.8 **instalado e no ar**. Pendências são **ação do dono**
+de conta, build 1.2.9 **instalado e no ar**. Pendências são **ação do dono**
 (ver ABERTO).
 
 ---
@@ -28,11 +28,11 @@ Diz o que mudou, o que foi medido e o que ficou aberto. Este arquivo é o resumo
 | `vitest run` | **950 passed** (77 arquivos) |
 | `tsc --noEmit` | **exit 0** |
 | `/api/universal/assets` no artefato | `XAUUSD=metal`, `EURUSD=forex` |
-| gráfico no app 1.2.8 | **"Candles OHLC reais · MT5"** — não mais `yahoo` |
-| instalador | `release\1.2.8\XAU AI PRO_1.2.8_x64-setup.exe` · 233,5 MB · NSIS `/S` **exit 0** |
+| gráfico no app 1.2.9 | **"Candles OHLC reais · MT5"** — não mais `yahoo` |
+| instalador | `release\1.2.9\XAU AI PRO_1.2.9_x64-setup.exe` · 233,5 MB · NSIS `/S` **exit 0** |
 | SHA256 do setup | `492943829738EFE1763234841981AB9AE0B1CBCD710BB0E2F51FB9D1FBCA67A7` |
 | ponte instalada vs build | **IGUAIS por hash** (`66B416BD…17462`) |
-| app no ar | app 1.2.8 · gateway 9011 · core 9002/9003 |
+| app no ar | app 1.2.9 · gateway 9011 · core 9002/9003 |
 | disco livre após build+instala | **7,9 GB** |
 
 Os 9 `skip` são os já documentados (CI Linux onde o MetaEditor não existe,

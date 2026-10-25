@@ -192,3 +192,78 @@ def test_gateway_do_modulo_coerente_com_o_ambiente():
 def test_gateway_do_modulo_e_uma_url_local():
     """Prova negativa: fora de loopback o MCP nao fala com ninguem."""
     assert mcp.GATEWAY.startswith("http://127.0.0.1:")
+
+
+# ---------------------------------------------------------------------------
+# Header de autorizacao (MEDIDO 25/10/2026)
+# ---------------------------------------------------------------------------
+# O gateway le `Authorization: Bearer <XAU_GATEWAY_TOKEN>` em
+# `mt5_gateway._autorizado`, e `_http()` nao enviava NENHUM header - entao
+# TODO caminho respondia 401, inclusive o de leitura, com o token certo na
+# mao. Dois lados do mesmo dado divergindo (AGENTS.md §5).
+#
+# A ORDEM do leitor tem de ser a mesma do gateway: ambiente vence `.env`.
+# ---------------------------------------------------------------------------
+
+
+class _RespostaFake:
+    status = 200
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def read(self):
+        return b'{"ok": true}'
+
+
+def _http_com_urlopen_fake(monkeypatch) -> dict[str, str]:
+    """Roda `_http` de verdade com `urlopen` fake; devolve o que saiu no header."""
+    vistos: dict[str, str] = {}
+
+    def fake_urlopen(requisicao, timeout=None):
+        for chave, valor in requisicao.header_items():
+            vistos[chave.lower()] = valor
+        return _RespostaFake()
+
+    monkeypatch.setattr(mcp.urllib.request, "urlopen", fake_urlopen)
+    assert mcp._http("/health")["ok"] is True
+    return vistos
+
+
+def test_http_envia_authorization_bearer(monkeypatch):
+    monkeypatch.setattr(mcp, "GATEWAY_TOKEN", "token-de-teste")
+    vistos = _http_com_urlopen_fake(monkeypatch)
+    assert vistos.get("authorization") == "Bearer token-de-teste"
+
+
+def test_http_sem_token_nao_envia_authorization(monkeypatch):
+    """Prova negativa: sem token nao ha header - `Bearer ` vazio e pior que nada."""
+    monkeypatch.setattr(mcp, "GATEWAY_TOKEN", "")
+    vistos = _http_com_urlopen_fake(monkeypatch)
+    assert "authorization" not in vistos
+
+
+def test_token_do_ambiente_vence_o_dotenv(monkeypatch):
+    """Mesma ordem do gateway: ambiente vence `.env`, nunca o contrario."""
+    monkeypatch.setattr(mcp, "_token_do_dotenv", lambda: "do-arquivo")
+    assert mcp.token_gateway({"XAU_GATEWAY_TOKEN": "  da-sessao  "}) == "da-sessao"
+    # prova negativa: sem ambiente, cai no arquivo
+    assert mcp.token_gateway({}) == "do-arquivo"
+
+
+def test_config_do_mcp_nao_fixa_porta():
+    """Nenhum dos dois arquivos pode pinar porta: quem manda e o ambiente.
+
+    MEDIDO 25/10/2026: `XAU_MCP_GATEWAY=http://127.0.0.1:9001` estava nos
+    DOIS arquivos, e a 9001 e do `terminal64.exe` - o gateway ativo estava em
+    9011. Lido por JSON, nao por texto (AGENTS.md §6).
+    """
+    raiz = Path(ROOT)
+    for nome in ("opencode.json", ".mcp.json"):
+        dados = json.loads((raiz / nome).read_text(encoding="utf-8"))
+        bloco = (dados.get("mcp") or dados.get("mcpServers"))["xau-trading"]
+        ambiente = bloco.get("environment") or bloco.get("env") or {}
+        assert "XAU_MCP_GATEWAY" not in ambiente, nome

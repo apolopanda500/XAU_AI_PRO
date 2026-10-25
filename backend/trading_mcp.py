@@ -23,6 +23,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 from typing import Any
 
 
@@ -49,7 +50,54 @@ def gateway_padrao(environ) -> str:
     return "http://127.0.0.1:9001"
 
 
+def _token_do_dotenv() -> str:
+    """`XAU_GATEWAY_TOKEN` do `.env` da raiz do repositorio.
+
+    Mesmo leitor (e MESMA ORDEM) do `_token_do_ambiente_ou_dotenv` de
+    `backend/mt5_gateway.py`: ambiente vence `.env`. Aqui e copia local de
+    proposito — o MCP roda stdlib puro e nao pode importar o gateway, que
+    levanta rotas e dependencias pesadas.
+
+    O valor NUNCA e impresso: so entra no header.
+    """
+    try:
+        raiz = Path(__file__).resolve().parent.parent
+        arq = raiz / ".env"
+        if not arq.is_file():
+            return ""
+        for linha in arq.read_text(encoding="utf-8", errors="replace").splitlines():
+            limpa = linha.strip()
+            if not limpa or limpa.startswith("#") or "=" not in limpa:
+                continue
+            chave, valor = limpa.split("=", 1)
+            if chave.strip() != "XAU_GATEWAY_TOKEN":
+                continue
+            valor = valor.strip().strip('"').strip("'")
+            if valor:
+                return valor
+    except (OSError, ValueError):
+        return ""
+    return ""
+
+
+def token_gateway(environ) -> str:
+    """Token que o gateway vai exigir: ambiente primeiro, `.env` depois.
+
+    MEDIDO em 25/10/2026: `_http()` nao enviava NENHUM header de autorizacao,
+    entao o gateway respondia 401 `nao autorizado` mesmo com o token certo —
+    dois lados do mesmo dado (o header) divergindo, §5 do AGENTS.md. O leitor
+    e identico ao do gateway para os dois lados lerem a mesma fonte na mesma
+    ordem.
+    """
+    do_ambiente = str(environ.get("XAU_GATEWAY_TOKEN", "")).strip()
+    if do_ambiente:
+        return do_ambiente
+    return _token_do_dotenv()
+
+
 GATEWAY = gateway_padrao(os.environ)
+#: Token do gateway no MOMENTO DO IMPORT, na mesma ordem do `GATEWAY` acima.
+GATEWAY_TOKEN = token_gateway(os.environ)
 # Padrao desbloqueado: `XAU_MCP_TRADING=0` volta a exigir dry-run.
 TRADING_HABILITADO = os.environ.get("XAU_MCP_TRADING", "1") == "1"
 PROTOCOL_VERSION = "2024-11-05"
@@ -59,10 +107,18 @@ _SEQ = itertools.count(1)
 
 
 def _http(path, payload=None, timeout=10.0):
-    """GET/POST no gateway; nunca lanca - devolve dict com erro marcado."""
+    """GET/POST no gateway; nunca lanca - devolve dict com erro marcado.
+
+    MEDIDO em 25/10/2026: faltava o header `Authorization`. O gateway le
+    `Authorization: Bearer <XAU_GATEWAY_TOKEN>` (`mt5_gateway._autorizado`),
+    e sem ele TODO caminho respondia 401 - inclusive o de leitura. Sem token
+    configurado o header simplesmente nao sai (nada de `Bearer ` vazio).
+    """
     url = f"{GATEWAY}{path}"
     data = None
     headers = {"Accept": "application/json"}
+    if GATEWAY_TOKEN:
+        headers["Authorization"] = f"Bearer {GATEWAY_TOKEN}"
     if payload is not None:
         data = json.dumps(payload).encode("utf-8")
         headers["Content-Type"] = "application/json"
