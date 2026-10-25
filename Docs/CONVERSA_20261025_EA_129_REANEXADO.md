@@ -45,3 +45,22 @@ Em cada gráfico: um único `v1.2.0` (instância velha morrendo) seguido do
   forward estável.
 - Continuam em aberto os passos do ciclo 23/10: forward em DEMO com token de
   sessão e, só depois, autorizar ordens reais.
+
+## Apêndice — incidentes do dia (25/10)
+
+**1. `.mq5` sobrescrito por conteúdo alheio (02:47, restabelecido 02:50).**
+O fonte do EA foi reescrito com o conteúdo de um script de teste
+(`"""A versao que o MQL5 mostra...`), 9.706 B contra 52.998 chars do HEAD.
+Restaurado de `HEAD` (`git checkout HEAD -- ...`): 56.708 B, primeiros bytes
+`// `, `tests/test_versao_consistente.py` **6 passed** logo depois. O backup da
+versão boa hoje é `git` (HEAD); os arquivos em
+`C:\Users\Micro\XAU_AI_PRO_backups_20261025` são de restaura o **binário**
+instalado (`Experts\` do terminal), e continuam lá.
+
+**2. Trava de versão atualizada para a fonte única** (`1bc319f`): o regex do
+`Print` no `tests/test_versao_consistente.py` aceita `+ EA_VERSION_STRING`;
+prova negativa em `Temp/prova_reprint.py` (ajuda: `python Temp\prova_reprint.py`).
+
+**3. Vulnerabilidades npm zeradas** no mesmo commit: frontend (undici HIGH +
+2 vitest) e backend (body-parser) — `npm audit` 0/0 em ambos. Security Checks
+do GitHub ficou **success** no `1bc319f`.
