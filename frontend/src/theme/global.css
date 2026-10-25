@@ -252,13 +252,13 @@ a {
   --bg: #f3f5f9;
   --panel: #ffffff;
   --panel2: #f7f9fc;
-  --border: #dbe2ec;
+  --border: #c3cddd;
   --text: #1c2433;
   --muted: #5d6b82;
   --primary: #3554d1;
   --primary-contrast: #ffffff;
   --ok: #1a7f37;
-  --warn: #b26a00;
+  --warn: #8a5200;
   --danger: #c93b34;
 }
 
