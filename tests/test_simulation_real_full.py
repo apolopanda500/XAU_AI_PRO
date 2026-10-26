@@ -86,12 +86,14 @@ LEITURAS_UNIVERSAIS = [
 def _ambiente_deterministico(monkeypatch, tmp_path):
     monkeypatch.setenv("XAU_AUDIT_FILE", str(tmp_path / "audit.jsonl"))
     monkeypatch.setenv("XAU_REAL_EMERGENCY_FILE", str(tmp_path / "STOP"))
+    monkeypatch.setenv("XAU_GATEWAY_TOKEN", TOKEN)
     monkeypatch.setitem(sys.modules, "MetaTrader5", terminal_desconectado())
 
     import backend.fastapi_gateway as fg
     import backend.mt5_gateway as gw
 
     monkeypatch.setattr(fg, "API_TOKEN", TOKEN)
+    monkeypatch.setattr(gw, "API_TOKEN", TOKEN)
     monkeypatch.setattr(gw, "RATE_LIMIT_MAX", 0, raising=False)
     monkeypatch.setattr(gw, "RATE_LIMIT_CMD_MAX", 0, raising=False)
     fg._RATE_STATE.update({"count": 0, "window": 0.0})

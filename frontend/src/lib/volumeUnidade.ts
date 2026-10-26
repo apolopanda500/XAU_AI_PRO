@@ -139,6 +139,12 @@ const MERCADO_POR_CLASSE: Record<string, string> = {
   metal: 'metals',
   index: 'indices',
   stock: 'stocks',
+  // O BACKEND DIZ "equity" (23/10/2026). `asset_registry._CAMINHO_PARA_CLASSE`
+  // devolve `equity` para `Stocks`/`Shares`; este mapa so conhecia `stock`, e
+  // `mercadoDoAtivo("equity")` devolvia `null` — a acao ficava sem mercado e o
+  // grafico caia para dado publico, o mesmo defeito do ouro (`other`). Dois
+  // lados do mesmo dado com nomes diferentes: o mapa aceita os dois.
+  equity: 'stocks',
   bond: 'bonds',
   commodity: 'commodities',
 };

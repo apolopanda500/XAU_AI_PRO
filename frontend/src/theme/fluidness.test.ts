@@ -142,7 +142,7 @@ describe('fluidness.css â€” numeros nunca animam', () => {
     // TUDO que e numero no app, das tabelas aos cards.
     const bloco = fluido.slice(fluido.indexOf('.num,'), fluido.indexOf('.status-chip.is-warn'));
     expect(bloco).toContain('transition: none !important');
-    for (const seletor of ['.num', '.kpi-value', '.latencia-ms', '.cal-row-time']) {
+    for (const seletor of ['.num', '.kpi-value', '.latencia-gatilho-ms', '.cal-row-time']) {
       expect(bloco).toContain(seletor);
     }
   });
@@ -224,15 +224,20 @@ describe('fluidness.css â€” reduced motion', () => {
   });
 });
 
-describe('latencia-bar.css â€” transform, nao width', () => {
-  it('o medidor nao transiciona width', () => {
-    // `width` e propriedade de layout: transicionar reflowa a linha a cada
-    // quadro. O componente passou a emitir `transform: scaleX(...)`.
-    const latencia = latenciaBar;
-    expect(latencia).not.toMatch(/transition:\s*width/);
-    // E o `transform-origin` precisa existir em algum lugar, senao a barra
-    // cresce a partir do centro e o valor lido fica errado.
-    expect(latencia + fluido).toContain('transform-origin: left center');
+describe('latencia-bar.css — o medidor foi removido com a lista', () => {
+  it('nenhuma regra de medidor sobra no CSS', () => {
+    // A lista por corretora saiu (25/10/2026, pedido do dono: "deletar a
+    // lista, manter o ms da conta") e o `<i>` medidor dela morreu junto.
+    // Se um dia o medidor voltar sem a lista, é regra morta: CSS que ninguém
+    // consome é controle que o operador acredita que existe (§9).
+    expect(latenciaBar).not.toMatch(/latencia-medidor|latencia-lista|latencia-nome/);
+    expect(fluido).not.toMatch(/latencia-medidor/);
+  });
+
+  it('o item unico que ficou tambem nao anima', () => {
+    // `broker · ms` é número ao vivo: entrando na lista de "não pode animar",
+    // o `_gatilho-ms` não tem transição no gatilho nem no CSS da barra.
+    expect(latenciaBar).not.toMatch(/transition/);
   });
 });
 

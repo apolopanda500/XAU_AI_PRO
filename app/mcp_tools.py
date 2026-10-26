@@ -3,12 +3,35 @@
 from __future__ import annotations
 
 import json
+import os
 import urllib.request
 from typing import Any
 
 from app.integrations_client import load_mcp_servers
 
 _UA = {"User-Agent": "XAU_AI_PRO/1.3.2"}
+
+
+def _headers_gateway() -> dict[str, str]:
+    """Header de autorizacao do gateway, da MESMA fonte que o MCP usa.
+
+    MEDIDO em 25/10/2026: `_act_mt5_gateway` mandava so `User-Agent`, entao o
+    gateway respondia 401 em health, status, positions, account e history —
+    o conector inteiro morto na porta certa (AGENTS.md §5: dois lados do
+    mesmo dado, aqui o header, divergindo; §4: sem token tudo recusa com 401,
+    que e fail-closed correto, nao defeito).
+
+    `backend.trading_mcp.token_gateway` e o leitor canonico: ambiente antes do
+    `.env`, mesma ordem do gateway. Sem token configurado o header nao sai
+    (nada de `Bearer ` vazio).
+    """
+    try:
+        from backend.trading_mcp import token_gateway  # noqa: PLC0415
+
+        token = token_gateway(os.environ)
+    except Exception:  # noqa: BLE001
+        token = ""
+    return {"Authorization": f"Bearer {token}"} if token else {}
 
 
 def _server(server_id: str) -> dict[str, Any]:
@@ -81,7 +104,8 @@ def _act_mt5_gateway(action: str, **params: Any) -> dict[str, Any]:
     paths = {"health": "/api/health", "status": "/api/status", "system": "/api/status",
              "positions": "/api/positions", "account": "/api/account", "history": "/api/history"}
     try:
-        return _result(True, _http_json(base + paths.get(action, "/api/health"), timeout=4))
+        return _result(True, _http_json(base + paths.get(action, "/api/health"),
+                                        timeout=4, headers=_headers_gateway()))
     except Exception as error:  # noqa: BLE001
         return _result(False, error=f"MT5 Gateway: {error}")
 

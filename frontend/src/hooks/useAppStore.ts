@@ -162,7 +162,6 @@ export interface Settings {
   soundEnabled: boolean;
   notifications: boolean;
   autoScroll: boolean;
-  precision: number;
   refreshInterval: number;
   dashboardAutoRefresh: boolean;
   marketAutoRefresh: boolean;
@@ -171,7 +170,6 @@ export interface Settings {
   marketRefreshMs: number;
   historyRefreshMs: number;
   mt5Path: string;
-  mt5AutoConnect: boolean;
   aiEnabled: boolean;
   aiModel: string;
   aiInterval: number;
@@ -212,7 +210,6 @@ export const DEFAULT_SETTINGS: Settings = {
   soundEnabled: true,
   notifications: true,
   autoScroll: true,
-  precision: 2,
   refreshInterval: 1000,
   dashboardAutoRefresh: true,
   marketAutoRefresh: true,
@@ -221,8 +218,6 @@ export const DEFAULT_SETTINGS: Settings = {
   marketRefreshMs: 5000,
   historyRefreshMs: 10000,
   mt5Path: '',
-  // MT5 nunca e iniciado pelo app; a conexao deve ser explicitamente acionada pelo usuario.
-  mt5AutoConnect: false,
   aiEnabled: true,
   aiModel: 'xau-pro-v2',
   aiInterval: 60,
@@ -342,13 +337,10 @@ export const useAppStore = create<AppState>()(
           sidebarOpen: true,
           marketWatchlist: normalizeSymbols(p.marketWatchlist ?? current.marketWatchlist),
           subscribeSymbols: normalizeSymbols(p.subscribeSymbols ?? current.subscribeSymbols),
-          // Compatibilidade segura: versoes antigas podiam persistir auto-connect=true.
-          // A inicializacao do MT5 exige acao explicita do usuario.
           settings: {
             ...DEFAULT_SETTINGS,
             ...(p.settings ?? {}),
             marketAutoRefresh: true,
-            mt5AutoConnect: false,
           },
           // Valor persistido de uma versao antiga ou corrompido cai na primeira
           // sub-aba; os nomes da versao de cinco viram os quatro novos.

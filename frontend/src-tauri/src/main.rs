@@ -15,7 +15,10 @@ use tauri::Manager;
 static OWNED_CHILDREN: OnceLock<Mutex<Vec<Child>>> = OnceLock::new();
 static GATEWAY_TOKEN: OnceLock<String> = OnceLock::new();
 
-const EXPECTED_GATEWAY_BUILD: &str = "xau-ai-pro-1.2.4-universal-20260928";
+// Vem do `build.rs`, que le `Docs/version.json` - a mesma fonte de
+// `backend/mt5_gateway.py::_gateway_build()`. Nao escrever o valor aqui: foi
+// assim que a 1.2.5 abriu em tela preta (main.rs e main.tsx com 1.2.4).
+const EXPECTED_GATEWAY_BUILD: &str = env!("XAU_GATEWAY_BUILD");
 
 fn gateway_token() -> Result<String, String> {
     if let Some(token) = GATEWAY_TOKEN.get() {

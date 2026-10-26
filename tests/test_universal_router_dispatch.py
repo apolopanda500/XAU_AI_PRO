@@ -56,12 +56,26 @@ def test_gateway_build_derives_from_version_json():
     assert "_MEIPASS" in inspect.getsource(gateway._gateway_build)
 
     # As constantes do frontend e do core tem que dizer a mesma coisa.
+    # Desde 22/10/2026 o literal NAO mora em `main.tsx`: ele e derivado para
+    # `version.ts` pelo `sync_version.py`, e o `main.tsx` importa a constante.
+    # O `main.rs` le `env!("XAU_GATEWAY_BUILD")`, emitido pelo `build.rs` a
+    # partir do mesmo `Docs/version.json`. Medir o literal em `main.tsx`
+    # reprovava o codigo correto e escondia justamente o defeito que a trava
+    # existe para pegar (literal escrito a mao).
+    version_ts = (raiz / "frontend" / "src" / "version.ts").read_text(encoding="utf-8")
+    assert f"GATEWAY_BUILD = '{esperado}'" in version_ts, "version.ts pede outro gateway_build"
     main_tsx = (raiz / "frontend" / "src" / "main.tsx").read_text(encoding="utf-8")
-    assert esperado in main_tsx, "main.tsx pede outro gateway_build"
+    assert "from './version'" in main_tsx and "GATEWAY_BUILD" in main_tsx
+    assert esperado not in main_tsx, "main.tsx nao pode escrever o build a mao"
+
     main_rs = (
         raiz / "frontend" / "src-tauri" / "src" / "main.rs"
     ).read_text(encoding="utf-8")
-    assert esperado in main_rs, "main.rs espera outro EXPECTED_GATEWAY_BUILD"
+    assert 'env!("XAU_GATEWAY_BUILD")' in main_rs, "main.rs deve ler o build do build.rs"
+    build_rs = (
+        raiz / "frontend" / "src-tauri" / "build.rs"
+    ).read_text(encoding="utf-8")
+    assert "Docs/version.json" in build_rs.replace("\\", "/")
 
 
 def test_universal_positions_and_quotes_helpers_exist():

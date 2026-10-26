@@ -4,6 +4,7 @@ import {
   fichaDoAtivo,
   faixaDoAtivo,
   rotuloQuantidade,
+  mercadoDoAtivo,
 } from './volumeUnidade';
 import type { AssetRow } from './brokerCatalog';
 
@@ -131,5 +132,37 @@ describe('rotuloQuantidade', () => {
     // acontecer e o rotulo afirmar "Token(s)" sem classe nenhuma.
     expect(rotuloQuantidade(null, 0.01)).toBe('Quantidade em lote(s)');
     expect(rotuloQuantidade(null, 0.01)).not.toContain('token');
+  });
+});
+
+/*
+  O MERCADO DA CLASSE (23/10/2026)
+  ==============================
+  MEDIDO no app 1.2.7: `asset_class="other"` para XAUUSD e `mercadoDoAtivo`
+  devolvia `null` — o grafico caia para dado publico e o motor ligava com o
+  mercado do escopo. O mapa agora aceita `equity` (o nome que o backend usa)
+  e continua recusando o que a corretora nao classificou.
+*/
+describe('mercadoDoAtivo', () => {
+  it('a classe do catalogo vira o mercado da consulta', () => {
+    expect(mercadoDoAtivo('metal')).toBe('metals');
+    expect(mercadoDoAtivo('crypto')).toBe('crypto-spot');
+    expect(mercadoDoAtivo('forex')).toBe('forex');
+    expect(mercadoDoAtivo('index')).toBe('indices');
+    expect(mercadoDoAtivo('bond')).toBe('bonds');
+    expect(mercadoDoAtivo('commodity')).toBe('commodities');
+  });
+
+  it('`equity` e `stock` sao a MESMA classe, com dois nomes no projeto', () => {
+    expect(mercadoDoAtivo('equity')).toBe('stocks');
+    expect(mercadoDoAtivo('stock')).toBe('stocks');
+    expect(mercadoDoAtivo('EQUITY')).toBe('stocks');
+  });
+
+  it('PROVA NEGATIVA: sem classe publicada nao ha mercado', () => {
+    expect(mercadoDoAtivo('other')).toBeNull();
+    expect(mercadoDoAtivo('cfd')).toBeNull();
+    expect(mercadoDoAtivo('')).toBeNull();
+    expect(mercadoDoAtivo(null)).toBeNull();
   });
 });

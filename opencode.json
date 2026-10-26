@@ -80,7 +80,6 @@
       ],
       "cwd": ".",
       "environment": {
-        "XAU_MCP_GATEWAY": "http://127.0.0.1:9001",
         "XAU_MCP_TRADING": "1"
       },
       "enabled": true,

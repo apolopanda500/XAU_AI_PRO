@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { apiBase } from '../lib/api';
 import { IconeRelogio, IconeSinal } from './Icones';
 import '../theme/latencia-bar.css';
@@ -39,9 +39,6 @@ type Medicao = {
  */
 type EstadoBarra = 'medindo' | 'ok' | 'sem-corretora' | 'token' | 'cota' | 'indisponivel';
 
-/** 400 ms e o alvo: a barra satura aqui e quem decide e o operador. */
-const ALVO_MS = 400;
-
 /** Nivel de latencia. A FAIXA e um token no CSS, aqui e o dado. */
 function nivel(m: Medicao): 'otima' | 'ok' | 'ruim' | 'off' {
   if (m.ms === null) return 'off';
@@ -51,17 +48,13 @@ function nivel(m: Medicao): 'otima' | 'ok' | 'ruim' | 'off' {
 }
 
 /**
- * Latencia ao vivo por corretora — canto inferior esquerdo, selecao com lista.
+ * Latencia ao vivo da CONTA ATIVA — canto inferior direito, sem lista.
  *
- * POR QUE MEXC PARA CIMA
- * ---------------------
- * Na MEXC e no MT5 a latencia e um item de RODAPE, nao de cabecalho. No
- * cabecalho ela competia com o relogio e com o status do EA, e a 5 corretoras
- * medindo o cabecalho deixava de caber na largura util.
- *
- * No rodape, o operador le como le uma legenda: o item fica compacto e so abre
- * a lista quando ele pergunta. O que fica sempre visivel e a CORRETORA ATIVA e
- * o seu `ms` — sao os dois dados que ele usa sem clicar.
+ * 25/10/2026, pedido do dono: "deletar a lista, manter o ms da conta".
+ * O dropdown por corretora saiu; o que fica no rodape e o item unico:
+ * ponto de cor + `broker · ms` da conta que o operador escolheu (`ativa`).
+ * As outras corretoras continuam MEDIDAS no gateway (`/api/latencia`) — o
+ * item e a leitura da conta ATIVA, que e o dado que decide a operacao.
  *
  * REGRA QUE IMPORTA
  * -----------------
@@ -73,8 +66,6 @@ export default function LatenciaBar({ ativa }: { ativa?: string }) {
   const [medicoes, setMedicoes] = useState<Medicao[]>([]);
   const [erro, setErro] = useState(false);
   const [estado, setEstado] = useState<EstadoBarra>('medindo');
-  const [aberto, setAberto] = useState(false);
-  const caixa = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let vivo = true;
@@ -136,24 +127,6 @@ export default function LatenciaBar({ ativa }: { ativa?: string }) {
     };
   }, []);
 
-  // Fecha ao clicar fora e no `Escape`. Sem isso a lista ficaria aberta por
-  // cima da tela depois que o operador mudou de aba com o mouse.
-  useEffect(() => {
-    if (!aberto) return;
-    const fora = (e: MouseEvent) => {
-      if (caixa.current && !caixa.current.contains(e.target as Node)) setAberto(false);
-    };
-    const esc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setAberto(false);
-    };
-    document.addEventListener('mousedown', fora);
-    document.addEventListener('keydown', esc);
-    return () => {
-      document.removeEventListener('mousedown', fora);
-      document.removeEventListener('keydown', esc);
-    };
-  }, [aberto]);
-
   if (erro) {
     return (
       <div className="latencia-rodape">
@@ -208,67 +181,32 @@ export default function LatenciaBar({ ativa }: { ativa?: string }) {
     );
   }
 
-  // A corretora ativa vem primeiro: e a que o operador opera. Sem `ativa`, a
-  // melhor medidamedida escolhe a ordem — que e a mesma logica do backend em
-  // `melhor_em_ms`.
-  const ordenada = [...medicoes].sort((a, b) => {
-    if (a.broker === ativa) return -1;
-    if (b.broker === ativa) return 1;
-    return (a.ms ?? Infinity) - (b.ms ?? Infinity);
-  });
-  const principal = ordenada[0];
-  const n = nivel(principal);
+  // A CONTA ATIVA PRIMEIRO (25/10/2026): a lista sumiu, entao o item do rodape
+  // e obrigatoriamente DA CONTA ESCOLHIDA. Se a medida da conta ativa nao
+  // existe (nenhuma corretora medida com esse nome), digo sem resposta — nao
+  // escondo o ms de OUTRA corretora na frente da conta que o operador usa.
+  const daConta = (ativa && medicoes.find((m) => m.broker === ativa)) || null;
+  const semResposta = !daConta || daConta.ms === null;
 
   return (
-    <div className="latencia-rodape" ref={caixa} data-aberto={aberto}>
-      <button
-        type="button"
-        className={`latencia-gatilho latencia-${n}`}
-        onClick={() => setAberto((v) => !v)}
-        aria-expanded={aberto}
-        aria-haspopup="true"
-        title={`Latência por corretora — ${principal.ms === null ? 'sem resposta' : `${Math.round(principal.ms)} ms`}`}
+    <div className="latencia-rodape">
+      <span
+        className={`latencia-gatilho latencia-${semResposta ? 'off' : nivel(daConta)}`}
+        title={`Latência da conta ativa (${ativa || 'sem corretora'})`}
       >
         <span className="latencia-gatilho-ponto" aria-hidden="true" />
+        {/* O PAR agora vai no texto: com a lista fora, `mexc · 334 ms` responde
+            DE QUEM e o ms — e o operador le sem clicar. */}
         <span className="latencia-gatilho-ms">
-          {principal.ms === null ? '—' : `${Math.round(principal.ms)} ms`}
+          {ativa ? `${ativa} · ` : ''}
+          {semResposta ? 'sem resposta' : `${Math.round(daConta.ms)} ms`}
         </span>
-        <span className="latencia-gatilho-seta" aria-hidden="true" />
-        <span className="sr-only">Abrir latência por corretora</span>
-      </button>
-
-      {aberto && (
-        <div className="latencia-lista" role="listbox" aria-label="Latência por corretora">
-          {ordenada.map((m) => {
-            const pct = m.ms === null ? 0 : Math.min(100, Math.round((m.ms / ALVO_MS) * 100));
-            return (
-              <div
-                key={m.broker}
-                role="option"
-                aria-selected={m.broker === ativa}
-                className={`latencia-item latencia-${nivel(m)}${m.broker === ativa ? ' latencia-ativa' : ''}`}
-                title={`${m.server || m.broker} — ${m.motivo}${
-                  m.melhor_em_ms ? ` · ${m.melhor_em_ms} ms acima da melhor` : ''
-                }`}
-              >
-                <span className="latencia-nome">{m.broker}</span>
-                {/*
-                    `transform: scaleX` em vez de `width`.
-                    `width` e propriedade de layout: anima-la reflowa a linha a
-                    cada quadro. `transform` move um pixel e o compositor cuida.
-                    O desenho e identico; a diferenca aparece em maquina fraca.
-                  */}
-                <span className="latencia-medidor" aria-hidden="true">
-                  <i style={{ transform: `scaleX(${Math.max(0.01, pct / 100)})` }} />
-                </span>
-                <span className="latencia-ms">
-                  {m.ms === null ? 'sem resposta' : `${Math.round(m.ms)} ms`}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      )}
+        <span className="sr-only">
+          {`Latência da conta ${ativa || 'sem corretora'}: ${
+            semResposta ? 'sem resposta' : `${Math.round(daConta.ms)} ms`
+          }`}
+        </span>
+      </span>
     </div>
   );
 }

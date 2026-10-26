@@ -24,15 +24,26 @@
 // (e) colunas do MT5: Anterior / Previsão / Real;
 // (f) evento estimado é marcado como estimado, e o aviso de feed fora aparece;
 // (g) evento já divulgado continua na tabela, com leitura apagada.
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { EconomicEvent } from './types';
 
 const H = vi.hoisted(() => {
   const agora = new Date();
   const hoje = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
-  const em = (dia: number, hora: number, min: number) =>
-    new Date(hoje.getTime() + dia * 86_400_000 + hora * 3_600_000 + min * 60_000);
+  /*
+    `em()` le o `hoje` DO H (e nao uma copia de import): o `beforeAll` ancora
+    o relogio na segunda-feira 19/10/2026 e repinta `H.hoje`/`H.agora` — os
+    offsets de dia dos testes ficam fixos para SEMPRE, em vez de quebrarem
+    quando o "hoje" real cai na fronteira da semana (sabado/domingo), que e
+    exatamente a classe de falha medida e documentada em 09/10/2026 e em
+    25/10/2026 (10 reprovas quando hoje era domingo: "amanhã" cai fora da
+    semana visivel 19-25/10).
+  */
+  const em = (dia: number, hora: number, min: number) => {
+    const base = H.hoje;
+    return new Date(base.getFullYear(), base.getMonth(), base.getDate() + dia, hora, min, 0);
+  };
   return {
     agora,
     hoje,
@@ -90,6 +101,45 @@ function ev(id: string, horario: Date, extra: Partial<EconomicEvent> = {}): Econ
     ...extra,
   };
 }
+
+/*
+  O RELOGIO DO ARQUIVO INTEIRO E FIXO, E E SEGUNDA-FEIRA (19/10/2026)
+  ====================================================================
+  Os testes escrevem datas por OFFSET de dia (`em(1, ...)`, `em(9, ...)`) e
+  contam com hoje, amanha e a semana visivel na MESMA janela seg-dom. Isso e
+  verdade so quando o "hoje" real cai no meio da semana: no CI de 25/10/2026
+  (DOMINGO) a semana visivel era 19-25/10 e "amanha" ja era a semana
+  SEGUINTE — 10 testes reprovaram sem que o COMPONENTE mudasse. O arquivo ja
+  tinha medido esta classe em 09/10/2026 (coment do "marca evento estimado").
+
+  MEDIDO (25/10/2026): ancorar o relogio SO dentro do describe "padrão MT5"
+  nao basta. `H.hoje` fica fixo, mas o `afterAll` devolve o Date real, e os
+  `describe` seguintes ("as sete abas sempre", "a tela diz ate onde vai o
+  dado", "a cor carrega a informacao") tambem usam `H.em(...)` com o
+  componente lendo `new Date()` — com H.hoje fora da semana real, 5 testes
+  reprovaram. Passavam em 25/10 so porque 19/10 e 25/10 caem na MESMA semana.
+  Amanha (26/10) reprovariam de novo.
+
+  Logo: o ancoramento e do ARQUIVO, nao de um describe. `beforeAll` no nivel
+  do modulo vale para todos os `describe`, e o `beforeEach` reancora `H.hoje`
+  e `H.agora` a cada teste. Falso so o `Date`: timers reais continuam, para
+  nao interferir com o `waitFor` da Testing Library.
+*/
+const SEGUNDA_FIXA = new Date(2026, 9, 19, 12, 0, 0);
+
+beforeAll(() => {
+  vi.useFakeTimers({ now: SEGUNDA_FIXA, toFake: ['Date'] });
+});
+
+afterAll(() => {
+  vi.useRealTimers();
+});
+
+beforeEach(() => {
+  const fixa = new Date(SEGUNDA_FIXA);
+  H.hoje = new Date(fixa.getFullYear(), fixa.getMonth(), fixa.getDate());
+  H.agora = new Date(fixa.getTime());
+});
 
 describe('agruparPorDia — ordem crescente', () => {
   it('ordena os dias do baixo para o alto, mesmo vindo fora de ordem', () => {

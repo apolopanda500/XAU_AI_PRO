@@ -1,4 +1,4 @@
-// XAU_AI_PRO v1.2.0
+// XAU_AI_PRO v1.2.9
 #ifndef EXECUTIONENGINE_MQH
 #define EXECUTIONENGINE_MQH
 
@@ -194,19 +194,31 @@ bool ExecuteTrade(string symbol,int signal)
    {
       double slUSD = DistanciaPontosParaRiscoUSD(symbol, lot, RiskPerTradeUsd);
 
-      if(slUSD > 0.0)
+      // MEDIDO 23/10/2026: quando a distancia em dinheiro nao podia ser
+      // calculada, este bloco caia CALADO para os pontos do input. O risco
+      // configurado deixava de valer sem ninguem saber. "Nao sei" tem saida:
+      // bloqueia e diz o motivo.
+      if(slUSD <= 0.0)
       {
-         slPontos = slUSD;
-         tpPontos = DistanciaPontosParaRiscoUSD(
-            symbol,
-            lot,
-            RiskPerTradeUsd * RewardRatio
-         );
-
-         // Alvo em dinheiro sem alvo em pontos e um alvo que nao existe.
-         if(tpPontos <= 0.0)
-            tpPontos = 0.0;
+         Print("EXECUTION: BLOQUEADA | ", symbol,
+               " | risco em US$ configurado mas a distancia em pontos nao pode ser calculada",
+               " | tick_value=", DoubleToString(SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE), 5),
+               " | tick_size=", DoubleToString(SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_SIZE), 5),
+               " | point=", DoubleToString(SymbolInfoDouble(symbol, SYMBOL_POINT), 5));
+         EventTradeRejected(symbol, "distancia de risco nao calculavel", "RISK_DISTANCE_UNKNOWN");
+         return false;
       }
+
+      slPontos = slUSD;
+      tpPontos = DistanciaPontosParaRiscoUSD(
+         symbol,
+         lot,
+         RiskPerTradeUsd * RewardRatio
+      );
+
+      // Alvo em dinheiro sem alvo em pontos e um alvo que nao existe.
+      if(tpPontos <= 0.0)
+         tpPontos = 0.0;
    }
 
    if(signal == 1) // BUY
@@ -233,6 +245,22 @@ bool ExecuteTrade(string symbol,int signal)
    }
    else
    {
+      return false;
+   }
+
+   //==================================================
+   // RISCO EM DINHEIRO x ORCAMENTO DO DIA (23/10/2026)
+   //==================================================
+   // O risco desta entrada e comparado com o orcamento que o proprio sistema
+   // usa para parar (`MaxDailyLossPercent` do saldo). Sem esta comparacao, um
+   // `RiskPerTradeUsd` maior que o orcamento faz UMA operacao estourar o dia.
+   double riscoUSD = RiscoEmDinheiroDaOrdem(symbol, lot, slPontos);
+   string motivoOrcamento = "";
+
+   if(!RiscoCabeNoOrcamento(riscoUSD, motivoOrcamento))
+   {
+      Print("EXECUTION: RISCO BLOQUEADO | ", symbol, " | ", motivoOrcamento);
+      EventRiskBlock(symbol, motivoOrcamento);
       return false;
    }
 

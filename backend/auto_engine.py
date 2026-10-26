@@ -31,6 +31,7 @@ etapa separada e explicita, com credencial propria.
 from __future__ import annotations
 
 import json
+import math
 import os
 import threading
 import time
@@ -385,31 +386,60 @@ def _declarado_impossivel(
 ) -> str:
     """Um campo que o painel PREENCHEU com valor impossivel. "" quando nao ha.
 
-    MEDIDO (09/10/2026): `valido()` comeca com `if self.lote > 0: return True`
-    — o atalho do modo simples. Um pedido com `max_posicoes: 0` e lote
-    preenchido passava por ele como se o limite estivesse apenas AUSENTE, e o
-    motor seguia ligado com limite zero, recusando todo ciclo com
-    "ja ha 0 posicoes (max 0)".
+    JULGA SO O QUE O PEDIDO DECLAROU (25/10/2026)
+    ============================================
+    MEDIDO: na sub-aba Risco o operador preenche confianca/edge/posicoes e
+    aperta "Aplicar limites ao motor". A resposta era
 
-    `valido()` nao pode julgar isso: para ele, zero quer dizer ausente, e
-    ausente e um estado legitimo no modo simples. Quem sabe a diferenca entre
-    "nao mandei" e "mandei zero" e quem le o PEDIDO — e so o `configurar` le o
-    pedido. Por isso esta julgadora vive aqui, e nao no `LimitesAuto`.
+        "defina no painel de operacao automatica: banca, risco por operacao
+         (%), multiplicador de ATR do stop loss, multiplicador de ATR do take
+         profit — nenhum valor vem por padrao"
+
+    e o painel voltava vazio ao trocar de aba. O erro nao era do painel: este
+    bloco chamava `copia.valido()`, que exige o conjunto COMPLETO (banca, risco,
+    ATR, ...). Declarar um limite e um ato; poder ligar o motor e outro. Quem
+    exige o conjunto completo e o `/api/auto/start`, via `ligar()`.
+
+    Aqui cada campo declarado e julgado pela propria faixa — nunca pela
+    ausencia dos que o operador nao tocou. Zero continua sendo AUSENTE, exceto
+    nos campos em que zero nao faz sentido como limite (posicoes, operacoes por
+    dia, intervalo), e esses sao recusados quando vem explicitamente no pedido.
     """
-    impossiveis = [
-        rotulos.get(nome, nome)
-        for nome, valor in declarados.items()
-        if valor < 0 or (nome in ("max_posicoes", "max_operacoes_dia") and valor < 1)
-    ]
-    if impossiveis:
-        return (
-            "valor impossivel em "
-            + ", ".join(impossiveis)
-            + " — escolhido zero, e zero aqui e ausencia de limite"
-        )
-    confianca = declarados.get("confianca_minima")
-    if confianca is not None and confianca != 0 and not 0 < confianca <= 100:
-        return "confianca minima tem de estar entre 0 e 100"
+    faixas = {
+        # campo: (minimo aceito quando declarado, maximo, "zero e ausente?")
+        "banca": (1.0, math.inf, True),
+        "risco_por_trade_pct": (0.0, 100.0, True),
+        "confianca_minima": (0.0, 100.0, True),
+        "edge_minimo": (0.0, 1.0, True),
+        "max_posicoes": (1.0, math.inf, False),
+        "max_operacoes_dia": (1.0, math.inf, False),
+        "perda_diaria_max_pct": (0.0, 100.0, True),
+        "sl_atr": (0.0, math.inf, True),
+        "tp_atr": (0.0, math.inf, True),
+        "intervalo_minutos": (1.0, math.inf, False),
+        "lote": (0.0, math.inf, True),
+        "sl_preco": (0.0, math.inf, True),
+        "tp_preco": (0.0, math.inf, True),
+        "sl_valor": (0.0, math.inf, True),
+        "tp_valor": (0.0, math.inf, True),
+    }
+    for nome, valor in declarados.items():
+        minimo, maximo, zero_e_ausente = faixas.get(nome, (0.0, math.inf, True))
+        if zero_e_ausente and valor == 0:
+            continue
+        if not (minimo <= valor <= maximo):
+            return (
+                f"valor invalido em {rotulos.get(nome, nome)}: {valor} "
+                f"(faixa aceita: {minimo} a {maximo})"
+            )
+
+    # CONTEXTO HISTORICO (09/10/2026): `valido()` comeca com `if self.lote > 0:
+    # return True`. Um pedido com `max_posicoes: 0` e lote preenchido passava
+    # por ele como se o limite estivesse apenas AUSENTE, e o motor seguia
+    # ligado com limite zero, recusando todo ciclo com "ja ha 0 posicoes
+    # (max 0)". Por isso a julgadora do que foi DECLARADO vive aqui, e nao no
+    # `LimitesAuto`: so o `configurar` conhece a diferenca entre "nao mandei" e
+    # "mandei zero".
     return ""
 
 
@@ -638,18 +668,33 @@ class MotorAuto:
                     return {"ok": False, "error": impossivel}
 
                 copia = replace(self.limites, **campos_copia)
-                ok, motivo = copia.valido()
-                if not ok:
-                    # O par e o periodo JA foram gravados: a resposta diz o que
-                    # foi aplicado e o que ainda falta, para a tela nao parecer
-                    # que nada aconteceu.
+                # SL/TP SEM LOTE continua sendo pedido incoerente (prova
+                # negativa em tests/test_auto_escolher_modelo.py). Isto NAO e a
+                # exigencia do conjunto completo: e a relacao entre dois campos
+                # que o proprio pedido declarou. Sem lote nao existe ordem, e
+                # gravar um stop para uma operacao que nao pode existir faria a
+                # tela mostrar "protegido" sem nada para proteger.
+                if any(
+                    campo in declarados
+                    for campo in ("sl_preco", "tp_preco", "sl_valor", "tp_valor")
+                ) and copia.lote <= 0:
                     return {
                         "ok": False,
-                        "error": motivo,
-                        "simbolo": self.simbolo,
-                        "timeframe": self.timeframe,
-                        "aplicado": True,
+                        "error": "defina o lote junto com stop loss e take profit para operar",
                     }
+                # SEM `copia.valido()` AQUI (25/10/2026).
+                #
+                # `valido()` responde "o motor PODE operar com este conjunto?"
+                # — e por isso exige banca, risco, ATR e lote juntos. Declarar
+                # um limite na sub-aba Risco nao e ligar o motor: o painel
+                # promete que campo vazio e "nao declarado", e o risk_gate do
+                # gateway continua limitando de verdade. Exigir o conjunto
+                # completo neste ponto fazia o Aplicar recusar justamente o
+                # caso normal (so os campos de risco preenchidos) e a tela
+                # voltar vazia. Quem exige o conjunto e `ligar()`.
+                #
+                # O que o pedido DECLAROU ja foi julgado campo a campo em
+                # `_declarado_impossivel`, e um valor invalido nao entra.
                 self.limites = copia
             # NAO mexeram nos limites? Entao NAO ha o que julgar.
             #
@@ -747,6 +792,23 @@ class MotorAuto:
         return resultados
 
     def ligar(self) -> dict[str, Any]:
+        # TUDO AUTOMATIZADO (25/10/2026): se o operador nao declarou o maximo
+        # de posicoes, a IA sugere e aplica antes de ligar — sem botao manual.
+        # A aceitacao do risco fica registrada no audit_log via configurar().
+        if getattr(self.limites, "max_posicoes", 0) < 1:
+            try:
+                sug = self.sugerir_limites_externo() if hasattr(self, "sugerir_limites_externo") else None
+            except Exception:
+                sug = None
+            if sug is None:
+                try:
+                    sug = sugerir_limites(self.simbodo, self.timeframe, self.broker, self.market)
+                except Exception:
+                    sug = {"ok": False}
+            if isinstance(sug, dict) and sug.get("ok"):
+                self.configurar({"simbodo": self.simbodo, "timeframe": self.timeframe,
+                                "broker": self.broker, "market": self.market,
+                                "limites": sug.get("limites") or {}})
         ok, motivo = self.limites.valido()
         if not ok:
             return {"ok": False, "error": motivo}
@@ -948,15 +1010,14 @@ class MotorAuto:
         modelo_ciclo = str(getattr(inf, "modelo", "") or "")
 
         # 3. O modelo precisa ter edge e confianca minima.
-        # Modo simples: sem travas de confianca/edge/perda — o operador
-        # decidiu o lote e as protecoes; o risk_gate do gateway limita.
-        simples = bool(limites.get("lote")) and bool(limites.get("sl_preco")) and bool(limites.get("tp_preco"))
-        if not simples and edge is not None and float(edge) < float(limites["edge_minimo"]):
+        # Modo fixo REMOVIDO (25/10/2026): um unico motor, tudo ao vivo com IA.
+        simples = False
+        if edge is not None and float(edge) < float(limites["edge_minimo"]):
             return self._registrar(Decisao(
                 agora, simbolo, timeframe, False,
                 f"edge {float(edge):+.4f} abaixo do minimo {float(limites['edge_minimo']):+.4f}",
                 sinal, confianca, edge, modelo=modelo_ciclo))
-        if not simples and confianca < float(limites["confianca_minima"]):
+        if confianca < float(limites["confianca_minima"]):
             return self._registrar(Decisao(
                 agora, simbolo, timeframe, False,
                 f"confianca {confianca:.1f}% abaixo do minimo {float(limites['confianca_minima']):.1f}%",
@@ -1557,43 +1618,93 @@ def sugerir_limites(simbolo: str, timeframe: str, broker: str, market: str) -> d
     if not (atr_pct >= 0):
         return {"ok": False, "error": "volatilidade nao medida na serie"}
 
+    # BANCA DESBLOQUEADA (25/10/2026): em vez de chutar dinheiro do operador,
+    # le a banca REAL da conta quando o escopo e MT5. Nao e palpite: e o saldo
+    # que a corretora devolveu. Em corretoras sem conta local (crypto), fica
+    # nao declarada (0) e o operador digita — nunca inventa.
+    banca_real = 0.0
+    if str(broker or "").lower() == "mt5":
+        try:
+            import MetaTrader5 as _mt5
+            info = _mt5.account_info()
+            if info is not None:
+                banca_real = float(getattr(info, "balance", 0.0) or getattr(info, "equity", 0.0) or 0.0)
+        except Exception:  # noqa: BLE001
+            banca_real = 0.0
+
     def _faixa(valor: float, minimo: float, maximo: float) -> float:
         return max(minimo, min(maximo, valor))
 
     # Faixas iniciais (conservadoras). Cada uma tem o motivo em `base`, e a
     # tabela permite ajustar — o padrao da IA e ponto de partida, nao trava.
     if atr_pct < 0.5:
-        risco = 1.0
+        risco = 2.0
     elif atr_pct < 1.5:
-        risco = 0.5
+        risco = 1.0
     elif atr_pct < 3.0:
+        risco = 0.5
+    else:
         risco = 0.3
+    risco = _faixa(risco, 0.1, 5.0)
+    if edge >= 0.10:
+        posicoes, por_dia, perda_dia = 20, 50, 5.0
+    elif edge >= 0.05:
+        posicoes, por_dia, perda_dia = 10, 25, 3.0
     else:
-        risco = 0.2
-    risco = _faixa(risco, 0.1, 2.0)
-    if edge >= 0.15:
-        posicoes, por_dia, perda_dia = 3, 8, 3.0
-    elif edge >= 0.08:
-        posicoes, por_dia, perda_dia = 2, 5, 2.0
+        posicoes, por_dia, perda_dia = 5, 10, 2.0
+    if edge > 0:
+        # FOLGA DE 10% ABAIXO DO EDGE MEDIDO: sugerir o minimo EXATAMENTO no
+        # medido (0,114 para 0,114) deixa o motor na fronteira — recusa com
+        # meio desvio do proprio edge (liga hoje, recusa amanha). O teto e o
+        # medido x 0,95: a sugestao nao pode impor um minimo que o
+        # modelo atual nao passa.
+        edge_sugerido = _faixa(round(edge * 0.9, 4), 0.0, round(edge * 0.95, 4))
     else:
-        posicoes, por_dia, perda_dia = 1, 3, 1.0
+        edge_sugerido = 0
+    # CONFIANCA COM FOLGA (25/10/2026): o piso fixo de 50 era o comentario que
+    # media 50 para um modelo medido a 36,8% — sugerir o minimo acima da
+    # confianca medida e declarar o motor desligado por desenho (MEDIDO: o
+    # painel do dono mostrava exatamente isso). Sugestao = medida - 5 p.p.,
+    # so no piso de 30 e teto de 60: nunca acima do que o modelo mede hoje,
+    # porque a sugestao nao pode impor um minimo que o modelo atual nao passa.
+    # proteção: o teto e a PROPRIA medida — a sugestao nunca fica acima do
+    # que o modelo consegue hoje (o defeito medido: minim um de 50 p/ medida
+    # de 36,8% = motor desligado por desenho).
+    confianca_sugerida = _faixa(round(conf) - 5, 30, round(conf))
+    # ATR (dinamico): multiplicadores conservadores pelo regime. O motor opera
+    # so por ATR agora (modo fixo removido) — a IA precisa sugerir isso tambem.
+    if atr_pct < 0.5:
+        sl_atr, tp_atr = 1.0, 2.0
+    elif atr_pct < 1.5:
+        sl_atr, tp_atr = 1.5, 2.5
+    else:
+        sl_atr, tp_atr = 2.0, 3.0
+    sl_atr = _faixa(sl_atr, 0.5, 5.0)
+    tp_atr = _faixa(tp_atr, 1.0, 8.0)
     limites = {
-        "confianca_minima": _faixa(round(conf), 50, 90),
-        "edge_minimo": round(edge, 4) if edge > 0 else 0,
+        "confianca_minima": confianca_sugerida,
+        "edge_minimo": edge_sugerido,
         "risco_por_trade_pct": risco,
         "max_posicoes": posicoes,
         "max_operacoes_dia": por_dia,
         "perda_diaria_max_pct": perda_dia,
         "intervalo_minutos": INTERVALO_POR_TIMEFRAME.get(periodo, 30),
+        "sl_atr": sl_atr,
+        "tp_atr": tp_atr,
+        "banca": round(banca_real, 2) if banca_real > 0 else 0.0,
     }
     base = {
-        "confianca_minima": f"confianca atual do modelo: {conf:.0f}%",
-        "edge_minimo": f"edge medido: {edge:.4f}",
+        "confianca_minima": f"confianca medida {conf:.1f}% −5 p.p. de folga (minimo 30; teto: a propria medida)",
+        "edge_minimo": f"edge medido {edge:.4f} −10% de folga, teto medido×0,95",
         "risco_por_trade_pct": f"volatilidade {atr_pct:.2f}% na serie ({len(df)} velas)",
         "max_posicoes": f"faixa por edge {edge:.4f}",
         "max_operacoes_dia": f"faixa por edge {edge:.4f}",
-        "perda_diaria_max_pct": f"faixa por edge {edge:.4f}",
+        "perda_diaria_max_pct": f"faixa por edge {edge:.4f} (ligada a banca, ajuste manual)",
         "intervalo_minutos": f"passo do periodo {periodo}",
+        "sl_atr": f"ATR {atr_pct:.2f}% → multiplicador {sl_atr}",
+        "tp_atr": f"ATR {atr_pct:.2f}% → multiplicador {tp_atr}",
+        "banca": (f"saldo real da conta MT5: {banca_real:.2f}" if banca_real > 0
+                  else "nao declarada (conta nao acessivel)"),
     }
     return {
         "ok": True,

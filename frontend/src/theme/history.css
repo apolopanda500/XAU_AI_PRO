@@ -78,11 +78,11 @@
   font-weight: 700;
 }
 .acum-table-card td.acum-pos {
-  color: #35d28f !important;
+  color: var(--ok) !important;
   font-weight: 700;
 }
 .acum-table-card td.acum-neg {
-  color: #ff5c74 !important;
+  color: var(--danger) !important;
   font-weight: 700;
 }
 .acum-table-card td:nth-child(3).acum-pos,
@@ -90,10 +90,10 @@
   text-shadow: 0 0 10px currentColor;
 }
 .acum-table-card tbody tr:has(td.acum-pos) {
-  box-shadow: inset 3px 0 #35d28f;
+  box-shadow: inset 3px 0 var(--ok);
 }
 .acum-table-card tbody tr:has(td.acum-neg) {
-  box-shadow: inset 3px 0 #ff5c74;
+  box-shadow: inset 3px 0 var(--danger);
 }
 /* `.chip.mt5` e `.chip.neutral` foram para theme/global.css junto com os
    demais tons: o vocabulario do chip de status e de um lugar so. */
@@ -174,16 +174,16 @@
   font-weight: 700;
 }
 .quantum-history .history-row-positive td:nth-child(7) {
-  color: #22c55e !important;
+  color: var(--ok) !important;
 }
 .quantum-history .history-row-negative td:nth-child(7) {
-  color: #ef4444 !important;
+  color: var(--danger) !important;
 }
 .quantum-history .history-row-neutral td:nth-child(7) {
-  color: #94a3b8 !important;
+  color: var(--muted) !important;
 }
 .quantum-history .history-error {
-  border-left: 3px solid #ef4444;
+  border-left: 3px solid var(--danger);
 }
 
 /* TABELA COMPACTA E GAVETAS POR DIA (2026-09-30)

@@ -1,7 +1,7 @@
 //+------------------------------------------------------------------+
 //|                                               BenchmarkEngine.mqh |
 //|                                  Strategy Benchmark System        |
-//|                                            XAU_AI_PRO v1.2.0      |
+//|                                            XAU_AI_PRO v1.2.9      |
 //|                                            ETAPA 8 - v2.0         |
 //+------------------------------------------------------------------+
 // BenchmarkEngine compara o desempenho de estrategias (Technical,

@@ -1,7 +1,7 @@
 //+------------------------------------------------------------------+
 //|                                           NotificationCenter.mqh |
 //|                                  Notification Center             |
-//|                                            XAU_AI_PRO v1.2.0      |
+//|                                            XAU_AI_PRO v1.2.9      |
 //|                                            ETAPA 9 - v2.0         |
 //+------------------------------------------------------------------+
 // Central de notificacoes do EA: camada de OBSERVABILIDADE.

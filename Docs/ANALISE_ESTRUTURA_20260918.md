@@ -220,10 +220,11 @@ Mas:
 
 `mcp/` (interno do projeto):
 
-- `mcp/servers/registry.json` → lista `mt5_gateway.json`, `tradingview.json`
-- `mcp/servers/mt5_gateway.json` → declara `type: http`, endpoint `http://127.0.0.1:9001`, `needs_api_key: false`
+- ~~`mcp/servers/registry.json`~~ → **REMOVIDO em 25/10/2026**: o `load_mcp_servers()` ignorava o registry (fazia `glob("*.json")` da pasta e pulava o próprio arquivo), então era fonte de nada — só um teste lia a lista literal. A pasta é agora a única fonte.
+- `mcp/servers/mt5_gateway.json` → declara `type: http`, endpoint `http://127.0.0.1:9001` (o `needs_api_key: false` saiu em 25/10/2026 — **medido: zero leitores**)
 - `mcp/servers/tradingview.json`
 - `mcp/subgrp/financial_graph.py` — subgrafo financeiro
+- `mcp/servers/test_sequential_thinking.py` → movido para `scripts/testar_sequential_thinking.py` em 25/10/2026: é script manual de verificação, não é entrada de catálogo
 
 ⚠️ **Lacuna:** o `mt5_gateway.json` **descreve** um MCP server, mas o gateway é um servidor HTTP comum — **não implementa o protocolo MCP** (sem `initialize`, `tools/list`, `tools/call`, sem transport stdio/SSE). O registry aponta para algo que não fala MCP. Falta a ponte real.
 
@@ -395,7 +396,7 @@ Documentação oficial (`v2.tauri.app/develop/sidecar/`):
 | L9  | 5 dos 8 temas sem wallpaper próprio                            | `useTheme.ts`                                              | Baixo — cosmético               |
 | L10 | Mini terminal sem comissão/duração/magic/retorno               | `UniversalLiveTerminalLatest`                              | 🟠 Médio — "falta info"         |
 | L11 | Sem ações por linha na tabela de posições                      | `UniversalLiveTerminalLatest`                              | Médio — "comandos para fechar"  |
-| L12 | MCP declarado mas não implementado                             | `mcp/servers/mt5_gateway.json`                             | 🟠 Médio — integração fantasma  |
+| ~~L12~~ | **FECHADO (medido 25/10/2026)** — `mt5_gateway` e `tradingview` estão em `_ACTIONS_SPECIFIC` (`app/mcp_tools.py:89`) e `_act_mt5_gateway` faz chamada HTTP real ao gateway | `mcp/servers/mt5_gateway.json`                             | ~~🟠 Médio~~ Fechado |
 | L13 | Motores `Python/` (IA, risco, backtest) desconectados          | `Python/*` vs `frontend/`                                  | Alto — IA inerte                |
 | L14 | Sem OpenAPI/Swagger no gateway                                 | `mt5_gateway.py`                                           | 🟡 Baixo — DX                   |
 | L15 | `GATEWAY_BUILD` congelado em 1.2.0                             | `mt5_gateway.py`                                           | Médio — não detecta drift       |

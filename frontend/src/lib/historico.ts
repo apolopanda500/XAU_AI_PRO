@@ -36,6 +36,15 @@ export interface Deal {
   realizedPnl?: number | string;
   profit?: number;
   executedAt?: string;
+  /**
+   * Hora do SERVIDOR da corretora no formato do MT5 (`2026.10.05 01:46:43`).
+   *
+   * MEDIDO em 23/10/2026: o `deal.time` do MT5 e a hora de parede do servidor
+   * (UTC+3 nesta conta) codificada como se fosse UTC. Formatado no fuso da
+   * maquina (UTC-3) o mesmo deal aparecia 6 h antes do que o MT5 mostra.
+   * Quando este campo existe, a tela usa ELE.
+   */
+  time_server?: string;
   close_time?: string;
   comment?: string;
   position_id?: number | string;

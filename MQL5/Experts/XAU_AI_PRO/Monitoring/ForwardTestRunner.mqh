@@ -41,7 +41,8 @@
 #include "../Enterprise/ConnectionGuard.mqh" // self-contained: ConnectionGuardRefresh
 #include "../Enterprise/FailureMode.mqh"     // self-contained: GetFailureStateString
 #include "../Filters/NewsFilter.mqh"         // self-contained: GetNewsState
-#include "../AI/AIClient.mqh"                // self-contained: AIClientConnected/LastAIConfidence
+#include "../AI/AIClient.mqh"
+#include "../Enterprise/VersionManager.mqh"   // EA_VERSION_STRING (fonte unica)                // self-contained: AIClientConnected/LastAIConfidence
 
 input bool EnableForwardLog      = true;   // ETAPA 13: coletor de sesion live
 input int    ForwardHeartbeatSec = 1;      // intervalo minimo do heartbeat (seg)
@@ -145,7 +146,7 @@ void ForwardHeartbeat()
       newsState = EnumToString(GetNewsState());
    bool aiReady = AIClientConnected();
    double aiConf = LastAIConfidence();
-   string version = "1.2.0";
+   string version = EA_VERSION_STRING;
    FileWrite(g_fwdHFile,
       TimeToString(now, TIME_DATE | TIME_SECONDS),
       DoubleToString(AccountInfoDouble(ACCOUNT_BALANCE), 2),

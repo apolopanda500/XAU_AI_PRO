@@ -1,7 +1,7 @@
 ﻿//+------------------------------------------------------------------+
 //|                                            ExecutionQuality.mqh |
 //|                                  Smart Execution Engine - Quality|
-//|                                            XAU_AI_PRO v1.2.0       |
+//|                                            XAU_AI_PRO v1.2.9       |
 //+------------------------------------------------------------------+
 
 #ifndef EXECUTION_QUALITY_MQH

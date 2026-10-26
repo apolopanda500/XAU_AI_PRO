@@ -1,4 +1,4 @@
-// XAU_AI_PRO v1.2.0 - VersionManager v2.0 (ETAPA 10)
+// XAU_AI_PRO v1.2.9 - VersionManager v2.0 (ETAPA 10)
 // Versao padronizada, build date, registro do estado dos modulos.
 // SEM auto-update: atualizacao somente controlada/manual (seguranca).
 #ifndef VERSION_MANAGER_MQH
@@ -11,7 +11,7 @@
 // escreve no log, e que a tela mostra, dizia uma versao que nao existe mais.
 // Este modulo nao esta na lista de manifestos do `sync_version.py`, entao a
 // divergencia nao era detectada por `--check`.
-#define EA_VERSION_STRING "1.2.4"
+#define EA_VERSION_STRING "1.2.9"
 
 struct VersionInfo
 {
@@ -60,7 +60,8 @@ void CVersionManager::Init()
    m_current.version    = EA_VERSION_STRING;
    m_current.build_date = TimeToString(TimeCurrent(), TIME_DATE);
    m_current.author     = "XAU_AI_PRO Team";
-   m_current.changes    = "v1.2.4 - ETAPA 10: consolidacao final (ConfigManager, "
+   m_current.changes    = "v1.2.8 - identidade do build derivada de Docs/version.json, "
+                           "classificacao do catalogo pela hierarquia da corretora (v1.2.4: "
                            "VersionManager, BackupManager, NotificationCenter)";
    m_current.stable     = true;
 

@@ -1,4 +1,4 @@
-// XAU_AI_PRO v1.2.0 - NEWS FILTER PROFESSIONAL (Etapa 6 + calendario MT5 nativo)
+// XAU_AI_PRO v1.2.9 - NEWS FILTER PROFESSIONAL (Etapa 6 + calendario MT5 nativo)
 #ifndef NEWSFILTER_MQH
 #define NEWSFILTER_MQH
 

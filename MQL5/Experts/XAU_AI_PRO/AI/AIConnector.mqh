@@ -1,4 +1,4 @@
-// XAU_AI_PRO v1.2.0
+// XAU_AI_PRO v1.2.9
 #ifndef AICONNECTOR_MQH
 #define AICONNECTOR_MQH
 
@@ -7,7 +7,7 @@
 
 //==================================================
 // AI CONNECTOR
-// XAU_AI_PRO v1.2.0
+// XAU_AI_PRO v1.2.9
 // MULTI SYMBOL
 //
 // RESPONSABILIDADE:
