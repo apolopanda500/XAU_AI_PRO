@@ -50,7 +50,9 @@ Os 9 `skip` são os já documentados (CI Linux onde o MetaEditor não existe,
 | Prova negativa | — | `test_ligar_continua_exigindo_o_conjunto_completo`; SL/TP sem lote continua recusado (`test_pedido_sem_lote_ainda_recusado`) |
 | Faixas declaradas | confiança 150 passava em alguns caminhos; `banca=0,5` não era julgado | cada campo tem faixa própria; valor fora dela **não entra** (pedido inteiro é recusado) |
 | Gateway no ar | `.exe` anterior (recusava o Aplicar) | reconstruído, hash idêntico `dist`/instalado/`src-tauri`; `/health` 401 sem token |
-| Testes | — | **suite inteira: 1561 passed, 2 skipped**; artefato **exit 0** |
+| IA sobrescrevia ao voltar | painel remontava vazio e a sugestão automática rodava antes da leitura do motor → valores aplicados trocados | com limite guardado no motor, a sugestão **não roda**; campos mostram o que foi aplicado |
+| Testes | — | **suite Python: 1561 passed, 2 skipped**; **vitest: 981 passed (81 arquivos)**; `tsc --noEmit` exit 0; artefato **exit 0** |
+| App instalado | UI anterior (sem as duas correções) | 1.2.9 reconstruído e instalado; gateway novo no ar |
 
 ---
 
