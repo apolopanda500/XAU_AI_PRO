@@ -29,6 +29,7 @@ from backend.mexc_client import MexcClient, MexcError
 from backend.bybit_client import BybitClient, BybitError
 from backend.okx_client import OkxClient, OkxError
 from backend.risk_gate import validate_trade
+from backend import connection_store
 from backend.connection_store import save_connection, list_connections, delete_connection, load_connection_credentials_full, resolve_connection
 from backend.binance_client import BinanceClient, BinanceError
 from backend.universal_contracts import (
@@ -1459,26 +1460,247 @@ def _mt5_connected() -> bool:
         return False
 
 
-def _ensure_mt5() -> bool:
-    # MetaTrader5.initialize() pode abrir o terminal automaticamente.
-    # O app deve somente conectar a uma sessao que o usuario ja abriu.
-    if os.name == "nt":
+_TERMINAL_START_LOCK = threading.Lock()
+_TERMINAL_LAST_START = 0.0
+_TERMINAL_START_INTERVAL = 45.0
+_TERMINAL_START_TIMEOUT = 25.0
+_AUTOSTART_OFF = {"0", "false", "nao", "não", "off", "no"}
+
+
+def _terminal_autostart_enabled() -> bool:
+    """Auto-start do terminal, ligado por padrao; `XAU_MT5_AUTOSTART=0` desliga."""
+    return (os.getenv("XAU_MT5_AUTOSTART") or "1").strip().lower() not in _AUTOSTART_OFF
+
+
+def _terminal_path() -> str | None:
+    """Caminho do `terminal64.exe`, por `XAU_MT5_TERMINAL` ou instalacao padrao.
+
+    Nao presume: so devolve caminho que o disco confirma. Devolver None e
+    recusa com motivo, nunca "vou tentar o padrao de qualquer jeito".
+    """
+    candidato = (os.getenv("XAU_MT5_TERMINAL") or "").strip()
+    if candidato:
+        return candidato if os.path.isfile(candidato) else None
+    for caminho in (
+        r"C:\Program Files\MetaTrader 5\terminal64.exe",
+        r"C:\Program Files (x86)\MetaTrader 5\terminal64.exe",
+        r"C:\MetaTrader 5\terminal64.exe",
+    ):
+        if os.path.isfile(caminho):
+            return caminho
+    return None
+
+
+def _terminal_running() -> bool:
+    """O processo do terminal esta vivo?
+
+    `tasklist` e a prova de processo. `MetaTrader5.initialize()` sozinho ABRE
+    o terminal, entao ele nao serve para descobrir se ja esta aberto.
+    """
+    try:
+        result = subprocess.run(
+            ["tasklist", "/FI", "IMAGENAME eq terminal64.exe", "/FO", "CSV", "/NH"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=False,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return "terminal64.exe" in result.stdout.lower()
+
+
+_SESSION_WAIT = 10.0
+
+
+def _auto_login_file() -> Path:
+    return Path(os.environ.get("APPDATA", "")) / "XAU_AI_PRO" / "mt5_auto_login.dpapi.json"
+
+
+def _auto_login_from_env() -> dict | None:
+    login = (os.getenv("XAU_MT5_LOGIN") or "").strip()
+    senha = os.getenv("XAU_MT5_PASSWORD") or ""
+    server = (os.getenv("XAU_MT5_SERVER") or "").strip()
+    if not (login and senha and server):
+        return None
+    try:
+        return {"login": int(login), "password": senha, "server": server}
+    except ValueError:
+        return None
+
+
+def _auto_login_from_file() -> dict | None:
+    try:
+        dados = json.loads(_auto_login_file().read_text(encoding="utf-8"))
+        senha = connection_store.unprotect_secret(str(dados["password"]))
+        return {"login": int(dados["login"]), "password": senha, "server": str(dados["server"])}
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def _auto_login_credentials() -> dict | None:
+    """Credencial do login automatico: arquivo DPAPI (tela) ou ambiente.
+
+    Nada aqui e presumido: sem login, senha e servidor nao existe credencial,
+    e a conexao continua sendo a sessao que o terminal ja tem.
+    """
+    return _auto_login_from_file() or _auto_login_from_env()
+
+
+def _auto_login_status() -> dict:
+    """Diz o que esta configurado, nunca a senha."""
+    credenciais = _auto_login_credentials()
+    if not credenciais:
+        return {"ok": True, "configured": False, "login": None, "server": None, "source": None}
+    return {
+        "ok": True,
+        "configured": True,
+        "login": credenciais["login"],
+        "server": credenciais["server"],
+        "source": "file" if _auto_login_from_file() else "env",
+    }
+
+
+def _save_auto_login(payload: dict) -> dict:
+    login = str(payload.get("login") or "").strip()
+    senha = str(payload.get("password") or "")
+    server = str(payload.get("server") or "").strip()
+    if payload.get("clear") is True:
         try:
-            result = subprocess.run(
-                ["tasklist", "/FI", "IMAGENAME eq terminal64.exe", "/FO", "CSV", "/NH"],
-                capture_output=True,
-                text=True,
-                timeout=2,
-                check=False,
+            _auto_login_file().unlink()
+        except FileNotFoundError:
+            pass
+        return {**_auto_login_status(), "cleared": True}
+    if not (login.isdigit() and senha and server):
+        raise ValueError("login (numero), password e server sao obrigatorios")
+    destino = _auto_login_file()
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    dados = {"login": int(login), "server": server, "password": connection_store.protect_secret(senha)}
+    temp = destino.with_suffix(".tmp")
+    temp.write_text(json.dumps(dados), encoding="utf-8")
+    os.replace(temp, destino)
+    return _auto_login_status()
+
+
+def _sessao_confere(atual: Any, credenciais: dict) -> bool:
+    try:
+        return int(getattr(atual, "login", 0)) == credenciais["login"] and str(
+            getattr(atual, "server", "")
+        ) == credenciais["server"]
+    except (TypeError, ValueError):
+        return False
+
+
+def _inicializar_mt5(mt5: Any, caminho: str | None, credenciais: dict | None) -> bool:
+    """Anexa ao terminal e, se a sessao nao for a configurada, faz o login.
+
+    A ordem importa: primeiro se DETECTA a sessao que ja existe. So quando ela
+    nao e a conta configurada e que a credencial entra — uma senha errada nao
+    deve derrubar uma sessao boa que ja estava logada.
+    """
+    kwargs = {"path": caminho} if caminho else {}
+    try:
+        conectou = bool(mt5.initialize(**kwargs))
+    except TypeError:
+        conectou = bool(mt5.initialize())
+    if not conectou or not credenciais:
+        return conectou
+    atual = mt5.account_info()
+    if atual is not None and _sessao_confere(atual, credenciais):
+        return True
+    try:
+        mt5.shutdown()
+    except Exception:  # noqa: BLE001 - shut down e melhor esforco
+        pass
+    try:
+        return bool(mt5.initialize(
+            login=credenciais["login"],
+            password=credenciais["password"],
+            server=credenciais["server"],
+            **kwargs,
+        ))
+    except TypeError:
+        return bool(mt5.initialize(
+            login=credenciais["login"],
+            password=credenciais["password"],
+            server=credenciais["server"],
+        ))
+
+
+def _aguardar_sessao(mt5: Any, timeout: float) -> bool:
+    """Espera o terminal terminar o login que ele mesmo faz ao abrir."""
+    try:
+        if mt5.account_info() is not None:
+            return True
+    except Exception:  # noqa: BLE001
+        return False
+    limite = time.monotonic() + timeout
+    while time.monotonic() < limite:
+        time.sleep(0.5)
+        try:
+            if mt5.account_info() is not None:
+                return True
+        except Exception:  # noqa: BLE001
+            return False
+    return False
+
+
+def _start_terminal() -> bool:
+    """Abre o terminal MT5 que o usuario ja configurou nesta maquina.
+
+    Liga-la nao executa ordem nenhuma: sem conta carregada as rotas seguem
+    fail-closed como antes. A trava de 45 s evita abrir uma janela por
+    requisicao enquanto o terminal sobe.
+    """
+    global _TERMINAL_LAST_START
+    if os.name != "nt" or not _terminal_autostart_enabled():
+        return False
+    caminho = _terminal_path()
+    if not caminho:
+        print("[gateway] terminal MT5 fechado e nenhum terminal64.exe encontrado")
+        return False
+    with _TERMINAL_START_LOCK:
+        if _terminal_running():
+            return True
+        if time.monotonic() - _TERMINAL_LAST_START < _TERMINAL_START_INTERVAL:
+            return False
+        _TERMINAL_LAST_START = time.monotonic()
+        try:
+            subprocess.Popen(
+                [caminho],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                close_fds=True,
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
-            if "terminal64.exe" not in result.stdout.lower():
-                return False
-        except (OSError, subprocess.SubprocessError):
+            print(f"[gateway] terminal MT5 iniciado: {caminho}")
+        except OSError as exc:
+            print(f"[gateway] nao foi possivel iniciar o terminal MT5: {exc}")
             return False
+    limite = time.monotonic() + _TERMINAL_START_TIMEOUT
+    while time.monotonic() < limite:
+        if _terminal_running():
+            return True
+        time.sleep(0.5)
+    print("[gateway] terminal MT5 nao ficou pronto a tempo")
+    return False
+
+
+def _ensure_mt5() -> bool:
+    # Auto-start: o dono liga o app e o terminal que ele ja configurou sobe
+    # junto. Sem terminal e sem caminho, a recusa continua sendo recusa.
+    caminho = None
+    if os.name == "nt":
+        if not _terminal_running() and not _start_terminal():
+            return False
+        caminho = _terminal_path()
     mt5 = _mt5()
-    if not mt5.initialize():
+    if not _inicializar_mt5(mt5, caminho, _auto_login_credentials()):
         return False
+    if not _aguardar_sessao(mt5, _SESSION_WAIT):
+        print("[gateway] terminal aberto, sem sessao de conta (login nao concluido)")
     try:
         report = intent_log.reconcile(mt5)
         if report.get("checked"):
@@ -1963,6 +2185,31 @@ def _movimentacao_de(deal: object) -> str:
     return _TIPOS_DEAL.get(tipo, f"TIPO_{tipo}")
 
 
+def _mt5_hora_servidor(timestamp) -> str | None:
+    """Hora do SERVIDOR da corretora, no formato do MT5 (`2026.10.05 01:46:43`).
+
+    MEDIDO em 23/10/2026 nesta maquina (EURUSD, conta XMGlobal-MT5): o tick
+    voltou com `time` = 2026-10-23T23:14:19 e o UTC real era 20:14:19 — o
+    servidor esta em UTC+3, e o `deal.time` do MT5 carrega a HORA DE PAREDE do
+    servidor codificada como se fosse UTC.
+
+    Consequencia antes desta funcao: `timestamp_iso` escrevia `...T23:14:19Z`,
+    o navegador convertia para o fuso da maquina (UTC-3) e a tela mostrava
+    `17:14:19` enquanto o MT5 mostrava `23:14:19` — seis horas de diferenca e,
+    perto da meia-noite, o DIA errado.
+
+    Nao se subtrai offset aqui de proposito: o operador confere o historico
+    contra o MT5, e o que tem de bater e a hora que o MT5 mostra. `time` (ISO
+    em UTC) continua no payload para ordenar e para calculo.
+    """
+    if timestamp is None:
+        return None
+    try:
+        return datetime.utcfromtimestamp(int(timestamp)).strftime("%Y.%m.%d %H:%M:%S")
+    except (TypeError, ValueError, OSError):
+        return None
+
+
 def _history(days: int = 30, symbol: str = "") -> dict:
     mt5 = _mt5()
     days = max(1, min(int(days), 3650))
@@ -2027,6 +2274,8 @@ def _history(days: int = 30, symbol: str = "") -> dict:
             "fee": optional_number(getattr(deal, "fee", None)),
             "magic": optional_number(getattr(deal, "magic", None), integer=True),
             "time": timestamp_iso(optional_number(getattr(deal, "time", None), integer=True)),
+            "time_server": _mt5_hora_servidor(getattr(deal, "time", None)),
+            "broker": "mt5",
         })
     rows.sort(key=lambda row: row.get("time") or "", reverse=True)
     return {"deals": rows, "count": len(rows), "days": days, "source": "mt5_gateway"}
@@ -3406,6 +3655,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, _journal(int(query.get("limit", ["100"])[0])))
             except Exception as exc:
                 self._send(503, {"ok": False, "error": str(exc), "lines": [], "count": 0})
+        elif path == "/api/mt5/auto-login":
+            self._send(200, _auto_login_status())
         elif path == "/api/account":
             self._send(200, _payload().get("account") or {"ok": False})
         elif path in ("/api/symbols", "/api/assets"):
@@ -3721,6 +3972,14 @@ class Handler(BaseHTTPRequestHandler):
             record_audit(AUDIT_FILE, action=universal_actions[parsed.path], payload=payload, status=result.get("stage", "rejected"))
             LAST_COMMAND.update({"command": parsed.path, "status": "validated" if result.get("stage") == "validated" else "rejected", "updated_at": datetime.now().isoformat()})
             self._send(200 if result.get("stage") == "validated" else 422, result); return
+        if parsed.path == "/api/mt5/auto-login":
+            length = int(self.headers.get("Content-Length", "0"))
+            payload = json.loads(self.rfile.read(length) or b"{}")
+            try:
+                self._send(200, _save_auto_login(payload))
+            except (ValueError, OSError) as exc:
+                self._send(400, {"ok": False, "error": str(exc)})
+            return
         if parsed.path in {"/api/assets/select", "/api/assets/enable", "/api/assets/disable"}:
             length = int(self.headers.get("Content-Length", "0")); payload = json.loads(self.rfile.read(length) or b"{}")
             self._send(200, _asset_toggle(payload, parsed.path != "/api/assets/disable")); return

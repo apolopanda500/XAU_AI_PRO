@@ -575,6 +575,29 @@
   position: relative;
 }
 
+/*
+  TELA CHEIA DO GRAFICO (23/10/2026)
+  ----------------------------------
+  O `requestFullscreen` vai no wrap; sem estas regras o canvas continuaria com
+  a altura fixa do modo normal e o operador veria meia tela cheia de vazio.
+  A altura do canvas e `100vh` porque, em tela cheia, o wrap e o unico filho
+  visivel da pagina.
+*/
+.market-chart-wrap:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  background: var(--bg);
+  padding: 0;
+}
+
+.market-chart-wrap:fullscreen .market-chart-canvas {
+  height: 100vh;
+  min-height: 0;
+  margin-top: 0;
+  border: 0;
+  border-radius: 0;
+}
+
 .price-chart-overlay {
   position: absolute;
   inset: 0;

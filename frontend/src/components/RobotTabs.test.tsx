@@ -33,6 +33,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 const estado = vi.hoisted(() => ({
   auto: { ativo: false, simbolo: 'GOLD', timeframe: 'H1' } as Record<string, unknown>,
   ws: true,
+  /** Par escolhido pelo operador no seletor "Par para operar". */
+  selectedSymbol: '' as string,
   chamadas: [] as Array<{ url: string; body: Record<string, unknown> }>,
   /**
    * O preco que `/api/universal/quotes` devolve. `null` e a corretora sem
@@ -47,7 +49,8 @@ vi.mock('../hooks/queries', () => ({
 }));
 
 vi.mock('../hooks/useAppStore', () => ({
-  useAppStore: (seletor: (s: unknown) => unknown) => seletor({ wsConnected: estado.ws }),
+  useAppStore: (seletor: (s: unknown) => unknown) =>
+    seletor({ wsConnected: estado.ws, selectedSymbol: estado.selectedSymbol, setSelectedSymbol: () => {} }),
 }));
 
 /*
@@ -150,6 +153,7 @@ beforeEach(() => {
   estado.auto = { ativo: false, simbolo: 'GOLD', timeframe: 'H1' };
   estado.ws = true;
   estado.chamadas = [];
+  estado.selectedSymbol = '';
   estado.preco = 4140.6;
   window.localStorage.setItem('xau-active-account', 'mt5:metals');
   // A escolha de CONTA (id) e estado deste arquivo tambem: sem a limpeza, o
@@ -1146,6 +1150,25 @@ describe('IA sugere limites, operador grava (12/10/2026)', () => {
     expect(corpo.broker).toBe('mt5');
   });
 
+  it('PROVA NEGATIVA: sem timeframe, a IA nem e acionada e a tela diz o que falta', async () => {
+    let acionou = false;
+    vi.stubGlobal('fetch', async (url: string) => {
+      if (String(url).includes('/api/auto/sugerir-limites')) acionou = true;
+      return { ok: true, json: async () => ({ ok: true }) };
+    });
+    estado.auto = { ativo: false, simbolo: 'GOLD', timeframe: '', broker: 'mt5', market: 'metals' };
+    const container = naRisco();
+    await abaRiscoAberta(container);
+
+    fireEvent.click(screen.getByRole('button', { name: 'IA sugere limites' }));
+    await waitFor(() => {
+      const texto = document.querySelector('.robo-observacao')?.textContent ?? '';
+      expect(texto).toContain('escolha o timeframe antes');
+    });
+    await new Promise((resolvi) => setTimeout(resolvi, 50));
+    expect(acionou).toBe(false);
+  });
+
   it('PROVA NEGATIVA: IA sem resposta nao preenche nem apaga nada', async () => {
     vi.stubGlobal('fetch', async (url: string) => {
       if (String(url).includes('/api/auto/sugerir-limites')) {
@@ -1226,5 +1249,54 @@ describe('IA sempre viva (13/10/2026)', () => {
     await new Promise((r) => setTimeout(r, 300));
     expect(estado.chamadas.length).toBe(chamadasAposAuto);
     expect(campo.value).toBe('99');
+  });
+});
+
+/*
+  O PAR DA TELA E O DA ESCOLHA, E NAO O GRAVADO NO MOTOR (22/10/2026)
+  ===================================================================
+  MEDIDO no app instalado: a barra inferior mostrava `BTCUSD` e o seletor
+  "Par para operar" mostrava `XAUUSD`, na mesma janela. O `auto.simbolo` era
+  um valor antigo do motor, e ele vencia a escolha do operador no cabecalho,
+  na barra e no corpo do `/api/auto/config` - o motor recebia `BTCUSD`, que o
+  MetaQuotes-Demo nao publica, e o AUTO nunca ligava.
+
+  Os dois lados do mesmo dado: a tela mostrando um par e mandando outro. Estes
+  tres casos travam a precedencia nos dois sentidos (prova e prova negativa).
+*/
+describe('o par na tela e a escolha do operador, nao o par gravado no motor', () => {
+  it('PROVA: motor DESLIGADO, o cabecalho mostra o par escolhido', () => {
+    estado.auto = { ativo: false, simbolo: 'BTCUSD', timeframe: 'M15' };
+    estado.selectedSymbol = 'XAUUSD';
+    const { container } = renderPainel();
+    const texto = container.textContent ?? '';
+    expect(texto).toContain('XAUUSD');
+    expect(texto).not.toContain('BTCUSD');
+  });
+
+  it('PROVA NEGATIVA: motor LIGADO, o cabecalho mostra o par que ele opera', () => {
+    estado.auto = { ativo: true, simbolo: 'BTCUSD', timeframe: 'M15' };
+    estado.selectedSymbol = 'XAUUSD';
+    const { container } = renderPainel();
+    const texto = container.textContent ?? '';
+    expect(texto).toContain('BTCUSD');
+    // O par escolhido continua na tela (o seletor e a fonte), mas quem
+    // opera e o do motor: o cabecalho nao pode dizer que opera XAUUSD.
+    const cabecalho = container.querySelector('.section-head .muted');
+    expect(cabecalho?.textContent ?? '').toContain('BTCUSD');
+    expect(cabecalho?.textContent ?? '').not.toContain('XAUUSD');
+  });
+
+  it('o corpo enviado ao motor leva o par ESCOLHIDO, e nao o gravado', async () => {
+    estado.auto = { ativo: false, simbolo: 'BTCUSD', timeframe: 'M15' };
+    estado.selectedSymbol = 'XAUUSD';
+    renderPainel();
+    await ticketMontado();
+    fireEvent.click(screen.getByRole('switch', { name: 'Operação automática' }));
+    await waitFor(() =>
+      expect(estado.chamadas.some((c) => c.url.includes('/api/auto/config'))).toBe(true),
+    );
+    const cfg = estado.chamadas.find((c) => c.url.includes('/api/auto/config'))!;
+    expect(cfg.body.simbolo).toBe('XAUUSD');
   });
 });

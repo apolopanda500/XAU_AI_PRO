@@ -224,17 +224,37 @@ def test_porta_de_qualidade_bloqueia_edge_insuficiente():
     assert "abaixo do minimo" in r.motivo
 
 
-def test_porta_de_qualidade_libera_quando_edge_supera_minimo():
-    r = t.treinar(_serie(3000), "XAUUSD", "M5", min_edge=-1.0)
+def test_porta_de_qualidade_libera_quando_edge_supera_minimo(monkeypatch):
+    # O GATE e o que este teste mede; a floresta nao. Uma serie sintetica de
+    # ruido nao tem sinal, e desde 22/10/2026 o edge e medido contra a classe
+    # majoritaria - entao ela reprova por falta de edge, nao por defeito da
+    # porta. Aqui o walk-forward e substituido por folds positivos para que a
+    # decisao da porta seja o unico objeto do teste.
+    folds = [
+        {"fold": k + 1, "accuracy": 0.60, "baseline": 0.40, "edge": 0.20,
+         "train": 1000 + k * 200, "test": 200}
+        for k in range(t.N_FOLDS)
+    ]
+    monkeypatch.setattr(t, "walk_forward", lambda *a, **k: folds)
+    r = t.treinar(_serie(3000), "XAUUSD", "M5", min_edge=0.0)
     assert r.Treinou is True
     assert r.publicavel is True, r.motivo
-    assert r.edge is not None and r.edge >= -1.0
+    assert r.edge is not None and r.edge >= 0.0
 
 
-def test_edge_e_calculado_contra_o_palpite_da_arvore():
-    r = t.treinar(_serie(3000), "XAUUSD", "M5", min_edge=-1.0)
-    assert r.palpite == pytest.approx(1 / 3)
-    assert r.edge == pytest.approx(r.accuracy - r.palpite)
+def test_palpite_e_a_classe_majoritaria_e_nao_1_por_classe():
+    # MEDIDO 22/10/2026: um alvo 50/49/1 comparado com 1/3 dava "+0,17 de
+    # edge" para um modelo que so acertava a moeda. A prova negativa esta no
+    # limiar: com skew de 90%, o palpite tem de ficar perto de 0,90 - o
+    # `1/n_classes` antigo (0,33) reprovaria aqui.
+    base = t.construir_features(_serie(3000))
+    base["Target"] = 2
+    base.loc[base.index[: int(len(base) * 0.10)], "Target"] = 0
+    folds = t.walk_forward(base, min_amostras_treino=500, n_folds=3)
+    assert folds, "sem folds"
+    for fold in folds:
+        assert fold["baseline"] > 0.80
+        assert fold["edge"] == pytest.approx(fold["accuracy"] - fold["baseline"])
 
 
 def test_meta_publicavel_false_tem_motivo_explicito():

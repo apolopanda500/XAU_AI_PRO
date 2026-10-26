@@ -6,6 +6,7 @@ import { queryClient } from './hooks/queries';
 import { isMobileRuntime, sessionToken, apiBase } from './lib/api';
 import { definirBaseLocal, definirPortaWs, portaPadraoGateway } from './lib/portas';
 import { installGatewayAuth, installRemoteGatewayAuth, isTauri } from './lib/tauri';
+import { GATEWAY_BUILD } from './version';
 /*
   `App` NAO E IMPORTADO AQUI (09/10/2026)
   =========================================
@@ -134,7 +135,7 @@ async function waitForGateway() {
         response.ok &&
         payload.ok === true &&
         payload.source === 'mt5_gateway' &&
-        payload.gateway_build === 'xau-ai-pro-1.2.4-universal-20260928'
+        payload.gateway_build === GATEWAY_BUILD
       )
         return;
       retry = false;

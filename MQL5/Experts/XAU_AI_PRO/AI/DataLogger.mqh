@@ -1,4 +1,4 @@
-// XAU_AI_PRO v1.2.0
+// XAU_AI_PRO v1.2.9
 #ifndef DATALOGGER_MQH
 #define DATALOGGER_MQH
 
@@ -13,7 +13,7 @@
 
 //==================================================
 // DATA LOGGER
-// XAU_AI_PRO v1.2.0
+// XAU_AI_PRO v1.2.9
 // MULTI SYMBOL
 //==================================================
 

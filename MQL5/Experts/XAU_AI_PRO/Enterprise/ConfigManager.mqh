@@ -1,4 +1,4 @@
-// XAU_AI_PRO v1.2.0 - ConfigManager v2.0 (ETAPA 10)
+// XAU_AI_PRO v1.2.9 - ConfigManager v2.0 (ETAPA 10)
 // Persistencia REAL de perfis em FILE_COMMON (XAU_AI_PRO\Profiles\<nome>.cfg),
 // validacao de parametros, perfil ativo controlado pelo EA.
 // MQL5: structs com string NAO podem ser copiadas/retornadas por valor.

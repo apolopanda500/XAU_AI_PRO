@@ -518,12 +518,18 @@ def test_risk_gate_recusa_limite_excedido():
 
 
 def test_risk_gate_recusa_exposicao_e_drawdown():
-    with pytest.raises(ValueError):
-        validate_trade(volume=0.01, daily_loss_pct=0.0, exposure_pct=99.0,
-                       open_positions=0, daily_trades=0, drawdown_pct=0.0)
-    with pytest.raises(ValueError):
+    # Com as metricas obrigatorias presentes: sem `spread`/`notional` a recusa
+    # viria do dado ausente, nao do limite — o teste passaria pelo motivo
+    # errado (AGENTS.md §6). A exposicao e % da capacidade (0-100), entao o
+    # caso que excede o teto padrao e > 100.
+    with pytest.raises(ValueError, match="exposi"):
+        validate_trade(volume=0.01, daily_loss_pct=0.0, exposure_pct=100.01,
+                       open_positions=0, daily_trades=0, drawdown_pct=0.0,
+                       spread=1.0, notional=1.0)
+    with pytest.raises(ValueError, match="drawdown"):
         validate_trade(volume=0.01, daily_loss_pct=0.0, exposure_pct=0.0,
-                       open_positions=0, daily_trades=0, drawdown_pct=99.0)
+                       open_positions=0, daily_trades=0, drawdown_pct=99.0,
+                       spread=1.0, notional=1.0)
 
 
 def test_risk_gate_recusa_nan():

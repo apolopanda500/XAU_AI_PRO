@@ -223,20 +223,46 @@ export default function UniversalLiveTerminal() {
   const resolvedPositions: Position[] = useMemo(() => {
     const uni = uniPositionsQ.data?.positions;
     if (Array.isArray(uni) && uni.length > 0) {
-      const texto = (v: unknown): string | undefined =>
-        typeof v === 'string' || typeof v === 'number' ? String(v) : undefined;
       const numero = (v: unknown): number | undefined =>
         typeof v === 'number' && Number.isFinite(v) ? v : undefined;
+      /*
+        OS DOIS NOMES DO MESMO DADO (25/10/2026, medido na DEMO 113568614):
+        para MT5 o `_universal_positions` devolve as linhas cruas do payload
+        legado (`volume`, `open_price`, `price_current`, `sl`, `tp`,
+        `profit`, `type`), e para exchanges o contrato universal
+        (`quantity`, `entry_price`, `mark_price`, `unrealized_pnl`,
+        `stop_loss`, `take_profit`, `side`). A traducao antiga so lia o
+        universal: na DEMO, ticket e symbol apareciam e TODO o resto --
+        (volume, abertura, atual, SL, TP, PnL). Aceitar os dois nomes aqui e
+        o ponto unico de traducao — replicar o mapa nos consumidores e o
+        defeito que o AGENTS.md 5 descreve.
+      */
+      // Aceita string OU numero do payload (ambient com numeros crua) e
+      // devolve string, o que o tipo `Position` exige.
+      const texto = (universal: unknown, ...apelidos: Array<unknown>): string | undefined => {
+        for (const v of [universal, ...apelidos]) {
+          if (typeof v === 'string' || typeof v === 'number') return String(v);
+        }
+        return undefined;
+      };
+      const numeroDoDado = (
+        universal: unknown,
+        ...apelidos: Array<unknown>
+      ): number | undefined => {
+        const candidato = texto(universal, ...apelidos);
+        const n = Number(candidato);
+        return candidato !== undefined && Number.isFinite(n) ? n : undefined;
+      };
       return uni.map((r) => ({
         ticket: texto(r.ticket),
         symbol: texto(r.symbol),
-        type: texto(r.side),
-        volume: numero(r.quantity),
-        open_price: numero(r.entry_price),
-        price_current: numero(r.mark_price),
-        sl: numero(r.stop_loss),
-        tp: numero(r.take_profit),
-        profit: numero(r.unrealized_pnl),
+        type: texto(r.side, r.type),
+        volume: numeroDoDado(r.quantity, r.volume),
+        open_price: numeroDoDado(r.entry_price, r.open_price),
+        price_current: numeroDoDado(r.mark_price, r.current_price, r.price_current),
+        sl: numeroDoDado(r.stop_loss, r.sl),
+        tp: numeroDoDado(r.take_profit, r.tp),
+        profit: numeroDoDado(r.unrealized_pnl, r.profit),
         swap: undefined,
       }));
     }

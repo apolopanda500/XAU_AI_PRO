@@ -40,6 +40,15 @@ export default function SettingsCore() {
   const setHasPin = useAuthStore((state) => state.setHasPin);
   const [section, setSection] = useState<Section>('general');
   const [status, setStatus] = useState('');
+  const [autoLogin, setAutoLogin] = useState<{
+    configured?: boolean;
+    login?: number | null;
+    server?: string | null;
+  } | null>(null);
+  const [loginMt5, setLoginMt5] = useState('');
+  const [senhaMt5, setSenhaMt5] = useState('');
+  const [serverMt5, setServerMt5] = useState('');
+  const [loginMsg, setLoginMsg] = useState('');
   const [pin1, setPin1] = useState('');
   const [pin2, setPin2] = useState('');
   const [pinAtual, setPinAtual] = useState('');
@@ -64,8 +73,44 @@ export default function SettingsCore() {
     const timer = window.setInterval(refreshAccount, 15000);
     return () => window.clearInterval(timer);
   }, []);
+  const carregarLogin = () => {
+    fetch(`${apiBase()}/api/mt5/auto-login`, { signal: AbortSignal.timeout(5000) })
+      .then((r) => r.json())
+      .then((d: any) => {
+        setAutoLogin(d && typeof d === 'object' ? d : null);
+        if (d?.server) setServerMt5(String(d.server));
+        if (d?.login) setLoginMt5(String(d.login));
+      })
+      .catch(() => setAutoLogin(null));
+  };
+  const salvarLogin = async (limpar = false) => {
+    setLoginMsg('');
+    try {
+      const resposta = await fetch(`${apiBase()}/api/mt5/auto-login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(
+          limpar
+            ? { clear: true }
+            : { login: loginMt5.trim(), password: senhaMt5, server: serverMt5.trim() },
+        ),
+        signal: AbortSignal.timeout(10000),
+      });
+      const dados = (await resposta.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      if (!resposta.ok || dados.ok === false) {
+        setLoginMsg(dados.error ?? `recusado (${resposta.status})`);
+        return;
+      }
+      setSenhaMt5('');
+      setLoginMsg(limpar ? 'Login automatico removido.' : 'Login automatico salvo.');
+      carregarLogin();
+    } catch {
+      setLoginMsg('Nao foi possivel falar com o gateway.');
+    }
+  };
   useEffect(() => {
     if (section !== 'connections') return;
+    carregarLogin();
     let active = true;
     const check = async () => {
       const items: Record<string, string> = {};
@@ -217,22 +262,26 @@ export default function SettingsCore() {
                 - Notificações do sistema .. 0 leituras, e duplicado
                 - Auto-scroll terminais .... 0 leituras
               Um interruptor que nada faz e pior que a ausencia dele: o
-              usuario acredita que esta protegido. Ficou só a precisão
-              decimal, que o formatador realmente usa.
+              usuario acredita que esta protegido.
+
+              "CASAS DECIMAIS" SAIU TAMBEM (23/10/2026)
+              ----------------------------------------
+              Este comentario dizia "ficou só a precisão decimal, que o
+              formatador realmente usa" — e era MENTIRA no proprio codigo.
+              MEDIDO: `settings.precision` tinha ZERO leitores. As ocorrencias
+              eram o slider (aqui), o default no store e o `digits` de OUTRA
+              coisa (`marketApi.ts:794`, que vem da ficha do simbolo).
+
+              Alem de nao fazer nada, era a premissa errada do AGENTS 9: preco,
+              volume e moeda tem precisoes diferentes, e quem manda e a ficha
+              que a corretora entrega (`digits` por simbolo) — nao uma
+              preferencia global. O slider prometia controlar algo que ele nao
+              controlava e que, se controlasse, estaria errado.
             */}
-            <h3>Preferências</h3>
-            <div className="settings-rows">
-              <label className="switch-row">
-                <span>Casas decimais: {settings.precision}</span>
-                <input
-                  type="range"
-                  min={0}
-                  max={5}
-                  value={settings.precision}
-                  onChange={(e) => setSettings({ precision: Number(e.target.value) })}
-                />
-              </label>
-            </div>
+            <p className="muted">
+              A precisão de preço e de volume vem da ficha de cada símbolo publicada pela
+              corretora — não há preferência global de casas decimais.
+            </p>
           </div>
         )}
         {/*
@@ -279,11 +328,62 @@ export default function SettingsCore() {
                 />
               </label>
             </div>
+            <div className="settings-rows">
+              <label className="switch-row">
+                <span>Login automatico do MT5</span>
+                <span className="hint" style={{ margin: 0 }}>
+                  {autoLogin?.configured
+                    ? `configurado: ${autoLogin.login ?? '--'} @ ${autoLogin.server ?? '--'}`
+                    : 'nao configurado'}
+                </span>
+              </label>
+              <label className="switch-row">
+                <span>Login</span>
+                <input
+                  className="input"
+                  inputMode="numeric"
+                  value={loginMt5}
+                  onChange={(e) => setLoginMt5(e.target.value)}
+                  placeholder="numero da conta"
+                />
+              </label>
+              <label className="switch-row">
+                <span>Servidor</span>
+                <input
+                  className="input"
+                  value={serverMt5}
+                  onChange={(e) => setServerMt5(e.target.value)}
+                  placeholder="nome do servidor"
+                />
+              </label>
+              <label className="switch-row">
+                <span>Senha</span>
+                <input
+                  className="input"
+                  type="password"
+                  value={senhaMt5}
+                  onChange={(e) => setSenhaMt5(e.target.value)}
+                  placeholder="guardada cifrada no Windows"
+                  autoComplete="new-password"
+                />
+              </label>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button type="button" className="btn" onClick={() => void salvarLogin(false)}>
+                  Salvar login automatico
+                </button>
+                {autoLogin?.configured && (
+                  <button type="button" className="btn btn-ghost" onClick={() => void salvarLogin(true)}>
+                    Remover
+                  </button>
+                )}
+                <span className="hint" style={{ margin: 0 }}>{loginMsg}</span>
+              </div>
+            </div>
             <ConnectionSettings />
             <ConnectedDevicesPanel />
             <p className="hint">
-              Por segurança o app nunca inicia o MT5 sozinho — a conexão é uma ação sua, na aba do
-              Robô.
+              O app abre o terminal MT5 sozinho e entra na conta salva. Se a senha do terminal nao
+              estiver salva, preencha o login automatico acima: a senha fica cifrada pelo Windows.
             </p>
           </div>
         )}

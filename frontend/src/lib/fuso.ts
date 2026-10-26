@@ -270,7 +270,20 @@ export function buscarCidades(
 
 /** O fuso que o navegador resolveu, que e o padrao `auto` da XM. */
 export function fusoAutomatico(): string {
-  return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (tz && tz !== 'UTC' && tz !== 'Etc/UTC' && tz !== 'Etc/GMT') return tz;
+  } catch { /* ignora */ }
+  // Alguns webviews (Tauri/WebView2) reportam UTC mesmo na maquina do operador.
+  // Nesse caso, usa o offset real do sistema (getTimezoneOffset) para achar
+  // uma zona do catalogo com o mesmo offset — melhor que mostrar UTC errado.
+  try {
+    const offsetMin = -new Date().getTimezoneOffset();
+    const candidatas = cidadesDoSistema();
+    const achada = candidatas.find((c) => offsetMinutos(c.zona, new Date()) === offsetMin);
+    if (achada) return achada.zona;
+  } catch { /* ignora */ }
+  return 'UTC';
 }
 
 /** A zona esta no catalogo? `auto` nunca esta, e o que voce quer. */

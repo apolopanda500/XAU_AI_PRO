@@ -18,6 +18,7 @@
 // "publicavel" vem do quality gate do treino. O que nao existe no arquivo
 // aparece como "--", nunca preenchido.
 import { assetIcon } from '../lib/assetIcons';
+import AssetArt from './AssetArt';
 
 export type CapaModelo = {
   id: string;
@@ -161,7 +162,9 @@ export default function ModelCover({
         style={{
           background: `linear-gradient(135deg, hsl(${matiz} 60% 22%) 0%, hsl(${(matiz + 40) % 360} 65% 12%) 60%, transparent 100%)`,
         }}
-      />
+      >
+        <AssetArt classe={classe} seed={matiz} cor={paleta.glifo} />
+      </span>
       <span className="mc-topo" style={{ background: paleta.base, borderColor: paleta.borda }}>
         {sigla && (
           <span className="mc-glifo" style={{ color: paleta.glifo }} aria-hidden="true">

@@ -339,61 +339,9 @@ class TestOperaQuandoDeve:
         # do gateway e 0.10.
         assert p["quantity"] == pytest.approx(0.10, abs=0.01)
 
-    def test_modo_simples_opera_com_lote_e_precos_do_painel(self):
-        m = MotorAuto()
-        m.simbolo = ATIVO
-        m.timeframe = PERIODO
-        m.limites = LimitesAuto(lote=0.01, sl_preco=4290.0, tp_preco=4310.0)
-        chamadas: list[dict] = []
-        d = m.ciclo_unico(
-            lambda s, t: InferenciaFalsa(signal="BUY", price=4300.0, atr=5.0,
-                                         confianca=72.0, edge=0.12),
-            enviar_espiao(chamadas), risco)
-        assert d.agir is True, d.motivo
-        p = chamadas[0]
-        assert p["quantity"] == pytest.approx(0.01)
-        assert p["stop_loss"] == pytest.approx(4290.0)
-        assert p["take_profit"] == pytest.approx(4310.0)
 
-    def test_modo_simples_recusa_sl_incoerente_com_buy(self):
-        m = MotorAuto()
-        m.simbolo = ATIVO
-        m.timeframe = PERIODO
-        m.limites = LimitesAuto(lote=0.01, sl_preco=4310.0, tp_preco=4290.0)
-        d = m.ciclo_unico(
-            lambda s, t: InferenciaFalsa(signal="BUY", price=4300.0, atr=5.0,
-                                         confianca=72.0, edge=0.12),
-            enviar_espiao([]), risco)
-        assert d.agir is False
-        assert "SL" in d.motivo
 
-    def test_modo_simples_aceita_distancia(self):
-        """SL 10 / TP 20 com preco 4300 vira SL 4290 / TP 4320 no BUY."""
-        m = MotorAuto()
-        m.simbolo = ATIVO
-        m.timeframe = PERIODO
-        m.limites = LimitesAuto(lote=0.01, sl_preco=10.0, tp_preco=20.0)
-        chamadas: list[dict] = []
-        d = m.ciclo_unico(
-            lambda s, t: InferenciaFalsa(signal="BUY", price=4300.0, atr=5.0,
-                                         confianca=72.0, edge=0.12),
-            enviar_espiao(chamadas), risco)
-        assert d.agir is True, d.motivo
-        assert chamadas[0]["stop_loss"] == pytest.approx(4290.0)
-        assert chamadas[0]["take_profit"] == pytest.approx(4320.0)
 
-    def test_distancia_absurda_nao_vira_preco(self):
-        """SL 4310 com preco 4300 nao e distancia: recusa com exemplo."""
-        m = MotorAuto()
-        m.simbolo = ATIVO
-        m.timeframe = PERIODO
-        m.limites = LimitesAuto(lote=0.01, sl_preco=4310.0, tp_preco=4320.0)
-        d = m.ciclo_unico(
-            lambda s, t: InferenciaFalsa(signal="BUY", price=4300.0, atr=5.0,
-                                         confianca=72.0, edge=0.12),
-            enviar_espiao([]), risco)
-        assert d.agir is False
-        assert "distancia" in d.motivo.lower()
 
     def test_banca_de_1_dolar_tem_piso_de_lote(self):
         """Conta de $1: o volume fracionario nao pode arredondar para zero."""
@@ -1040,6 +988,63 @@ class TestProvedorDaFicha:
 # DEPOIS chamava `valido()`. A resposta recusava, e o valor invalido ja estava
 # dentro do motor — que passava a recusar todos os ciclos com um motivo que nao
 # explicava nada ("ja ha 0 posicoes (max 0)").
+
+
+class TestAplicarLimitesSemLigarMotor:
+    """A sub-aba Risco grava limites SEM exigir o conjunto completo (25/10/2026).
+
+    MEDIDO no app: preencher confianca/edge/posicoes e clicar "Aplicar limites
+    ao motor" respondia "defina no painel ... banca, risco por operacao, ATR"
+    e, ao trocar de aba e voltar, os campos vinham vazios. A causa era o
+    `copia.valido()`, que julga se o motor PODE OPERAR, nao se o limite
+    declarado e valido. As duas perguntas sao diferentes: aplicar e um ato,
+    ligar e outro — `ligar()` continua exigindo o conjunto completo.
+    """
+
+    def test_aplicar_so_os_campos_de_risco_e_aceito(self):
+        m = MotorAuto()  # nasce ZERADO: sem lote, banca, ATR, SL/TP
+        r = m.configurar({
+            "confianca_minima": 40.0,
+            "edge_minimo": 0.1319,
+            "max_posicoes": 2,
+            "max_operacoes_dia": 5,
+            "perda_diaria_max_pct": 2.0,
+            "intervalo_minutos": 60,
+        })
+
+        assert r["ok"] is True, r
+        assert m.limites.confianca_minima == 40.0
+        assert m.limites.edge_minimo == 0.1319
+        assert m.limites.max_posicoes == 2
+        assert m.limites.intervalo_minutos == 60
+        # O que nao foi declarado continua ausente, nao virou palpite.
+        assert m.limites.banca == 0.0
+        assert m.limites.lote == 0.0
+
+    def test_ligar_continua_exigindo_o_conjunto_completo(self):
+        """A prova negativa: aplicar aceita, LIGAR nao."""
+        m = MotorAuto()
+        assert m.configurar({"confianca_minima": 40.0})["ok"] is True
+        assert m.simbolo == ""
+        r = m.ligar()
+        assert r["ok"] is False
+        assert m.ativo is False
+
+    def test_limite_declarado_fora_de_faixa_continua_recusado(self):
+        m = MotorAuto()
+        for pedido in (
+            {"confianca_minima": 150},
+            {"edge_minimo": -0.1},
+            {"max_posicoes": 0},
+            {"max_operacoes_dia": 0},
+            {"intervalo_minutos": 0},
+            {"banca": 0.5},
+        ):
+            r = m.configurar(pedido)
+            assert r["ok"] is False, pedido
+            # Um pedido recusado nao aplica metade dele.
+            assert m.limites.max_posicoes == 0
+            assert m.limites.banca == 0.0
 
 
 class TestConfigurarNaoEnvenenaOMotor:

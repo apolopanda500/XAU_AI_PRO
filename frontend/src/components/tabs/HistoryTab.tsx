@@ -42,6 +42,13 @@ import { useMemo, useState } from 'react';
 import { fmtNum, fmtSigned } from '../../lib/format';
 import { useHistorico } from '../../lib/historico';
 import { corDaOperacao, linhasMt5, resumoMt5 } from '../../lib/historicoMt5';
+import {
+  chaveDia,
+  hora,
+  horaDaLinha,
+  stamp,
+  stampDaLinha,
+} from '../../lib/horaServidor';
 import '../../theme/history.css';
 // Carregado por último: sobrescreve as celulas de 40px do history.css.
 import '../../theme/history-grid.css';
@@ -66,51 +73,25 @@ const limits: Record<string, number> = {
 };
 
 /** Só a HORA, como a captura: `01:46:43`. A data fica na faixa de dia. */
-const hora = (v?: string) => {
-  if (!v) return '';
-  const d = new Date(v);
-  return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString('pt-BR');
-};
-
-/** Data e hora completas, para o `title` de quem precisa do valor inteiro. */
-const stamp = (v?: string) => {
-  if (!v) return '';
-  const d = new Date(v);
-  return Number.isNaN(d.getTime()) ? v : d.toLocaleString('pt-BR');
-};
 
 /**
  * ESTILO MT5: SEPARADOR DE DIA (05/10/2026)
  * =========================================
- * O histórico vem agrupado por dia, com uma faixa de data atravessando a
- * tabela. Vinte operações do mesmo dia ocupam uma faixa e vinte linhas.
+ * O historico vem agrupado por dia, com uma faixa de data atravessando a
+ * tabela. A ORDEM E PRESERVADA: o historico vem na ordem que o gateway
+ * devolveu (mais recente primeiro), e aqui so se INSERE um separador quando o
+ * dia muda.
  *
- * Ganho concreto, além do visual: o operador confere o dia antes de conferir a
- * operação. "Quantas operações hoje?" é a primeira pergunta do dia, e ela fica
- * respondida pelo cabeçalho em vez de exigir varredura da coluna de data.
- *
- * A ORDEM É PRESERVADA. Não se reordena por data: o histórico vem na ordem que
- * o gateway devolveu (mais recente primeiro) e trocar essa ordem mudaria o que
- * "primeira linha" significa para quem lê. Aqui só se INSERE um separador
- * quando o dia muda — e a troca de dia é detectada pela data já convertida no
- * fuso local, não por comparação da string crua, porque `data` pode vir em ISO
- * UTC e virar o dia anterior na conversão.
+ * A chave do dia vem de `lib/horaServidor`, que ja prefere a data do SERVIDOR
+ * (MT5) quando ela existe: agrupar pela data local jogava a operacao das 23 h
+ * do servidor no dia anterior.
  */
 export interface GrupoDia<T> {
-  /** `YYYY-MM-DD` no fuso local, usado como chave de agrupamento. */
+  /** `YYYY-MM-DD` na data usada para agrupar (servidor quando houver). */
   chave: string;
-  /** Rótulo pronto para a faixa: "hoje", "ontem" ou "12/05/2026, terça-feira". */
+  /** Rotulo pronto para a faixa: "Hoje", "Ontem" ou "12/05/2026, terca-feira". */
   rotulo: string;
   linhas: T[];
-}
-
-function chaveDia(valor: string): string {
-  if (!valor) return 'sem-data';
-  const d = new Date(valor);
-  if (Number.isNaN(d.getTime())) return 'sem-data';
-  const mes = String(d.getMonth() + 1).padStart(2, '0');
-  const dia = String(d.getDate()).padStart(2, '0');
-  return `${d.getFullYear()}-${mes}-${dia}`;
 }
 
 function rotuloDia(chave: string): string {
@@ -220,7 +201,7 @@ export default function HistoryTab() {
 
   /* Agrupamento por dia, como a aba Histórico do MT5. */
   const grupos = useMemo(
-    () => agruparPorDia(linhas, (linha) => linha.horario),
+    () => agruparPorDia(linhas, (linha) => linha.horarioServidor || linha.horario),
     [linhas],
   );
 
@@ -276,11 +257,11 @@ export default function HistoryTab() {
       linha.preco ?? '',
       linha.sl ?? '',
       linha.tp ?? '',
-      linha.horarioFim,
+      linha.horarioFimServidor || linha.horarioFim,
       linha.precoFim ?? '',
       linha.lucro === null ? '' : String(linha.lucro),
       linha.mudanca,
-      linha.horario,
+      linha.horarioServidor || linha.horario,
     ]);
     const csv = [cols, ...linhasCsv].map((l) => l.join(';')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -506,8 +487,8 @@ export default function HistoryTab() {
                       }
                     >
                       {/* Horario de ABERTURA. A data completa fica no `title`. */}
-                      <td className="history-when" title={stamp(linha.horario)}>
-                        {hora(linha.horario)}
+                      <td className="history-when" title={stampDaLinha(linha)}>
+                        {horaDaLinha(linha)}
                       </td>
                       <td>
                         <strong>{linha.ativo || '—'}</strong>
@@ -576,11 +557,13 @@ export default function HistoryTab() {
                         className="history-when"
                         title={
                           linha.horarioFim
-                            ? stamp(linha.horarioFim)
+                            ? linha.horarioFimServidor || stamp(linha.horarioFim)
                             : 'posição sem fechamento conhecido'
                         }
                       >
-                        {hora(linha.horarioFim)}
+                        {linha.horarioFimServidor
+                          ? linha.horarioFimServidor.slice(11, 19)
+                          : hora(linha.horarioFim)}
                       </td>
                       <td className="num">{preco(linha.precoFim)}</td>
                       {/*

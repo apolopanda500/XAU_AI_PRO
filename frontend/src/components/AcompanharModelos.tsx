@@ -9,6 +9,7 @@ import { requestId } from '../lib/format';
 import { useEffect, useState, useRef } from 'react';
 import PriceChart from './charts/PriceChart';
 import { nivelDoValor, linhasDaOrdem, rotuloDoBotao } from '../lib/ordemGrafico';
+import { parNaTela } from '../lib/parNaTela';
 import { fichaDoAtivo, faixaDoAtivo, mercadoDoAtivo, requisitoDeMargem, unidadeDeVolume, rotuloQuantidade } from '../lib/volumeUnidade';
 import { useCatalogoAtivos } from '../hooks/useCatalogoAtivos';
 import { useUniversalAccount } from '../hooks/queries';
@@ -81,7 +82,7 @@ export default function AcompanharModelos() {
     nao ha candles para ler, e sem par nao ha grafico — nesses dois casos a tela
     diz ONDE escolher, e nao promete sinal.
   */
-  const simbolo = String(auto?.simbolo || parDaTela || '').toUpperCase();
+  const simbolo = parNaTela(auto, parDaTela);
   const timeframe = String(auto?.timeframe ?? '').toUpperCase();
   /*
     O PERIODO E O MERCADO PODEM VIR DA FICHA (07/10/2026)

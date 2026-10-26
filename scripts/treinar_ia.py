@@ -87,7 +87,9 @@ def main() -> int:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
     print("datasets:")
-    df = carregar([DATA / "dataset_legacy_20260910_1730.csv", DATA / "dataset.csv"])
+    fontes = [DATA / "dataset_legacy_20260910_1730.csv", DATA / "dataset.csv"]
+    fontes += sorted(DATA.glob("dataset_mt5_*.csv"))
+    df = carregar(fontes)
 
     simbolos = (
         sorted(df["Symbol"].dropna().unique())

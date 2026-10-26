@@ -1,7 +1,7 @@
 //+------------------------------------------------------------------+
 //|                                               MarginChecker.mqh |
 //|                                  Smart Execution Engine - Margin |
-//|                                            XAU_AI_PRO v1.2.0       |
+//|                                            XAU_AI_PRO v1.2.9       |
 //+------------------------------------------------------------------+
 
 #ifndef MARGIN_CHECKER_MQH

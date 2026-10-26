@@ -370,6 +370,19 @@ describe('arrastar a linha devolve o PAPEL e o preco', () => {
     expect(mover).toHaveBeenCalledWith('tp', 85_600);
   });
 
+  it('PROVA NEGATIVA: clique puro — soltar onde pressionou nao move nada', () => {
+    // A trava do 63e4680 ("clique puro nao move") existia so no codigo, sem
+    // teste: quem trocasse a condicao por `return` incondicional mataria o
+    // arraste e nada reprovaria alem dos testes de soltar longe.
+    const mover = vi.fn();
+    render(
+      <PriceChart symbol="BTCUSD" candles={CANDLES} modoOrdem ordem={ORDEM} onMoverLinhaOrdem={mover} />,
+    );
+    fireEvent.mouseDown(canvas(), { clientY: coordenadaDe(STOP) });
+    fireEvent.mouseUp(window, { clientY: coordenadaDe(STOP) });
+    expect(mover).not.toHaveBeenCalled();
+  });
+
   it('PROVA NEGATIVA: a entrada nao arrasta — o preco dela e o que foi clicado', () => {
     const mover = vi.fn();
     render(
