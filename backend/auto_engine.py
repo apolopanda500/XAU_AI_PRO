@@ -797,18 +797,19 @@ class MotorAuto:
         # A aceitacao do risco fica registrada no audit_log via configurar().
         if getattr(self.limites, "max_posicoes", 0) < 1:
             try:
-                sug = self.sugerir_limites_externo() if hasattr(self, "sugerir_limites_externo") else None
+                sug = sugerir_limites(self.simbolo, self.timeframe, self.broker, self.market)
             except Exception:
-                sug = None
-            if sug is None:
-                try:
-                    sug = sugerir_limites(self.simbodo, self.timeframe, self.broker, self.market)
-                except Exception:
-                    sug = {"ok": False}
+                sug = {"ok": False}
             if isinstance(sug, dict) and sug.get("ok"):
-                self.configurar({"simbodo": self.simbodo, "timeframe": self.timeframe,
-                                "broker": self.broker, "market": self.market,
-                                "limites": sug.get("limites") or {}})
+                # FLAT, NAO "limites" ANINHADO (25/10/2026).
+                # `configurar` le os campos na raiz do payload; mandar
+                # `{"simbodo": ..., "limites": {...}}` nao gravava nada — nem
+                # o simbolo (typo) nem os limites (aninhados) —, e o motor
+                # seguia recusando "limite de posicoes nao declarado" com a
+                # sugestao calculada e descartada.
+                self.configurar({"simbolo": self.simbolo, "timeframe": self.timeframe,
+                                 "broker": self.broker, "market": self.market,
+                                 **(sug.get("limites") or {})})
         ok, motivo = self.limites.valido()
         if not ok:
             return {"ok": False, "error": motivo}

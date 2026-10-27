@@ -5,18 +5,18 @@
   item com nome, parametros, o que mede e botao Liga/Desliga — a mesma leitura
   dos cards de modelo, sem exigir que o operador descubra sigla.
 
-  O QUE LIGA DE VERDADE: EMA, RSI e MACD — via `onAlternar`, que o dono do
-  grafico conecta nas props do `PriceChart` (que ja aceitam os tres). O painel
-  nao desenha nada sozinho: controle sem consumidor e pior que ausencia
-  (AGENTS.md 9).
+  O QUE LIGA DE VERDADE: EMA, SMA, BOLLINGER, VWAP, RSI e MACD. Todos sao
+  calculados dos candles exibidos e desenhados pelo `PriceChart`; o painel so
+  chama `onAlternar`, e o grafico e o consumidor. Controle sem consumidor e
+  pior que ausencia (AGENTS.md 9).
 
-  BOLLINGER e ESTOCASTICO aparecem como ROTEIRO (texto, nao botao): o calculo
-  e o desenho ainda nao existem, e um botao para eles seria o botao que parece
-  funcionar e nao funciona. Quando o dono do grafico entregar, viram itens.
+  ESTOCASTICO aparece como ROTEIRO (texto, nao botao): o calculo e o desenho
+  ainda nao existem, e um botao para ele seria o botao que parece funcionar e
+  nao funciona. Quando o desenho existir, vira item.
 */
 import '../theme/indicadores.css';
 
-export type IndicadorId = 'ema' | 'rsi' | 'macd';
+export type IndicadorId = 'ema' | 'sma' | 'bollinger' | 'vwap' | 'rsi' | 'macd';
 
 export type EstadoIndicadores = Record<IndicadorId, boolean>;
 
@@ -35,6 +35,24 @@ const ITENS: Item[] = [
     mede: 'tendência pelas médias exponenciais, no gráfico',
   },
   {
+    id: 'sma',
+    nome: 'SMA 20',
+    params: '20',
+    mede: 'média móvel simples, no gráfico',
+  },
+  {
+    id: 'bollinger',
+    nome: 'Bollinger',
+    params: '20 · 2',
+    mede: 'volatilidade por bandas, no gráfico',
+  },
+  {
+    id: 'vwap',
+    nome: 'VWAP',
+    params: 'volume',
+    mede: 'preço médio ponderado pelo volume, no gráfico',
+  },
+  {
     id: 'rsi',
     nome: 'RSI',
     params: '14',
@@ -49,7 +67,6 @@ const ITENS: Item[] = [
 ];
 
 const ROTEIRO = [
-  { nome: 'Bollinger', params: '20 · 2', mede: 'volatilidade por bandas, no gráfico' },
   { nome: 'Estocástico', params: '14 · 3 · 3', mede: '%K/%D 0–100 com faixas 80/20, em painel próprio' },
 ];
 

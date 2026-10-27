@@ -365,8 +365,22 @@ const [periodoDoGrafico, setPeriodoDoGrafico] = useState<string>('');
   */
   const [descartado, setDescartado] = useState(false);
   const [volumeArmado, setVolumeArmado] = useState('0.01');
-  const [riscoArmado, setRiscoArmado] = useState('2.00');
-  const [alvoArmado, setAlvoArmado] = useState('2.00');
+  /*
+    STOP E ALVO NASCEM VAZIOS (25/10/2026)
+    ======================================
+    MEDIDO no app: o grafico abria com as linhas de stop e alvo JA desenhadas,
+    sem o operador ter escrito nada. A causa eram os defaults `'2.00'`/`'2.00'`
+    combinados com o preco que chega sozinho do ultimo fechamento: o painel
+    derivava os dois niveis e o grafico os desenhava. O operador lia "o app
+    armou uma ordem que eu nao pedi".
+
+    Vazio e ausencia de protecao — e `nivelDoValor`/`linhasDaOrdem` ja tratam
+    `null` como "sem linha". O padrao de 2,00 continua sendo o valor que o
+    arraste preenche quando o operador move a ponta, nao um numero que o app
+    escolhe por ele.
+  */
+  const [riscoArmado, setRiscoArmado] = useState('');
+  const [alvoArmado, setAlvoArmado] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [erroEnvio, setErroEnvio] = useState('');
 
@@ -905,6 +919,7 @@ const [periodoDoGrafico, setPeriodoDoGrafico] = useState<string>('');
       )}
       <PriceChart
         symbol={simbolo}
+        height={640}
         broker={broker as never}
         market={market as never}
         timeframe={tempoEscolhido as never}

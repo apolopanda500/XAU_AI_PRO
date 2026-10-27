@@ -1024,6 +1024,57 @@ class TestAplicarLimitesSemLigarMotor:
             assert m.limites.banca == 0.0
 
 
+class TestLigarAplicaSugestaoDaIA:
+    """`ligar()` aplica a sugestao da IA FLAT, no formato que `configurar` le.
+
+    PROVA NEGATIVA do defeito de 25/10/2026: o `ligar()` montava o payload com
+    `simbodo` (typo) e com os limites ANINHADOS em `{"limites": {...}}`.
+    `configurar` le os campos na RAIZ — entao nada era gravado, a sugestao era
+    calculada e descartada, e o motor seguia recusando "maximo de posicoes nao
+    declarado". O teste abaixo mede o estado DEPOIS do `ligar()`: sem a
+    correcao, `max_posicoes` continua 0 e a recusa e a mesma.
+    """
+
+    def test_sugestao_da_ia_chega_aos_limites_do_motor(self, monkeypatch):
+        sugerida = {
+            "banca": 1000.0,
+            "risco_por_trade_pct": 1.0,
+            "confianca_minima": 40.0,
+            "edge_minimo": 0.13,
+            "max_posicoes": 5,
+            "max_operacoes_dia": 10,
+            "perda_diaria_max_pct": 5.0,
+            "sl_atr": 1.5,
+            "tp_atr": 2.0,
+            "intervalo_minutos": 60,
+        }
+        monkeypatch.setattr(
+            "backend.auto_engine.sugerir_limites",
+            lambda *a, **k: {"ok": True, "limites": dict(sugerida)},
+        )
+
+        m = MotorAuto()  # limites ZERADOS, que e o gatilho da sugestao
+        m.simbolo = "XAUUSD"
+        m.timeframe = "H1"
+        m.broker = ""
+        m.market = ""
+        assert m.limites.max_posicoes == 0
+
+        r = m.ligar()
+
+        # Os limites da sugestao entraram de verdade...
+        assert m.limites.max_posicoes == 5
+        assert m.limites.banca == 1000.0
+        assert m.limites.confianca_minima == 40.0
+        # ...e o simbolo nao foi perdido pelo campo com typo.
+        assert m.simbolo == "XAUUSD"
+        # A recusa seguinte e a corretora (campo vazio de proposito), NAO
+        # "maximo de posicoes nao declarado" — o motivo errado do defeito.
+        assert r["ok"] is False
+        assert "corretora" in r["error"].lower()
+        assert "posi" not in r["error"].lower()
+
+
 class TestConfigurarNaoEnvenenaOMotor:
     def test_valor_invalido_nao_entra_no_motor(self):
         """Recusar o pedido e aplicar o pedido nao podem acontecer separados."""

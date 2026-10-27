@@ -102,7 +102,8 @@ function montar() {
   return render(<AcompanharModelos />);
 }
 
-const botaoEma = () => screen.getByRole('button', { name: 'EMA' });
+const botaoEma = () =>
+  screen.getByRole('button', { name: /^(Ligar|Desligar) EMA$/ });
 
 describe('o botao EMA do grafico manda no estado', () => {
   beforeEach(() => {
@@ -115,7 +116,7 @@ describe('o botao EMA do grafico manda no estado', () => {
     // operar. Dois controles para um dado e o que produz "so funciona o de
     // baixo": o dono usava o unico que escrevia o estado e via o outro inerte.
     montar();
-    const botoesEma = screen.getAllByRole('button', { name: 'EMA' });
+    const botoesEma = screen.getAllByRole('button', { name: /^(Ligar|Desligar) EMA$/ });
     expect(botoesEma).toHaveLength(1);
     // E nao sobrou checkbox com o rotulo antigo em lugar nenhum.
     expect(screen.queryByLabelText('EMA 12/26')).toBeNull();

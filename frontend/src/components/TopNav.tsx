@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo } from 'react';
 import { useAppStore } from '../hooks/useAppStore';
 import { useEaRuntime } from '../hooks/queries';
+import SeletorFuso from './SeletorFuso';
+import '../theme/fuso.css';
 
 // A navegacao vive em Sidebar.tsx (ITEMS). Este arquivo usava declarar um
 // TABS proprio com 4 entradas que nunca eram renderizadas — uma terceira lista
@@ -58,6 +60,16 @@ export default function TopNav() {
         </span>
         <span className="status">🤖 AI: {aiStatus}</span>
         <span className="status">EA: {robotStatus}</span>
+      </div>
+      {/*
+        O RELOGIO/FUSO VEM PARA O TOPO (25/10/2026, pedido do dono).
+        ==========================================================
+        Ele era o ultimo item do rodape do grafico. O horario e referencia de
+        TODA a tela — ordem, historico, candle — e nao so do grafico; ficar
+        dentro do grafico obrigava a rolar ate o fim para trocar o fuso.
+      */}
+      <div className="topnav-fuso" aria-label="Fuso horario">
+        <SeletorFuso />
       </div>
     </header>
   );

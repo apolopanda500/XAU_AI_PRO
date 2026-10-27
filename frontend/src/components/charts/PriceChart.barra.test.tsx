@@ -1,4 +1,4 @@
-﻿// @vitest-environment jsdom
+// @vitest-environment jsdom
 // A BARRA DO GRAFICO: tipo, indicadores, desfazer e refazer (06/10/2026).
 //
 // O DONO PEDIU
@@ -118,6 +118,10 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 const botao = (nome: string) => screen.getByRole('button', { name: nome });
+
+/** Indicador agora e um botao de lista, com nome que diz o estado. */
+const botaoIndicador = (nome: string) =>
+  screen.getByRole('button', { name: new RegExp(`^(Ligar|Desligar) ${nome}$`) });
 
 /** O botao esta DESABILITADO de verdade, e nao so apagado. */
 const desabilitado = (nome: string): boolean =>
@@ -284,8 +288,8 @@ describe('a barra do grafico — desfazer e refazer', () => {
     render(<PriceChart symbol="BTCUSD" candles={CANDLES} />);
     expect(desabilitado('Desfazer')).toBe(true);
 
-    fireEvent.click(botao('RSI'));
-    expect(botao('RSI').getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(botaoIndicador('RSI'));
+    expect(botaoIndicador('RSI').getAttribute('aria-pressed')).toBe('true');
 
     // Agora ha o que desfazer, e o botao diz O QUE.
     const desfazer = botao('Desfazer');
@@ -294,7 +298,7 @@ describe('a barra do grafico — desfazer e refazer', () => {
 
     // E o efeito e real: o RSI DESLIGA.
     fireEvent.click(desfazer);
-    expect(botao('RSI').getAttribute('aria-pressed')).toBe('false');
+    expect(botaoIndicador('RSI').getAttribute('aria-pressed')).toBe('false');
   });
 
   it('PROVA NEGATIVA: o desfazer volta o TIPO, nao so o indicador', () => {
@@ -315,14 +319,14 @@ describe('a barra do grafico — desfazer e refazer', () => {
 
   it('refazer volta ao estado depois, e volta a desabilitar', () => {
     render(<PriceChart symbol="BTCUSD" candles={CANDLES} />);
-    fireEvent.click(botao('MACD'));
+    fireEvent.click(botaoIndicador('MACD'));
     fireEvent.click(botao('Desfazer'));
-    expect(botao('MACD').getAttribute('aria-pressed')).toBe('false');
+    expect(botaoIndicador('MACD').getAttribute('aria-pressed')).toBe('false');
     expect(desabilitado('Refazer')).toBe(false);
     expect(botao('Refazer').getAttribute('title')).toContain('ligar MACD');
 
     fireEvent.click(botao('Refazer'));
-    expect(botao('MACD').getAttribute('aria-pressed')).toBe('true');
+    expect(botaoIndicador('MACD').getAttribute('aria-pressed')).toBe('true');
     // E o refazer esgota: um segundo clique nao faz nada.
     expect(desabilitado('Refazer')).toBe(true);
   });
@@ -331,29 +335,29 @@ describe('a barra do grafico — desfazer e refazer', () => {
     // Sem isso, o "refazer" descreveria um caminho que deixou de existir: o
     // operador desfazia, ligava outro indicador, e o refazer pulava por cima.
     render(<PriceChart symbol="BTCUSD" candles={CANDLES} />);
-    fireEvent.click(botao('RSI'));
+    fireEvent.click(botaoIndicador('RSI'));
     fireEvent.click(botao('Desfazer'));
     expect(desabilitado('Refazer')).toBe(false);
 
-    fireEvent.click(botao('EMA'));
+    fireEvent.click(botaoIndicador('EMA'));
     expect(desabilitado('Refazer')).toBe(true);
   });
 
   it('varios passos: desfazer volta um de cada vez, na ordem', () => {
     render(<PriceChart symbol="BTCUSD" candles={CANDLES} />);
     fireEvent.click(botao('Linha'));
-    fireEvent.click(botao('RSI'));
-    fireEvent.click(botao('EMA'));
-    expect(botao('EMA').getAttribute('aria-pressed')).toBe('true');
-    expect(botao('RSI').getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(botaoIndicador('RSI'));
+    fireEvent.click(botaoIndicador('EMA'));
+    expect(botaoIndicador('EMA').getAttribute('aria-pressed')).toBe('true');
+    expect(botaoIndicador('RSI').getAttribute('aria-pressed')).toBe('true');
 
 fireEvent.click(botao('Desfazer'));
-    expect(botao('EMA').getAttribute('aria-pressed')).toBe('false');
-    expect(botao('RSI').getAttribute('aria-pressed')).toBe('true');
+    expect(botaoIndicador('EMA').getAttribute('aria-pressed')).toBe('false');
+    expect(botaoIndicador('RSI').getAttribute('aria-pressed')).toBe('true');
     expect(botao('Linha').getAttribute('aria-pressed')).toBe('true');
 
     fireEvent.click(botao('Desfazer'));
-    expect(botao('RSI').getAttribute('aria-pressed')).toBe('false');
+    expect(botaoIndicador('RSI').getAttribute('aria-pressed')).toBe('false');
     expect(botao('Linha').getAttribute('aria-pressed')).toBe('true');
 
     fireEvent.click(botao('Desfazer'));

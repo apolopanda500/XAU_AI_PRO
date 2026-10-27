@@ -15,7 +15,6 @@ import SystemHealth from './components/SystemHealthOnly';
 import SettingsCore from './components/SettingsCore';
 import ExitAppButton from './components/ExitAppButton';
 import EconomicCalendarTab from './components/tabs/EconomicCalendarTab';
-import StatusBar from './components/StatusBar';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 
 function renderActiveTab(tab: TabType): ReactNode {
@@ -134,12 +133,11 @@ export default function App() {
               <section ref={contentRef} className="content">
                 {renderActiveTab(activeTab)}
               </section>
-              {/* Barra de rodapé do app: ativo, timeframe e latência por
-                  corretora. Fica DEPOIS de `.content`, fora do scroll, para
-                  não subir e descer com a rolagem — e no lado direito, como no
-                  MT5. Antes a latência ficava dentro da Mesa, o que a duplicava
-                  por aba e a escondia de quem não estava no Robô. */}
-              <StatusBar />
+              {/* A BARRA INFERIOR SAIU (25/10/2026, decisao do dono):
+                  o par/timeframe agora e escolhido SO na lista da Operacao
+                  Automatica. Dois lugares para o mesmo dado era o caminho
+                  para os dois discordarem — e o operador acreditar no
+                  errado (AGENTS.md §5). */}
             </main>
           </div>
         </AuthGate>
