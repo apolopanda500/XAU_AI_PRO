@@ -1,4 +1,4 @@
-# XAU AI PRO v1.2.3
+# XAU AI PRO v1.2.9
 
 Plataforma desktop para acompanhamento do MetaTrader 5, análise de mercado e treinamento local de modelos. A interface atual usa **Python/Tkinter** e o robô opera no **MetaTrader 5** por meio do EA MQL5 distribuído com o projeto.
 
