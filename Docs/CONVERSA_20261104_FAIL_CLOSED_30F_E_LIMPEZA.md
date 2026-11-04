@@ -250,7 +250,7 @@ exige rede e é decisão do dono.
    precisam ser reconfigurados: precisam apenas receber o `.ex5` novo (§10.4).
 2. **Testador ocupado**: 5 processos `metatester64.exe` ativos nesta medição;
    nenhum backtest foi lançado. Re-medir quando o slot estiver livre, com o EA
-   `v1.2.134` e ticks reais.
+   `v1.2.135` e ticks reais.
 3. **`Data\prediction_XAUUSD.json`**: `WebRequest` não funciona dentro do
    Strategy Tester. Para o EA ver IA no backtest é preciso gerar esse arquivo;
    no gráfico real/demo o caminho HTTP já responde.
