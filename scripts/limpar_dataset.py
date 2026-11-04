@@ -21,7 +21,7 @@ tem volume suficiente para MULTI.
 
 USO
 ====
-    .\.venv\Scripts\python.exe scripts\limpar_dataset.py --simular
+    .\\.venv\\Scripts\\python.exe scripts\\limpar_dataset.py --simular
 """
 from __future__ import annotations
 

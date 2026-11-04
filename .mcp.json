@@ -1,5 +1,11 @@
 {
   "mcpServers": {
+    "mt5-assistant": {
+      "command": "C:\\Users\\Micro\\AppData\\Local\\Programs\\Python\\Python312-embed\\python.exe",
+      "args": [
+        "C:\\Users\\Micro\\AppData\\Roaming\\MetaQuotes\\Terminal\\D0E8209F77C8CF37AD8BF550E51FF075\\MQL5\\Files\\XAU_AI_PRO\\mcp\\mt5_assistant_mcp.py"
+      ]
+    },
     "github": {
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-github"],

@@ -5,7 +5,7 @@ O QUE HOUVE
 `scripts/build_app.bat` foi editado por uma ferramenta que grava LF. O
 arquivo passou a ter LF puro em disco, e o build quebrou:
 
-    '"ROOT=...scripts\.."' nao e reconhecido como comando
+    '"ROOT=...scripts\\.."' nao e reconhecido como comando
     'O' nao e reconhecido como comando interno
     ERRO: Nao foi possivel sincronizar os modelos
 

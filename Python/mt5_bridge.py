@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -26,6 +27,32 @@ symbol_aliases = {
     "USDCAD": ["USDCAD", "USDCAD#", "USDCADc", "USDCADm", "USDCAD.", "USDCAD.pro"],
     "NZDUSD": ["NZDUSD", "NZDUSD#", "NZDUSDc", "NZDUSDm", "NZDUSD.", "NZDUSD.pro"],
 }
+
+# P1.49 (01/11/2026): valida o NOME pela forma, nao por catalogo. `symbol_aliases`
+# continua a ser o mapa de apelidos da corretora (isso e mapeamento, nao
+# presuncao), mas deixa de servir de filtro de dados: uma lista fixa contra os
+# milhares de simbolos que a corretora oferece descartava ativos reais em
+# silencio. MEDIDO: 9 de 16 ativos operados eram removidos no carregamento.
+SIMBOLO_RE = re.compile(r"^[A-Za-z][A-Za-z0-9._#\-]{1,30}$")
+
+
+def simbolo_plausivel(valor) -> bool:
+    """True quando o campo Symbol pode ser um simbolo de corretora.
+
+    Rejeita vazio, nulo, numero puro (preco sem cabecalho que virou simbolo)
+    e texto fora do formato. Nao conhece nem presume nenhum ativo.
+    """
+    if valor is None:
+        return False
+    texto = str(valor).strip()
+    if not texto:
+        return False
+    try:
+        float(texto)
+        return False
+    except ValueError:
+        pass
+    return SIMBOLO_RE.match(texto) is not None
 
 max_prediction_age_seconds = 300  # 5 minutes
 

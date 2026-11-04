@@ -396,7 +396,7 @@ def _carregar(symbol: str, timeframe: str) -> tuple[Any | None, dict[str, Any]]:
     Duas defesas, porque uma so nao fecha:
 
     1. `_nome_de_artefato` so aceita `[A-Z0-9]` e `^[A-Z0-9]{1,12}$`, o que
-       ja barra `/`, `\` e `..` na origem. O timeframe tem allowlist
+       ja barra `/`, `\\` e `..` na origem. O timeframe tem allowlist
        fechada, medida nos artefatos reais (H1, H4, M15, M5).
     2. Mesmo com nome valido, o caminho resolvido e conferido dentro de
        `MODELOS_DIR` com `Path.is_relative_to`/`resolve`. Isto cobre o caso
@@ -689,6 +689,120 @@ def _predict_proba(modelo: Any, amostra: pd.DataFrame) -> np.ndarray:
     return modelo.predict_proba(amostra)[0]
 
 
+# ============================================================
+# CONTRATO XAU-30F-v4 (30 features, alvo binario)
+# ============================================================
+# MEDIDO 2026-11-04 nos 87 `Python/models/*.meta.json`: 80 falam 25F-v2, 3
+# falam 25F-est-v1 e 4 falam XAU-30F-v4. Dos 4 publicaveis, o UNICO XAUUSD e o
+# H1 - e ele e XAU-30F-v4. O runtime construia 25 features e o unico modelo que
+# o gateway podia publicar exigia 30: por isso a resposta era `available=false`
+# e o EA ficava em IA=SEM PRECO.
+#
+# A lista abaixo e uma COPIA VERBATICA de `xau_model_tools.FEATURES` e existe
+# aqui para nao importar o modulo no caminho quente. `_features_30f` confere o
+# tamanho contra o modulo antes de prever: divergencia vira recusa, nunca uma
+# previsao com a coluna trocada.
+_VERSAO_30F = "XAU-30F-v4"
+
+_COLS_30F: tuple[str, ...] = (
+    "ret1", "ret3", "ret5", "ret10", "ret20",
+    "ema20_rel", "ema50_rel", "ema200_rel", "ema20_slope", "ema50_slope",
+    "rsi14", "rsi_slope",
+    "atr_pct", "atr_z",
+    "adx14", "pdi_minus_mdi",
+    "bbw", "close_z20",
+    "stoch14",
+    "body_ratio", "upper_wick", "lower_wick", "range_pct",
+    "vol_z", "vol_ratio",
+    "ret5_std", "gap_pct",
+    "hour_sin", "hour_cos", "dow",
+)
+
+
+def _features_30f(candles: pd.DataFrame) -> tuple[pd.DataFrame, float]:
+    """Monta as 30 features do XAU-30F-v4 e o ATR absoluto da ultima barra.
+
+    O construtor do 30F trabalha em MINUSCULAS (`time/open/high/low/close/
+    tickvol`) porque le o CSV do dataset, enquanto o gateway entrega as colunas
+    capitalizadas. O mapa abaixo aceita as duas grafias e as duas fontes de
+    volume, para o caminho nao depender do nome exato que o MT5 devolveu.
+
+    O ATR devolvido e o ABSOLUTO, e nao `atr_pct`: `atr_pct` e uma razao
+    (ATR/preco) e devolve-la como ATR daria um numero ~4000x menor ao EA.
+    """
+    from Python import xau_model_tools as x30
+
+    d = candles.copy()
+    mapa: dict[str, str] = {}
+    for destino, origens in (
+        ("time", ("Time", "time")),
+        ("open", ("Open", "open")),
+        ("high", ("High", "high")),
+        ("low", ("Low", "low")),
+        ("close", ("Close", "close")),
+        ("tickvol", ("Tick_volume", "Tickvol", "tick_volume", "tickvol",
+                     "Volume", "volume")),
+    ):
+        for origem in origens:
+            if origem in d.columns:
+                mapa[origem] = destino
+                break
+
+    d = d.rename(columns=mapa)
+    faltando = [c for c in ("time", "open", "high", "low", "close", "tickvol")
+                if c not in d.columns]
+    if faltando:
+        raise ValueError(f"candles sem coluna para o contrato 30F: {faltando}")
+
+    if tuple(x30.FEATURES) != _COLS_30F:
+        raise ValueError(
+            "contrato 30F divergente do xau_model_tools: "
+            f"{len(x30.FEATURES)} features no modulo x {len(_COLS_30F)} aqui"
+        )
+
+    d = d.dropna(subset=["time", "open", "high", "low", "close"]).sort_values("time")
+    feats = x30.build_features(d)
+    atr_abs = float(x30.atr(d, 14).iloc[-1]) if len(d) else 0.0
+    return feats, atr_abs
+
+
+def _decodifica(probs: Any, classes: Any) -> tuple[float, float, float, str]:
+    """Traduz a saida do classificador em (p_sell, p_neutral, p_buy, rotulo).
+
+    BINARIO x TRICLASSE - O DEFEITO QUE SO APARECE A OPERAR
+    ======================================================
+    O alvo do XAU-30F-v4 e 0/1 com "0 = desce, 1 = sobe" e NAO tem classe
+    NEUTRO (era a v3 de 3 classes; ver `build_target` em xau_model_tools). Ler
+    `probs[2]` como compra num modelo binario devolve 0.0 sempre, e `probs[1]`
+    (a probabilidade de SUBIR) iria para o campo NEUTRO: a compra viraria
+    neutro em silencio - exactamente o que o proprio treinador avisa que nao se
+    deve fazer.
+
+    A traducao usa `classes_` do artefato, nunca um indice fixo. Para um modelo
+    de 3 classes o resultado e identico ao anterior (0=SELL, 1=NEUTRAL,
+    2=BUY), para nao mudar o comportamento dos 80 artefatos 25F-v2.
+    """
+    p = np.asarray(probs, dtype=np.float64).ravel()
+    cl = list(range(len(p))) if classes is None else [int(c) for c in classes]
+    if len(p) < 2 or len(cl) != len(p):
+        return 0.0, 0.0, 0.0, "NEUTRAL"
+
+    triclasse = 2 in cl
+    p_sell = float(p[cl.index(0)]) if 0 in cl else 0.0
+    if triclasse:
+        p_neu = float(p[cl.index(1)]) if 1 in cl else 0.0
+        p_buy = float(p[cl.index(2)]) if 2 in cl else 0.0
+    else:
+        p_neu = 0.0
+        p_buy = float(p[cl.index(1)]) if 1 in cl else 0.0
+
+    codigo = cl[int(np.argmax(p))]
+    if triclasse:
+        rotulo = {0: "SELL", 1: "NEUTRAL", 2: "BUY"}.get(codigo, "NEUTRAL")
+    else:
+        rotulo = "BUY" if codigo == 1 else "SELL"
+    return p_sell, p_neu, p_buy, rotulo
+
 def inferir(symbol: str, candles: pd.DataFrame, timeframe: str = "H1") -> Inferencia:
     """Roda o modelo do timeframe e devolve a decisao, ou diz por que nao pode.
 
@@ -723,47 +837,64 @@ def inferir(symbol: str, candles: pd.DataFrame, timeframe: str = "H1") -> Infere
         return Inferencia(False, motivo, symbol, timeframe)
 
     try:
-        # So a ultima linha e usada. Cortar ANTES de reamostrar evita
-        # resamplear 46 mil candles a cada tique (eram ~2,4 s por inferencia).
-        # 600 candles M5 dao 200 de H1, mais que o suficiente para as features
-        # rolling/ewm ficarem identicas ao treino.
-        janela = t.reamostrar(candles.tail(1200), timeframe)
-        base = t.construir_features(janela)
-        base = base.replace([np.inf, -np.inf], np.nan).dropna(subset=t.FEATURES)
+        # O contrato de features vem do ARTEFATO, nao do codigo: 80 dos 87
+        # `.meta.json` falam 25F-v2 e os unicos publicaveis falam
+        # XAU-30F-v4 (30 features, alvo binario). Despachar pelo
+        # `feature_version` mantem os dois caminhos vivos sem que um quebre o
+        # outro - trocar o construtor para todo mundo quebraria 80 modelos.
+        versao = str(meta.get("feature_version") or "")
+        if versao == _VERSAO_30F:
+            base, atr_abs = _features_30f(candles)
+            colunas = _COLS_30F
+            col_preco = "close"
+        else:
+            # So a ultima linha e usada. Cortar ANTES de reamostrar evita
+            # resamplear 46 mil candles a cada tique (eram ~2,4 s por inferencia).
+            # 600 candles M5 dao 200 de H1, mais que o suficiente para as
+            # features rolling/ewm ficarem identicas ao treino.
+            janela = t.reamostrar(candles.tail(1200), timeframe)
+            base = t.construir_features(janela)
+            colunas = t.FEATURES
+            col_preco = "Close"
+            atr_abs = 0.0
+
+        base = base.replace([np.inf, -np.inf], np.nan).dropna(subset=list(colunas))
         if base.empty:
             return Inferencia(False, "features incompletas apos derivacao", symbol, timeframe)
-        ultima = base.iloc[[-1]][t.FEATURES]
+        ultima = base.iloc[[-1]][list(colunas)]
         if ultima.isna().any(axis=None):
             return Inferencia(False, "ultima linha com feature faltando", symbol, timeframe)
 
-        probs = _predict_proba(modelo, ultima)
-        decisao = int(np.argmax(probs))
+        # O 30F foi treinado com `to_numpy` (sem nomes de coluna): passar um
+        # DataFrame aqui e aceito, mas gera aviso do sklearn a cada tique.
+        amostra = ultima.to_numpy(dtype=np.float64) if versao == _VERSAO_30F else ultima
+        probs = _predict_proba(modelo, amostra)
+        p_sell, p_neu, p_buy, rotulo = _decodifica(probs, getattr(modelo, "classes_", None))
         metricas = meta.get("metrics", {})
         linha = base.iloc[-1]
         ms = (time.perf_counter() - inicio) * 1000.0
-
-        p_buy = float(probs[2]) if len(probs) > 2 else 0.0
-        p_sell = float(probs[0]) if len(probs) > 0 else 0.0
-        p_neu = float(probs[1]) if len(probs) > 1 else 0.0
+        if versao != _VERSAO_30F:
+            atr_abs = float(linha.get("ATR", 0.0))
         return Inferencia(
             disponivel=True,
             motivo="inferencia real do modelo publicado",
             symbol=symbol,
             timeframe=timeframe,
-            signal={0: "SELL", 1: "NEUTRAL", 2: "BUY"}.get(decisao, "NEUTRAL"),
+            signal=rotulo,
             # Confianca = probabilidade real que o modelo atribui a decisao.
             confianca=float(max(probs)) * 100.0,
             prob_buy=p_buy,
             prob_sell=p_sell,
             prob_neutral=p_neu,
-            price=float(linha["Close"]),
-            atr=float(linha.get("ATR", 0.0)),
+            price=float(linha[col_preco]),
+            atr=float(atr_abs),
             edge=metricas.get("edge"),
             accuracy=metricas.get("accuracy"),
             folds=metricas.get("folds"),
             inferencia_ms=ms,
             modelo=_nome_do_modelo(symbol, timeframe, meta),
-            feature_hash=t.feature_hash(),
+            feature_hash=(str(meta.get("feature_hash") or "")
+                          if versao == _VERSAO_30F else t.feature_hash()),
         )
     except Exception as exc:  # pragma: no cover
         return Inferencia(False, f"erro na inferencia: {exc}", symbol, timeframe)
