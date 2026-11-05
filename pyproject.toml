@@ -32,6 +32,11 @@ dependencies = [
     "python-dotenv>=1.0",
     "mcp>=1.0",
     "certifi>=2026.10.19",
+    # Piso de seguranca (Dependabot): filelock <= 4.2.0 tem vulnerabilidades
+    # abertas (GHSA-v4x8-3wr5-3wq8 e outras). Declarar o piso aqui impede o
+    # resolvedor de escolher a versao 3.x antiga exigida por `litellm>=1.109`,
+    # e resolve o alerta no manifesto `pyproject.toml`.
+    "filelock>=4.2.1",
 ]
 
 [tool.poetry.dependencies]
@@ -56,6 +61,7 @@ six = ">=1.16"
 python-dotenv = ">=1.0"
 mcp = ">=1.0"
 certifi = ">=2026.10.19"
+filelock = ">=4.2.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = ">=8.0"
