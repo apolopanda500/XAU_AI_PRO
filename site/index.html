@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>XAU AI PRO — plataforma de operação para MetaTrader 5</title>
+<meta name="description" content="XAU AI PRO: gateway local em Python, interface React/Tauri, núcleo Rust, app Tkinter e Expert Advisor MQL5 para MetaTrader 5. Local-first, fail-closed, com risco explícito.">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230d1117'/%3E%3Ctext x='32' y='44' font-family='Segoe UI,Arial' font-size='30' font-weight='700' text-anchor='middle' fill='%23e3b341'%3EX%3C/text%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#0b0f14; --panel:#131a22; --panel-2:#0f151c; --line:#243040;
+    --text:#e6edf3; --muted:#9aa7b4; --gold:#e3b341; --gold-soft:#f2d489;
+    --link:#7cc4ff; --ok:#3fb950; --warn:#d29922;
+    --radius:14px; --max:1080px;
+    --font:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif;
+    --mono:"Cascadia Mono",Consolas,"SFMono-Regular",Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:
+      radial-gradient(900px 420px at 82% -8%, rgba(227,179,65,.14), transparent 62%),
+      radial-gradient(700px 380px at -10% 8%, rgba(124,196,255,.09), transparent 60%),
+      var(--bg);
+    color:var(--text); font-family:var(--font); line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--link); text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:var(--max); margin:0 auto; padding:0 22px}
+  header{padding:76px 0 44px}
+  .eyebrow{
+    display:inline-flex; align-items:center; gap:10px; font-size:12px; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--muted); border:1px solid var(--line);
+    background:var(--panel-2); padding:7px 12px; border-radius:999px;
+  }
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 4px rgba(63,185,80,.14)}
+  h1{
+    font-size:clamp(38px,6vw,66px); line-height:1.05; margin:20px 0 14px;
+    letter-spacing:-.02em; font-weight:800;
+  }
+  h1 .gold{color:var(--gold)}
+  .lede{font-size:clamp(16px,2.1vw,20px); color:#c9d4df; max-width:66ch; margin:0}
+  .actions{display:flex; flex-wrap:wrap; gap:12px; margin-top:26px}
+  .btn{
+    display:inline-flex; align-items:center; gap:9px; padding:11px 18px; border-radius:10px;
+    border:1px solid var(--line); background:var(--panel); color:var(--text);
+    font-weight:600; font-size:14px;
+  }
+  .btn:hover{text-decoration:none; border-color:#3a4b60; background:#182231}
+  .btn.primary{background:linear-gradient(180deg,#e9c05a,#d9a72e); border-color:#c99a28; color:#1b1405}
+  .btn.primary:hover{filter:brightness(1.05)}
+  .meta{display:flex; gap:18px; flex-wrap:wrap; margin-top:22px; color:var(--muted); font-size:13px}
+  .meta code{font-family:var(--mono); color:var(--gold-soft)}
+  section{padding:38px 0}
+  h2{font-size:clamp(22px,3vw,30px); margin:0 0 6px; letter-spacing:-.01em}
+  .sub{color:var(--muted); margin:0 0 22px; max-width:70ch}
+  .paths{display:grid; grid-template-columns:repeat(3,1fr); gap:14px}
+  .path{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:18px 18px 16px}
+  .path h3{margin:0 0 4px; font-size:15px; color:var(--gold-soft); letter-spacing:.02em}
+  .path p{margin:0; color:var(--muted); font-size:14px}
+  .path code{font-family:var(--mono); font-size:12.5px; color:#cfe3f7}
+  .grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px}
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:18px}
+  .card h3{margin:0 0 6px; font-size:15px}
+  .card p{margin:0; color:var(--muted); font-size:14px}
+  .card .tag{font-family:var(--mono); font-size:12px; color:var(--gold-soft)}
+  .callout{
+    display:grid; grid-template-columns:1.05fr .95fr; gap:22px; align-items:start;
+    background:linear-gradient(180deg,var(--panel),var(--panel-2));
+    border:1px solid var(--line); border-radius:16px; padding:24px;
+  }
+  .callout h2{margin-bottom:10px}
+  .list{margin:0; padding-left:18px; color:var(--muted)}
+  .list li{margin:7px 0}
+  .list strong{color:var(--text)}
+  .table{width:100%; border-collapse:collapse; font-size:14px}
+  .table th,.table td{text-align:left; padding:10px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+  .table th{color:var(--muted); font-weight:600; font-size:12px; letter-spacing:.08em; text-transform:uppercase}
+  .table tr:last-child td{border-bottom:0}
+  .table code{font-family:var(--mono); font-size:12.5px; color:var(--gold-soft)}
+  footer{border-top:1px solid var(--line); margin-top:34px; padding:26px 0 46px; color:var(--muted); font-size:13px}
+  footer .row{display:flex; gap:16px; flex-wrap:wrap; justify-content:space-between; align-items:center}
+  .warn{
+    border-left:3px solid var(--warn); background:rgba(210,153,34,.08);
+    padding:12px 16px; border-radius:0 10px 10px 0; color:#e8d9b6; font-size:14px;
+  }
+  @media (max-width:820px){
+    .paths{grid-template-columns:1fr}
+    .callout{grid-template-columns:1fr}
+    header{padding:52px 0 30px}
+  }
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+
+<header class="wrap">
+  <span class="eyebrow"><span class="dot" aria-hidden="true"></span> local-first · fail-closed · Windows</span>
+  <h1>XAU <span class="gold">AI PRO</span></h1>
+  <p class="lede">
+    Plataforma de operação para MetaTrader 5 e múltiplas corretoras: gateway local em
+    Python, interface desktop em React/TypeScript com Tauri, núcleo em Rust, aplicação
+    legada em Tkinter e Expert Advisor em MQL5.
+  </p>
+  <div class="actions">
+    <a class="btn primary" href="https://github.com/apolopanda500/XAU_AI_PRO">Repositório</a>
+    <a class="btn" href="https://github.com/apolopanda500/XAU_AI_PRO/blob/main/Docs/INDICE.md">Documentação</a>
+    <a class="btn" href="https://github.com/apolopanda500/XAU_AI_PRO/releases">Releases</a>
+    <a class="btn" href="https://github.com/apolopanda500/XAU_AI_PRO/security">Segurança</a>
+  </div>
+  <div class="meta">
+    <span>Versão <code>1.2.9</code></span>
+    <span>Python 3.11 · Node 22 · Rust stable</span>
+    <span>Licença proprietária (EULA)</span>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section id="caminhos">
+    <h2>Três caminhos, uma conta</h2>
+    <p class="sub">Não existe confirmação por ordem. A decisão é da IA ou do dono, conforme o caminho escolhido; a responsabilidade de operar é sempre do dono.</p>
+    <div class="paths">
+      <div class="path">
+        <h3>MOTOR</h3>
+        <p>IA decide ativo, timeframe e limites.<br><code>backend Python</code></p>
+      </div>
+      <div class="path">
+        <h3>EA</h3>
+        <p>IA decide o sinal e o robô opera.<br><code>MetaTrader 5</code></p>
+      </div>
+      <div class="path">
+        <h3>MESA</h3>
+        <p>O dono monta a ordem no gráfico.<br><code>gráfico</code></p>
+      </div>
+    </div>
+  </section>
+
+  <section id="componentes">
+    <h2>Componentes</h2>
+    <p class="sub">Cada responsabilidade tem um lugar só. O mapa completo está no repositório.</p>
+    <div class="grid">
+      <div class="card"><h3>backend/</h3><p>Gateway local, adaptadores de corretora, risco, auditoria, fila e MCP de trading.</p></div>
+      <div class="card"><h3>frontend/</h3><p>Interface React/TypeScript empacotada por Tauri.</p></div>
+      <div class="card"><h3>core/</h3><p>Componentes Rust do núcleo.</p></div>
+      <div class="card"><h3>MQL5/</h3><p>Expert Advisor e indicadores, compilados no MetaEditor.</p></div>
+      <div class="card"><h3>app/</h3><p>Interface Tkinter legada, memória e configuração.</p></div>
+      <div class="card"><h3>tests/</h3><p>Suíte Python do gateway e da lógica de aplicação.</p></div>
+      <div class="card"><h3>scripts/</h3><p>Build, instalador, preflight, auditorias e ferramentas de prova.</p></div>
+      <div class="card"><h3>Docs/</h3><p>Decisões, levantamentos e o estado medido de cada ciclo.</p></div>
+    </div>
+  </section>
+
+  <section id="comecar">
+    <h2>Começar</h2>
+    <p class="sub">Windows 10/11 x64, Python 3.11, Node 22 e o terminal oficial do MetaTrader 5.</p>
+    <div class="callout">
+      <div>
+        <table class="table">
+          <tbody>
+            <tr><th>Clonar</th><td><code>git clone https://github.com/apolopanda500/XAU_AI_PRO.git</code></td></tr>
+            <tr><th>Ambiente</th><td><code>python -m venv .venv</code> · <code>pip install -r requirements.txt -r requirements-dev.txt</code></td></tr>
+            <tr><th>Interface</th><td><code>.\.venv\Scripts\python.exe app\main.py</code></td></tr>
+            <tr><th>Testes</th><td><code>python -m pytest -q tests</code></td></tr>
+            <tr><th>Instalador</th><td><code>installer\build_installer.cmd</code> → <code>XAU_AI_PRO_Setup.exe</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <ul class="list">
+          <li><strong>Local-first:</strong> não existe deploy hospedado do produto. Os antigos jobs de Vercel/Nitro foram removidos em 04/10/2026.</li>
+          <li><strong>CI:</strong> segredos (gitleaks), Rust, frontend, lint e empacotamento rodam a cada push em <code>main</code>/<code>develop</code>.</li>
+          <li><strong>EA:</strong> compilação manual no MetaEditor; o binário <code>.ex5</code> não é versionado.</li>
+          <li><strong>Instalação:</strong> em <code>MQL5\Files\XAU_AI_PRO</code>, sem privilégios de administrador.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="risco">
+    <h2>Risco e segurança</h2>
+    <div class="callout">
+      <div>
+        <ul class="list">
+          <li><strong>Nenhum saque nem transferência</strong> para fora da corretora, em nenhuma camada — há teste automatizado que reprova a regressão.</li>
+          <li><strong>Fail-closed:</strong> sem token de sessão válido o gateway recusa tudo com <code>401</code>.</li>
+          <li><strong>Ordem real</strong> exige, nesta ordem: demo completa, forward test aprovado, endurance test e autorização explícita do dono.</li>
+          <li><strong>Toda ordem</strong> exige <code>confirm=true</code> e <code>request_id</code> idempotente, e passa por <code>risk_gate</code>, <code>intent_log</code> e <code>audit_log</code>.</li>
+        </ul>
+      </div>
+      <div>
+        <p class="warn">
+          Trading envolve risco de perda. Nada aqui é promessa de lucro. Valide
+          qualquer estratégia primeiro em backtest e conta demo. O módulo
+          <em>Subgraph</em> é somente leitura e não envia ordens.
+        </p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="wrap">
+  <div class="row">
+    <span>© 2026 APOLOPANDA500 · Todos os direitos reservados · Uso regido pelo <a href="https://github.com/apolopanda500/XAU_AI_PRO/blob/main/EULA.txt">EULA</a></span>
+    <span><a href="https://github.com/apolopanda500/XAU_AI_PRO">GitHub</a> · <a href="https://github.com/apolopanda500/XAU_AI_PRO/blob/main/SECURITY.md">Segurança</a> · <a href="https://github.com/apolopanda500/XAU_AI_PRO/blob/main/CHANGELOG.md">Changelog</a></span>
+  </div>
+</footer>
+
+</body>
+</html>
