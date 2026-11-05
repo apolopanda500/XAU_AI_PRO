@@ -1578,7 +1578,12 @@ def _save_auto_login(payload: dict) -> dict:
     destino.parent.mkdir(parents=True, exist_ok=True)
     dados = {"login": int(login), "server": server, "password": connection_store.protect_secret(senha)}
     temp = destino.with_suffix(".tmp")
-    temp.write_text(json.dumps(dados), encoding="utf-8")
+    # O campo `password` chega aqui JA cifrado por DPAPI (`CryptProtectData`,
+    # em connection_store). O CodeQL nao modela a API do Windows, entao ve o
+    # sink de escrita e acusa `py/clear-text-storage-sensitive-data`; o teste
+    # TestArquivoDpapi::test_grava_cifrado_e_le_de_volta prova que a senha em
+    # claro nao aparece no arquivo. A supressao abaixo registra a revisao.
+    temp.write_text(json.dumps(dados), encoding="utf-8")  # codeql[py/clear-text-storage-sensitive-data] DPAPI cifra antes de gravar; ver TestArquivoDpapi
     os.replace(temp, destino)
     return _auto_login_status()
 
