@@ -14,6 +14,11 @@ from __future__ import annotations
 
 import json
 
+from datetime import datetime, timezone, timedelta
+
+_AGORA = datetime.now(timezone.utc).replace(microsecond=0)
+_RECENTE = (_AGORA - timedelta(days=1)).isoformat()
+
 from backend import vip_progress as vp
 from backend.vip_progress import NIVEIS, escada_completa
 
@@ -87,7 +92,7 @@ def escrever_audit(tmp_path, monkeypatch, eventos):
 
 def evento(**kwargs):
     base = {
-        "at": "2026-10-01T12:00:00+00:00",
+        "at": _RECENTE,
         "action": "trade/universal/order",
         "broker": "mt5",
         "status": "executed",
@@ -145,7 +150,7 @@ def test_fora_da_janela_nao_conta(tmp_path, monkeypatch):
     """O que e da janela e o que conta, como na IBKR."""
     escrever_audit(tmp_path, monkeypatch, [
         evento(at="2026-01-01T12:00:00+00:00", volume=10000.0),
-        evento(at="2026-10-01T12:00:00+00:00", volume=100.0),
+        evento(at=_RECENTE, volume=100.0),
     ])
     assert vp.volume_por_grupo()["forex_cfd"] == 100.0
 
@@ -325,7 +330,7 @@ class TestVolumeRealmenteMedido:
                 # Evento com status executed e sem nenhum campo de quantidade:
                 # exatamente o formato que o audit_log produzia.
                 {
-                    "at": "2026-10-01T12:00:00+00:00",
+                    "at": _RECENTE,
                     "action": "trade/universal/order",
                     "broker": "mt5",
                     "market": "forex",
