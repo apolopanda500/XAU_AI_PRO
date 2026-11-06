@@ -115,6 +115,13 @@ const painelComPreco = async () => {
  */
 const clicarComFicha = async () => {
   await painelComPreco();
+  // STOP E ALVO SAO DO OPERADOR (25/10/2026): nascem vazios, e o grafico so
+  // desenha as linhas depois que ele declara os valores. Este helper declara
+  // 2,00 USD nos dois, que e o caso dos testes de envio.
+  const stop = screen.getByLabelText('Quanto aceita perder no stop loss') as HTMLInputElement;
+  const alvo = screen.getByLabelText('Quanto espera ganhar no alvo') as HTMLInputElement;
+  fireEvent.change(stop, { target: { value: '2' } });
+  fireEvent.change(alvo, { target: { value: '2' } });
   await waitFor(() => {
     const linhas = JSON.parse(screen.getByTestId('linhas').textContent ?? '[]');
     expect(linhas).toHaveLength(3);
@@ -257,6 +264,23 @@ describe('o clique ARMA e NAO ENVIA', () => {
     } finally {
       estado.semCandles = false;
     }
+  });
+
+  it('PROVA NEGATIVA: sem o operador declarar, o grafico nao desenha stop nem alvo', async () => {
+    /*
+    MEDIDO 25/10/2026: o grafico abria com as tres linhas (entrada, stop e
+    alvo) sem nenhum gesto do operador. Eram defaults de 2,00 USD somados ao
+    preco que chega sozinho do ultimo fechamento. Nivel de protecao que o
+    operador nao escolheu e uma ordem que ele nao pediu.
+    */
+    renderPainel();
+    await painelComPreco();
+    const linhas = linhasDoGrafico();
+    expect(linhas.map((l) => l.papel)).toEqual(['entrada']);
+    const stop = screen.getByLabelText('Quanto aceita perder no stop loss') as HTMLInputElement;
+    const alvo = screen.getByLabelText('Quanto espera ganhar no alvo') as HTMLInputElement;
+    expect(stop.value).toBe('');
+    expect(alvo.value).toBe('');
   });
 
   it('as tres linhas seguem o preco clicado, com o rotulo em dinheiro', async () => {

@@ -1,7 +1,7 @@
 ﻿//+------------------------------------------------------------------+
 //|                                             SimulationEngine.mqh |
 //|                                  Pre-Execution Simulation        |
-//|                                            XAU_AI_PRO v1.2.1     |
+//|                                            XAU_AI_PRO v1.2.9     |
 //+------------------------------------------------------------------+
 
 #ifndef SIMULATION_ENGINE_MQH
@@ -30,10 +30,10 @@ private:
    static double          m_min_probability;
    static double          m_min_expected_profit;
    static double          m_max_risk;
-   static SimulationResult SimulateTrade(string symbol, int type, double volume, double entry, double sl, double tp);
+   static SimulationResult SimulateTrade(string symbol, int type, double volume, double entry, double sl, double tp, double confidence = 0.0);
 public:
    static void Init();
-   static SimulationResult Evaluate(string symbol, int type, double volume, double entry, double sl, double tp);
+   static SimulationResult Evaluate(string symbol, int type, double volume, double entry, double sl, double tp, double confidence = 0.0);
    static bool ShouldExecute(SimulationResult &result);
    static void SetThresholds(double min_prob, double min_profit, double max_risk);
    static int GetSimulationCount();
@@ -60,7 +60,7 @@ void CSimulationEngine::Init()
    Print("[SIMULATION] SimulationEngine initialized");
 }
 
-SimulationResult CSimulationEngine::SimulateTrade(string symbol, int type, double volume, double entry, double sl, double tp)
+SimulationResult CSimulationEngine::SimulateTrade(string symbol, int type, double volume, double entry, double sl, double tp, double confidence)
 {
    SimulationResult result;
 
@@ -69,9 +69,18 @@ SimulationResult CSimulationEngine::SimulateTrade(string symbol, int type, doubl
    double reward = MathAbs(tp - entry);
    result.risk_reward = (risk > 0) ? reward / risk : 0;
 
-   // Historical win rate for similar setups (simplified)
-   result.probability_success = 0.5 + (result.risk_reward * 0.1); // Base probability
+   // v1.2.9 (29/10/2026): a probabilidade NAO pode ser derivada do RR.
+   // A formula antiga (0,5 + RR*0,1) fazia alvo curto parecer improvavel e,
+   // junto com o piso fixo RR>=1,0, reprovava TODO alvo adaptativo menor que o
+   // stop (DynTPFactorMin=0,35). Agora, quando a confianca do sinal e
+   // conhecida, ela e a probabilidade; o RR continua medido.
+   if(SimulationUseConfidence && confidence > 0.0)
+      result.probability_success = confidence / 100.0;
+   else
+      result.probability_success = 0.5 + (result.risk_reward * 0.1);
+
    if(result.probability_success > 0.95) result.probability_success = 0.95;
+   if(result.probability_success < 0.05) result.probability_success = 0.05;
 
    // v1.2.1 FIX: expected profit normalizado em unidades de RISCO (R):
    // EP_R = prob*RR - (1-prob). Independe do point/preco do simbolo.
@@ -86,24 +95,29 @@ SimulationResult CSimulationEngine::SimulateTrade(string symbol, int type, doubl
    result.max_adverse_excursion = risk * 1.5;
    result.max_favorable_excursion = reward * 1.2;
 
-   // Decision - thresholds em unidades de R (nao preco absoluto)
-   result.should_execute = (result.probability_success >= m_min_probability &&
-                           result.expected_profit >= m_min_expected_profit &&
-                           result.risk_reward >= 1.0);
+   // Decision - pisos em unidades de R, agora configuraveis por input
+   // (MinSimulationRR / MinSimulationExpectancy / MinSimulationProbability).
+   double pisoProb = (MinSimulationProbability > 0.0) ? MinSimulationProbability : m_min_probability;
+   double pisoEP   = MinSimulationExpectancy;
+   double pisoRR   = (MinSimulationRR > 0.0) ? MinSimulationRR : 0.0;
+
+   result.should_execute = (result.probability_success >= pisoProb &&
+                           result.expected_profit >= pisoEP &&
+                           result.risk_reward >= pisoRR);
 
    result.reason = result.should_execute ? "All criteria met" :
-                  (result.probability_success < m_min_probability ? "Low probability" :
-                  result.expected_profit < m_min_expected_profit ? "Low expected profit" : "Poor risk/reward");
+                  (result.probability_success < pisoProb ? "Low probability" :
+                  result.expected_profit < pisoEP ? "Low expected profit" : "Poor risk/reward");
 
    return result;
 }
 
-SimulationResult CSimulationEngine::Evaluate(string symbol, int type, double volume, double entry, double sl, double tp)
+SimulationResult CSimulationEngine::Evaluate(string symbol, int type, double volume, double entry, double sl, double tp, double confidence)
 {
    if(!m_initialized) Init();
    m_simulation_count++;
 
-   SimulationResult result = SimulateTrade(symbol, type, volume, entry, sl, tp);
+   SimulationResult result = SimulateTrade(symbol, type, volume, entry, sl, tp, confidence);
 
    if(result.should_execute) m_approved_count++; else m_rejected_count++;
 

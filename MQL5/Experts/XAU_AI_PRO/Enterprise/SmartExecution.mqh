@@ -170,7 +170,7 @@ void CSmartExecution::Init()
    m_initialized=true;
 
 
-   Print(
+   if(LogInicioDetalhe()) Print(
       "[EXECUTION] SmartExecution initialized"
    );
 }
@@ -981,6 +981,26 @@ string CSmartExecution::GetExecutionSummary()
 
    summary+=
       " total EA (terminal)\n";
+
+
+   // v1.2.107 (03/11/2026) - P1.97: "Positions" era um numero solto e foi
+   // lido como contradicao contra o terminal (jornal dizia 1 EA, a aba
+   // Negociacao mostrava 0 no instante da auditoria). As duas leituras
+   // estavam certas em instantes diferentes: a posicao existia quando a
+   // linha saiu e fechou depois. Para a linha passar a ser verificavel sem
+   // depender de forca externa, cada numero sai com o valor cru que o valida:
+   //   EA(magic) <> PosTerminal -> posicao de outro programa ou magic errado;
+   //   MargemLivre <> Equity - MargemUsada -> leituras de instantes diferentes.
+   // Isto e diagnostico. Nenhuma regra, limite, lote, spread, alvo,
+   // precificacao ou parametro de risco foi alterado.
+   summary += "PosTerminal=" + IntegerToString(PositionsTotal());
+   summary += " | MargemUsada=" +
+              DoubleToString(AccountInfoDouble(ACCOUNT_MARGIN), 2);
+   summary += " | MargemLivre=" +
+              DoubleToString(AccountInfoDouble(ACCOUNT_MARGIN_FREE), 2);
+   summary += " | Equity=" +
+              DoubleToString(AccountInfoDouble(ACCOUNT_EQUITY), 2);
+   summary += "\n";
 
 
    QualityScore lastScore=

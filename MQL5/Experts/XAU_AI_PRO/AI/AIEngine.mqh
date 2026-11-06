@@ -8,6 +8,7 @@
 
 #include "../Filters/TrendFilter.mqh"
 #include "../Filters/SpreadFilter.mqh"
+#include "../Filters/MarketIntelligence.mqh" // v1.3: inteligencia de mercado para ajuste da IA
 
 #include "../Indicators/ATR.mqh"
 #include "../Indicators/ADX.mqh"
@@ -18,6 +19,7 @@
 #include "AdaptiveWeights.mqh"
 #include "AIConnector.mqh"
 #include "AILearningMemory.mqh"
+#include "AIMetrics.mqh"
 
 //==================================================
 // PROTOTYPES
@@ -35,10 +37,31 @@ void   LogAIFeedback(string symbol,double profit);
 // AI FILTER
 //==================================================
 
+//==================================================
+// GATE DE IA
+//==================================================
+// A IA so PODE barrar entrada quando ela e obrigatoria. Com
+// `EnableAutonomousMode=true` (Config.mqh) o gateway ausente deixa de
+// bloquear o EA: a IA continua calculando score e registrando feedback,
+// mas nao veta e nao exige disponibilidade.
+bool AIGateRequired()
+{
+   if(!EnableAIFilter)
+      return(false);
+
+   if(EnableAutonomousMode)
+      return(false);
+
+   return(!AllowTradeWithoutAI);
+}
+
 bool AITradeAllowed(string symbol="")
 {
    if(symbol=="")
       symbol=_Symbol;
+
+   if(!AIGateRequired())
+      return(true);
 
    int signal=GetSignal(symbol);
 
@@ -96,7 +119,13 @@ double GetAIConfidence(int signal,string symbol="")
    // ETAPA 15.3: UNAVAILABLE nao gera bonus de IA;
    // cai no fallback local (trend/RSI/ADX).
    //------------------------------------------------
-   if(LoadAIPrediction(symbol) && AI_Signal!="UNAVAILABLE")
+   // v1.2.162 - P1.125: diz-se se a leitura veio MESMO da IA. O teto do
+   // fallback so pode valer quando o numero vem dos indicadores; aplicado
+   // tambem com IA real a responder, ele fechava o gate para sempre (ver
+   // o bloco abaixo).
+   bool aiReal = (LoadAIPrediction(symbol) && AI_Signal!="UNAVAILABLE");
+
+   if(aiReal)
    {
       if(signal==1 && AI_Signal=="BUY")
          score+=20.0;
@@ -134,7 +163,15 @@ double GetAIConfidence(int signal,string symbol="")
    // (50 de base + 15 tendencia + 10 RSI + 10 ADX), o multiplicador de lote ia
    // a 1,00 e o piso de veto (50) passava sem nenhum modelo responder. O
    // numero era de indicador com nome de IA.
-   if(!AllowTradeWithoutAI)
+   //
+   // v1.2.162 - P1.125 CORRIGIDO: MEDIDO 05/11/2026 - o teto era
+   // aplicado quando `AIGateRequired()` era VERDADEIRO, ou seja
+   // exactamente quando a IA e obrigatoria: 40 < MinAIConfidence 60,
+   // logo `AITradeAllowed()` devolvia false SEMPRE - com gateway, sem
+   // gateway, com score 95 ou com score 0. O texto do Config.mqh
+   // manda capar o fallback, nao a leitura real. Agora o teto vale so
+   // quando `aiReal` e falso.
+   if(!aiReal)
       score = MathMin(score, AIUnavailableConfidenceCap);
 
    score *= MemoryBoost(symbol);
@@ -170,16 +207,37 @@ double GetAIVetoThreshold(string symbol="")
 
    double atrPoints=atr/point;
 
+   double baseThreshold;
+
    if(atrPoints>200)
-      return 70;
+      baseThreshold = 70;
+   else if(atrPoints>100)
+      baseThreshold = 65;
+   else if(atrPoints>50)
+      baseThreshold = 60;
+   else
+      baseThreshold = 55;
 
-   if(atrPoints>100)
-      return 65;
+   //------------------------------------------------
+   // v1.3: AJUSTE POR INTELIGÊNCIA DE MERCADO
+   // Quando o mercado tem baixa inteligencia (fora de
+   // sessao principal, proximo de fechamento, evento
+   // de alto impacto), a IA fica MAIS conservadora:
+   // abaixa o threshold de veto (mais facil barrar).
+   //------------------------------------------------
+   double intelScore = GetMarketIntelligenceScore(symbol);
 
-   if(atrPoints>50)
-      return 60;
+   double intelPenalty = 0.0;
+   if(intelScore < 40)      intelPenalty = 15.0; // inteligencia muito baixa
+   else if(intelScore < 60) intelPenalty = 8.0;  // inteligencia baixa
+   else if(intelScore < 70) intelPenalty = 3.0;  // inteligencia media-baixa
 
-   return 55;
+   double finalThreshold = baseThreshold + intelPenalty;
+
+   // Cap em 85 para nunca tornar impossível
+   if(finalThreshold > 85) finalThreshold = 85;
+
+   return finalThreshold;
 }
 
 //==================================================
@@ -263,6 +321,45 @@ int GetAIEngineSignal(string symbol="")
 // COMBINED SIGNAL
 //==================================================
 
+//==================================================
+// CONFLITO IA x TECNICO (v1.2.10 - 29/10/2026)
+//==================================================
+// MEDIDO: `GetCombinedSignal` devolvia 0 sempre que tecnico e IA apontavam
+// lados opostos. Com previsao fraca ou desatualizada isso zerava TODA
+// entrada: o EA varria os 11 simbolos, logava "No Signal" e nunca chegava
+// ao AllowTrade (zero linhas DECISION em 3h de journal). Nao era falta de
+// setup tecnico, era o empate.
+//
+// Politica nova: a IA so cancela a entrada quando esta fresca E confiavel
+// (score >= AIConflictMinScore). Fora disso o tecnico prevalece e o evento
+// vira `[AI CONFLICT]`, nunca silencio.
+bool AIConflictBlocks(int tech,int ai,string symbol="")
+{
+   if(!EnableAIConflictResolve)
+      return(true);   // comportamento antigo: empate = nao operar
+
+   bool iaConfiavel = (!AI_IsStale && AI_Score >= AIConflictMinScore);
+
+   static datetime lastConflictLog = 0;
+   datetime conflitoAgora = TimeCurrent();
+
+   if(conflitoAgora - lastConflictLog >= 60)
+     {
+      lastConflictLog = conflitoAgora;
+
+      PrintFormat("[AI CONFLICT] %s | tech=%d | ai=%d | ai_score=%.2f | stale=%s | decisao=%s | min=%.2f",
+                  symbol,
+                  tech,
+                  ai,
+                  AI_Score,
+                  (AI_IsStale ? "SIM" : "NAO"),
+                  (iaConfiavel ? "IA" : "TECNICO"),
+                  AIConflictMinScore);
+     }
+
+   return(iaConfiavel);
+}
+
 int GetCombinedSignal(string symbol="")
 {
    if(symbol=="")
@@ -298,7 +395,7 @@ int GetCombinedSignal(string symbol="")
    if(tech==0 && ai!=0 && AI_Score>75)
       return ai;
 
-   if(tech!=0 && ai!=0 && tech!=ai)
+   if(tech!=0 && ai!=0 && tech!=ai && AIConflictBlocks(tech,ai,symbol))
       return 0;
 
    return tech;
@@ -424,7 +521,7 @@ bool FinalAIAllow(int signal, string symbol="")
 
    // Sem IA nao ha veto; e sem veto nao ha entrada. `AllowTradeWithoutAI=true`
    // e o caminho do Strategy Tester, onde o pipeline Python nao roda.
-   if(!AllowTradeWithoutAI)
+   if(AIGateRequired())
    {
       if(!LoadAIPrediction(symbol) || AI_Signal=="UNAVAILABLE" || AI_Signal=="ERROR")
       {
@@ -459,6 +556,36 @@ bool FinalAIAllow(int signal, string symbol="")
       );
    }
 
+   //------------------------------------------------
+   // VETO DE SCORE ZERO (29/10/2026)
+   //------------------------------------------------
+   // `AIGateRequired()` e false com EnableAutonomousMode=true (padrao) e com
+   // AllowTradeWithoutAI=true. Nesse caminho a funcao devolvia TRUE logo
+   // abaixo, sem olhar o score - foi assim que 67 entradas com score 0
+   // passaram (ai_feedback.csv): WR 34,3% e -56,77. Score 0 nao e sinal
+   // fraco: e ausencia de leitura (nenhum componente somou). O veto e
+   // proprio, vale nos dois modos e nao mexe em posicoes abertas.
+   if(BlockZeroAIScore && score <= 0.0)
+   {
+      static datetime lastZeroScore = 0;
+      datetime zeroNow = TimeCurrent();
+
+      if(zeroNow - lastZeroScore >= 60)
+      {
+         lastZeroScore = zeroNow;
+         PrintFormat(
+            "[ADV AI] BLOQUEADO | score=%.2f (sem leitura) | %s",
+            score,
+            symbol
+         );
+      }
+
+      return(false);
+   }
+
+   if(!AIGateRequired())
+      return(true);
+
    return(score >= MinAIConfidence);
 }
 
@@ -468,12 +595,21 @@ bool FinalAIAllow(int signal, string symbol="")
 
 void LogAIFeedback(string symbol,double profit)
 {
+   // Uma unica leitura da direcao: alimenta o aprendizado E as metricas.
+   const int aiSignal = GetAIEngineSignal(symbol);
+
    StoreExperience(
    symbol,
-   GetAIEngineSignal(symbol),
+   aiSignal,
    AI_Score,
    profit>0
 );
+
+   // Metricas de IA (AI/AIMetrics.mqh). Somente observabilidade: nao
+   // altera sinal, risco nem execucao. Direcao 0 = IA sem opiniao, fica
+   // fora da conta, senao a accuracy ficaria diluida por abstencoes.
+   if(aiSignal != 0)
+      AIMetricsRegister(aiSignal, profit);
 
    int file=
       FileOpen(

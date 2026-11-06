@@ -1250,6 +1250,37 @@ describe('IA sempre viva (13/10/2026)', () => {
     expect(estado.chamadas.length).toBe(chamadasAposAuto);
     expect(campo.value).toBe('99');
   });
+
+  it('PROVA NEGATIVA: motor com limites aplicados nao dispara sugestao', async () => {
+    /*
+    MEDIDO 25/10/2026: aplicar, sair da sub-aba Risco e voltar remontava o
+    painel com os campos vazios e a sugestao automatica rodava antes de os
+    valores do motor aparecerem — e sobrescrevia o que o operador tinha
+    aplicado. Havendo limite guardado, sugerir nao e papel da IA.
+    */
+    stubSugestao();
+    estado.auto = {
+      ativo: false,
+      simbolo: 'GOLD',
+      timeframe: 'H1',
+      broker: 'mt5',
+      market: 'metals',
+      limites: { confianca_minima: 40, max_posicoes: 4 },
+    };
+    const container = naRisco();
+    await waitFor(() => {
+      expect(container.querySelector('[aria-label="Controle de risco"]')).toBeTruthy();
+    });
+    await new Promise((r) => setTimeout(r, 500));
+    expect(
+      estado.chamadas.some((c) => String(c.url).includes('/api/auto/sugerir-limites')),
+      'a IA sobrescreveu os limites que o motor ja tinha',
+    ).toBe(false);
+    const campo = container.querySelector('[aria-label="Confiança mínima (%)"]') as HTMLInputElement;
+    expect(campo.value).toBe('40');
+    const posicoes = container.querySelector('[aria-label="Máximo de posições"]') as HTMLInputElement;
+    expect(posicoes.value).toBe('4');
+  });
 });
 
 /*

@@ -2,9 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { GraficoIndicador } from './GraficoIndicador';
 import { bollingerValores, smaValores, vwapValores } from '../../lib/indicadores';
 import MenuGrafico, { type AcaoDoMenu } from './MenuGrafico';
-import SeletorFuso from '../SeletorFuso';
+import PainelIndicadores, { type IndicadorId } from '../PainelIndicadores';
 import '../../theme/market.css';
-import '../../theme/fuso.css';
 import '../../theme/mt5-terminal.css';
 import '../../theme/menu-grafico.css';
 import {
@@ -1042,9 +1041,13 @@ chartRef.current = chart;
     setChartReady(true);
     const observer =
       typeof ResizeObserver !== 'undefined'
-        ? new ResizeObserver(() =>
-            chart.applyOptions({ width: containerRef.current?.clientWidth ?? 0 }),
-          )
+        ? new ResizeObserver(() => {
+            const el = containerRef.current;
+            if (!el) return;
+            const width = el.clientWidth;
+            const altura = el.clientHeight;
+            if (width > 0 && altura > 0) chart.applyOptions({ width, height: altura });
+          })
         : null;
     observer?.observe(containerRef.current);
     return () => {
@@ -1749,7 +1752,7 @@ useEffect(() => {
   };
 
   return (
-    <div className="card compact-card price-chart" aria-busy={loading}>
+    <div className="card compact-card price-chart" ref={wrapRef} aria-busy={loading}>
       <div className="section-head">
         <div>
           <h2>{symbol || 'Selecione um ativo'}</h2>
@@ -1936,73 +1939,55 @@ useEffect(() => {
             Refazer
           </button>
         </div>
-        <div className="btn-row" role="group" aria-label="Indicadores do gráfico">
-          <button
-            type="button"
-            className={`btn sm ${emaExterno ? 'primary' : 'ghost'}`}
-            aria-pressed={emaExterno}
-            onClick={() => setEma(!emaExterno)}
-            title="Media movel exponencial, calculada dos candles exibidos"
-          >
-            EMA
-          </button>
-          <button
-            type="button"
-            className={`btn sm ${rsiExterno ? 'primary' : 'ghost'}`}
-            aria-pressed={rsiExterno}
-            onClick={() => setRsi(!rsiExterno)}
-            title="RSI de Wilder (14), dos candles exibidos"
-          >
-            RSI
-          </button>
-          <button
-            type="button"
-            className={`btn sm ${macdExterno ? 'primary' : 'ghost'}`}
-            aria-pressed={macdExterno}
-            onClick={() => setMacd(!macdExterno)}
-            title="MACD (12, 26, 9), dos candles exibidos"
-          >
-            MACD
-          </button>
-          {/*
-            SMA, BOLLINGER E VWAP (23/10/2026): a lista do MT5.
-            `aria-pressed` mostra o estado sem precisar clicar; o `title` diz o
-            periodo usado, porque "Bollinger" sem o (20, 2) e um nome sem
-            parametro — e parametro diferente muda a linha.
-          */}
-          {([
-            ['sma', 'SMA 20', 'Media movel simples de 20 candles'],
-            ['bollinger', 'Bollinger', 'Bandas de Bollinger (20, 2)'],
-            ['vwap', 'VWAP', 'Preco medio ponderado pelo volume, desde o primeiro candle exibido'],
-          ] as Array<[keyof typeof extras, string, string]>).map(([chave, rotulo, ajuda]) => (
-            <button
-              key={chave}
-              type="button"
-              className={`btn sm ${extras[chave] ? 'primary' : 'ghost'}`}
-              aria-pressed={extras[chave]}
-              onClick={() => {
-                const proximo = { ...extras, [chave]: !extras[chave] };
-                setExtras(proximo);
-                // Entra no desfazer: um indicador que liga e nao desliga no
-                // "desfazer" e controle que mente.
-                registrarPasso(
-                  {
-                    tipo: tipoGrafico,
-                    timeframe: activeTimeframe,
-                    rsi: rsiExterno,
-                    macd: macdExterno,
-                    ema: emaExterno,
-                    ...proximo,
-                  },
-                  proximo[chave] ? `ligar ${rotulo}` : `desligar ${rotulo}`,
-                );
-              }}
-              title={ajuda}
-            >
-              {rotulo}
-            </button>
-          ))}
-        </div>
+        {/*
+          INDICADORES EM LISTA COM BOTAO (25/10/2026, pedido do dono)
+          ==========================================================
+          A fileira de siglas virou a mesma lista dos cards de modelo: nome,
+          parametros, o que mede e um botao Liga/Desliga por linha. O painel
+          so chama `onAlternar`; quem desenha e este grafico. Os seis tem
+          consumidor real (EMA/RSI/MACD pelas props, SMA/Bollinger/VWAP pelos
+          `extras`), e o Estocastico continua como roteiro, sem botao.
+        */}
+        <PainelIndicadores
+          ativos={{
+            ema: emaExterno,
+            sma: extras.sma,
+            bollinger: extras.bollinger,
+            vwap: extras.vwap,
+            rsi: rsiExterno,
+            macd: macdExterno,
+          }}
+          onAlternar={(id: IndicadorId) => {
+            if (id === 'ema') {
+              setEma(!emaExterno);
+              return;
+            }
+            if (id === 'rsi') {
+              setRsi(!rsiExterno);
+              return;
+            }
+            if (id === 'macd') {
+              setMacd(!macdExterno);
+              return;
+            }
+            const proximo = { ...extras, [id]: !extras[id] };
+            setExtras(proximo);
+            // Entra no desfazer: um indicador que liga e nao desliga no
+            // "desfazer" e controle que mente.
+            const rotulo = id === 'sma' ? 'SMA 20' : id === 'bollinger' ? 'Bollinger' : 'VWAP';
+            registrarPasso(
+              {
+                tipo: tipoGrafico,
+                timeframe: activeTimeframe,
+                rsi: rsiExterno,
+                macd: macdExterno,
+                ema: emaExterno,
+                ...proximo,
+              },
+              proximo[id] ? `ligar ${rotulo}` : `desligar ${rotulo}`,
+            );
+          }}
+        />
         <div className="btn-row" role="group" aria-label="Tela do grafico">
           <button
             type="button"
@@ -2105,11 +2090,11 @@ useEffect(() => {
           e a camada do `x` fica por cima, sem capturar ponteiro — senao ela
           transparenta o crosshair, o arraste e o clique que arma a ordem.
         */}
-      <div className="market-chart-wrap" ref={wrapRef}>
+      <div className="market-chart-wrap">
         <div
           ref={containerRef}
           className="market-chart-canvas"
-          style={{ height }}
+          style={{ height: telaCheia ? '100%' : height }}
           aria-label={`Gráfico de candles de ${symbol || 'ativo'}`}
           aria-describedby="price-chart-summary"
           role="img"
@@ -2196,7 +2181,6 @@ useEffect(() => {
           const rotulo = rotuloRodape(displayError, displayCandles.length);
           return rotulo ? <span className="muted mono">{rotulo}</span> : null;
         })()}
-        <SeletorFuso />
       </div>
 
       {displayCandles.length > 0 && (

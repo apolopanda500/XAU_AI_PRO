@@ -5,7 +5,7 @@ Nao substitui `tests/test_metas_vip.py` — este script existe para rodar as
 mesmas regras e MOSTRAR o resultado, para dar para conferir o comportamento
 sem abrir um terminal de teste. Uso:
 
-    .\.venv\Scripts\python.exe scripts\provar_metas_vip.py
+    .\\.venv\\Scripts\\python.exe scripts\\provar_metas_vip.py
 """
 from __future__ import annotations
 

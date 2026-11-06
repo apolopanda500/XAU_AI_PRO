@@ -186,3 +186,33 @@ def test_token_expirado_nao_abre_rota_protegida(client, monkeypatch):
     with sqlite3.connect(remote_auth.DB_PATH) as db:
         db.execute("UPDATE sessions SET expires_at = ?", (int(_time.time()) - 1,))
     assert client.get("/api/health", headers={"Authorization": f"Bearer {token}"}).status_code == 401
+
+
+# --------------------------------------------------------------------------
+# fail-closed: sem XAU_GATEWAY_TOKEN o gateway nao atende ninguem
+# --------------------------------------------------------------------------
+
+def test_sem_token_configurado_o_gateway_recusa_tudo(client, monkeypatch):
+    """Prova negativa do fail-closed.
+
+    O middleware era `if API_TOKEN:` -- sem a variavel, qualquer chamada
+    passava sem token nenhum. Este teste reprova aquele codigo: com
+    API_TOKEN vazio, /api/health tem de responder 401, nunca 200.
+    """
+    monkeypatch.setattr(gw, "API_TOKEN", "")
+    monkeypatch.setattr(gw.gw, "API_TOKEN", "")
+    assert client.get("/api/health").status_code == 401
+    assert client.get("/api/health", headers={"Authorization": "Bearer "}).status_code == 401
+    assert client.get("/api/health", headers={"Authorization": "Bearer qualquer-coisa"}).status_code == 401
+    # a recusa diz o motivo real, em vez de culpar o token do cliente
+    assert client.get("/api/health").json()["error"] == "sem token configurado"
+
+
+def test_sem_token_configurado_as_rotas_de_auth_continuam_alcancaveis(client, monkeypatch):
+    """Fail-closed nao pode trancar a porta que emite a sessao."""
+    monkeypatch.setattr(gw, "API_TOKEN", "")
+    monkeypatch.setattr(gw.gw, "API_TOKEN", "")
+    remote_auth.register("trader@exemplo.com", SENHA)
+    assert client.get("/api/auth/ping").status_code == 200
+    r = client.post("/api/auth/login", json={"email": "trader@exemplo.com", "password": SENHA})
+    assert r.status_code == 200

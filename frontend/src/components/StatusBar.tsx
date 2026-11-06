@@ -1,3 +1,5 @@
+// ATUALIZADO: placeholder removido - nao usa ativo padrao
+
 // BARRA INFERIOR — estilo MT5 (05/10/2026)
 //
 // O DONO PEDIU
@@ -100,7 +102,7 @@ export default function StatusBar() {
     O PAR DA BARRA E O MESMO DA LISTA DE CIMA (22/10/2026)
     =====================================================
     MEDIDO no app instalado: a barra dizia `BTCUSD` e o seletor "Par para
-    operar" dizia `XAUUSD`. Eram dois valores do mesmo dado, e o da barra
+    operar" dizia `placeholder=""`. Eram dois valores do mesmo dado, e o da barra
     vinha de `auto.simbolo` - o par GRAVADO no motor por uma configuracao
     antiga. O motor nao estava ligado: um par que ninguem esta operando
     vencia a escolha que o operador acabara de fazer na tela.

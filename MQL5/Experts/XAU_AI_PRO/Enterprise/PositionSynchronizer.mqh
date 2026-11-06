@@ -56,7 +56,7 @@ void CPositionSynchronizer::Init()
    ArrayResize(m_positions, 0);
    m_position_count = 0;
    m_initialized = true;
-   Print("[SYNC] PositionSynchronizer initialized");
+   if(LogInicioDetalhe()) { Print("[SYNC] PositionSynchronizer initialized"); }
 }
 
 bool CPositionSynchronizer::IsEAPosition(ulong ticket)

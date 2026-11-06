@@ -1,4 +1,4 @@
-﻿//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
 //|                                              DatabaseManager.mqh |
 //|                                  SQLite Database Manager         |
 //|                                            XAU_AI_PRO v1.2.9       |
@@ -7,12 +7,38 @@
 #ifndef DATABASE_MANAGER_MQH
 #define DATABASE_MANAGER_MQH
 
+// P1.58 (v1.2.72): MEDIDO em 02/11/2026 06:03 - este #import incondicional
+// tornava o EA impossivel de CARREGAR onde a permissao de DLL nao esta dada:
+// ao tentar reanexar o EA (chart_add_expert) e ao aplicar um template gerado
+// pelo proprio grafico, o terminal escrevia
+//   "expert XAU_AI_PRO (USDSGD,H1) loaded successfully"
+//   "initializing of XAU_AI_PRO (USDSGD,H1) failed with code 0 (prepare to execution failed)"
+//   "DLL loading is not allowed"
+// e o EA era removido do grafico. O grafico ficou sem EA as 06:03. O modulo que
+// usa a DLL e o DatabaseManager, chamado em OnInit apenas quando EnableDatabase=true
+// (input que esta false nos 16 graficos); a ligacao `#import` e resolvida no
+// carregamento do programa, portanto bloqueava o EA por uma funcionalidade que
+// esta desligada. O import passa a ser condicional: sem a macro, as quatro
+// funcoes existem como stubs que devolvem falha e o Connect() registra
+// "[DATABASE] sqlite3 indisponivel (compilado sem DLL)" em vez de o programa
+// nao arrancar. Nenhuma regra de trading, risco, limite ou return de execucao
+// foi alterado: muda o carregamento do modulo, nao a operacao.
+// Para repor a base de dados: compilar com -DXAI_USE_SQLITE_DLL e permitir DLL.
+//#define XAI_USE_SQLITE_DLL
+
+#ifdef XAI_USE_SQLITE_DLL
 #import "sqlite3.dll"
    int sqlite3_open(string filename, int &db);
    int sqlite3_close(int db);
    int sqlite3_exec(int db, string sql, int callback, int param, string &errmsg);
    string sqlite3_errmsg(int db);
 #import
+#else
+int sqlite3_open(string filename, int &db) { db = 0; return -1; }
+int sqlite3_close(int db) { return 0; }
+int sqlite3_exec(int db, string sql, int callback, int param, string &errmsg) { errmsg = "sqlite3 indisponivel"; return -1; }
+string sqlite3_errmsg(int db) { return "sqlite3 indisponivel"; }
+#endif
 
 class CDatabaseManager
 {
@@ -47,9 +73,18 @@ string CDatabaseManager::m_db_path = "";
 void CDatabaseManager::Init()
 {
    if(m_initialized) return;
-   m_db_path = TerminalInfoString(TERMINAL_PATH) + "\\MQL5\\Experts\\XAU_AI_PRO\\Enterprise\\Data\\xau_ai_pro.db";
+   // v1.2.130 (03/11/2026) - P2.22: a raiz do caminho era a pasta de
+   // INSTALACAO. MEDIDO no journal do expert as 23:37:07 de 03/11, com os 15
+   // graficos: [DATABASE] DB: C:\Program Files\MetaTrader 5\MQL5\Experts\
+   // XAU_AI_PRO\Enterprise\Data\xau_ai_pro.db | Connected: No. TERMINAL_PATH
+   // e C:\Program Files\MetaTrader 5 - um directorio de instalacao, onde o
+   // terminal nao escreve e onde um utilizador sem privilegios nao pode
+   // criar ficheiros; a base de dados nunca poderia nascer ali. A raiz certa
+   // e TERMINAL_DATA_PATH, a pasta de dados do terminal onde o proprio MT5
+   // le MQL5\Files, MQL5\Logs e o resto da sandbox.
+   m_db_path = TerminalInfoString(TERMINAL_DATA_PATH) + "\\MQL5\\Experts\\XAU_AI_PRO\\Enterprise\\Data\\xau_ai_pro.db";
    m_initialized = true;
-   Print("[DATABASE] DatabaseManager initialized");
+   if(LogInicioDetalhe()) { Print("[DATABASE] DatabaseManager initialized"); }
 }
 
 bool CDatabaseManager::Connect()
@@ -58,6 +93,17 @@ bool CDatabaseManager::Connect()
    // v1.2.0 fix: em backtest o sqlite3.dll nao esta no agente do tester
    if(MQLInfoInteger(MQL_TESTER)!=0)
       return false;
+#ifndef XAI_USE_SQLITE_DLL
+   // v1.2.130 - P2.22: a linha dizia "compilado sem DLL" como se fosse erro de
+   // runtime e saia em TODOS os graficos a cada arranque (15 linhas por reload,
+   // medido as 23:37:07 de 03/11). Nao e erro de runtime: e o build por omissao,
+   // decidido no P1.58 para o EA carregar em qualquer terminal sem permissao de
+   // DLL. Passa a 1 linha por sessao e por CONTA, a nomear a macro que liga a
+   // funcionalidade e a mostrar o caminho que seria usado.
+   if(LogSessaoPodeImprimir("db_nodll"))
+      Print("[DATABASE] DESATIVADA | build sem sqlite3 (macro XAI_USE_SQLITE_DLL nao definida) | nao e erro: EnableDatabase=false e o caminho previsto seria ", m_db_path);
+   return false;
+#endif
    int result = sqlite3_open(m_db_path, m_db);
    if(result != 0) { PrintFormat("[DATABASE] Failed: %s", sqlite3_errmsg(m_db)); return false; }
    ExecuteQuery("CREATE TABLE IF NOT EXISTS trades (ticket INTEGER PRIMARY KEY, symbol TEXT, type INTEGER, volume REAL, open_price REAL, open_time INTEGER, close_price REAL, close_time INTEGER, profit REAL, commission REAL, swap REAL, comment TEXT)");
@@ -123,6 +169,6 @@ bool CDatabaseManager::Backup(const string backup_path) { if(m_db == 0) return f
 bool CDatabaseManager::Restore(const string backup_path) { return Backup(backup_path); }
 
 string CDatabaseManager::GetStatus() { return StringFormat("DB: %s | Connected: %s", m_db_path, IsConnected() ? "Yes" : "No"); }
-void CDatabaseManager::LogStatus() { Print("[DATABASE] " + GetStatus()); }
+void CDatabaseManager::LogStatus() { if(AccountLogGatePodeImprimir("database", 3600)) { Print("[DATABASE] " + GetStatus()); } }
 
 #endif // DATABASE_MANAGER_MQH

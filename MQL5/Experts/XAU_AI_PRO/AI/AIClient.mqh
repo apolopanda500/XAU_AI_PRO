@@ -1,4 +1,4 @@
-﻿// XAU_AI_PRO v1.2.9
+// XAU_AI_PRO v1.2.9
 #ifndef AICLIENT_MQH
 #define AICLIENT_MQH
 
@@ -10,7 +10,7 @@
 #include "../AI/AdaptiveWeights.mqh"
 
 //==================================================
-// AI CLIENT v1.2.0
+// AI CLIENT v1.2.9
 //==================================================
 
 bool g_AIConnected=false;
@@ -176,7 +176,7 @@ void AIClientInit()
 {
    g_AIConnected=true;
 
-   Print("[AI] Client initialized");
+   if(LogInicioDetalhe()) { Print("[AI] Client initialized"); }
 }
 
 //==================================================
@@ -185,7 +185,7 @@ void AIClientShutdown()
 {
    g_AIConnected=false;
 
-   Print("[AI] Client shutdown");
+   if(AccountLogGatePodeImprimir("aishutdown", 3600)) Print("[AI] Client shutdown");   // P1.90: 1x/h por CONTA (era 1x por grafico)
 }
 
 #endif

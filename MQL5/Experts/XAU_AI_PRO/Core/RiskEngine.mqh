@@ -148,6 +148,8 @@ double CalculateLotByRisk(
 
    lot=NormalizarVolume(lot, step);
 
+   if(DiagGateAllow(symbol, "RISK_CALC",
+            DoubleToString(balance, 2) + "|" + DoubleToString(lot, 2), 14400))
    Print("RISK CALC | Balance=", DoubleToString(balance, 2), 
          " | Equity=", DoubleToString(equity, 2),
          " | DD=", DoubleToString(drawdown, 2), "%",
@@ -155,6 +157,124 @@ double CalculateLotByRisk(
          " | Lot=", DoubleToString(lot, 2));
 
    return(lot);
+}
+
+
+
+//==================================================
+// LOTE POR RISCO EM DINHEIRO (29/10/2026)
+//==================================================
+// MEDIDO na conta 113568614: a ordem saia com 0,41 lote e stop de 5 PONTOS.
+// O lote vinha de `RiskPercent` (1% do saldo, dimensionado para 300 pontos);
+// o stop vinha de `RiskPerTradeUsd` (US$ 2,00 / 0,41 lote = 5 pontos). Os dois
+// numeros descreviam operacoes diferentes, e a que ia para o mercado era a
+// mais fragil possivel: 0,5 pip de stop, dentro do spread.
+//
+// Aqui o lote e dimensionado pela MESMA distancia que o stop usa
+// (`StopLossPoints`): o risco em dolares fica igual ao configurado e o stop
+// fica fora do spread. Sem dados de tick na ficha do simbolo, devolve 0.
+double CalculateLotByRiskUSD(
+   string symbol,
+   double riskUsd,
+   int stopPoints
+)
+{
+   if(symbol=="" || riskUsd<=0.0)
+      return(0.0);
+
+   if(stopPoints<=0)
+      stopPoints=100;
+
+   double balance=AccountInfoDouble(ACCOUNT_BALANCE);
+   double equity=AccountInfoDouble(ACCOUNT_EQUITY);
+   double minEquityRatio=MinEquityPercent/100.0;
+
+   if(equity < balance*minEquityRatio)
+   {
+      Print("RISK: Equity critica (", DoubleToString(equity, 2),
+            " < ", DoubleToString(balance*minEquityRatio, 2),
+            "), bloqueando operacoes");
+      return 0.0;
+   }
+
+   if(!CheckDailyLossDaily())
+   {
+      Print("RISK: Limite de perda diaria atingido");
+      return 0.0;
+   }
+
+   // Mesma reducao escalonada por drawdown do CalculateLotByRisk.
+   double drawdown=GetDrawdownPercent();
+   double fator=1.0;
+
+   if(drawdown > MaxDrawdownPercent)
+      fator=0.25;
+   else if(drawdown > MaxDrawdownPercent*0.67)
+      fator=0.50;
+   else if(drawdown > MaxDrawdownPercent*0.33)
+      fator=0.75;
+
+   // Valor em dinheiro de 1 ponto para 1,0 lote (TICK_VALUE/TICK_SIZE).
+   double perLot=RiscoEmDinheiroDaOrdem(symbol, 1.0, (double)stopPoints);
+
+   if(perLot<=0.0)
+   {
+      Print("RISK: valor do ponto indisponivel | ", symbol,
+            " | tick_value=", DoubleToString(SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE), 5),
+            " | tick_size=", DoubleToString(SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_SIZE), 5),
+            " | point=", DoubleToString(SymbolInfoDouble(symbol, SYMBOL_POINT), 5));
+      return 0.0;
+   }
+
+   double lot=(riskUsd*fator)/perLot;
+
+   double minLot=SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
+   double maxLot=SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX);
+   double step=SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP);
+
+   if(lot < minLot)
+   {
+      if(!AllowMinLotOverride)
+      {
+         Print("RISK: Lote calculado (", DoubleToString(lot, 4),
+               ") abaixo do minimo (", DoubleToString(minLot, 2),
+               ") -> trade BLOQUEADO");
+         return 0.0;
+      }
+
+      lot=minLot;
+   }
+
+   lot=MathMin(maxLot, lot);
+   lot=NormalizarVolume(lot, step);
+
+   if(DiagGateAllow(symbol, "RISK_CALC_USD",
+            DoubleToString(balance, 2) + "|" + DoubleToString(lot, 2), 14400))
+   Print("[RISK] CALC USD | Balance=", DoubleToString(balance, 2),
+         " | Risco=", DoubleToString(riskUsd, 2), " USD",
+         " | Stop=", IntegerToString(stopPoints), " pts",
+         " | ValorPorLote=", DoubleToString(perLot, 2),
+         " | DD=", DoubleToString(drawdown, 2), "%",
+         " | Fator=", DoubleToString(fator, 2),
+         " | Lot=", DoubleToString(lot, 2));
+
+   return(lot);
+}
+
+// Seletor unico usado pelo ExecutionEngine: quando o risco em DINHEIRO esta
+// configurado ele manda (lote derivado da mesma distancia do stop); senao cai
+// no dimensionamento por percentual, que continua intacto.
+double CalculateLotByRiskAuto(
+   string symbol,
+   int stopPoints
+)
+{
+   double riscoTrade = RiscoPorTradeUsd();
+
+   if(riscoTrade > 0.0)
+      return CalculateLotByRiskUSD(symbol, riscoTrade, stopPoints);
+
+   return CalculateLotByRisk(symbol, RiskPercent, stopPoints);
 }
 
 #endif

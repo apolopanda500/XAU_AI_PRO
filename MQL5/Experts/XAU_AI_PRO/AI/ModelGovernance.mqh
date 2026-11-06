@@ -61,7 +61,7 @@ void ModelGovernanceRefresh()
 
    g_modelGoverned = (g_modelId != "" && g_modelVersion != "");
 
-   if(g_modelGoverned && !EnableVerboseDebug)
+   if(g_modelGoverned && (!EnableVerboseDebug || MQLInfoInteger(MQL_TESTER)))   // v1.2.35: no tester o verbose ja esta OFF
       Print("[MODEL] Governado | ID=", g_modelId,
             " | V=", g_modelVersion,
             " | DS=", g_modelDatasetVer,

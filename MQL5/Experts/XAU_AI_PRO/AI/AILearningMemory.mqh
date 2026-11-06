@@ -1,9 +1,9 @@
-﻿// XAU_AI_PRO v1.2.9
+// XAU_AI_PRO v1.2.9
 #ifndef AILEARNINGMEMORY_MQH
 #define AILEARNINGMEMORY_MQH
 
 //==================================================
-// AI LEARNING MEMORY v1.2.0
+// AI LEARNING MEMORY v1.2.9
 // XAU_AI_PRO ENTERPRISE
 //==================================================
 
@@ -28,6 +28,10 @@ struct AILearningState
 };
 
 static AILearningState g_AIMemory[];
+
+// Silencia o log por evento durante importacao em lote
+// (o resumo e impresso uma vez em LearningPrintSummary).
+static bool g_AILearnQuiet = false;
 
 //==================================================
 
@@ -135,7 +139,7 @@ void StoreExperience(
    g_AIMemory[id].learningWeight=
       0.70+(winrate*0.60);
 
-   Print(
+   if(!g_AILearnQuiet) Print(
       "[AI MEMORY] ",
       symbol,
       " WR=",

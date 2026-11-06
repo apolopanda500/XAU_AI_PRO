@@ -704,6 +704,22 @@ export default function OperacaoAutomatica({
     if (!risco || !simbolo || !broker || ocupado) return;
     const vazios = Object.values(limites).every((v) => !String(v ?? '').trim());
     if (!vazios) return;
+    /*
+      O MOTOR JA TEM LIMITES: NAO HA O QUE SUGERIR (25/10/2026)
+      =========================================================
+      MEDIDO: aplicar os limites, sair da sub-aba Risco e voltar disparava a
+      sugestao automatica de novo — o componente remonta com `limites` vazio,
+      e este efeito rodava antes de o efeito acima preencher os campos com o
+      que o motor guarda. Resultado: a IA SOBRESCREVIA os valores aplicados, e
+      a tela parecia "voltar tudo de novo" a cada troca de aba.
+      Sugerir e para quando nao ha decisao gravada; havendo, quem manda e o
+      operador.
+    */
+    const guardado = (auto?.limites ?? {}) as Record<string, unknown>;
+    const motorTemAlgo = Object.values(guardado).some(
+      (v) => typeof v === 'number' && Number.isFinite(v) && v !== 0,
+    );
+    if (motorTemAlgo) return;
     const chave = `${simbolo}|${timeframe}|${broker}|${market}`;
     if (chaveAutoIA.current === chave) return;
     chaveAutoIA.current = chave;

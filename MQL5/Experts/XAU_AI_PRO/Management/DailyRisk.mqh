@@ -1,4 +1,4 @@
-﻿// XAU_AI_PRO v1.2.9
+// XAU_AI_PRO v1.2.9
 #ifndef DAILYRISK_MQH
 #define DAILYRISK_MQH
 
@@ -28,7 +28,7 @@ void InitDailyRisk()
 {
    CSafetyManager::Init();
 
-   PrintFormat(
+   if(LogInicioDetalhe()) PrintFormat(
       "[DAILYRISK] Delegating to SafetyManager"
    );
 }

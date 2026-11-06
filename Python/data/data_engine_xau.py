@@ -78,12 +78,17 @@ class DataEngineXAU:
         # remover linhas com símbolo vazio
         self.df = self.df[self.df["Symbol"].astype(str).str.strip() != ""]
 
-        # ETAPA 15.3: whitelist de simbolos validos (evita linhas sujas tipo '69.136',
-        # '1.37933', '4654.93' que sao precos sem cabecalho virados em Symbol).
+        # ETAPA 15.3 / P1.49 (01/11/2026): a limpeza nao pode ser uma lista de
+        # ativos. MEDIDO: `symbol_aliases` tem 9 nomes e era usada como FILTRO,
+        # portanto 9 dos 16 ativos operados (USDCHF, USDSEK, USDCZK, USDCNH,
+        # USDCLP, USDCOP, USDBRL, USDRUB, USDSGD) eram descartados em silencio
+        # no carregamento: sobreviveram 700 000 de 1 494 248 linhas.
+        # O defeito que a lista resolvia (precos sem cabecalho virando Symbol,
+        # tipo '69.136' ou '1.37933') resolve-se pela FORMA do campo, nao pelo
+        # nome do ativo.
         try:
-            from mt5_bridge import symbol_aliases
-            valid = set(symbol_aliases.keys()) | {s for v in symbol_aliases.values() for s in v}
-            self.df = self.df[self.df["Symbol"].astype(str).str.upper().isin(valid)]
+            from mt5_bridge import simbolo_plausivel
+            self.df = self.df[self.df["Symbol"].astype(str).map(simbolo_plausivel)]
         except Exception:
             pass  # fallback: mantem linhas atuais se mt5_bridge indisponivel
 

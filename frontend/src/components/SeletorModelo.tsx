@@ -487,7 +487,7 @@ export default function SeletorModelo() {
               <option value="">
                 {simbolo
                   ? `Nenhum modelo carregável para ${simbolo}`
-                  : 'Escolha o par ao lado ou na barra inferior'}
+                  : 'Escolha o par na lista da operação automática'}
               </option>
             )}
             {visiveis.map((m) => (

@@ -1,4 +1,4 @@
-﻿// XAU_AI_PRO v1.2.9
+// XAU_AI_PRO v1.2.9
 #ifndef STATISTICS_MQH
 #define STATISTICS_MQH
 
@@ -6,7 +6,7 @@
 #include "Logger.mqh"
 
 //==================================================
-// XAU_AI_PRO — STATISTICS ENGINE v1.2.0
+// XAU_AI_PRO — STATISTICS ENGINE v1.2.9
 // Estatísticas diárias, semanais e mensais
 //==================================================
 
@@ -201,7 +201,20 @@ void StatisticsUpdateTimeframes()
 // REGISTRA TRADE
 //==================================================
 
-void StatisticsRegisterTrade(double profit)
+// P2.12 (03/11/2026) - a linha do resultado dizia o simbolo ERRADO.
+//
+// MEDIDO no journal as 20:50:33 de 03/11, no fecho de um USDCHF de +10.00:
+// a linha que registou esse resultado foi escrita como
+//    2026.11.04 01:50:33 | [TRADE] | USDCOP | Statistics trade registrado | WIN | 10.00
+// e a MESMA linha saiu com USDCLP no mesmo instante. O prefixo do Logger e
+// _Symbol, ou seja o simbolo do GRAFICO, e nao o simbolo NEGOCIADO; com 15
+// graficos o mesmo fecho ganhava 15 nomes e o journal atribuia lucros a
+// simbolos que nao os tiveram. O aprendizado por simbolo ([AI MEMORY], WR)
+// nunca esteve errado: o defeito era so desta linha de estatistica.
+//
+// A funcao passa a receber o simbolo negociado e o deal, e a linha nomeia
+// os dois. Contadores, win rate, streaks e o retorno nao mudam.
+void StatisticsRegisterTrade(double profit, string symbol = "", ulong ticket = 0)
 {
    StatisticsUpdateTimeframes();
 
@@ -258,7 +271,7 @@ void StatisticsRegisterTrade(double profit)
    }
 
    LogTrade(
-      "Statistics trade registrado",
+      "Statistics trade registrado | negociado=" + (symbol == "" ? _Symbol : symbol) + " | deal=" + (ticket > 0 ? IntegerToString((long)ticket) : "?"),   // P2.12: o prefixo do Logger e _Symbol (o grafico); este campo nomeia o simbolo NEGOCIADO
       (profit > 0.0 ? "WIN" : "LOSS"),
       DoubleToString(profit, 2)
    );
@@ -278,7 +291,7 @@ void StatisticsSaveSummary()
    int handle =
       FileOpen(
          "xau_ai_pro_summary.csv",
-         FILE_WRITE |
+         FILE_WRITE | FILE_SHARE_READ | FILE_SHARE_WRITE |
          FILE_CSV |
          FILE_ANSI |
          FILE_COMMON

@@ -195,7 +195,7 @@ long CBackupManager::FileSizeOf(
       path,
       FILE_READ |
       FILE_BIN |
-      root
+      root | FILE_SHARE_READ | FILE_SHARE_WRITE
    );
 
    if(h == INVALID_HANDLE)
@@ -346,14 +346,34 @@ bool CBackupManager::BackupFile(
 
    if(!copied)
    {
-      Print(
-         "[BACKUP] Falha na copia: ",
-         src,
-         " -> ",
-         dst,
-         " | Erro=",
-         GetLastError()
-      );
+      // v1.2.39 (30/10/2026) - P1.12. Esta linha saia a CADA snapshot, por
+      // ficheiro. Medido no journal de 30/10: 2 574 linhas em 5,7 h de mercado
+      // fechado ("Data\prediction_BTCUSD...json"), o 2.o maior emissor de todo o
+      // journal. O resumo por snapshot ([BACKUP] OK/FAIL + copiados/falhas,
+      // impresso pelo EA) continua a sair igual; aqui a linha passa a 1x/hora com
+      // o contador de ocorrencias abafadas.
+      static datetime s_lastCopyFailLog = 0;
+      static long     s_copyFailSuppressed = 0;
+
+      if(s_lastCopyFailLog == 0 || (TimeCurrent() - s_lastCopyFailLog) >= 3600)
+        {
+         Print(
+            "[BACKUP] Falha na copia: ",
+            src,
+            " -> ",
+            dst,
+            " | Erro=",
+            GetLastError(),
+            " | abafadas=",
+            IntegerToString(s_copyFailSuppressed),
+            " | aviso 1x/hora"
+         );
+
+         s_lastCopyFailLog   = TimeCurrent();
+         s_copyFailSuppressed = 0;
+        }
+      else
+         s_copyFailSuppressed++;
 
       return false;
    }
@@ -378,6 +398,32 @@ bool CBackupManager::BackupFile(
 
    if(srcSize > 0 && dstSize != srcSize)
    {
+      // v1.2.109 (03/11/2026): MEDIDO no journal de 03/11 (21:19 e 21:23):
+      // "[BACKUP] Tamanho divergente: Data\system_status.json (1117) -> ...bak (1141)".
+      // O system_status.json e reescrito a cada 15 s por todas as instancias, logo o
+      // tamanho lido em ExpandPattern deixa de corresponder ao ficheiro no instante da
+      // copia e a igualdade estrita produzia uma "falha" por snapshot sem erro de copia
+      // (o snapshot estava valido, com 1141 bytes). Regra nova: se a origem MUDOU de
+      // tamanho desde a medicao, a copia e aceite como retrato de ficheiro em escrita;
+      // se nao mudou, a divergencia continua a ser falha.
+      long srcNow = FileSizeOf(src, srcRoot);
+
+      if(srcNow != srcSize)
+      {
+         static datetime s_lastVolatileLog = 0;
+
+         if(s_lastVolatileLog == 0 || (TimeCurrent() - s_lastVolatileLog) >= 3600)
+         {
+            s_lastVolatileLog = TimeCurrent();
+
+            Print("[BACKUP] Origem em escrita | snapshot aceite | ", src,
+                  " | medido=", srcSize, " | agora=", srcNow,
+                  " | copiado=", dstSize, " | aviso 1x/hora");
+         }
+
+         return true;
+      }
+
       Print(
          "[BACKUP] Tamanho divergente: ",
          src,
@@ -427,7 +473,7 @@ bool CBackupManager::WriteManifest(
       manifestFile,
       FILE_COMMON |
       FILE_READ |
-      FILE_WRITE |
+      FILE_WRITE | FILE_SHARE_READ | FILE_SHARE_WRITE |
       FILE_TXT |
       FILE_ANSI
    );
@@ -485,7 +531,7 @@ bool CBackupManager::ReadManifest(
       FILE_COMMON |
       FILE_READ |
       FILE_TXT |
-      FILE_ANSI
+      FILE_ANSI | FILE_SHARE_READ | FILE_SHARE_WRITE
    );
 
    if(h == INVALID_HANDLE)
@@ -712,11 +758,14 @@ void CBackupManager::CleanupOldBackups()
 
    int toDelete = total - m_max_backups;
 
+   // P2.05: uma linha por snapshot removido davam 5 a 7 linhas seguidas
+   // em cada backup. O facto que importa e QUANTOS sairam; os nomes
+   // continuam no disco e nao acrescentam decisao nenhuma ao journal.
    for(int i = 0; i < toDelete; i++)
-   {
-      Print("[BACKUP] Removendo snapshot antigo: ", names[i]);
       DeleteFolderRecursive(m_backup_dir + names[i] + "\\");
-   }
+
+   if(toDelete > 0)
+      Print("[BACKUP] snapshots antigos removidos=", toDelete);
 }
 
 
@@ -764,7 +813,7 @@ void CBackupManager::Init()
    AddItem("Stats",       "xau_ai_pro_summary.csv");
    AddItem("TradeHistory","trade_history.csv");
 
-   Print(
+   if(LogInicioDetalhe()) Print(
       "[BACKUP] BackupManager inicializado | Items=",
       m_item_count,
       " | MaxKeep=",

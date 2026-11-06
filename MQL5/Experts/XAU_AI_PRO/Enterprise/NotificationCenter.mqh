@@ -68,6 +68,7 @@ private:
    static bool     m_dedup_enabled;
    static int      m_dedup_sec;
    static string   NCUrlEncode(string s);
+   static void     UmaLinha(string &s);
    static bool     SendTelegram(string message);
    static bool     SendPush(string message);
    static void     RegisterLog(string status, string detail);
@@ -141,7 +142,7 @@ void CNotificationCenter::Init()
       m_last_message[i] = "";
    }
 
-   Print("[NOTIFY] NotificationCenter inicializado");
+   if(LogInicioDetalhe()) Print("[NOTIFY] NotificationCenter inicializado");
 }
 
 //--------------------------------------------------
@@ -243,12 +244,36 @@ bool CNotificationCenter::SendTelegram(string message)
 
 bool CNotificationCenter::SendPush(string message)
 {
+   // v1.2.84 (02/11/2026) - P1.71: com o push DESLIGADO no terminal, SendNotification
+   // falha SEMPRE com o erro 4517 e o journal levou 1 626 dessas linhas no dia 02/11
+   // (80 delas na janela de 3 min de um reload). O estado do push e um dado do
+   // terminal e nao muda a meio de uma sessao, por isso passa a ser lido ANTES da
+   // chamada: desligado, sai UMA linha explicativa por sessao e a funcao devolve false
+   // sem round-trip ao servidor. O valor de retorno e o mesmo de antes, logo nenhum
+   // chamador muda de comportamento; falhas reais com o push ligado continuam a sair.
+   if(TerminalInfoInteger(TERMINAL_NOTIFICATIONS_ENABLED) == 0)
+   {
+      static bool s_avisouPushDesligado = false;
+
+      if(!s_avisouPushDesligado && AccountLogGatePodeImprimir("notifypush", 86400))   // P1.90: 1x/dia por CONTA
+      {
+         s_avisouPushDesligado = true;
+         Print("[NOTIFY] push desligado no terminal | TerminalInfo(TERMINAL_NOTIFICATIONS_ENABLED)=0 | ",
+               "nenhuma notificacao sai nesta sessao; ligue em Ferramentas > Opcoes > Notificacoes");
+      }
+      return false;
+   }
+
    ResetLastError();
    bool ok = SendNotification(message);
    if(!ok)
    {
-      Print("[NOTIFY] SendNotification falhou | Erro=", GetLastError(),
-         " | Configure Push em Ferramentas > Opcoes > Notificacoes");
+      // P2.00: o push desligado falhava em todas as 14 instancias; o codigo e
+      // lido UMA vez e a linha passa a 1x/6h por CONTA e por codigo.
+      int nerr = GetLastError();
+      if(AccountLogGatePodeImprimir("notify_falhou_" + IntegerToString(nerr), 21600))
+         Print("[NOTIFY] SendNotification falhou | Erro=", nerr,
+            " | Configure Push em Ferramentas > Opcoes > Notificacoes");
    }
    return ok;
 }
@@ -300,18 +325,19 @@ bool CNotificationCenter::Send(string message, NotifyPriority priority, NotifyCa
    {
       if(SendPush(message))
          anySent = true;
-      else
-         m_failed_count++;
    }
 
    if(m_telegram_token != "" && m_telegram_chat_id != "")
    {
       if(SendTelegram(message))
          anySent = true;
-      else
-         m_failed_count++;
    }
 
+   // P2.21 (04/11/2026): a mensagem era contada DUAS vezes quando o canal
+   // falhava - uma no ramo do canal e outra aqui. MEDIDO no journal do tester
+   // as 20:58:22: `[NOTIFY] Sent=0 | Failed=1156`, com push ligado e Telegram
+   // desligado; 1156 = 578 mensagens x 2. O contador passa a medir MENSAGENS
+   // que nao sairam por canal nenhum, uma vez por mensagem.
    if(anySent)
       m_sent_count++;
    else
@@ -328,14 +354,55 @@ bool CNotificationCenter::Send(string message, NotifyPriority priority, NotifyCa
 // LOG PROPRIO (FILE_COMMON, append)
 //--------------------------------------------------
 
+void CNotificationCenter::UmaLinha(string &s)
+{
+   // O ficheiro e comum a todos os graficos e nao tem estrutura de registos:
+   // uma notificacao multi-linha virava N linhas soltas. MEDIDO em 04/11/2026
+   // no `Common\Files\Notifications.log`: 1 644 441 linhas / 53 200 689 bytes,
+   // dos quais 41 491 blocos "HEALTH MONITOR" de ~39.6 linhas cada. O bloco
+   // inteiro do HEALTH era UMA notificacao que se partia em 40 registos sem
+   // data, sem estado e sem dono. Passa a uma linha so, com o texto ligado.
+   StringReplace(s, "\r\n", " / ");
+   StringReplace(s, "\n", " / ");
+   StringReplace(s, "\r", " / ");
+   StringReplace(s, "\t", " ");
+
+   // Tecto de 400: o detalhe serve para identificar o evento, nao para
+   // arquivar um relatorio dentro do log de notificacoes.
+   if(StringLen(s) > 400)
+      s = StringSubstr(s, 0, 397) + "...";
+}
+
 void CNotificationCenter::RegisterLog(string status, string detail)
 {
-   int h = FileOpen("Notifications.log", FILE_COMMON | FILE_READ | FILE_WRITE | FILE_TXT | FILE_ANSI);
+   // P2.21: rotacao. Sem ela o ficheiro cresceu ate 53 MB desde 14/08/2026,
+   // porque cada abertura e um append e nada o corta. Acima de 8 MB o actual
+   // passa a `Notifications.old.log` (o anterior e substituido) e recomeca-se
+   // um ficheiro limpo; o historico imediato fica disponivel.
+   int hSize = FileOpen("Notifications.log", FILE_COMMON | FILE_READ | FILE_TXT | FILE_ANSI | FILE_SHARE_READ | FILE_SHARE_WRITE);
+   if(hSize != INVALID_HANDLE)
+   {
+      ulong tam = FileSize(hSize);
+      FileClose(hSize);
+      if(tam > 8388608)
+         FileMove("Notifications.log", FILE_COMMON,
+                  "Notifications.old.log", FILE_REWRITE);
+   }
+
+   int h = FileOpen("Notifications.log", FILE_COMMON | FILE_READ | FILE_WRITE | FILE_TXT | FILE_ANSI | FILE_SHARE_READ | FILE_SHARE_WRITE);
    if(h == INVALID_HANDLE)
       return;
 
+   // P2.21: o separador era implicito e nao saia no ficheiro. MEDIDO na linha
+   // 1 do log real: `2026.08.14 00:00:00FAIL[RELATORIO] Profit=0.00`, isto e,
+   // data, estado e mensagem colados uns aos outros - impossivel separar sem
+   // adivinhar. Passa a ser escrito um unico campo ja delimitado.
+   string linha = TimeToString(TimeCurrent(), TIME_DATE | TIME_SECONDS)
+                  + " | " + status + " | " + detail;
+   UmaLinha(linha);
+
    FileSeek(h, 0, SEEK_END);
-   FileWrite(h, TimeToString(TimeCurrent(), TIME_DATE | TIME_SECONDS), status, detail);
+   FileWrite(h, linha);
    FileClose(h);
 }
 
@@ -345,8 +412,10 @@ void CNotificationCenter::RegisterLog(string status, string detail)
 
 void CNotificationCenter::RegisterAudit(string detail, bool ok)
 {
-   // AuditLogSimple(symbol, direction, result, score) - registra evento simples
-   AuditLogSimple(_Symbol, "NOTIFY", (ok ? "OK" : "FAIL") + "|" + detail, 0.0);
+   // P2.21: a auditoria recebia o bloco cru, com quebras de linha incluidas.
+   string linha = detail;
+   UmaLinha(linha);
+   AuditLogSimple(_Symbol, "NOTIFY", (ok ? "OK" : "FAIL") + "|" + linha, 0.0);
 }
 
 //--------------------------------------------------
@@ -436,7 +505,10 @@ string CNotificationCenter::GetStatus()
 
 void CNotificationCenter::LogStatus()
 {
-   Print("[NOTIFY] " + GetStatus());
+   // v1.2.91 (02/11/2026) - P1.78: a mesma tag do [NOTIFY] do OnInit, logo
+   // a linha sai uma vez por CONTA em vez de duas por instancia.
+   if(AccountLogGatePodeImprimir("notify", 3600))
+      Print("[NOTIFY] " + GetStatus());
 }
 
 #endif // NOTIFICATION_CENTER_MQH

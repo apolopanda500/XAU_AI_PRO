@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Treina o MULTI de cada classe: um modelo so, que opera M1 ate H4.
+r"""Treina o MULTI de cada classe: um modelo so, que opera M1 ate H4.
 
 O QUE O DONO DEFINIU (2026-10-02)
 ==================================

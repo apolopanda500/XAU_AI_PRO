@@ -43,7 +43,13 @@ def _resolve_models_dir() -> Path:
 
 
 MODELS_DIR = _resolve_models_dir()
-FEATURE_VERSION = "25F"          # contrato 25 features (ETAPA 15.2.2)
+# P1.48 (01/11/2026): esta constante dizia "25F" e mentia sobre o contrato real.
+# MEDIDO nos artefactos: os .meta.json gravados por train_v2 dizem
+# feature_version = "25F-v2" com feature_count = 25. Passa a coincidir com
+# Python/ai/train_v2.py::FEATURE_VERSION, e model_status le o valor do
+# proprio artefacto quando ele existe (o artefacto e a fonte, o constante e
+# apenas o fallback).
+FEATURE_VERSION = "25F-v2"       # contrato 25 features (ETAPA 15.2.2 / train_v2)
 MODEL_VERSION = "1.2.0"
 # idade maxima aceita como READY (segundos) - 5 dias
 MAX_AGE_READY_SEC = 5 * 24 * 3600
@@ -66,6 +72,24 @@ def _mtime_age_sec(p: Path) -> float:
     return max(0.0, datetime.now().timestamp() - p.stat().st_mtime)
 
 
+# P1.48 (01/11/2026): o registo do gateway ignorava o veredicto de publicacao.
+# MEDIDO: backend/ai_inference.py recusa servir um modelo cujo .meta.json diz
+# publicable=false, mas este registo (consumido por prediction_gateway.py)
+# devolvia READY a esse mesmo modelo. Dois lados do mesmo dado a discordarem
+# sobre o mesmo nome de estado. Le-se o .meta.json ao lado do pickle e o
+# veredicto passa a valer ca dentro. Sem .meta.json nada muda (compatibilidade
+# com artefactos antigos), mas a ausencia fica registada como publicable=None
+# em vez de ser apresentada como publicavel.
+def _read_meta(p: Path) -> dict:
+    meta = p.with_suffix(".meta.json")
+    if not meta.exists():
+        return {}
+    try:
+        return json.loads(meta.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
 def model_status(symbol: str, timeframe: str) -> dict[str, Any]:
     """Avalia o modelo e retorna metadados + estado."""
     p = model_path(symbol, timeframe)
@@ -78,14 +102,36 @@ def model_status(symbol: str, timeframe: str) -> dict[str, Any]:
     try:
         age_sec = _mtime_age_sec(p)
         size = p.stat().st_size
+        # P1.48: o artefacto e a fonte. O .meta.json manda no veredicto de
+        # publicacao e na versao de features; as constantes sao so fallback.
+        meta = _read_meta(p)
+        feat_ver = str(meta.get("feature_version") or FEATURE_VERSION)
+        feat_count = meta.get("feature_count")
+        publicable = meta.get("publicable", None)
+        publish_reason = str(meta.get("publish_reason") or "")
+        if publicable is False:
+            # Recusa identica a de backend/ai_inference.py: um modelo
+            # reprovado na porta de edge nao pode ser servido com READY.
+            return {
+                "symbol": symbol, "timeframe": timeframe.upper(),
+                "model": f"{symbol}_{timeframe.upper()}", "path": str(p),
+                "exists": True, "status": ERROR,
+                "reason": "not_publishable: " + (publish_reason or "publicable=false"),
+                "publicable": False, "publish_reason": publish_reason,
+                "age_sec": int(age_sec), "age_hours": round(age_sec / 3600, 1),
+                "size_bytes": size, "model_version": MODEL_VERSION,
+                "feature_version": feat_ver, "feature_count": feat_count,
+                "type": "pickle",
+            }
         status = READY if age_sec <= MAX_AGE_READY_SEC else STALE
         return {
             "symbol": symbol, "timeframe": timeframe.upper(),
             "model": f"{symbol}_{timeframe.upper()}", "path": str(p),
             "exists": True, "status": status, "reason": "ok" if status == READY else "model_stale",
+            "publicable": publicable,
             "age_sec": int(age_sec), "age_hours": round(age_sec / 3600, 1),
             "size_bytes": size, "model_version": MODEL_VERSION,
-            "feature_version": FEATURE_VERSION,
+            "feature_version": feat_ver, "feature_count": feat_count,
             "type": "pickle",
         }
     except Exception as e:  # noqa: BLE001

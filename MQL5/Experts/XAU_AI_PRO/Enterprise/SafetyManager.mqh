@@ -1,4 +1,4 @@
-﻿//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
 //|                                              SafetyManager.mqh   |
 //|                                  Safety Management System        |
 //|                                            XAU_AI_PRO v1.2.9       |
@@ -141,10 +141,10 @@ void CSafetyManager::Init()
    // Limites derivados do CONFIG
    //------------------------------------------------
 
+   // v1.2.35 - P1.2b: o limite diario em dinheiro e o MENOR entre o teto de %
+   // do saldo e MaxDailyLossUsd (OrcamentoDiarioPerda em Core/Config.mqh).
    m_limits.max_daily_loss =
-      balance *
-      MaxDailyLossPercent /
-      100.0;
+      OrcamentoDiarioPerda();
 
    m_limits.max_daily_drawdown =
       MaxDailyLossPercent;
@@ -187,7 +187,7 @@ void CSafetyManager::Init()
 
    m_initialized = true;
 
-   Print(
+   if(LogInicioDetalhe()) Print(
       "[SAFETY] SafetyManager initialized | ",
       "DailyLoss=",
       DoubleToString(
@@ -490,14 +490,32 @@ bool CSafetyManager::CheckTotalExposure()
       *
       100.0;
 
-   if(exposurePct >=
+      if(exposurePct >=
       m_limits.max_total_exposure)
    {
-      PrintFormat(
-         "[SAFETY] Exposure limit: %.2f%%/%.2f%%",
-         exposurePct,
-         m_limits.max_total_exposure
-      );
+      // v1.2.27 (30/10/2026) - P0.4/P1.3: esta linha era o MAIOR spam do
+      // journal. MEDIDO no backtest de 3 meses da v1.2.26: 2375 ocorrencias
+      // em cada 8 MB de log. O gate continua devolvendo `false` em todo tick
+      // (o bloqueio nao muda); so o TEXTO passa a sair no maximo 1x por minuto.
+      // v1.2.56 (P1.33): MEDIDO no journal do backtest de 31/10/2026
+      // (4 521 967 linhas): '[SAFETY] Exposure limit' = 35 572 linhas, o maior
+      // emissor que sobrou depois de P1.25..P1.32. Nao e um evento, e um ESTADO
+      // persistente (a exposicao total acima do limite), e o bloqueio em si
+      // continua a devolver false em TODOS os ticks - so o texto passa a sair
+      // no maximo 1x por 30 min (60 s -> 1800 s = ganho ~30x nesta linha).
+      static datetime ultimoAvisoExposicao = 0;
+      datetime agoraExposicao = TimeCurrent();
+
+      if(ultimoAvisoExposicao == 0 || (agoraExposicao - ultimoAvisoExposicao) >= 1800)
+      {
+         ultimoAvisoExposicao = agoraExposicao;
+
+         PrintFormat(
+            "[SAFETY] Exposure limit: %.2f%%/%.2f%%",
+            exposurePct,
+            m_limits.max_total_exposure
+         );
+      }
 
       return false;
    }
@@ -674,7 +692,7 @@ string CSafetyManager::GetSafetySummary()
    // nome que ela mede. Nenhum dos dois se apresenta como "DD" sem dizer o
    // que e: e o que fez o operador procurar DD num bloqueio que era margem.
    return StringFormat(
-      "P/L: %.2f | Trades: %d/%d | PerdaDia: %.2f%%/%.2f%% | Amplitude: %.2f%% | FreeMargin: %.2f",
+      "P/Ldia(realizado): %.2f | Trades: %d/%d | PerdaDia: %.2f%%/%.2f%% | Amplitude: %.2f%% | MargemLivre: %.2f",
       m_daily_profit,
       GetDailyTrades(),
       m_limits.max_trades_per_day,

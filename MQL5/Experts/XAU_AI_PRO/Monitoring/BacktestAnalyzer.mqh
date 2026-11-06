@@ -103,7 +103,8 @@ bool BacktestInit()
 
    BacktestReady = true;
 
-   Print("BACKTEST ANALYZER | Inicializado");
+   // v1.2.88 (02/11/2026) - P1.75: tag [BT]; o texto era um titulo sem dados.
+   if(LogInicioDetalhe()) Print("[BT] inicializado");
 
    return true;
 }
@@ -349,14 +350,15 @@ bool BacktestIsReady()
 
 string BacktestSummary()
 {
-   string s = "=== BACKTEST ANALYZER ===\n";
-   s += StringFormat("  Trades=%d | Wins=%d | Losses=%d\n",
-      (int)BacktestTrades, (int)BacktestWins, (int)BacktestLosses);
-   s += StringFormat("  Profit=%.2f | WinRate=%.2f%% | PF=%.2f\n",
-      BacktestProfit, BacktestWinRate(), BacktestProfitFactorCalc());
-   s += StringFormat("  MaxDD=%.2f (%.2f%%) | Sharpe=%.2f | Expect=%.2f\n",
+   // v1.2.87 (02/11/2026) - P1.74: 4 linhas por chamada (init e deinit de
+   // cada instancia). O mesmo dado passa a UMA linha.
+   string s = StringFormat(
+      "[BT] Trades=%d W=%d L=%d | Profit=%.2f | WR=%.2f%% | PF=%.2f | MaxDD=%.2f (%.2f%%) | Sharpe=%.2f | Expect=%.2f",
+      (int)BacktestTrades, (int)BacktestWins, (int)BacktestLosses,
+      BacktestProfit, BacktestWinRate(), BacktestProfitFactorCalc(),
       BacktestMaxDD, BacktestMaxDDPct, BacktestSharpeCalc(),
       (BacktestTrades > 0 ? BacktestProfit / (double)BacktestTrades : 0.0));
+
    return s;
 }
 
@@ -381,7 +383,9 @@ void BacktestClose()
 
    BacktestReady = false;
 
-   Print("BACKTEST ANALYZER | Finalizado | ",
+   // v1.2.83 (02/11/2026) - P1.70: linha de encerramento so no tester.
+   if(MQLInfoInteger(MQL_TESTER))
+      Print("BACKTEST ANALYZER | Finalizado | ",
       "Trades=", IntegerToString((int)BacktestTrades),
       " | Wins=", IntegerToString((int)BacktestWins),
       " | Losses=", IntegerToString((int)BacktestLosses),
@@ -391,10 +395,13 @@ void BacktestClose()
       " | MaxDD=", DoubleToString(BacktestMaxDD, 2),
       " | Sharpe=", DoubleToString(BacktestSharpe, 2));
 
-   Print(BacktestSummary());
+   // v1.2.88 (02/11/2026) - P1.75: com 0 trades o resumo era uma linha de zeros
+   // por instancia (Trades=0 W=0 L=0 PF=0.00). Sem trades nao ha resumo a dar.
+   if(BacktestTrades > 0)
+      Print(BacktestSummary());
 
    // Grava resumo em arquivo (FILE_COMMON) para validacao observavel
-   int h = FileOpen("BacktestSummary.txt", FILE_COMMON | FILE_READ | FILE_WRITE | FILE_TXT | FILE_ANSI);
+   int h = FileOpen("BacktestSummary.txt", FILE_COMMON | FILE_READ | FILE_WRITE | FILE_TXT | FILE_ANSI | FILE_SHARE_READ | FILE_SHARE_WRITE);
    if(h != INVALID_HANDLE)
    {
       FileSeek(h, 0, SEEK_END);

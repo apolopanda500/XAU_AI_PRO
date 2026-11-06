@@ -583,15 +583,26 @@
   A altura do canvas e `100vh` porque, em tela cheia, o wrap e o unico filho
   visivel da pagina.
 */
-.market-chart-wrap:fullscreen {
+.price-chart:fullscreen {
+  display: flex;
+  flex-direction: column;
   width: 100vw;
   height: 100vh;
+  box-sizing: border-box;
   background: var(--bg);
-  padding: 0;
+  padding: 8px;
+  border: 0;
+  border-radius: 0;
+  overflow: hidden;
 }
 
-.market-chart-wrap:fullscreen .market-chart-canvas {
-  height: 100vh;
+.price-chart:fullscreen .market-chart-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.price-chart:fullscreen .market-chart-canvas {
+  height: 100%;
   min-height: 0;
   margin-top: 0;
   border: 0;

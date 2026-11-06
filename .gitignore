@@ -297,3 +297,12 @@ experiments/isolated/
 
 # Assinatura de plano e estado local do usuario: nunca versionar
 app/data/subscriptions.json
+
+# --- Artefactos de edicao automatica e saida de geradores (nunca versionar) ---
+*.bak_before_p*
+*.pre_p*
+*.orig
+*.rej
+*.bom
+/Scaffolds/
+/audit_xau_ai_pro.json

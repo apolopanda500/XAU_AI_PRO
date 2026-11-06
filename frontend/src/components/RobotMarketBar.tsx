@@ -114,11 +114,12 @@ export default function RobotMarketBar() {
           controles para o mesmo par e o caminho para discordarem. O prompt,
           alem de duplicado, e bloqueante e some atras da janela.
 
-          A faixa segue mostrando o preco do par; a troca e na barra inferior.
+          A faixa segue mostrando o preco do par; a troca e na lista da
+          operacao automatica — a barra inferior saiu em 25/10/2026.
         */}
         <span
           className="rmb-symbol"
-          title="Troque o par na barra inferior"
+          title="Troque o par na lista da operação automática"
           aria-label={`Ativo operado: ${simbolo || 'nenhum'}`}
         >
           {simbolo || '—'}

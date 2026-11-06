@@ -1,4 +1,4 @@
-﻿// XAU_AI_PRO v1.2.9
+// XAU_AI_PRO v1.2.9
 #ifndef COMPATIBILITYMANAGER_MQH
 #define COMPATIBILITYMANAGER_MQH
 
@@ -15,10 +15,6 @@
 
 bool InitCompatibility()
 {
-
-   Print("========================================");
-   Print("XAU_AI_PRO COMPATIBILITY CHECK");
-   Print("========================================");
 
    if(!InitBrokerInfo())
       return false;
@@ -39,16 +35,12 @@ bool InitCompatibility()
    // a dupla resolucao de simbolos e permite o retry automatico quando
    // os simbolos ainda nao sincronizaram na abertura do terminal.
 
-   Print("----------------------------------------");
-   Print("Broker     : ",GetBrokerName());
-   Print("Servidor   : ",GetBrokerServer());
-   Print("Simbolos   : (inicializado em InitializeModules)");
-   Print("Entrada TF : ",TimeFrameToString(GetEntryTF()));
-   Print("Trend TF   : ",TimeFrameToString(GetTrendTF()));
-   Print("Filtro TF  : ",TimeFrameToString(GetFilterTF()));
-   Print("----------------------------------------");
-
-   Print("Compatibility OK");
+   // v1.2.87 (02/11/2026) - P1.74: eram 16 linhas por arranque (256 num
+   // reload de 16 graficos) para descrever a mesma conta. Passa a UMA.
+   if(LogInicioDetalhe()) Print("[COMPAT] OK | ",GetBrokerName(),"/",GetBrokerServer(),
+         " | TF entrada=",TimeFrameToString(GetEntryTF()),
+         " trend=",TimeFrameToString(GetTrendTF()),
+         " filtro=",TimeFrameToString(GetFilterTF()));
 
    return true;
 

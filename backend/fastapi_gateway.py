@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """Gateway FastAPI - substituto moderno do mt5_gateway.py.
 
 Reusa os 36 helpers puros de mt5_gateway e expõe os mesmos
@@ -90,7 +90,7 @@ app = FastAPI(
 
 @app.middleware("http")
 async def _auth_rate_limit(request, call_next):  # type: ignore[no-untyped-def]
-    """Paridade com mt5_gateway: token opcional + rate limit por categoria.
+    """Paridade com mt5_gateway: token obrigatorio (fail-closed) + rate limit.
 
     GET = leitura (polling), demais verbos = comando. Rotas de documentacao
     (/api/docs, /api/redoc, /api/openapi.json) ficam isentas.
@@ -101,15 +101,22 @@ async def _auth_rate_limit(request, call_next):  # type: ignore[no-untyped-def]
         return await call_next(request)
     if path in PUBLIC_AUTH_PATHS:
         return await call_next(request)
-    if API_TOKEN:
-        auth = request.headers.get("authorization", "")
-        if auth != f"Bearer {API_TOKEN}":
-            # Token de sessao emitido por /api/auth/login (usado pelo app
-            # Android, que nao tem o Tauri desktop para injetar API_TOKEN).
-            token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
-            if not token or not _session_user_id(token):
-                _SESSION_CACHE.clear()
-                return _send({"ok": False, "error": "token invalido"}, 401)
+    if not API_TOKEN:
+        # FAIL-CLOSED: antes era `if API_TOKEN:` -- sem a variavel, o
+        # middleware deixava passar qualquer chamada. O gateway so escuta em
+        # 127.0.0.1, mas qualquer processo da maquina (e um mapeamento de
+        # porta exposto) conseguiria ler conta e enviar ordem. Sem token
+        # configurado, RECUSA tudo: e melhor ficar inacessivel do que aberto.
+        # Paridade com mt5_gateway.py (_autorizado), que ja e fail-closed.
+        return _send({"ok": False, "error": "sem token configurado"}, 401)
+    auth = request.headers.get("authorization", "")
+    if auth != f"Bearer {API_TOKEN}":
+        # Token de sessao emitido por /api/auth/login (usado pelo app
+        # Android, que nao tem o Tauri desktop para injetar API_TOKEN).
+        token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        if not token or not _session_user_id(token):
+            _SESSION_CACHE.clear()
+            return _send({"ok": False, "error": "token invalido"}, 401)
     if gw.THIRD_PARTY_READ_ONLY and request.method.upper() not in {"GET", "HEAD", "OPTIONS"} and path != "/api/universal/emergency-stop":
         return _send({"ok": False, "status": "blocked", "error": "perfil de compatibilidade somente leitura", "commands_enabled": False, "execution_enabled": False, "withdrawals_enabled": False}, 403)
     if gw.RATE_LIMIT_MAX <= 0 and gw.RATE_LIMIT_CMD_MAX <= 0:

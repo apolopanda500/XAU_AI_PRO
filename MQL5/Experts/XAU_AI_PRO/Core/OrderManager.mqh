@@ -1,4 +1,4 @@
-﻿// XAU_AI_PRO v1.2.9
+// XAU_AI_PRO v1.2.9
 #ifndef ORDERMANAGER_MQH
 #define ORDERMANAGER_MQH
 
@@ -15,6 +15,7 @@ void InitOrderManager()
 {
    trade.SetExpertMagicNumber(MagicNumber);
    trade.SetDeviationInPoints(Slippage);
+   trade.LogLevel(LOG_LEVEL_ERRORS);   // v1.2.55 (P1.32): so erros da biblioteca
 }
 
 //==================================================
@@ -47,7 +48,7 @@ bool OpenBuy(string symbol,double lot)
    double slPontos=(double)StopLossPoints;
    double tpPontos=(double)TakeProfitPoints;
 
-   if(RiskPerTradeUsd>0.0)
+   if(RiscoPorTradeUsd()>0.0)
    {
       double slUSD=DistanciaPontosParaRiscoUSD(symbol,lot,RiskPerTradeUsd);
 
@@ -57,7 +58,7 @@ bool OpenBuy(string symbol,double lot)
          tpPontos=DistanciaPontosParaRiscoUSD(
             symbol,
             lot,
-            RiskPerTradeUsd*RewardRatio
+            RiscoPorTradeUsd()*RewardRatio
          );
 
          if(tpPontos<=0.0)
@@ -132,7 +133,7 @@ bool OpenSell(string symbol,double lot)
    double slPontos=(double)StopLossPoints;
    double tpPontos=(double)TakeProfitPoints;
 
-   if(RiskPerTradeUsd>0.0)
+   if(RiscoPorTradeUsd()>0.0)
    {
       double slUSD=DistanciaPontosParaRiscoUSD(symbol,lot,RiskPerTradeUsd);
 
@@ -142,7 +143,7 @@ bool OpenSell(string symbol,double lot)
          tpPontos=DistanciaPontosParaRiscoUSD(
             symbol,
             lot,
-            RiskPerTradeUsd*RewardRatio
+            RiscoPorTradeUsd()*RewardRatio
          );
 
          if(tpPontos<=0.0)

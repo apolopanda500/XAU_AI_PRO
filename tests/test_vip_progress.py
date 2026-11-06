@@ -13,7 +13,11 @@ Brokers) e, mais importante, os casos em que a resposta honesta é "zero" ou
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+
+from datetime import datetime, timezone, timedelta
+
+_AGORA = datetime.now(timezone.utc).replace(microsecond=0)
+_RECENTE = (_AGORA - timedelta(days=1)).isoformat()
 
 from backend import vip_progress as vp
 from backend.vip_progress import NIVEIS, escada_completa
@@ -86,21 +90,9 @@ def escrever_audit(tmp_path, monkeypatch, eventos):
     return base
 
 
-def _agora_menos_um_dia() -> str:
-    """Data relativa: a janela e de 30 dias contada a partir de HOJE.
-
-    Um `at` fixo funciona so enquanto a data do calendario estiver perto dele.
-    Quando o CI roda depois de 30 dias, todo evento cai fora da janela, o
-    volume e lido como zero e os testes passam a falhar por motivo errado.
-    """
-    return (
-        datetime.now(timezone.utc) - timedelta(days=1)
-    ).isoformat()
-
-
 def evento(**kwargs):
     base = {
-        "at": _agora_menos_um_dia(),
+        "at": _RECENTE,
         "action": "trade/universal/order",
         "broker": "mt5",
         "status": "executed",
@@ -158,7 +150,7 @@ def test_fora_da_janela_nao_conta(tmp_path, monkeypatch):
     """O que e da janela e o que conta, como na IBKR."""
     escrever_audit(tmp_path, monkeypatch, [
         evento(at="2026-01-01T12:00:00+00:00", volume=10000.0),
-        evento(volume=100.0),  # dentro da janela (ontem)
+        evento(at=_RECENTE, volume=100.0),
     ])
     assert vp.volume_por_grupo()["forex_cfd"] == 100.0
 
@@ -338,7 +330,7 @@ class TestVolumeRealmenteMedido:
                 # Evento com status executed e sem nenhum campo de quantidade:
                 # exatamente o formato que o audit_log produzia.
                 {
-                    "at": _agora_menos_um_dia(),
+                    "at": _RECENTE,
                     "action": "trade/universal/order",
                     "broker": "mt5",
                     "market": "forex",

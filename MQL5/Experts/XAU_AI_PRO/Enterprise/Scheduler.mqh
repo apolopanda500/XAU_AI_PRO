@@ -51,7 +51,7 @@ void CScheduler::Init()
    ArrayResize(m_tasks, 20);
    m_task_count = 0;
    m_initialized = true;
-   Print("[SCHEDULER] Scheduler initialized");
+   if(LogInicioDetalhe()) { Print("[SCHEDULER] Scheduler initialized"); }
 }
 
 void CScheduler::AddTask(string name, TaskFrequency freq, int hour, int minute, TaskCallback callback)
@@ -150,6 +150,6 @@ string CScheduler::GetStatus()
    return s;
 }
 
-void CScheduler::LogStatus() { Print("[SCHEDULER] " + GetStatus()); }
+void CScheduler::LogStatus() { if(AccountLogGatePodeImprimir("scheduler", 3600)) { Print("[SCHEDULER] " + GetStatus()); } }
 
 #endif // SCHEDULER_MQH

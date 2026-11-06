@@ -1,4 +1,4 @@
-﻿//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
 //|                                               BrokerAnalyzer.mqh |
 //|                       XAU_AI_PRO v1.2.9 Professional               |
 //+------------------------------------------------------------------+
@@ -194,49 +194,19 @@ m_cfg.recommended_slippage =
 
       initialized=true;
 
-      Print("--------------------------------");
+      // v1.2.87 (02/11/2026) - P1.74: eram 20 linhas de dump por arranque
+      // (320 num reload de 16 graficos). O mesmo dado passa a UMA linha.
+      if(LogSessaoPodeImprimir("broker_cfg_" + m_cfg.symbol))
+      Print("[BROKER] ",m_cfg.symbol," | ",m_cfg.company,"/",m_cfg.server,
+            " | digits=",m_cfg.digits," point=",DoubleToString(m_cfg.point,m_cfg.digits),
+            " | lot=",m_cfg.min_volume,"-",m_cfg.max_volume," step=",m_cfg.volume_step,
+            " | stops=",m_cfg.stop_level," freeze=",m_cfg.freeze_level,
+            " | tick=",m_cfg.tick_size,"/",m_cfg.tick_value," contrato=",m_cfg.contract_size,
+            " | fill=",EnumToString(m_cfg.fill_mode)," exec=",EnumToString(m_cfg.execution),
+            " | margem=",m_cfg.margin_initial,"/",m_cfg.margin_maintenance,
+            " | slippage=",m_cfg.recommended_slippage);
 
-      Print("BROKER ANALYZER");
-
-      Print("Company: ",m_cfg.company);
-
-      Print("Server : ",m_cfg.server);
-
-      Print("Symbol : ",m_cfg.symbol);
-
-      Print("Digits : ",m_cfg.digits);
-
-      Print("Point  : ",DoubleToString(m_cfg.point,m_cfg.digits));
-
-      Print("MinLot : ",m_cfg.min_volume);
-
-      Print("MaxLot : ",m_cfg.max_volume);
-
-      Print("Step   : ",m_cfg.volume_step);
-
-      Print("Stops  : ",m_cfg.stop_level);
-
-      Print("Freeze : ",m_cfg.freeze_level);
-
-      Print("TickSize : ",m_cfg.tick_size);
-
-      Print("TickValue: ",m_cfg.tick_value);
-
-      Print("Contract : ",m_cfg.contract_size);
-
-      Print("Execution: ",EnumToString(m_cfg.execution));
-
-      Print("Filling  : ",EnumToString(m_cfg.fill_mode));
-
-      Print("Margin Initial: ",m_cfg.margin_initial);
-
-      Print("Margin Maint : ",m_cfg.margin_maintenance);
-
-      Print("Slippage: ",m_cfg.recommended_slippage);
-
-      Print("--------------------------------");
-
-      return true;
+      return true;      return true;
    }
 
    static BrokerConfig GetConfig()
