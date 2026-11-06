@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """Gateway FastAPI - substituto moderno do mt5_gateway.py.
 
 Reusa os 36 helpers puros de mt5_gateway e expõe os mesmos

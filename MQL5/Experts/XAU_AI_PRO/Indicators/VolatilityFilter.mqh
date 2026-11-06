@@ -180,6 +180,162 @@ bool ATRCacheDropAllowed(string symbol)
    return true;
 }
 
+//==================================================
+// v1.2.169 (05/11/2026) - P1.132: A IDENTIDADE DO HANDLE DO ATR
+//
+// MEDIDO no journal do expert de 05/11 entre as 22:10:48 e as 22:11:06, com
+// get_expert_journal sobre 47 registos: o MESMO handle=10 serve XAUUSD,
+// USDJPY, USDSEK, USDCNH, USDCAD, AUDUSD, USDCZK, USDCHF, GBPUSD, USDSGD e
+// NZDUSD; barsCalc=60374 em todos (que e exactamente Bars(XAUUSD,H1)) contra
+// barrasSerie 100016 / 72098 / 66894; e o valor devolvido e o mesmo
+// ATR=34.857860 em oito pares cujos precos vao de 0.5594 (NZDUSD) a 157.8
+// (USDJPY). A guarda de plausibilidade do P1.112 faz o que promete e devolve
+// 0.0 ("[ATR] LEITURA SUSPEITA ... ATR%=2487.31"), mas nao pode mudar a
+// identidade da serie: ATRCacheDrop + IndicatorRelease + iATR devolvem o
+// MESMO handle 10. Foi por isso que as "auto-curas" do P1.113/P1.117/P1.122
+// falharam tres vezes - recriar nao desliga o handle da serie errada.
+//
+// Correcao em tres partes, nenhuma delas a mexer em limites, lote, alvo,
+// stop, spread, RR, regra de entrada/saida ou parametro de risco:
+//  (1) O handle deixa de ser a unica fonte. Passa a haver um ATR calculado
+//      da PROPRIA serie do simbolo (CopyRates + True Range + suavizacao de
+//      Wilder, a mesma formula do iATR), que nao depende de handle nenhum.
+//  (2) Cada leitura com sucesso e conferida contra esse valor, no maximo uma
+//      vez por ATR_VERIFY_SEC por simbolo. Diferenca acima de
+//      ATR_IDENTITY_TOL_PCT por cento significa que o handle responde por
+//      outra serie: publica-se [ATR] IDENTIDADE ERRADA com os dois valores e
+//      devolve-se o valor da serie certa, em vez do ATR do ouro.
+//  (3) Depois de ATR_IDENTITY_MAX_FAIL falhas provadas no mesmo build, o
+//      simbolo deixa de pedir handles e passa a usar sempre o calculo da
+//      serie propria. E fail-closed: sem leitura devolve 0.0, nunca um valor
+//      de outro instrumento.
+//==================================================
+#define ATR_IDENTITY_MAX_FAIL  2
+#define ATR_IDENTITY_TOL_PCT   25.0
+#define ATR_VERIFY_SEC         300
+
+string   g_atrIdSymbol[ATR_SYMBOL_CACHE];
+int      g_atrIdFail[ATR_SYMBOL_CACHE];
+bool     g_atrIdRatesOnly[ATR_SYMBOL_CACHE];
+datetime g_atrIdStamp[ATR_SYMBOL_CACHE];
+int      g_atrIdCount = 0;
+
+int ATRIdentitySlot(string symbol)
+{
+   for(int i = 0; i < g_atrIdCount; i++)
+      if(g_atrIdSymbol[i] == symbol)
+         return i;
+
+   if(g_atrIdCount >= ATR_SYMBOL_CACHE)
+      return -1;
+
+   g_atrIdSymbol[g_atrIdCount] = symbol;
+   g_atrIdFail[g_atrIdCount] = 0;
+   g_atrIdRatesOnly[g_atrIdCount] = false;
+   g_atrIdStamp[g_atrIdCount] = 0;
+   g_atrIdCount++;
+
+   return g_atrIdCount - 1;
+}
+
+bool ATRRatesOnly(string symbol)
+{
+   int slot = ATRIdentitySlot(symbol);
+   if(slot < 0)
+      return false;
+
+   return g_atrIdRatesOnly[slot];
+}
+
+bool ATRIdentityShouldVerify(string symbol)
+{
+   int slot = ATRIdentitySlot(symbol);
+   if(slot < 0)
+      return false;
+
+   datetime agora = TimeCurrent();
+   if(g_atrIdStamp[slot] > 0 && agora - g_atrIdStamp[slot] < ATR_VERIFY_SEC)
+      return false;
+
+   g_atrIdStamp[slot] = agora;
+   return true;
+}
+
+void ATRIdentityClear(string symbol)
+{
+   int slot = ATRIdentitySlot(symbol);
+   if(slot < 0)
+      return;
+
+   g_atrIdFail[slot] = 0;
+}
+
+void ATRIdentityFail(string symbol, double doHandle, double daSerie)
+{
+   int slot = ATRIdentitySlot(symbol);
+   if(slot < 0)
+      return;
+
+   // Um falso positivo nao pode matar o handle para sempre: so a falha
+   // repetida no mesmo build muda o simbolo para o calculo da serie.
+   if(g_atrIdFail[slot] < ATR_IDENTITY_MAX_FAIL)
+      g_atrIdFail[slot]++;
+
+   if(g_atrIdFail[slot] >= ATR_IDENTITY_MAX_FAIL)
+      g_atrIdRatesOnly[slot] = true;
+
+   if(AccountLogGatePodeImprimir("atr_identidade_" + symbol + "_" + IntegerToString((long)__DATETIME__), 3600))
+      Print("[ATR] IDENTIDADE ERRADA | ", symbol,
+            " | doHandle=", DoubleToString(doHandle, 6),
+            " | daSerie=", DoubleToString(daSerie, 6),
+            " | falhas=", IntegerToString(g_atrIdFail[slot]),
+            " | usaHandleAgora=", (g_atrIdRatesOnly[slot] ? "NAO" : "SIM"),
+            " | grafico=", _Symbol);
+}
+
+void ATRIdentityReset()
+{
+   g_atrIdCount = 0;
+}
+
+// ATR da propria serie do simbolo: True Range + suavizacao de Wilder.
+// Nao usa handle, logo nao pode ficar ligado a serie de outro instrumento.
+double ATRFromRates(string symbol, ENUM_TIMEFRAMES tf, int period)
+{
+   if(period < 1)
+      return 0.0;
+
+   MqlRates rates[];
+   int need = period * 3 + 3;
+   int copied = CopyRates(symbol, tf, 0, need, rates);
+   if(copied < period + 2)
+      return 0.0;
+
+   // CopyRates sem ArraySetAsSeries ordena do mais antigo para o mais novo.
+   double soma = 0.0;
+   for(int i = 1; i <= period; i++)
+     {
+      double fechoAnterior = rates[i - 1].close;
+      double tr = MathMax(rates[i].high - rates[i].low,
+                          MathMax(MathAbs(rates[i].high - fechoAnterior),
+                                  MathAbs(rates[i].low - fechoAnterior)));
+      soma += tr;
+     }
+
+   double atr = soma / (double)period;
+
+   for(int i = period + 1; i < copied; i++)
+     {
+      double fechoAnterior = rates[i - 1].close;
+      double tr = MathMax(rates[i].high - rates[i].low,
+                          MathMax(MathAbs(rates[i].high - fechoAnterior),
+                                  MathAbs(rates[i].low - fechoAnterior)));
+      atr = (atr * (period - 1) + tr) / (double)period;
+     }
+
+   return atr;
+}
+
 int ATRSymbolHandle(string symbol)
 {
    for(int i = 0; i < g_atrCacheCount; i++)
@@ -389,6 +545,18 @@ double GetATR(string symbol)
 
    // v1.2.149 - P1.108: handle por simbolo, em CACHE, e nunca libertado
    // na leitura. Era a libertacao imediata que impedia o aquecimento.
+   // v1.2.169 - P1.132: simbolo cuja identidade foi provada errada
+   // ATR_IDENTITY_MAX_FAIL vezes neste build deixa de pedir handles. O valor
+   // continua a vir da propria serie, logo nao ha risco de ler outro
+   // instrumento; sem leitura devolve 0.0 e o resto do pipeline trata o zero
+   // como sempre tratou (fail-closed).
+   if(ATRRatesOnly(symbol))
+     {
+      double atrSerie=ATRFromRates(symbol, (ENUM_TIMEFRAMES)Period(), VOLATILITY_ATR_PERIOD);
+      if(atrSerie>0.0)
+         return NormalizeDouble(atrSerie, symbolDigits);
+     }
+
    int handle=ATRSymbolHandle(symbol);
    if(handle==INVALID_HANDLE)
      {
@@ -406,6 +574,28 @@ double GetATR(string symbol)
      {
       result=NormalizeDouble(buf[0], symbolDigits);
       ATRStaleClear(symbol);   // v1.2.157 - P1.118: aqueceu, zera a marca de falha
+
+      // v1.2.169 - P1.132: a leitura do handle so vale se for a serie DESTE
+      // simbolo. Uma vez por ATR_VERIFY_SEC confere-se contra o ATR calculado
+      // da propria serie; desvio acima de ATR_IDENTITY_TOL_PCT e prova de
+      // handle preso noutra serie (medido: ATR do ouro em oito pares). Nesse
+      // caso devolve-se o valor da serie certa e conta-se a falha, em vez de
+      // entregar ao pipeline o ATR de outro instrumento.
+      if(ATRIdentityShouldVerify(symbol))
+        {
+         double atrDaSerie=ATRFromRates(symbol, (ENUM_TIMEFRAMES)Period(), VOLATILITY_ATR_PERIOD);
+         if(atrDaSerie>0.0 && result>0.0)
+           {
+            double desvio=MathAbs(result-atrDaSerie)/atrDaSerie*100.0;
+            if(desvio>ATR_IDENTITY_TOL_PCT)
+              {
+               ATRIdentityFail(symbol, result, atrDaSerie);
+               result=NormalizeDouble(atrDaSerie, symbolDigits);
+              }
+            else
+               ATRIdentityClear(symbol);
+           }
+        }
      }
    else
      {
