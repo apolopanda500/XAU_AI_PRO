@@ -1,4 +1,4 @@
-// XAU_AI_PRO v1.3.1 - ETAPA 7: METRICAS DE IA
+﻿// XAU_AI_PRO v1.2.9 - ETAPA 7: METRICAS DE IA
 // Tracking em memoria de accuracy / precision / recall /
 // directional accuracy a partir do LogAIFeedback.
 // NAO altera decisao: apenas observabilidade.

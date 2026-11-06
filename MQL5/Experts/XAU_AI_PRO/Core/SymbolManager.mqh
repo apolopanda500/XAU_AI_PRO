@@ -1,4 +1,4 @@
-﻿// XAU_AI_PRO v1.2.9
+// XAU_AI_PRO v1.2.9
 #ifndef SYMBOLMANAGER_MQH
 #define SYMBOLMANAGER_MQH
 
@@ -158,7 +158,12 @@ string ResolveBrokerSymbol(string symbol)
 
       if(IsSymbolTradeable(candidates[i]))
       {
-         Print("SYMBOL MANAGER | Resolved: ", symbol, " -> ", candidates[i]);
+         // v1.2.81 (02/11/2026) - P1.68: medido 7 955 linhas hoje, quase todas
+         // a dizer o obvio (XAUUSD -> XAUUSD). So interessa quando ha
+         // REMAPEAMENTO real entre o nome pedido e o nome do broker.
+         if(StringCompare(candidates[i], symbol, false) != 0)
+            if(AccountLogGatePodeImprimir("symres_" + symbol, 3600))
+               Print("SYMBOL MANAGER | Resolved: ", symbol, " -> ", candidates[i]);
          return candidates[i];
       }
    }
@@ -174,7 +179,8 @@ string ResolveBrokerSymbol(string symbol)
       {
          if(IsSymbolTradeable(broker))
          {
-            Print("SYMBOL MANAGER | Exact match: ", symbol, " -> ", broker);
+            if(AccountLogGatePodeImprimir("symexact_" + symbol, 3600))
+               Print("SYMBOL MANAGER | Exact match: ", symbol, " -> ", broker);
             return broker;
          }
       }
@@ -196,7 +202,8 @@ string ResolveBrokerSymbol(string symbol)
       {
          if(IsSymbolTradeable(broker))
          {
-            Print("SYMBOL MANAGER | Partial match: ", symbol, " -> ", broker);
+            if(AccountLogGatePodeImprimir("sympart_" + symbol, 3600))
+               Print("SYMBOL MANAGER | Partial match: ", symbol, " -> ", broker);
             return broker;
          }
       }
@@ -271,19 +278,11 @@ bool InitSymbolManager()
       return true;
    }
 
-   Print("=== SYMBOL MANAGER INITIALIZING ===");
-   Print("SYMBOL MANAGER | Configured symbols: ", count);
-
-   if(EnableVerboseDebug)
-   {
-      Print("SYMBOL MANAGER | Market Watch list:");
-      int total = SymbolsTotal(true);
-      for(int i = 0; i < total; i++)
-      {
-         string brokerSymbol = SymbolName(i, true);
-         Print("  [", i, "] ", brokerSymbol);
-      }
-   }
+   // v1.2.87 (02/11/2026) - P1.74: MEDIDO 9 863 linhas/dia so neste modulo e
+   // 57 delas num unico arranque de 16 graficos. Nada disto era evento: era o
+   // mesmo retrato da configuracao repetido por instancia. Passa a UMA linha.
+   int    totalMW    = SymbolsTotal(true);
+   string duplicados = "";
 
    for(int i = 0; i < count; i++)
    {
@@ -294,24 +293,95 @@ bool InitSymbolManager()
 
       if(SymbolAlreadyActive(symbol))
       {
-         Print("SYMBOL MANAGER | Duplicate ignored: ", symbol);
+         if(duplicados != "")
+            duplicados += ",";
+         duplicados += symbol;
          continue;
       }
 
       int size = ArraySize(ActiveSymbols);
       ArrayResize(ActiveSymbols, size + 1);
       ActiveSymbols[size] = symbol;
-
-      Print("SYMBOL MANAGER | Active symbol registered: ", symbol);
    }
 
-   Print("=== SYMBOL MANAGER INITIALIZED ===");
-   Print("SYMBOL MANAGER | Total active symbols: ", ArraySize(ActiveSymbols));
 
+   //--------------------------------------------------
+   // v1.2.167 (05/11/2026) - P1.130: UNIVERSO UNIVERSAL.
+   // MEDIDO em 05/11 as 21:30, conta 113568614: Market Watch com 21 simbolos,
+   // `Symbols` com 11, e 10 simbolos do Market Watch fora da lista (AMD, MSFT,
+   // INTC, NVDA, GOLD, USDCLP, USDCOP, USDCZK, USDRUB e USDSGD). A instancia
+   // mestre percorre ActiveSymbols, logo esses 10 NUNCA eram avaliados; tres
+   // deles (USDCZK, USDRUB e USDSGD) tinham grafico aberto no perfil e ficavam
+   // a operar apenas por si mesmos, sem passar pelo pipeline. O universo do EA
+   // era um retrato fixo que comecava em XAUUSD.
+   // Agora o universo e o do TERMINAL: os simbolos de `Symbols` (base, por
+   // ordem de prioridade) mais o Market Watch mais o simbolo do proprio
+   // grafico. Nenhum simbolo e privilegiado. Com SymbolsFromMarketWatch=false
+   // fica o comportamento anterior (Symbols + simbolo do grafico).
+   int mwAdicionados = 0;
+
+   if(SymbolsFromMarketWatch)
+     {
+      int totalMWAdd = SymbolsTotal(true);
+
+      for(int mw = 0; mw < totalMWAdd; mw++)
+        {
+         string mwSymbol = SymbolName(mw, true);
+
+         if(mwSymbol == "")
+            continue;
+
+         if(SymbolAlreadyActive(mwSymbol))
+            continue;
+
+         if(!IsSymbolTradeable(mwSymbol))
+            continue;
+
+         int mwSize = ArraySize(ActiveSymbols);
+         ArrayResize(ActiveSymbols, mwSize + 1);
+         ActiveSymbols[mwSize] = mwSymbol;
+         mwAdicionados++;
+        }
+     }
+
+   // O simbolo do GRAFICO entra sempre, mesmo fora de `Symbols` e fora do
+   // Market Watch: e o unico simbolo que este programa tem a vista garantida.
+   string selfResolved = ResolveBrokerSymbol(_Symbol);
+   if(selfResolved == "")
+      selfResolved = _Symbol;
+
+   bool graficoAdicionado = false;
+
+   if(!SymbolAlreadyActive(selfResolved) && IsSymbolTradeable(selfResolved))
+     {
+      int selfSize = ArraySize(ActiveSymbols);
+      ArrayResize(ActiveSymbols, selfSize + 1);
+      ActiveSymbols[selfSize] = selfResolved;
+      graficoAdicionado = true;
+     }
+
+   // P2.00: e configuracao estatica, nao um evento - 1x/dia por CONTA. A linha
+   // que o P1.19 publicava continua, agora com o universo JA completo e com a
+   // origem dita por extenso (antes avisava que o simbolo do grafico nao estava
+   // em `Symbols` e nada era feito com essa informacao).
+   if(AccountLogGatePodeImprimir("syms_universo", 86400))
+      Print("[SYMS] UNIVERSO | marketwatch=", totalMW, " | deSymbols=", count,
+            " | adicionadosDoMarketWatch=", mwAdicionados,
+            " | grafico=", selfResolved, (graficoAdicionado ? " (adicionado)" : ""),
+            " | ativos=", ArraySize(ActiveSymbols), " | origem=",
+            (SymbolsFromMarketWatch ? "Symbols+MarketWatch+grafico" : "Symbols+grafico"));
+   string listaAtivos = "";
    for(int i = 0; i < ArraySize(ActiveSymbols); i++)
    {
-      Print("  [", i, "] ", ActiveSymbols[i]);
+      if(i > 0)
+         listaAtivos += ",";
+      listaAtivos += ActiveSymbols[i];
    }
+
+   if(LogInicioDetalhe()) Print("[SYMS] configurados=", count, " | ativos=", ArraySize(ActiveSymbols),
+         " | marketwatch=", totalMW, " | grafico=", _Symbol,
+         (duplicados != "" ? (" | duplicados=" + duplicados) : ""),
+         " | ", listaAtivos, " | mwAdicionados=", mwAdicionados);
 
    if(ArraySize(ActiveSymbols) == 0)
    {

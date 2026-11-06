@@ -68,7 +68,7 @@ void CExecutionStats::Init()
    m_stats.best_score=-DBL_MAX;
    m_stats.worst_score= DBL_MAX;
 
-   Print("[STATS] ExecutionStats initialized");
+   if(LogInicioDetalhe()) { Print("[STATS] ExecutionStats initialized"); }
 }
 
 

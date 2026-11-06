@@ -146,7 +146,7 @@ void SignalCoreV2Init()
       }
    }
 
-   Print("[V2] INIT | Core=",
+   if(LogInicioDetalhe()) Print("[V2] INIT | Core=",
          (SignalCoreVersion == CORE_VERSION_V2 ? "V2" : "V1"),
          " | TrendTF=", EnumToString(V2_TrendTF),
          " | EntryTF=", EnumToString(V2_EntryTF),

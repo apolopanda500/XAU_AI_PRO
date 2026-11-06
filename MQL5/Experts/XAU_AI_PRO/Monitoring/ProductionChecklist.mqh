@@ -5,12 +5,18 @@
 //| execucao, risco, notificacoes, auditoria e ambiente.            |
 //+------------------------------------------------------------------+
 #property copyright "XAU_AI_PRO"
-#property version   "1.20"
+#property version   "1.290"   // 1.2.9 no formato xxx.yyy exigido pelo compilador
 
 #ifndef PRODUCTION_CHECKLIST_MQH
 #define PRODUCTION_CHECKLIST_MQH
 
+// P1.56 (v1.2.70): teto de idade do ficheiro de previsao, o mesmo que o
+// registo de modelos usa para o estado READY (MAX_AGE_READY_SEC = 5 dias).
+#define AIChecklistMaxAgeHours 120.0
+
 #include "../Core/Config.mqh"
+// P1.61 (v1.2.75): fonte unica de verdade das permissoes de negociacao.
+#include "../Core/TradeGate.mqh"
 
 //==================================================
 // CLASSE (arrays paralelos - seguro em MQL5)
@@ -27,8 +33,15 @@ private:
    static int    m_item_count;
    static bool   m_initialized;
    static bool   m_all_passed;
+   // P1.44: hora em que o checklist correu, para que um veredicto antigo
+   // nao possa ser lido como se fosse o estado actual do EA.
+   static datetime m_snapshot_time;
 
    static void SetResult(int idx, bool passed, string message);
+
+   static double PredictionAgeHours(const string file);
+
+   static double PredictionAgeSeconds(const string file);
 
 public:
 
@@ -94,6 +107,7 @@ bool   CProductionChecklist::m_critical[];
 int    CProductionChecklist::m_item_count = 0;
 bool   CProductionChecklist::m_initialized = false;
 bool   CProductionChecklist::m_all_passed = false;
+datetime CProductionChecklist::m_snapshot_time = 0;
 
 //==================================================
 // HELPERS
@@ -105,6 +119,49 @@ void CProductionChecklist::SetResult(int idx, bool passed, string message)
       return;
    m_passed[idx]   = passed;
    m_messages[idx] = message;
+}
+
+//==================================================
+// P1.56: idade de um ficheiro em horas, lida da data de
+// modificacao sem abrir o ficheiro.
+// Devolve -1.0 quando a data nao pode ser lida.
+//==================================================
+
+double CProductionChecklist::PredictionAgeHours(const string file)
+{
+   long mod = FileGetInteger(file, FILE_MODIFY_DATE, false);
+
+   if(mod <= 0)
+      return -1.0;
+
+   // FILE_MODIFY_DATE e a data local do sistema de ficheiros, o mesmo relogio
+   // de TimeLocal(). TimeGMT() entra como rede de seguranca para o caso de a
+   // maquina e o servidor estarem em fusos diferentes, e o menor dos dois e o
+   // escolhido para que a idade nunca seja declarada por engano.
+   double hLocal = (double)((long)TimeLocal() - (long)mod) / 3600.0;
+   double hGmt   = (double)((long)TimeGMT()   - (long)mod) / 3600.0;
+   double horas  = MathMin(hLocal, hGmt);
+
+   if(horas < 0.0)
+      horas = 0.0;
+
+   return horas;
+}
+
+//==================================================
+// P1.60 (v1.2.74): a mesma idade, em segundos. A regra que o motor aplica
+// (AI\AIConnector.mqh:420) e em segundos contra MaxPredictionAgeSec; converter
+// horas em segundos aqui evita um segundo criterio sobre o mesmo ficheiro.
+//==================================================
+
+double CProductionChecklist::PredictionAgeSeconds(const string file)
+{
+   double horas = PredictionAgeHours(file);
+
+   if(horas < 0.0)
+      return -1.0;
+
+   return horas * 3600.0;
 }
 
 //==================================================
@@ -156,7 +213,7 @@ void CProductionChecklist::Init()
 
    m_initialized = true;
 
-   Print("[CHECKLIST] ProductionChecklist inicializado (17 itens)");
+   if(LogInicioDetalhe()) { Print("[CHECKLIST] ProductionChecklist inicializado (17 itens)"); }
 }
 
 //==================================================
@@ -200,6 +257,8 @@ bool CProductionChecklist::Run()
       }
    }
 
+   // P1.44: o relatorio e um retrato do arranque; a hora tem de viajar com ele.
+   m_snapshot_time = TimeCurrent();
    LogResults();
 
    return m_all_passed;
@@ -209,6 +268,9 @@ bool CProductionChecklist::Run()
 // READY
 //==================================================
 
+// P1.44: MEDIDO - nenhum caminho de execucao chama esta funcao.
+// O resultado do checklist e informativo: nao trava nem liberta trading,
+// porque o portao de spread e por tick (Filters/SpreadFilter.mqh).
 bool CProductionChecklist::IsReady()
 {
    return m_all_passed;
@@ -220,9 +282,10 @@ bool CProductionChecklist::IsReady()
 
 void CProductionChecklist::CheckBroker()
 {
-   bool ok = (TerminalInfoInteger(TERMINAL_CONNECTED) != 0);
+   // P1.64: le a fonte unica (Core/TradeGate.mqh) em vez do bit cru
+   bool ok = CTradeGate::Connected();
 
-   SetResult(0, ok, ok ? "Terminal conectado" : "Terminal desconectado");
+   SetResult(0, ok, ok ? "Terminal conectado" : CTradeGate::Cause(TG_DISCONNECTED));
 }
 
 //==================================================
@@ -244,12 +307,17 @@ void CProductionChecklist::CheckAccount()
 
 void CProductionChecklist::CheckPermissions()
 {
-   bool terminalTrade = (TerminalInfoInteger(TERMINAL_TRADE_ALLOWED) != 0);
-   bool accountTrade  = (AccountInfoInteger(ACCOUNT_TRADE_ALLOWED) != 0);
+   // P1.61 (v1.2.75): o criterio era TERMINAL && CONTA e ignorava o EA, por
+   // isso dava PASS enquanto o portao de OnTick barrava as 16 ordens com
+   // MQL_TRADE_ALLOWED=0. Passa a ler a fonte unica (Core/TradeGate.mqh).
+   // P1.88 (v1.2.98): veredicto da SUITE. A execucao e delegada a uma instancia
+   // (PipelineIsMaster), por isso um grafico sem o bit proprio nao impede a suite
+   // de negociar. O item so deve reprovar quando NENHUMA instancia pode negociar.
+   ETradeGate tradeGate = CTradeGate::EvaluateSuite();
 
-   bool ok = terminalTrade && accountTrade;
+   bool ok = (tradeGate == TG_OK);
 
-   SetResult(2, ok, ok ? "Trading permitido" : "Trading nao permitido (Algoritmos OFF?)");
+   SetResult(2, ok, CTradeGate::Describe(tradeGate));
 }
 
 //==================================================
@@ -295,11 +363,92 @@ void CProductionChecklist::CheckIndicators()
 
 void CProductionChecklist::CheckAI()
 {
+   // P1.54 (v1.2.68): MEDIDO em 02/11/2026 05:18 - este ficheiro vive em
+   // MQL5\Files\Data\prediction_<SIMBOLO>.json, a sandbox do terminal, que e
+   // onde o AIConnector o le (AIConnector.mqh:791 e :836 usam FileIsExist e
+   // FileOpen SEM FILE_COMMON) e onde o Core\PathManager.mqh o declara
+   // (PredictionPath = Files\Data\prediction.json). Com FILE_COMMON a
+   // verificacao olhava para Common\Files\Data, pasta onde o EA nunca
+   // escreve: 16 de 16 graficos diziam "IA offline" as 05:18, com 7 dos 16
+   // ficheiros presentes no disco (XAUUSD, USDJPY, USDCAD, AUDUSD, NZDUSD,
+   // GBPUSD, EURUSD).
+   //
+   // P1.56 (v1.2.70): MEDIDO em 02/11/2026 05:51 - o ficheiro existia mas tinha
+   // 25 dias. Data\prediction_XAUUSD.json tem "timestamp":
+   // "2026-10-08T22:00:33.296743", que coincide ao segundo com a data de
+   // modificacao do ficheiro no disco, e o item imprimia apenas
+   // "Prediction JSON encontrado". Um PASS sem idade escondia uma previsao de
+   // 08/10, mais velha do que o dataset que o EA escreve a cada vela.
+   // O VEREDICTO NAO MUDA: o item continua [OPTIONAL] e continua PASS enquanto
+   // o ficheiro existir, para nao criar um segundo veredicto sobre o mesmo dado
+   // (regra do P1.53). O que passa a existir e a idade no texto e a marca STALE
+   // acima do mesmo teto que o registo de modelos usa para o estado READY
+   // (MAX_AGE_READY_SEC = 5 dias). Nenhum return, limite, risco ou regra de
+   // trading foi tocado: muda o que a mensagem diz.
+   // P1.57 (v1.2.71): MEDIDO em 02/11/2026 05:58 - as duas checklists
+   // davam vereditos DIFERENTES para o mesmo ficheiro e os mesmos inputs.
+   // Exemplo medido no codigo: com EnableAIFilter=false e nenhuma previsao no
+   // disco, esta lista escrevia "[OPTIONAL] AI: FAIL - Prediction JSON nao
+   // encontrado (IA offline)" e a ValidationChecklist escrevia, no mesmo
+   // arranque, "AI: READY - Filtro IA desativado (nao requerido)". E com
+   // RequireAIJSON=true e nenhuma previsao, esta lista ficava em FAIL NAO
+   // CRITICO enquanto a Validation escrevia BLOCKED. Passa a haver uma so
+   // tabela de decisao: filtro desligado = READY/PASS; previsao presente =
+   // READY/PASS; ausente e nao requerida = WARNING/FAIL nao critico; ausente e
+   // requerida = BLOCKED/FAIL critico. Nenhum limite, risco ou regra de trading
+   // foi tocado: muda o veredicto do item de diagnostico.
    string file = "Data\\prediction_" + _Symbol + ".json";
 
-   bool ok = FileIsExist(file, FILE_COMMON);
+   bool existe = FileIsExist(file);
 
-   SetResult(5, ok, ok ? "Prediction JSON encontrado" : "Prediction JSON nao encontrado (IA offline)");
+   if(!EnableAIFilter)
+   {
+      m_critical[5] = false;
+      SetResult(5, true, "Filtro IA desativado (nao requerido)");
+      return;
+   }
+
+   // BLOCKED na ValidationChecklist so acontece com RequireAIJSON=true: para o
+   // mesmo dado, este item tem de ser critico exatamente no mesmo caso.
+   m_critical[5] = RequireAIJSON;
+
+   // P1.60 (v1.2.74): MEDIDO em 02/11/2026 06:19 - o item dizia PASS para
+   // a previsao do simbolo so por o ficheiro existir, enquanto o motor
+   // descartava o MESMO ficheiro por idade: AI\AIConnector.mqh:420 faz
+   // `MaxPredictionAgeSec>0 && age>(long)MaxPredictionAgeSec` e o input vale
+   // 900 s. O teto usado aqui era 120 h (AIChecklistMaxAgeHours), que nao e o
+   // do motor e nunca decidia nada. Resultado medido: PASS/READY com
+   // idade=600 h e o motor em fallback. Passa a haver um so criterio, o do
+   // motor, lido do proprio input. O item continua [OPTIONAL]; so vira
+   // critico quando RequireAIJSON=true, exatamente como na ValidationChecklist.
+   double idadeS = PredictionAgeSeconds(file);
+
+   bool velho = (MaxPredictionAgeSec > 0) && (idadeS < 0.0 || idadeS > (double)MaxPredictionAgeSec);
+
+   bool ok = existe && !velho;
+
+   string msg = "";
+
+   if(!existe)
+   {
+      msg = "Prediction JSON nao encontrado (IA offline)";
+   }
+   else if(!velho)
+   {
+      msg = "Prediction JSON usavel pelo motor | idade=" + DoubleToString(idadeS, 0)
+          + "s (max=" + IntegerToString(MaxPredictionAgeSec) + "s)";
+   }
+   else
+   {
+      msg = "Prediction STALE: idade=" + DoubleToString(idadeS, 0)
+          + "s > MaxPredictionAgeSec=" + IntegerToString(MaxPredictionAgeSec)
+          + "s | motor ignora, fallback tecnico (nao bloqueia)";
+   }
+
+   if(!ok && RequireAIJSON)
+      msg += " | BLOQUEIA (RequireAIJSON=true)";
+
+   SetResult(5, ok, msg);
 }
 
 //==================================================
@@ -308,10 +457,12 @@ void CProductionChecklist::CheckAI()
 
 void CProductionChecklist::CheckPython()
 {
+   // P1.54 (v1.2.68): mesma pasta que o CheckAI e o resto do EA usam -
+   // predicao e dataset ficam os dois na sandbox do terminal.
    string pred = "Data\\prediction_" + _Symbol + ".json";
    string ds   = "Data\\dataset.csv";
 
-   bool ok = FileIsExist(pred, FILE_COMMON) && FileIsExist(ds, FILE_COMMON);
+   bool ok = FileIsExist(pred) && FileIsExist(ds);
 
    SetResult(6, ok, ok ? "Pipeline Python: prediction + dataset OK" : "Pipeline Python incompleto");
 }
@@ -322,13 +473,34 @@ void CProductionChecklist::CheckPython()
 
 void CProductionChecklist::CheckDataset()
 {
+   // P1.46 (v1.2.64): desligar o dataset e uma opcao, nao uma avaria.
+   // MEDIDO em 01/11/2026: com EnableDataset=true e nenhum dataset no disco o
+   // relatorio dizia "[OPTIONAL] Dataset: FAIL - Dataset ausente ou vazio",
+   // enquanto a ValidationChecklist dizia, no mesmo arranque,
+   // "Dataset: READY - Dataset desativado". Uma respeitava a definicao, a
+   // outra contava a escolha como falha.
+   if(!EnableDataset)
+   {
+      SetResult(7, true, "Dataset desativado (opcional)");
+      return;
+   }
+
+   // P1.54 (v1.2.68): MEDIDO em 02/11/2026 05:18:05 - o dataset existe e
+   // esta a ser escrito, em MQL5\Files\Data\dataset.csv (3.537.420 bytes,
+   // escrita de 1 em 1 vela pelo DataLogger.mqh:180, que abre o ficheiro
+   // SEM FILE_COMMON). O relatorio dizia "Dataset ausente ou vazio" porque
+   // esta funcao procurava em Common\Files\Data, onde nao existe dataset
+   // nenhum. O Diagnostics.mqh:382 le o mesmo ficheiro na sandbox e ja
+   // documentava a segunda metade do problema: sem FILE_SHARE_* o CSV aberto
+   // pelo DataLogger aparece como "nao encontrado" - por isso o FILE_SHARE_
+   // READ/WRITE entra aqui tambem.
    string file = "Data\\dataset.csv";
 
    bool ok = false;
 
-   if(FileIsExist(file, FILE_COMMON))
+   if(FileIsExist(file))
    {
-      int h = FileOpen(file, FILE_READ | FILE_BIN | FILE_COMMON);
+      int h = FileOpen(file, FILE_READ | FILE_BIN | FILE_SHARE_READ | FILE_SHARE_WRITE);
 
       if(h != INVALID_HANDLE)
       {
@@ -346,13 +518,15 @@ void CProductionChecklist::CheckDataset()
 
 void CProductionChecklist::CheckJSON()
 {
+   // P1.54 (v1.2.68): mesma pasta e mesmas flags do CheckDataset (a
+   // previsao do simbolo esta na sandbox, ao lado do dataset).
    string file = "Data\\prediction_" + _Symbol + ".json";
 
    bool ok = false;
 
-   if(FileIsExist(file, FILE_COMMON))
+   if(FileIsExist(file))
    {
-      int h = FileOpen(file, FILE_READ | FILE_BIN | FILE_COMMON);
+      int h = FileOpen(file, FILE_READ | FILE_BIN | FILE_SHARE_READ | FILE_SHARE_WRITE);
 
       if(h != INVALID_HANDLE)
       {
@@ -361,7 +535,12 @@ void CProductionChecklist::CheckJSON()
       }
    }
 
-   SetResult(8, ok, ok ? "JSON acessivel" : "JSON ausente ou vazio");
+   // P1.57 (v1.2.71): mesma tabela do item JSon da ValidationChecklist.
+   // Antes, com RequireAIJSON=true e o ficheiro vazio, esta lista escrevia
+   // "FAIL nao critico" e a Validation escrevia "BLOCKED" para o mesmo ficheiro.
+   m_critical[8] = (EnableAIFilter && RequireAIJSON);
+
+   SetResult(8, ok, ok ? ("JSON acessivel" + (RequireAIJSON ? " (requerido)" : " (opcional)")) : (RequireAIJSON && EnableAIFilter ? "JSON ausente ou vazio | BLOQUEIA (RequireAIJSON=true)" : "JSON ausente ou vazio (opcional, nao bloqueia)"));
 }
 
 //==================================================
@@ -444,14 +623,19 @@ void CProductionChecklist::CheckExecution()
 
 void CProductionChecklist::CheckNotifications()
 {
-   bool ok = EnableNotifications;
+   // P1.46 (v1.2.64): desligar notificacoes e uma opcao, nao uma avaria.
+   if(!EnableNotifications)
+   {
+      SetResult(12, true, "Notificacoes desativadas (opcional)");
+      return;
+   }
 
-   string msg = ok ? "Central de notificacoes habilitada" : "Notificacoes desabilitadas";
+   string msg = "Central de notificacoes habilitada";
 
-   if(ok && NotifyTelegramToken != "" && NotifyTelegramChatID == "")
+   if(NotifyTelegramToken != "" && NotifyTelegramChatID == "")
       msg = "Telegram configurado sem ChatID (apenas Push)";
 
-   SetResult(12, ok, msg);
+   SetResult(12, true, msg);
 }
 
 //==================================================
@@ -460,9 +644,8 @@ void CProductionChecklist::CheckNotifications()
 
 void CProductionChecklist::CheckAudit()
 {
-   bool ok = EnableAuditLog;
-
-   SetResult(13, ok, ok ? "Auditoria habilitada" : "Auditoria desabilitada");
+   // P1.46 (v1.2.64): auditoria desligada e opcao, nao falha.
+   SetResult(13, true, EnableAuditLog ? "Auditoria habilitada" : "Auditoria desativada (opcional)");
 }
 
 //==================================================
@@ -471,9 +654,8 @@ void CProductionChecklist::CheckAudit()
 
 void CProductionChecklist::CheckDashboard()
 {
-   bool ok = EnableDashboard;
-
-   SetResult(14, ok, ok ? "Dashboard habilitado" : "Dashboard desabilitado");
+   // P1.46 (v1.2.64): dashboard desligado e opcao, nao falha.
+   SetResult(14, true, EnableDashboard ? "Dashboard habilitado" : "Dashboard desativado (opcional)");
 }
 
 //==================================================
@@ -531,6 +713,10 @@ string CProductionChecklist::GetSummary()
    summary += " | " + IntegerToString(failed) + " failed";
    summary += " | " + IntegerToString(criticalFailed) + " critical failed";
    summary += "\nREADY: " + (m_all_passed ? "YES" : "NO");
+   summary += " | snapshot de init: " + TimeToString(m_snapshot_time, TIME_DATE|TIME_MINUTES);
+   summary += "\nNOTA: relatorio do arranque - nao e reavaliado enquanto o EA corre,"
+            + " nao e portao de execucao (nada consulta IsReady()) e o bloqueio"
+            + " real de spread e por tick em Filters/SpreadFilter.mqh.";
 
    return summary;
 }
@@ -542,9 +728,37 @@ string CProductionChecklist::GetSummary()
 void CProductionChecklist::LogResults()
 {
    string summary = GetSummary();
-   Print("[CHECKLIST]\n", summary);
 
-   int h = FileOpen("XAU_AI_PRO\\ProductionChecklist.txt", FILE_READ | FILE_WRITE | FILE_TXT | FILE_ANSI | FILE_COMMON);
+   // v1.2.87 (02/11/2026) - P1.74: MEDIDO 23 linhas por arranque (368 num
+   // reload de 16 graficos) para dizer 13/17. O relatorio completo continua
+   // a ir inteiro para Common\Files\XAU_AI_PRO\ProductionChecklist.txt; o
+   // journal passa a receber UMA linha com as falhas, o unico facto accionavel.
+   int    passou = 0;
+   string falhas = "";
+
+   for(int i = 0; i < m_item_count; i++)
+     {
+      if(m_passed[i])
+        {
+         passou++;
+         continue;
+        }
+
+      if(falhas != "")
+         falhas += ",";
+
+      falhas += m_names[i] + (m_critical[i] ? "(critico)" : "(opcional)");
+     }
+
+   if(LogInicioDetalhe()) Print("[CHECKLIST] ", passou, "/", m_item_count, " passed",
+         (falhas == "" ? " | sem falhas" : (" | falhas: " + falhas)),
+         " | READY=", (m_all_passed ? "SIM" : "NAO"),
+         " | relatorio completo: Common\\Files\\XAU_AI_PRO\\ProductionChecklist.txt");
+
+   // P1.44: FILE_WRITE sozinho apaga o conteudo na abertura.
+   // Com FILE_READ | FILE_WRITE, FileSeek(0) e sem truncar, um resumo mais
+   // curto deixava o rabo do anterior no disco (medido: READY: YEStical failed).
+   int h = FileOpen("XAU_AI_PRO\\ProductionChecklist.txt", FILE_WRITE | FILE_TXT | FILE_ANSI | FILE_COMMON | FILE_SHARE_READ | FILE_SHARE_WRITE);
    if(h != INVALID_HANDLE)
      {
       FileSeek(h, 0, SEEK_SET);

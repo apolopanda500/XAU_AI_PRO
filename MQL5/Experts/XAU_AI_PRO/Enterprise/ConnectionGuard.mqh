@@ -24,6 +24,8 @@
 #ifndef CONNECTION_GUARD_MQH
 #define CONNECTION_GUARD_MQH
 
+#include "../Core/TradeGate.mqh"   // P1.62: veredito unico de negociacao
+
 #include "../Core/Config.mqh"
 
 //==================================================
@@ -47,12 +49,11 @@ bool ConnTerminalUp()
 
 bool ConnAlgoAllowed()
 {
-   // Algor trading del terminal + del EA habilitado
-   if(MQLInfoInteger(MQL_TRADE_ALLOWED) == 0)
-      return false;
-   if(TerminalInfoInteger(TERMINAL_TRADE_ALLOWED) == 0)
-      return false;
-   return true;
+   // P1.62 (v1.2.76): antes este teste usava 2 dos 5 bits (MQL+TERMINAL) e
+   // ignorava conta e broker - podia responder "pode negociar" com a conta
+   // bloqueada, ou seja, um veredito diferente do portao de OnTick. Passa a
+   // ler a fonte unica (Core/TradeGate.mqh).
+   return CTradeGate::Ok();
 }
 
 //==================================================

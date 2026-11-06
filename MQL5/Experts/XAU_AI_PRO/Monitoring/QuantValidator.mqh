@@ -247,7 +247,7 @@ void QuantSaveReport()
 
    // ----- TXT -----
    int h = FileOpen("QuantValidationReport.txt",
-      FILE_COMMON | FILE_READ | FILE_WRITE | FILE_TXT | FILE_ANSI);
+      FILE_COMMON | FILE_READ | FILE_WRITE | FILE_TXT | FILE_ANSI | FILE_SHARE_READ | FILE_SHARE_WRITE);
    if(h != INVALID_HANDLE)
    {
       FileSeek(h, 0, SEEK_END);

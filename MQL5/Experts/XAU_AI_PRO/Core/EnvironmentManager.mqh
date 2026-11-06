@@ -34,14 +34,9 @@ bool InitEnvironment()
    IsDemoAccount=
       AccountInfoInteger(ACCOUNT_TRADE_MODE)==ACCOUNT_TRADE_MODE_DEMO;
 
-   Print("==============================");
-   Print("ENVIRONMENT");
-   Print("Tester       : ",IsTester);
-   Print("Optimization : ",IsOptimization);
-   Print("Visual Mode  : ",IsVisualMode);
-   Print("Real Account : ",IsRealAccount);
-   Print("Demo Account : ",IsDemoAccount);
-   Print("==============================");
+   if(LogInicioDetalhe()) Print("[ENV] tester=",(IsTester?"1":"0")," otimizacao=",(IsOptimization?"1":"0"),
+         " visual=",(IsVisualMode?"1":"0")," conta_real=",(IsRealAccount?"1":"0"),
+         " conta_demo=",(IsDemoAccount?"1":"0"));
 
    return true;
 

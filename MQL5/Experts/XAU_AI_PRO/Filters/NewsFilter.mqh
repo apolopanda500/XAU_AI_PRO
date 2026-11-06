@@ -1,10 +1,12 @@
-// XAU_AI_PRO v1.2.9 - NEWS FILTER PROFESSIONAL (Etapa 6 + calendario MT5 nativo)
+// XAU_AI_PRO v1.2.51 - NEWS FILTER PROFESSIONAL (Etapa 6 + calendario MT5 nativo)
 #ifndef NEWSFILTER_MQH
 #define NEWSFILTER_MQH
 
 #include "../Core/Config.mqh"
 #include "../Monitoring/AuditLog.mqh"     // self-contained: AuditLogSimple
 #include "../Monitoring/EventEmitter.mqh" // self-contained: EventNewsBlock
+// v1.2.51 (P1.26): DiagGate para abafar o erro de calendario do tester.
+#include "../Monitoring/DiagGate.mqh"
 
 //==================================================
 // ESTADOS EXPLICITOS DO FILTRO
@@ -33,7 +35,19 @@ int             g_newsEventsInWindow = 0;
 int             g_newsLastError      = 0;
 string          g_newsBlockReason    = "";   // ETAPA 11: motivo do bloqueo (audit)
 datetime        g_newsBlockLogAt     = 0;    // ETAPA 11: cooldown de log do bloqueo
-int             g_newsNextImportance = 0;    // ETAPA 11: impacto do próximo evento (1-3)
+int             g_newsNextImportance = 0;
+
+//---- estado de OPERAR NOTICIA (29/10/2026)
+int    g_newsCurImportance = 0;   // importancia do evento que abriu a janela
+
+// O modulo de noticias passa a existir se o FILTRO estiver ligado OU se o modo
+// de OPERAR noticia estiver ligado. Sem isto, um EA anexado com
+// EnableNewsFilter=false (estado atual do grafico) ignoraria a noticia por
+// completo, inclusive para operar.
+bool NewsModuleActive()
+{
+   return(EnableNewsFilter || EnableNewsTrading);
+}    // ETAPA 11: impacto do próximo evento (1-3)
 
 //==================================================
 // MOEDAS FX RECONHECIDAS NA AUTO-DERIVACAO
@@ -173,7 +187,7 @@ bool NewsRefreshWindow()
    if(now <= 0)
       now = TimeCurrent();
 
-   if(!EnableNewsFilter)
+   if(!NewsModuleActive())
    {
       g_newsState     = NEWS_CLEAR;
       g_newsLastCheck = now;
@@ -202,7 +216,27 @@ bool NewsRefreshWindow()
    if(total < 0)
    {
       g_newsLastError = GetLastError();
-      Print("[NEWS] Calendar error | Error=", g_newsLastError);
+
+      // v1.2.51 (P1.26): medido em 31/10/2026 no journal do tester: 121 076
+      // linhas "[NEWS] Calendar error | Error=4014" num unico run, 2,89% de
+      // todo o output. O codigo 4014 e ERR_FUNCTION_NOT_ALLOWED na tabela
+      // oficial de erros MQL5 - a chamada ao calendario nao e permitida
+      // dentro do Strategy Tester. E uma condicao PERMANENTE do teste e nao
+      // uma falha, por isso imprime-se uma vez e cala-se. Fora do tester
+      // qualquer outro erro continua visivel, abafado a 1 linha por 4 h.
+      if(g_newsLastError == 4014)
+      {
+         static bool avisou4014 = false;
+
+         if(!avisou4014)
+         {
+            avisou4014 = true;
+            Print("[NEWS] Calendario indisponivel no Strategy Tester (erro 4014 ERR_FUNCTION_NOT_ALLOWED) - filtro de noticias em fail-open");
+         }
+      }
+      else if(DiagGateAllow(_Symbol, "NEWS_CAL",
+                            IntegerToString(g_newsLastError), 14400))
+         Print("[NEWS] Calendar error | Error=", g_newsLastError);
 
       // Falha de calendario NAO bloqueia o EA (fail-open)
       g_newsState = NEWS_CLEAR;
@@ -216,6 +250,7 @@ bool NewsRefreshWindow()
    datetime        nextTime = 0;
    string          nextName = "";
    int             inWindow = 0;
+   int             curImp   = 0;
 
    for(int i=0; i<total; i++)
    {
@@ -249,6 +284,11 @@ bool NewsRefreshWindow()
       {
          if(newState != NEWS_BLOCK)
             newState = (now > t) ? NEWS_ACTIVE : NEWS_BLOCK;
+
+         // Importancia do evento que ABRIU a janela: e ela que decide se a
+         // noticia merece modo especial ou se e ruido de calendario.
+         if((int)ev.importance > curImp)
+            curImp = (int)ev.importance;
       }
       else
       if(inWarning && newState == NEWS_CLEAR)
@@ -269,6 +309,8 @@ bool NewsRefreshWindow()
    g_newsNextEventName  = nextName;
    
    g_newsEventsInWindow = inWindow;
+
+   g_newsCurImportance  = curImp;
 
    return true;
 }
@@ -352,28 +394,93 @@ bool NewsFilterActive()
    return IsNewsTime();
 }
 
-bool CanTradeNews()
+//==================================================
+// DECISAO UNICA DE NOTICIA (29/10/2026)
+//==================================================
+// false -> entrada BARRADA (NewsTradeMode=BLOCK ou modo BLOCK)
+// true  -> pode entrar, com os multiplicadores preenchidos:
+//   lotFactor  multiplica o LOTE
+//   riskMult   alarga a distancia de REFERENCIA (stop e orcamento do dia)
+//   tpMult     alarga o ALVO
+// Sem noticia, tudo fica em 1.0 e a entrada segue a regra normal.
+bool NewsTradeAllow(const string symbol, double &lotFactor, double &riskMult,
+                    double &tpMult, string &reason)
 {
+   lotFactor = 1.0;
+   riskMult  = 1.0;
+   tpMult    = 1.0;
+   reason    = "";
+
+   if(!NewsModuleActive())
+      return(true);
+
    NewsRefreshWindow();
 
-   if(g_newsState == NEWS_BLOCK || g_newsState == NEWS_ACTIVE)
+   if(g_newsState != NEWS_BLOCK && g_newsState != NEWS_ACTIVE)
+      return(true);
+
+   string detail = GetNewsBlockDetail(symbol);
+
+   // Bloqueio explicito: modo BLOCK, ou "operar noticia" desligado.
+   if(!EnableNewsTrading || NewsTradeMode == NEWS_TRADE_BLOCK)
    {
-      g_newsBlockReason = GetNewsBlockDetail(_Symbol);
-      Print("[NEWS] TRADE BLOCKED | ", _Symbol,
-            " | State=", EnumToString(g_newsState),
-            " | Reason=", g_newsBlockReason);
-      NewsLogBlock();
-      EventNewsBlock(_Symbol, g_newsBlockReason);  // ETAPA 15.6
-      return false;
+      reason = detail;
+      return(false);
    }
 
-   return true;
+   // Evento abaixo do impacto minimo: nao merece tratamento especial.
+   if(g_newsCurImportance > 0 && g_newsCurImportance < NewsTradeMinImpact)
+      return(true);
+
+   if(NewsTradeMode == NEWS_TRADE_FULL)
+   {
+      reason = detail;
+      return(true);
+   }
+
+   lotFactor = (NewsTradeLotFactor > 0.0) ? NewsTradeLotFactor : 1.0;
+   riskMult  = (NewsTradeRiskMult  > 0.0) ? NewsTradeRiskMult  : 1.0;
+   tpMult    = (NewsTradeTPMult    > 0.0) ? NewsTradeTPMult    : 1.0;
+   reason    = detail;
+
+   return(true);
+}
+
+bool CanTradeNews(const string symbol)
+{
+   double lotFactor = 1.0;
+   double riskMult  = 1.0;
+   double tpMult    = 1.0;
+   string why       = "";
+
+   if(NewsTradeAllow(symbol, lotFactor, riskMult, tpMult, why))
+      return(true);
+
+   g_newsBlockReason = why;
+
+   Print("[NEWS] TRADE BLOCKED | ", symbol,
+         " | State=", EnumToString(g_newsState),
+         " | Reason=", why);
+
+   NewsLogBlock();
+   EventNewsBlock(symbol, why);  // ETAPA 15.6
+
+   return(false);
+}
+
+bool CanTradeNews()
+{
+   return(CanTradeNews(_Symbol));
 }
 
 bool IsNewsBlocked()
 {
-   NewsRefreshWindow();
-   return (g_newsState == NEWS_BLOCK || g_newsState == NEWS_ACTIVE);
+   double lotFactor = 1.0;
+   double riskMult  = 1.0;
+   double tpMult    = 1.0;
+   string why       = "";
+
+   return(!NewsTradeAllow(_Symbol, lotFactor, riskMult, tpMult, why));
 }
 
 void PrintNewsStatus()
@@ -386,6 +493,9 @@ void PrintNewsStatus()
          " | Impact>=", NewsImpactThreshold,
          " | Window=", NewsMinutesBefore, "m/", NewsMinutesAfter, "m",
          " | Currencies=", NewsCurrencies,
+         " | Trading=", (EnableNewsTrading ? "ON" : "OFF"),
+         " | Mode=", EnumToString(NewsTradeMode),
+         " | ImpactNow=", g_newsCurImportance,
          " | Events=", g_newsEventsInWindow,
          (g_newsNextEventTime > 0
             ? " | Next=" + TimeToString(g_newsNextEventTime, TIME_DATE|TIME_MINUTES) + " " + g_newsNextEventName

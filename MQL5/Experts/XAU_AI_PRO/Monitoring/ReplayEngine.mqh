@@ -124,7 +124,8 @@ int ReplayOpenBest(
          FILE_COMMON |
          FILE_READ |
          FILE_CSV |
-         FILE_ANSI,
+         FILE_ANSI |
+         FILE_SHARE_READ | FILE_SHARE_WRITE,
          sep
       );
 
@@ -143,7 +144,8 @@ int ReplayOpenBest(
          path,
          FILE_READ |
          FILE_CSV |
-         FILE_ANSI,
+         FILE_ANSI |
+         FILE_SHARE_READ | FILE_SHARE_WRITE,
          sep
       );
 

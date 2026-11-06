@@ -33,13 +33,8 @@ bool InitBrokerInfo()
          ACCOUNT_CURRENCY
       );
 
-   Print("==============================");
-   Print("BROKER INFORMATION");
-   Print("Company  : ",BrokerName);
-   Print("Terminal : ",BrokerCompany);
-   Print("Server   : ",BrokerServer);
-   Print("Currency : ",BrokerCurrency);
-   Print("==============================");
+   if(LogInicioDetalhe()) Print("[BROKER] corretora=",BrokerName," | terminal=",BrokerCompany,
+         " | servidor=",BrokerServer," | moeda=",BrokerCurrency);
 
    return true;
 }

@@ -1,9 +1,9 @@
-﻿// XAU_AI_PRO v1.2.9
+// XAU_AI_PRO v1.2.9
 #ifndef ADAPTIVEWEIGHTS_MQH
 #define ADAPTIVEWEIGHTS_MQH
 
 //==================================================
-// ADAPTIVE AI WEIGHTS ENGINE v1.2.0
+// ADAPTIVE AI WEIGHTS ENGINE v1.2.9
 //==================================================
 
 struct AdaptiveWeights

@@ -1,10 +1,10 @@
-﻿// XAU_AI_PRO v1.2.9
+// XAU_AI_PRO v1.2.9
 #ifndef DATASET_MQH
 #define DATASET_MQH
 
 //==================================================
 // XAU_AI_PRO ENTERPRISE DATASET
-// v1.2.0 — Ring Buffer + Export seguro
+// v1.2.9 — Ring Buffer + Export seguro
 //==================================================
 
 #define MAX_DATASET 100000
@@ -14,38 +14,38 @@
 //==================================================
 
 struct TradeData
-{
-   datetime time;
+  {
+   datetime          time;
 
-   string symbol;
+   string            symbol;
 
-   ENUM_TIMEFRAMES timeframe;
+   ENUM_TIMEFRAMES   timeframe;
 
-   int signal;
+   int               signal;
 
-   double price;
-   double volume;
-   double spread;
+   double            price;
+   double            volume;
+   double            spread;
 
-   double atr;
-   double adx;
-   double rsi;
+   double            atr;
+   double            adx;
+   double            rsi;
 
-   double volatility;
-   double trend;
+   double            volatility;
+   double            trend;
 
-   double ai_score;
-   double ai_probability;
+   double            ai_score;
+   double            ai_probability;
 
-   double execution_score;
+   double            execution_score;
 
-   double sl;
-   double tp;
+   double            sl;
+   double            tp;
 
-   double profit;
+   double            profit;
 
-   bool result;
-};
+   bool              result;
+  };
 
 //==================================================
 // MEMÓRIA
@@ -61,21 +61,27 @@ static int LastDatasetIndex  = -1;
 // INIT
 //==================================================
 
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 void DatasetInit()
-{
+  {
    ArrayResize(Dataset, MAX_DATASET);
 
    DatasetCount      = 0;
    DatasetWriteIndex = 0;
    LastDatasetIndex  = -1;
-}
+  }
 
 //==================================================
 // PRÓXIMO SLOT
 //==================================================
 
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 int DatasetNext()
-{
+  {
    int index = DatasetWriteIndex;
 
    DatasetWriteIndex++;
@@ -87,12 +93,15 @@ int DatasetNext()
       DatasetCount++;
 
    return index;
-}
+  }
 
 //==================================================
 // ADICIONAR REGISTRO
 //==================================================
 
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 int AddToDataset(
    string symbol,
    ENUM_TIMEFRAMES tf,
@@ -111,7 +120,7 @@ int AddToDataset(
    double sl,
    double tp
 )
-{
+  {
    int id = DatasetNext();
 
    Dataset[id].time = TimeCurrent();
@@ -147,17 +156,20 @@ int AddToDataset(
    LastDatasetIndex = id;
 
    return id;
-}
+  }
 
 //==================================================
 // ATUALIZA RESULTADO
 //==================================================
 
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 void UpdateDatasetResult(
    int index,
    double profit
 )
-{
+  {
    if(index < 0)
       return;
 
@@ -167,46 +179,55 @@ void UpdateDatasetResult(
    Dataset[index].profit = profit;
 
    Dataset[index].result = (profit > 0.0);
-}
+  }
 
 //==================================================
 // TOTAL DE REGISTROS
 //==================================================
 
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 int DatasetTotal()
-{
+  {
    return DatasetCount;
-}
+  }
 
 //==================================================
 // WIN RATE
 //==================================================
 
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 double DatasetWinRate()
-{
+  {
    if(DatasetCount <= 0)
       return 0.0;
 
    int wins = 0;
 
    for(int i = 0; i < DatasetCount; i++)
-   {
+     {
       if(Dataset[i].result)
          wins++;
-   }
+     }
 
    return NormalizeDouble(
-      (double)wins * 100.0 / (double)DatasetCount,
-      2
-   );
-}
+             (double)wins * 100.0 / (double)DatasetCount,
+             2
+          );
+  }
 
 //==================================================
 // MÉDIA DE PROFIT
 //==================================================
 
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 double DatasetAverageProfit()
-{
+  {
    if(DatasetCount <= 0)
       return 0.0;
 
@@ -216,17 +237,20 @@ double DatasetAverageProfit()
       total += Dataset[i].profit;
 
    return NormalizeDouble(
-      total / (double)DatasetCount,
-      2
-   );
-}
+             total / (double)DatasetCount,
+             2
+          );
+  }
 
 //==================================================
 // MÉDIA AI SCORE
 //==================================================
 
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 double DatasetAverageAIScore()
-{
+  {
    if(DatasetCount <= 0)
       return 0.0;
 
@@ -236,48 +260,51 @@ double DatasetAverageAIScore()
       total += Dataset[i].ai_score;
 
    return NormalizeDouble(
-      total / (double)DatasetCount,
-      2
-   );
-}
+             total / (double)DatasetCount,
+             2
+          );
+  }
 
 //==================================================
 // EXPORT CSV
 //==================================================
 
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 void ExportDatasetCSV()
-{
+  {
    int total = MathMin(
-      DatasetCount,
-      MAX_DATASET
-   );
+                  DatasetCount,
+                  MAX_DATASET
+               );
 
    if(total <= 0)
-   {
+     {
       Print("Dataset vazio. Nada para exportar.");
       return;
-   }
+     }
 
    int file = FileOpen(
-      "Data\\trades_dataset.csv",
-      FILE_WRITE |
-      FILE_CSV |
-      FILE_ANSI
-   );
+                 "Data\\trades_dataset.csv",
+                 FILE_WRITE | FILE_SHARE_READ | FILE_SHARE_WRITE |
+                 FILE_CSV |
+                 FILE_ANSI
+              );
 
    if(file == INVALID_HANDLE)
-   {
+     {
       Print(
          "Dataset: erro ao abrir CSV. Code: ",
          GetLastError()
       );
 
       return;
-   }
+     }
 
-   //================================================
-   // HEADER
-   //================================================
+//================================================
+// HEADER
+//================================================
 
    FileWrite(
       file,
@@ -302,12 +329,12 @@ void ExportDatasetCSV()
       "Result"
    );
 
-   //================================================
-   // DADOS
-   //================================================
+//================================================
+// DADOS
+//================================================
 
    for(int i = 0; i < total; i++)
-   {
+     {
       FileWrite(
          file,
 
@@ -396,7 +423,7 @@ void ExportDatasetCSV()
 
          Dataset[i].result
       );
-   }
+     }
 
    FileFlush(file);
    FileClose(file);
@@ -406,14 +433,17 @@ void ExportDatasetCSV()
       total,
       " registros"
    );
-}
+  }
 
 //==================================================
 // LIMPAR DATASET
 //==================================================
 
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 void ClearDataset()
-{
+  {
    DatasetCount      = 0;
    DatasetWriteIndex = 0;
    LastDatasetIndex  = -1;
@@ -424,32 +454,39 @@ void ClearDataset()
    );
 
    for(int i = 0; i < MAX_DATASET; i++)
-   {
+     {
       ZeroMemory(
          Dataset[i]
       );
-   }
-}
+     }
+  }
 
 //==================================================
 // ÚLTIMO REGISTRO
 //==================================================
 
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 int DatasetLastIndex()
-{
+  {
    return LastDatasetIndex;
-}
+  }
 
 //==================================================
 // DATASET PRONTO
 //==================================================
 
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 bool DatasetIsReady()
-{
+  {
    return (
-      DatasetCount > 0 &&
-      LastDatasetIndex >= 0
-   );
-}
+             DatasetCount > 0 &&
+             LastDatasetIndex >= 0
+          );
+  }
 
 #endif
+//+------------------------------------------------------------------+

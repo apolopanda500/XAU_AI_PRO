@@ -127,7 +127,7 @@ void CBenchmarkEngine::Init()
    m_best_strategy = STRATEGY_TECHNICAL;
    m_initialized   = true;
 
-   Print("[BENCHMARK] BenchmarkEngine inicializado (4 estrategias)");
+   if(LogInicioDetalhe()) { Print("[BENCHMARK] BenchmarkEngine inicializado (4 estrategias)"); }
 }
 
 //--------------------------------------------------
@@ -377,10 +377,10 @@ string CBenchmarkEngine::GetComparisonSummary()
 void CBenchmarkEngine::LogComparison()
 {
    string summary = GetComparisonSummary();
-   Print("[BENCHMARK] " + summary);
+   if(AccountLogGatePodeImprimir("benchmark", 3600)) { Print("[BENCHMARK] " + summary); }
 
    // Grava resumo em arquivo (FILE_COMMON) para validacao observavel
-   int h = FileOpen("BenchmarkReport.txt", FILE_COMMON | FILE_READ | FILE_WRITE | FILE_TXT | FILE_ANSI);
+   int h = FileOpen("BenchmarkReport.txt", FILE_COMMON | FILE_READ | FILE_WRITE | FILE_TXT | FILE_ANSI | FILE_SHARE_READ | FILE_SHARE_WRITE);
    if(h != INVALID_HANDLE)
    {
       FileSeek(h, 0, SEEK_END);

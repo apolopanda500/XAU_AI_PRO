@@ -76,7 +76,7 @@ string CFG_ProfilePath(int idx, string name)
 bool CFG_FileSizePositive(string path)
 {
    if(!FileIsExist(path, FILE_COMMON)) return false;
-   int h = FileOpen(path, FILE_COMMON | FILE_READ | FILE_BIN);
+   int h = FileOpen(path, FILE_COMMON | FILE_READ | FILE_BIN | FILE_SHARE_READ | FILE_SHARE_WRITE);
    if(h == INVALID_HANDLE) return false;
    ulong sz = FileSize(h);
    FileClose(h);
@@ -118,7 +118,8 @@ void CConfigManager::Init()
    FillDefault(PROFILE_PROP,        "Prop Firm",    0.01, 80, 160, 40, 500, 5.0, 10, 0.5, 0.6, 75, true,  true,  false);
    FillDefault(PROFILE_REAL,        "Real Account", 0.02, 100, 200, 50, 500, 5.0, 10, 1.0, 0.6, 70, true,  true,  true);
 
-   Print("[CONFIG] ConfigManager v2.0 inicializado | perfis=", 7);
+   if(AccountLogGatePodeImprimir("config_init", 3600))
+      Print("[CONFIG] ConfigManager v2.0 inicializado | perfis=", 7);
 }
 
 //--------------------------------------------------
@@ -152,7 +153,8 @@ bool CConfigManager::SetProfile(ConfigProfile profile)
       return false;
    }
    m_current_profile = profile;
-   Print("[CONFIG] Perfil ativo: ", GetCurrentProfileName());
+   if(AccountLogGatePodeImprimir("config_ativo_" + GetCurrentProfileName(), 3600))
+      Print("[CONFIG] Perfil ativo: ", GetCurrentProfileName());
    return true;
 }
 
@@ -185,7 +187,7 @@ bool CConfigManager::SaveProfile(ConfigProfile profile)
    if(!ValidateProfile((int)profile, err)) { Print("[CONFIG] Save rejeitado: ", err); return false; }
 
    string path = CFG_ProfilePath((int)profile, m_profiles[(int)profile].name);
-   int h = FileOpen(path, FILE_COMMON | FILE_WRITE | FILE_TXT | FILE_ANSI);
+   int h = FileOpen(path, FILE_COMMON | FILE_WRITE | FILE_TXT | FILE_ANSI | FILE_SHARE_READ | FILE_SHARE_WRITE);
    if(h == INVALID_HANDLE) { Print("[CONFIG] Falha ao abrir p/ escrita: ", path); return false; }
 
    FileWrite(h, "name=" + m_profiles[(int)profile].name);
@@ -221,7 +223,7 @@ bool CConfigManager::LoadProfile(ConfigProfile profile)
    string path = CFG_ProfilePath((int)profile, m_profiles[(int)profile].name);
    if(!FileIsExist(path, FILE_COMMON)) return false;
 
-   int h = FileOpen(path, FILE_COMMON | FILE_READ | FILE_TXT | FILE_ANSI);
+   int h = FileOpen(path, FILE_COMMON | FILE_READ | FILE_TXT | FILE_ANSI | FILE_SHARE_READ | FILE_SHARE_WRITE);
    if(h == INVALID_HANDLE) return false;
 
    while(!FileIsEnding(h))
@@ -268,7 +270,7 @@ bool CConfigManager::ExportProfile(const string filename)
    int idx = (int)m_current_profile;
 
    string path = CONFIG_DIR + filename;
-   int h = FileOpen(path, FILE_COMMON | FILE_WRITE | FILE_TXT | FILE_ANSI);
+   int h = FileOpen(path, FILE_COMMON | FILE_WRITE | FILE_TXT | FILE_ANSI | FILE_SHARE_READ | FILE_SHARE_WRITE);
    if(h == INVALID_HANDLE) return false;
 
    FileWrite(h, "profile=" + m_profiles[idx].name);
@@ -297,7 +299,7 @@ bool CConfigManager::ImportProfile(const string filename, ConfigProfile profile)
    string path = CONFIG_DIR + filename;
    if(!FileIsExist(path, FILE_COMMON)) return false;
 
-   int h = FileOpen(path, FILE_COMMON | FILE_READ | FILE_TXT | FILE_ANSI);
+   int h = FileOpen(path, FILE_COMMON | FILE_READ | FILE_TXT | FILE_ANSI | FILE_SHARE_READ | FILE_SHARE_WRITE);
    if(h == INVALID_HANDLE) return false;
 
    while(!FileIsEnding(h))
@@ -342,6 +344,11 @@ string CConfigManager::GetStatus()
       m_profiles[idx].take_profit, m_profiles[idx].max_daily_dd, m_profiles[idx].max_trades_per_day);
 }
 
-void CConfigManager::LogStatus() { Print("[CONFIG] ", GetStatus()); }
+void CConfigManager::LogStatus()
+{
+   // v1.2.91 (02/11/2026) - P1.78: retrato igual nas 16 instancias.
+   if(AccountLogGatePodeImprimir("config", 3600))
+      Print("[CONFIG] ", GetStatus());
+}
 
 #endif // CONFIG_MANAGER_MQH

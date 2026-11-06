@@ -1,7 +1,7 @@
 //+------------------------------------------------------------------+
 //|                                              EventEmitter.mqh    |
 //|                                  Event Stream - ETAPA 15.6       |
-//|                                            XAU_AI_PRO v1.2.2     |
+//|                                            XAU_AI_PRO v1.2.9     |
 //+------------------------------------------------------------------+
 // ETAPA 15.6.1 / 15.6.2 - EVENT EMITTER (canal oficial de eventos)
 //
@@ -74,7 +74,7 @@ static string EV_FILE = "Data\\forward_test_events.csv";
 static bool   evInitialized = false;
 
 // Versao local (nao depende de VersionManager)
-#define EV_VERSION_STRING "1.2.0"
+#define EV_VERSION_STRING "1.2.9"
 
 // F4: estatisticas locais de escrita desta instancia
 int g_ev_written = 0;      // total de eventos gravados (esta instancia)

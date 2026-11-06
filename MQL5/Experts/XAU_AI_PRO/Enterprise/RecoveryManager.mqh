@@ -1,4 +1,4 @@
-﻿//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
 //| RecoveryManager.mqh                                              |
 //| XAU_AI_PRO                                                      |
 //| Auto Recovery System                                            |
@@ -211,7 +211,7 @@ void CRecoveryManager::Init()
       true;
 
 
-   Print(
+   if(LogInicioDetalhe()) Print(
       "[RECOVERY] RecoveryManager initialized"
    );
 }
@@ -598,47 +598,32 @@ string CRecoveryManager::GetHealthSummary()
       return "RecoveryManager not initialized";
 
 
-   string summary=
-      "=== RECOVERY STATUS ===\n";
+   // v1.2.87 (02/11/2026) - P1.74: MEDIDO 8 linhas por chamada (128 num
+   // reload de 16 graficos) e outras tantas dentro do [STATUS]. Passa a UMA:
+   // so aparece o que falha, porque "OK" repetido nao e informacao.
+   string summary = "";
 
+   for(int i = 0; i < m_module_count; i++)
+     {
+      if(m_modules[i].healthy && m_modules[i].failures == 0 && m_modules[i].error_message == "")
+         continue;
 
-   for(
-      int i=0;
-      i<m_module_count;
-      i++
-   )
-   {
-      string status=
-         m_modules[i].healthy
-         ?
-         "OK"
-         :
-         "FAIL";
+      if(summary != "")
+         summary += " | ";
 
+      summary += m_modules[i].name + "=" + (m_modules[i].healthy ? "OK" : "FAIL");
 
-      summary+=
-         StringFormat(
-            "  %s: %s | Failures: %d | Error: %s\n",
-            m_modules[i].name,
-            status,
-            m_modules[i].failures,
-            m_modules[i].error_message
-         );
-   }
+      if(m_modules[i].failures > 0)
+         summary += "(falhas=" + IntegerToString(m_modules[i].failures) + ")";
 
+      if(m_modules[i].error_message != "")
+         summary += "[" + m_modules[i].error_message + "]";
+     }
 
-   string overall=
-      EnumToString(
-         GetStatus()
-      );
+   if(summary == "")
+      summary = IntegerToString(m_module_count) + " modulos OK";
 
-
-   summary+=
-      StringFormat(
-         "Overall: %s",
-         overall
-      );
-
+   summary += " | Overall=" + EnumToString(GetStatus());
 
    return summary;
 }
@@ -784,10 +769,46 @@ void CRecoveryManager::ReportModuleStatus(
 
 void CRecoveryManager::LogHealth()
 {
-   Print(
-      "[RECOVERY]\n",
-      GetHealthSummary()
-   );
+   // v1.2.27 (30/10/2026) - P0.4/P1.3: este resumo ia ao journal A CADA TICK
+   // (Run() chama LogHealth() no fim). MEDIDO no backtest de 3 meses da
+   // v1.2.26: 2,8 GB de log, com ~1,1 M de linhas so deste bloco de 8 linhas.
+   // O log ficou maior que a medicao que ele deveria explicar.
+   // Agora sai quando o ESTADO MUDA ou a cada 300 s - nunca por tick.
+   static datetime       ultimoLog    = 0;
+   static RecoveryStatus ultimoStatus = RECOVERY_OK;
+
+   // v1.2.31 (30/10/2026) - P1.3: mesmo com o throttle de 300 s introduzido na
+   // v1.2.27 este resumo de 8 linhas continuava entre os maiores emissores.
+   // MEDIDO na v1.2.30, janela 17:17:30-17:22:30 (5 min, 16 graficos):
+   // 44 blocos "=== RECOVERY STATUS ===" (~3 500 linhas/hora). Com RECOVERY_OK
+   // o retrato periodico passa a 4 h; degradado continua a 300 s e mudanca de
+   // estado sai na hora. Perde-se o retrato de sistema saudavel, ganha-se
+   // journal legivel.
+   const int REC_LOG_OK_SEC  = 14400;
+   const int REC_LOG_BAD_SEC = 300;
+
+   RecoveryStatus atual = GetStatus();
+   datetime       agora = TimeCurrent();
+   int            recNeedSec = (atual == RECOVERY_OK ? REC_LOG_OK_SEC : REC_LOG_BAD_SEC);
+
+   if(atual == ultimoStatus && ultimoLog > 0 && (agora - ultimoLog) < recNeedSec)
+      return;
+
+   ultimoLog    = agora;
+   ultimoStatus = atual;
+
+   // P1.95 (v1.2.105): o MESMO estado de recuperacao nao se repete por grafico.
+   // MEDIDO no journal de 03/11 as 00:50 (janela do reload 00:49-00:51): 15 linhas
+   // "[RECOVERY] 6 modulos OK | Overall=RECOVERY_OK", uma por grafico, todas iguais.
+   // Mudanca de estado sai SEMPRE: estado OK sai 1x por SESSAO por conta
+   // (Monitoring\AccountLogGate.mqh, LogSessaoPodeImprimir) e estado degradado 1x/300 s
+   // por conta. Nenhuma decisao de recuperacao muda: muda quantas linhas vao ao journal.
+   bool recPodeImprimir = (atual != ultimoStatus)
+                          ? true
+                          : ((atual == RECOVERY_OK) ? LogSessaoPodeImprimir("recovery_ok")
+                                                    : AccountLogGatePodeImprimir("recovery_bad", REC_LOG_BAD_SEC));
+   if(recPodeImprimir)
+      Print("[RECOVERY] ", GetHealthSummary());
 }
 
 
