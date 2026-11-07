@@ -144,13 +144,28 @@ int ManualGuardState(string symbol,int sinal)
 }
 
 //==================================================
-// F2.2 (v1.2.180) - EXPOSICAO TOTAL DO EA (D-066)
+// F2.2 (v1.2.181) - EXPOSICAO TOTAL DA CONTA (D-067)
 //==================================================
-// Soma a margem exigida por todas as posicoes do EA (filtro por MagicNumber,
-// nunca por simbolo: o teto e da CONTA, nao do grafico). Devolve -1.0 quando
-// alguma leitura falha, para que o chamador possa falhar FECHADO em vez de
-// tratar "nao consegui medir" como "nao ha exposicao".
+// Margem EM USO da conta, lida de ACCOUNT_MARGIN. Fonte unica do servidor, sem
+// laco por posicao e sem MagicNumber, pelos dois motivos escritos em
+// Core/Config.mqh: o F2.8 nao pode fragmentar o teto em 13 tetos, e um simbolo
+// sem margem calculavel nao pode bloquear a conta inteira.
+// Devolve -1.0 apenas se o terminal nao publicar o valor, para o chamador
+// continuar a falhar FECHADO.
 double MargemUsadaEA()
+{
+   double margemConta = AccountInfoDouble(ACCOUNT_MARGIN);
+
+   if(margemConta < 0.0)
+      return(-1.0);
+
+   return(margemConta);
+}
+
+// Somatorio por posicao do MagicNumber, mantido SO como instrumento de medida:
+// publica a divergencia entre o que o servidor diz que a conta usa e o que as
+// posicoes deste magic justificam. NAO entra em nenhuma decisao.
+double MargemSomadaPosicoes()
 {
    double total = 0.0;
    bool   erro  = false;
@@ -194,7 +209,6 @@ double MargemUsadaEA()
 
    return(erro ? -1.0 : total);
 }
-
 bool ExposicaoDentroDoTeto(const string symbol)
 {
    if(!EnableExposureCap)
@@ -228,7 +242,7 @@ bool ExposicaoDentroDoTeto(const string symbol)
       {
          g_lastExpPrintLeitura = agoraLeitura;
          Print("[EXPOSURE CAP] ", symbol,
-               " | nao foi possivel medir a margem das posicoes abertas",
+               " | o terminal nao publica ACCOUNT_MARGIN",
                " | nova entrada recusada | fail-closed");
       }
       return(false);
@@ -250,6 +264,7 @@ bool ExposicaoDentroDoTeto(const string symbol)
             " | teto=", DoubleToString(teto, 2),
             " (", DoubleToString(MaxExposurePercent, 2), "% de ",
             DoubleToString(equity, 2), " )",
+            " | soma_posicoes_magic=", DoubleToString(MargemSomadaPosicoes(), 2),
             " | nova entrada recusada | desligue EnableExposureCap para ignorar");
    }
 

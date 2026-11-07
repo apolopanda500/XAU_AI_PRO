@@ -134,7 +134,7 @@ input int    MaxOpenPositions   = 50;
 // `MaxOpenPositions` e um tecto de CONTAGEM. Estas duas inputs medem MARGEM:
 // somam a margem exigida pelas posicoes do EA e comparam com o equity.
 //
-// CORRECCAO DE 06/11/2026 21:35 - a leitura inicial desta sessao ("nao existe
+// CORRECCAO DE 06/11/2026 21:28 - a leitura inicial desta sessao ("nao existe
 // limite de exposicao somada na conta") estava ERRADA. O CMD refutou-a com
 // codigo executavel, e eu verifiquei linha a linha:
 //   * `MaxTotalRiskPercent = 10.0`      -> Config.mqh:336
@@ -148,19 +148,24 @@ input int    MaxOpenPositions   = 50;
 // ele que manda na pratica e esta guarda praticamente nunca seria a primeira a
 // disparar.
 //
-// Por isso fica DESLIGADA por omissao: um segundo bloqueio NAO PROVADO sobre um
-// sistema que tem de comecar a operar e risco sem contrapartida, e o modo de
-// falha desta guarda (fail-closed) recusa entradas legitimas quando a medicao
-// de margem falha num simbolo exotico. Liga-se com EnableExposureCap=true e um
-// MaxExposurePercent dentro da banda 10%..50% autorizada pelo DONO (Q-065,
-// 06/11/2026 21:19).
+// v1.2.181 (D-067): a guarda passa a medir a MARGEM DA CONTA, lida de
+// ACCOUNT_MARGIN - valor que o servidor calcula e publica por conta - e nao a
+// soma das posicoes do MagicNumber. Duas objecoes registadas no canal ficam
+// fechadas por esta troca de fonte, e nenhuma delas era de estilo:
+//   (1) o somatorio por posicao filtrava por MagicNumber, portanto no dia em que
+//       o F2.8 der magic unico por grafico o teto FRAGMENTA-SE em 13 tetos de
+//       20% do capital e o limite deixa de existir na pratica (ponto (b) do CMD);
+//   (2) o somatorio por posicao chamava OrderCalcMargin por simbolo e devolvia
+//       -1 se UM exotico nao fosse calculavel, recusando a CONTA inteira por um
+//       simbolo (ponto (3b) do DELTA). ACCOUNT_MARGIN e uma leitura unica.
+// Por isso fica LIGADA por omissao: compara dois numeros publicados pelo
+// servidor (margem usada e equity) em vez de somar um calculo proprio.
 //
-// DEFEITO CONHECIDO, partilhado com o envelope existente: os dois somatorios
-// filtram por `MagicNumber`. Hoje os 13 graficos usam MagicNumber=2026001, logo
-// o somatorio ve as 13 instancias. Se o F2.8 der magic unico por grafico, o
-// limite FRAGMENTA-SE em 13 limites independentes. O F2.2 so fecha quando o
-// somatorio passar a ser da CONTA e nao do magic.
-input bool   EnableExposureCap  = false;
+// O RISCO ABERTO SOMADO (entrada -> SL) e limitado pelo envelope que JA existia
+// - MaxTotalRiskPercent / MaxTotalRiskOpenUsd / RiscoAbertoUSD(), recusado com
+// RISK_ENVELOPE_FULL - e esse NAO foi alterado por este patch: continua a
+// filtrar por MagicNumber e a correccao do filtro depende de decisao do CMD.
+input bool   EnableExposureCap  = true;
 input double MaxExposurePercent = 20.0;
 
 // v1.3.0 (Etapa 3): quando o risco configurado exige lote abaixo do
