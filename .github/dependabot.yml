@@ -1,19 +1,28 @@
 # ============================================================
-# COPIA INATIVA - NAO EDITAR AQUI
+# dependabot.yml - repo apolopanda500/XAU_AI_PRO
 #
-# O GitHub so le `.github/dependabot.yml` na RAIZ do repositorio
-# (apolopanda500/mql5). Este ficheiro vive em `Files/XAU_AI_PRO/`,
-# que nao e a raiz do repositorio e ainda por cima esta ignorado pelo
-# `.gitignore` (linha 84), logo nunca chegou ao GitHub:
-# era por isso que o Dependabot aparecia sem repositorio e sem
-# manifestos.
+# ESTE REPOSITORIO NAO TEM UPDATES ACTIVOS.
 #
-# Configuracao real, ja com os `directory` correctos para este repo:
-#   /.github/dependabot.yml        (raiz: npm backend, npm frontend,
-#                                   github-actions)
+# O Dependabot do GitHub exige que o ficheiro parseie para um OBJECTO.
+# Ate 06/11/2026 este ficheiro tinha apenas comentarios: em YAML isso e
+# `null`, e o Dependabot falhava na primeira linha com
+#   "Top level entity must be an Object, not a NilClass"
+# sem sequer chegar a ler a nota. O bloco `version`/`updates` abaixo existe
+# para o ficheiro ser valido; `updates: []` mantem o Dependabot inactivo,
+# como a nota sempre quis dizer.
 #
-# O historico da copia antiga (pip em `/`, npm em `/backend` e
-# `/frontend`, cargo em `/core` e `/frontend/src-tauri`) esta no
-# registo do ciclo de 03/11/2026: aqueles caminhos nunca existiram
-# na raiz deste repositorio.
+# POR QUE NAO HA UPDATES AQUI
+# A configuracao activa vive na raiz do repositorio apolopanda500/mql5
+# (`.github/dependabot.yml`), que e onde estao os manifestos versionados
+# (Files/XAU_AI_PRO/backend, Files/XAU_AI_PRO/frontend e github-actions).
+# Os caminhos usados no historico antigo (`/`, `/backend`, `/frontend`,
+# `/core`, `/frontend/src-tauri`) nunca existiram na raiz deste repo.
+#
+# ECOSSISTEMAS SEM MANIFESTO VERSIONADO, medidos com `git ls-files`:
+#   pip   -> requirements*.txt / pyproject.toml existem no disco mas nao
+#            estao versionados; configurar pip aqui voltaria a falhar.
+#   cargo -> core/Cargo.toml e frontend/src-tauri/Cargo.toml, mesmo caso.
+# Versionar o manifesto e o passo previo para activar cada ecossistema.
 # ============================================================
+version: 2
+updates: []
