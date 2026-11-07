@@ -65,8 +65,8 @@ class TestArtefatoQuandoExiste:
     # `@classmethod` e obrigatorio: fixture de escopo de classe definida como
     # metodo de instancia e deprecada no pytest 10, e cada teste receberia uma
     # instancia nova — o `subprocess` rodaria uma vez por teste.
-    @classmethod
     @pytest.fixture(scope="class")
+    @classmethod
     def resultado(cls) -> subprocess.CompletedProcess[str]:
         if not EXECUTAVEL.exists():
             pytest.skip(
