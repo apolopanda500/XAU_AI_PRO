@@ -143,6 +143,134 @@ int ManualGuardState(string symbol,int sinal)
    return -1;   // guarda ligada: qualquer posicao de fora bloqueia
 }
 
+//==================================================
+// F2.2 (v1.2.181) - EXPOSICAO TOTAL DA CONTA (D-067)
+//==================================================
+// Margem EM USO da conta, lida de ACCOUNT_MARGIN. Fonte unica do servidor, sem
+// laco por posicao e sem MagicNumber, pelos dois motivos escritos em
+// Core/Config.mqh: o F2.8 nao pode fragmentar o teto em 13 tetos, e um simbolo
+// sem margem calculavel nao pode bloquear a conta inteira.
+// Devolve -1.0 apenas se o terminal nao publicar o valor, para o chamador
+// continuar a falhar FECHADO.
+double MargemUsadaEA()
+{
+   double margemConta = AccountInfoDouble(ACCOUNT_MARGIN);
+
+   if(margemConta < 0.0)
+      return(-1.0);
+
+   return(margemConta);
+}
+
+// Somatorio por posicao do MagicNumber, mantido SO como instrumento de medida:
+// publica a divergencia entre o que o servidor diz que a conta usa e o que as
+// posicoes deste magic justificam. NAO entra em nenhuma decisao.
+double MargemSomadaPosicoes()
+{
+   double total = 0.0;
+   bool   erro  = false;
+
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0)
+         continue;
+
+      if(!PositionSelectByTicket(ticket))
+         continue;
+
+      if(PositionGetInteger(POSITION_MAGIC) != MagicNumber)
+         continue;
+
+      string sym   = PositionGetString(POSITION_SYMBOL);
+      double vol   = PositionGetDouble(POSITION_VOLUME);
+      double preco = PositionGetDouble(POSITION_PRICE_CURRENT);
+
+      if(preco <= 0.0)
+         preco = PositionGetDouble(POSITION_PRICE_OPEN);
+
+      if(sym == "" || vol <= 0.0 || preco <= 0.0)
+      {
+         erro = true;
+         continue;
+      }
+
+      ENUM_ORDER_TYPE lado = (PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY ? ORDER_TYPE_BUY : ORDER_TYPE_SELL);
+      double margem = 0.0;
+
+      if(!OrderCalcMargin(lado, sym, vol, preco, margem))
+      {
+         erro = true;
+         continue;
+      }
+
+      total += margem;
+   }
+
+   return(erro ? -1.0 : total);
+}
+bool ExposicaoDentroDoTeto(const string symbol)
+{
+   if(!EnableExposureCap)
+      return(true);
+
+   if(MaxExposurePercent <= 0.0)
+      return(true);
+
+   double equity = AccountInfoDouble(ACCOUNT_EQUITY);
+
+   if(equity <= 0.0)
+   {
+      static datetime g_lastExpPrintEquity = 0;
+      datetime agoraEq = TimeLocal();
+      if(agoraEq - g_lastExpPrintEquity >= 60)
+      {
+         g_lastExpPrintEquity = agoraEq;
+         Print("[EXPOSURE CAP] equity ilegivel (", DoubleToString(equity, 2),
+               ") | nova entrada recusada | fail-closed");
+      }
+      return(false);
+   }
+
+   double usado = MargemUsadaEA();
+
+   if(usado < 0.0)
+   {
+      static datetime g_lastExpPrintLeitura = 0;
+      datetime agoraLeitura = TimeLocal();
+      if(agoraLeitura - g_lastExpPrintLeitura >= 60)
+      {
+         g_lastExpPrintLeitura = agoraLeitura;
+         Print("[EXPOSURE CAP] ", symbol,
+               " | o terminal nao publica ACCOUNT_MARGIN",
+               " | nova entrada recusada | fail-closed");
+      }
+      return(false);
+   }
+
+   double teto = equity * MaxExposurePercent / 100.0;
+
+   if(usado < teto)
+      return(true);
+
+   static datetime g_lastExpPrint = 0;
+   datetime agoraExp = TimeLocal();
+
+   if(agoraExp - g_lastExpPrint >= 60)
+   {
+      g_lastExpPrint = agoraExp;
+      Print("[EXPOSURE CAP] ", symbol,
+            " | margem em uso=", DoubleToString(usado, 2),
+            " | teto=", DoubleToString(teto, 2),
+            " (", DoubleToString(MaxExposurePercent, 2), "% de ",
+            DoubleToString(equity, 2), " )",
+            " | soma_posicoes_magic=", DoubleToString(MargemSomadaPosicoes(), 2),
+            " | nova entrada recusada | desligue EnableExposureCap para ignorar");
+   }
+
+   return(false);
+}
+
 bool CanOpenPosition(string symbol)
 {
    if(HasPosition(symbol))
@@ -166,6 +294,9 @@ bool CanOpenPosition(string symbol)
 
       return false;
    }
+
+   if(!ExposicaoDentroDoTeto(symbol))
+      return false;
 
    if(CountPositions()>=MaxOpenPositions)
       return false;

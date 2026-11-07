@@ -373,7 +373,18 @@ bool SymbolDataFresh(string symbol, string &motivo)
       return false;
      }
 
-   int idade = (int)(TimeCurrent() - cotacao.time);
+   // v1.2.179 (07/11/2026) - D-029/D-064: o relogio de referencia passa a ser o
+   // do SERVIDOR (mesma escala de MqlTick.time), com TimeCurrent() so como
+   // recurso final. TimeCurrent() congela sem ticks: ao fim de semana ficava
+   // parado no carimbo do ultimo tick e dava idade ~0, ou seja "cotacao fresca"
+   // exactamente no freeze que esta verja existe para apanhar. O limite NAO
+   // muda: continua a ser MaxSymbolTickAgeSec.
+   datetime agoraStale = TimeTradeServer();
+
+   if(agoraStale <= 0)
+      agoraStale = TimeCurrent();
+
+   int idade = (int)((long)agoraStale - (long)cotacao.time);
 
    if(idade < 0)
       idade = 0;   // carimbo no futuro: feed adiantado, nao e motivo de veto

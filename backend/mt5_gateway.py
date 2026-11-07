@@ -3333,7 +3333,13 @@ def _cors_origin(origin: str | None) -> str | None:
     """
     if not origin:
         return None
-    return origin if origin in CORS_ORIGINS else None
+    # CWE-113 (alertas CodeQL #25/#26): um `Origin` com CR/LF injetaria
+    # cabecalhos extras na resposta. O valor so pode ser uma das origens da
+    # allowlist, mas a remocao dos line breaks e feita ANTES da comparacao para
+    # que o CodeQL reconheca o saneamento (`str.replace("\n", "")` literal) e
+    # para que `"https://ok\nX-Evil: 1"` nunca chegue a comparacao intacta.
+    limpo = origin.replace("\n", "").replace("\r", "")
+    return limpo if limpo in CORS_ORIGINS else None
 
 
 def _rate_limit_for(is_command: bool) -> int:

@@ -61,8 +61,13 @@ RE_PROPERTY = re.compile(r'#property\s+version\s+"([^"]+)"')
 #      grupo e o teste abaixo so o aceita COM a constante na mesma chamada;
 #      sumir o Print inteiro continua reprovando (`achados` vazio).
 RE_PRINT_LITERAL = re.compile(r'Print\(\s*"[^"]*XAU_AI_PRO\s+v([0-9.]+)"')
+# A forma 2 aparece no EA como `Print("[START] XAU_AI_PRO v", EA_VERSION_STRING, ...)`:
+# a constante entra como ARGUMENTO da mesma chamada, e nao por concatenacao com
+# `+`. As duas formas dizem a versao no log; a regex aceita ambas desde 07/11/2026,
+# quando o EA passou a usar a lista de argumentos (mais barata e sem string
+# temporaria). Continua a exigir a constante na MESMA chamada.
 RE_PRINT_CONCAT = re.compile(
-    r'Print\(\s*"[^"]*XAU_AI_PRO\s+v"\s*\+\s*EA_VERSION_STRING'
+    r'Print\(\s*"[^"]*XAU_AI_PRO\s+v"\s*(?:\+|,)\s*EA_VERSION_STRING'
 )
 RE_EA_VERSION = re.compile(r'#define\s+EA_VERSION_STRING\s+"([^"]+)"')
 RE_MANIFEST_LITERAL = re.compile(r'FileWrite\([^)]*XAU_AI_PRO\s+v([0-9.]+)"', re.DOTALL)
@@ -125,10 +130,17 @@ def test_property_version_do_ea(versao):
     # produzindo "1.024" — que foi exatamente o erro da primeira versao.
     major, minor, patch = (versao.split(".") + ["0", "0"])[:3]
     casas = f"{int(minor)}{int(patch)}".ljust(3, "0")  # "24" -> "240"
+    # v1.2.181 (07/11/2026): o patch chegou aos 3 digitos e o esquema de 3 casas
+    # deixa de representar o produto ("1.2181" tem 4 casas). O EA usa a formula
+    # documentada em Enterprise/VersionManager.mqh - minor*100+patch - que da
+    # "1.381" e e o valor que o MT5 mostra na aba de propriedades. Aceita-se
+    # essa forma; a forma canonica de 3 casas continua valida para patch < 100.
+    formula = f"{int(major)}.{int(minor) * 100 + int(patch)}"
     aceitos = {
         versao,                                     # 1.2.4
         f"{int(major)}.{int(minor)}.{int(patch)}",   # 1.2.4
         f"{int(major)}.{casas}",                     # 1.240
+        formula,                                     # 1.381 (patch 3 digitos)
     }
     assert declarado in aceitos, (
         f'#property version "{declarado}" no .mq5 nao corresponde a VERSION="{versao}". '

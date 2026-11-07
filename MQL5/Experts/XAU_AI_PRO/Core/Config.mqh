@@ -128,6 +128,46 @@ input double MinFreeMargin      = 10.0;  // Margem livre minima (moeda da conta)
 input int    MaxTradesPerDay    = 100;
 input int    MaxOpenPositions   = 50;
 
+//==================================================
+// F2.2 (v1.2.180) - TETO DE EXPOSICAO EM MARGEM (D-066) - DESLIGADO
+//==================================================
+// `MaxOpenPositions` e um tecto de CONTAGEM. Estas duas inputs medem MARGEM:
+// somam a margem exigida pelas posicoes do EA e comparam com o equity.
+//
+// CORRECCAO DE 06/11/2026 21:28 - a leitura inicial desta sessao ("nao existe
+// limite de exposicao somada na conta") estava ERRADA. O CMD refutou-a com
+// codigo executavel, e eu verifiquei linha a linha:
+//   * `MaxTotalRiskPercent = 10.0`      -> Config.mqh:336
+//   * `MaxTotalRiskOpenUsd = 60.0`      -> Config.mqh:353
+//   * `RiscoAbertoUSD()` soma entrada->SL -> Config.mqh:1219
+//   * envelope = min(saldo*10%, 60 USD)  -> Config.mqh:1318-1322
+//   * recusa com `RISK_ENVELOPE_FULL`    -> ExecutionEngine.mqh:686-701
+// Ou seja: o RISCO ABERTO SOMADO ja era limitado. O que nao existia era uma
+// medida de MARGEM. Sao grandezas diferentes, mas o envelope existente e muito
+// mais apertado (60 USD de risco contra 2527 USD de margem a 20%), portanto e
+// ele que manda na pratica e esta guarda praticamente nunca seria a primeira a
+// disparar.
+//
+// v1.2.181 (D-067): a guarda passa a medir a MARGEM DA CONTA, lida de
+// ACCOUNT_MARGIN - valor que o servidor calcula e publica por conta - e nao a
+// soma das posicoes do MagicNumber. Duas objecoes registadas no canal ficam
+// fechadas por esta troca de fonte, e nenhuma delas era de estilo:
+//   (1) o somatorio por posicao filtrava por MagicNumber, portanto no dia em que
+//       o F2.8 der magic unico por grafico o teto FRAGMENTA-SE em 13 tetos de
+//       20% do capital e o limite deixa de existir na pratica (ponto (b) do CMD);
+//   (2) o somatorio por posicao chamava OrderCalcMargin por simbolo e devolvia
+//       -1 se UM exotico nao fosse calculavel, recusando a CONTA inteira por um
+//       simbolo (ponto (3b) do DELTA). ACCOUNT_MARGIN e uma leitura unica.
+// Por isso fica LIGADA por omissao: compara dois numeros publicados pelo
+// servidor (margem usada e equity) em vez de somar um calculo proprio.
+//
+// O RISCO ABERTO SOMADO (entrada -> SL) e limitado pelo envelope que JA existia
+// - MaxTotalRiskPercent / MaxTotalRiskOpenUsd / RiscoAbertoUSD(), recusado com
+// RISK_ENVELOPE_FULL - e esse NAO foi alterado por este patch: continua a
+// filtrar por MagicNumber e a correccao do filtro depende de decisao do CMD.
+input bool   EnableExposureCap  = true;
+input double MaxExposurePercent = 20.0;
+
 // v1.3.0 (Etapa 3): quando o risco configurado exige lote abaixo do
 // minimo do broker. true = opera no minimo (comportamento antigo,
 // risco real maior que o configurado). false = estrito, bloqueia.

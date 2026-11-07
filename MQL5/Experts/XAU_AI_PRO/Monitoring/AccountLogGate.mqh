@@ -45,6 +45,75 @@ bool LogSessaoPodeImprimir(const string tag)
 //| tag       : nome curto e estavel (ex. "tradeblock", "session")   |
 //| janelaSeg : segundos minimos entre dois prints da MESMA tag      |
 //+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//| v1.2.170 (06/11/2026) - P1.133                                   |
+//| GATE EM MEMORIA PARA O TESTER.                                   |
+//|                                                                  |
+//| MEDIDO: o P1.102 provou que o tester NAO pode escrever nos        |
+//| ficheiros de gate partilhados (gravava o tempo SIMULADO do job e  |
+//| envenenava o throttle da producao), e a correcao foi devolver     |
+//| SEMPRE true. O efeito colateral apareceu no run1 do B-031:        |
+//| Tester\logs\20261105.log com 1 399 481 linhas "[ATR] SEM LEITURA" |
+//| em 659,93 MB, e o B-031b a crescer ~16,5 MB/min ate 775 MB em 13  |
+//| minutos - o journal do tester passou a ser o consumidor n.1 de    |
+//| disco da maquina e a medicao ficou caríssima de fazer.            |
+//|                                                                  |
+//| Correcao: no tester o throttle passa a ser uma tabela EM MEMORIA  |
+//| por instancia, com a MESMA janela pedida pelo chamador. A primeira|
+//| emissao de cada tag no passe continua a sair; as seguintes so     |
+//| depois da janela. Zero ficheiros, zero escrita em FILE_COMMON,    |
+//| logo o P1.102 continua respeitado.                                |
+//|                                                                  |
+//| Isto decide APENAS se uma linha de diagnostico e escrita. Nenhum  |
+//| limite, lote, alvo, stop, spread, preco, regra de entrada ou de   |
+//| saida, ou parametro de risco passa por aqui.                      |
+//| Tabela cheia -> devolve true (fail-open): erro de log nunca       |
+//| esconde informacao.                                              |
+//+------------------------------------------------------------------+
+#define TESTER_GATE_MAX_TAGS 128
+
+bool TesterGatePodeImprimir(const string tag,const int janelaSeg)
+  {
+   static string s_tag[TESTER_GATE_MAX_TAGS];
+   static datetime s_ultimo[TESTER_GATE_MAX_TAGS];
+   static int s_usados = 0;
+
+   datetime agora = TimeCurrent();
+      // tempo SIMULADO do passe: e o que a janela deve medir dentro do tester
+   if(agora <= 0)
+      return(true);                     // relogio indisponivel: fail-open
+
+   for(int i = 0; i < s_usados; i++)
+     {
+      if(s_tag[i] != tag)
+         continue;
+
+      // agora < ultimo = o tempo recuou (troca de simbolo/periodo no passe):
+      // deixa passar uma vez, como o ramo de ficheiro da producao
+      if(agora < s_ultimo[i] || agora >= s_ultimo[i] + janelaSeg)
+        {
+         s_ultimo[i] = agora;
+         return(true);
+        }
+
+      return(false);
+     }
+
+   if(s_usados < TESTER_GATE_MAX_TAGS)
+     {
+      s_tag[s_usados]    = tag;
+      s_ultimo[s_usados] = agora;
+      s_usados++;
+     }
+
+   return(true);
+  }
+
+//+------------------------------------------------------------------+
+//| Devolve true se esta instancia deve imprimir a tag agora.        |
+//| tag       : nome curto e estavel (ex. "tradeblock", "session")   |
+//| janelaSeg : segundos minimos entre dois prints da MESMA tag      |
+//+------------------------------------------------------------------+
 bool AccountLogGatePodeImprimir(const string tag,const int janelaSeg)
   {
    if(janelaSeg<=0)
@@ -62,7 +131,7 @@ bool AccountLogGatePodeImprimir(const string tag,const int janelaSeg)
    // devolve SEMPRE true e deixa de escrever no ficheiro comum. A producao
    // recupera o throttle de 1x/hora por tag e por conta.
    if(MQLInfoInteger(MQL_TESTER))
-      return(true);
+      return(TesterGatePodeImprimir(tag,janelaSeg));
 
    string nome="XAU_AI_PRO\\loggate_"+tag+".bin";
       // P2.05: os 15 graficos do terminal abrem o MESMO ficheiro de gate em
