@@ -164,6 +164,73 @@ void ADXLogNoRead(string symbol, string motivo)
 }
 
 //==================================================
+// v1.2.175 (06/11/2026) - P2: HANDLE DE ADX QUE NUNCA AQUECE
+//
+// MEDIDO no journal de 06/11 as 15:22:00, grafico USDCNH H1, build v1.2.174:
+//   [ADX] SEM LEITURA | USDCNH | CopyBuffer failed | Error=4807 |
+//   BarsCalculated=-1 | tratado como neutro (fail-open)
+// O P1.91 acertou em tentar o CopyBuffer quando BarsCalculated devolve -1,
+// mas o handle criado nesta MESMA leitura ainda nao tem uma barra calculada:
+// o MT5 calcula o indicador de forma assincrona. A linha dizia "tratado como
+// neutro", que sugere evento passageiro, e a cache por simbolo do P1.85
+// NUNCA deitava fora uma entrada que nao aquecesse - logo um handle recusado
+// ficava preso ate ao fim da sessao e aquele simbolo ficava sem ADX para
+// sempre, com o veto do ADX_OK a ser fail-open silencioso. E a mesma
+// assinatura do [ATR] HANDLE MORTO (P1.118) e do 4807 do ATR (P1.135).
+//
+// Correcao minima, so de leitura de indicador:
+// (1) a primeira falha sem barras de cada simbolo passa a ser datada;
+// (2) se a MESMA falha durar ADX_STALE_RECREATE_SEC (120 s), a entrada sai
+//     da cache e a leitura seguinte cria handle novo, com uma linha
+//     [ADX] HANDLE MORTO que publica o erro e as barras calculadas;
+// (3) uma leitura com exito limpa a marca, logo o caminho normal nao muda;
+// (4) a linha publica se o handle e NOVO (a aquecer) ou se ja falhou antes,
+//     para a mensagem deixar de sugerir que o caso e sempre passageiro.
+// Nenhum limite, lote, alvo, stop, spread, preco, regra de entrada ou de
+// saida, ou parametro de risco foi alterado: muda de ONDE vem o ADX quando o
+// handle nao serve e a partir de quando se tenta outro handle.
+//==================================================
+#define ADX_STALE_RECREATE_SEC 120
+
+datetime ADXNoBarTrack(const string symbol,const bool limpar)
+  {
+   static string   sim[];
+   static datetime desde[];
+
+   int idx = -1;
+
+   for(int i = 0; i < ArraySize(sim); i++)
+      if(sim[i] == symbol)
+        {
+         idx = i;
+         break;
+        }
+
+   if(limpar)
+     {
+      if(idx >= 0)
+         desde[idx] = 0;
+      return 0;
+     }
+
+   if(idx < 0)
+     {
+      idx = ArraySize(sim);
+      ArrayResize(sim, idx + 1);
+      ArrayResize(desde, idx + 1);
+      sim[idx]   = symbol;
+      desde[idx] = 0;
+     }
+
+   datetime anterior = desde[idx];
+
+   if(anterior == 0)
+      desde[idx] = TimeLocal();   // primeira falha deste simbolo
+
+   return anterior;
+  }
+
+//==================================================
 // INIT
 //==================================================
 
@@ -366,6 +433,8 @@ double GetADX(string symbol)
 
    if(copied == 1)
    {
+      ADXNoBarTrack(symbol, true);   // v1.2.175 - P2: aqueceu, a marca de falha cai
+
       result = buffer[0];
 
       // v1.2.152 - P1.113: o ADX nao passa de 100. Um valor acima disso e
@@ -395,6 +464,28 @@ double GetADX(string symbol)
       int err = GetLastError();
 
       g_adxUnavailable++;
+      // v1.2.175 - P2: handle que nao aquece tem prazo. Sem isto a entrada
+      // ficava na cache para sempre e o simbolo nunca voltava a ter ADX.
+      datetime desdeAntes = ADXNoBarTrack(symbol, false);
+
+      if(desdeAntes > 0 && TimeLocal() >= desdeAntes + ADX_STALE_RECREATE_SEC)
+        {
+         ADXCacheDrop(symbol);
+
+         if(AccountLogGatePodeImprimir("adx_handle_morto_" + symbol, 3600))
+            Print("[ADX] HANDLE MORTO | ", symbol,
+                  " | sem barras ha ", IntegerToString((int)(TimeLocal() - desdeAntes)), " s",
+                  " | erro=", IntegerToString(err),
+                  " | barsCalc=", IntegerToString(calculadas),
+                  " | entrada removida da cache | grafico=", _Symbol);
+        }
+      else
+         if(desdeAntes == 0 && AccountLogGatePodeImprimir("adx_handle_novo_" + symbol, 21600))
+            Print("[ADX] HANDLE NOVO | ", symbol,
+                  " | erro=", IntegerToString(err),
+                  " | barsCalc=", IntegerToString(calculadas),
+                  " | handle criado nesta leitura: indicador a aquecer, sem valor por agora (fail-open) | grafico=", _Symbol);
+
       ADXLogNoRead(symbol, "CopyBuffer failed | Error=" + IntegerToString(err) + " | BarsCalculated=" + IntegerToString(calculadas));
 
       result = -1.0;

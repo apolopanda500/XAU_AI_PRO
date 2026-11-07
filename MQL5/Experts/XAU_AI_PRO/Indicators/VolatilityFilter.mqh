@@ -213,11 +213,13 @@ bool ATRCacheDropAllowed(string symbol)
 #define ATR_IDENTITY_MAX_FAIL  2
 #define ATR_IDENTITY_TOL_PCT   25.0
 #define ATR_VERIFY_SEC         300
+#define ATR_4807_DROP_SEC      900
 
 string   g_atrIdSymbol[ATR_SYMBOL_CACHE];
 int      g_atrIdFail[ATR_SYMBOL_CACHE];
 bool     g_atrIdRatesOnly[ATR_SYMBOL_CACHE];
 datetime g_atrIdStamp[ATR_SYMBOL_CACHE];
+datetime g_atrIdDrop[ATR_SYMBOL_CACHE];
 int      g_atrIdCount = 0;
 
 int ATRIdentitySlot(string symbol)
@@ -233,6 +235,7 @@ int ATRIdentitySlot(string symbol)
    g_atrIdFail[g_atrIdCount] = 0;
    g_atrIdRatesOnly[g_atrIdCount] = false;
    g_atrIdStamp[g_atrIdCount] = 0;
+   g_atrIdDrop[g_atrIdCount] = 0;
    g_atrIdCount++;
 
    return g_atrIdCount - 1;
@@ -281,6 +284,18 @@ void ATRIdentityFail(string symbol, double doHandle, double daSerie)
    if(g_atrIdFail[slot] < ATR_IDENTITY_MAX_FAIL)
       g_atrIdFail[slot]++;
 
+   // v1.2.173 - P1.137: FALHA PROVADA REVERIFICA JA NA LEITURA SEGUINTE.
+   //
+   // A marca de ATR_VERIFY_SEC existe para nao pagar um CopyRates em cada
+   // leitura. Mas depois de o desvio ser PROVADO, manter a marca significa
+   // continuar a entregar ao pipeline o valor do handle errado durante os
+   // 300 s seguintes - que e exactamente o que o P1.132 quis fechar. Com a
+   // marca a zero a leitura seguinte volta a conferir e, apos
+   // ATR_IDENTITY_MAX_FAIL falhas provadas (2 leituras), o simbolo cai em
+   // rates-only, em vez de esperar 10 minutos. Nenhum limite, lote, alvo,
+   // stop, spread, preco, RR ou regra de entrada ou de saida e tocado.
+   g_atrIdStamp[slot] = 0;
+
    if(g_atrIdFail[slot] >= ATR_IDENTITY_MAX_FAIL)
       g_atrIdRatesOnly[slot] = true;
 
@@ -298,6 +313,34 @@ void ATRIdentityReset()
    g_atrIdCount = 0;
 }
 
+// v1.2.172 - P1.135: handle recusado (4807) passa a ser RECRIADO.
+//
+// MEDIDO no B-031b (job 20260801_20261105, 06/11): o terminal responde
+// erro=4807 (ERR_INDICATOR_WRONG_HANDLE) e barsCalc=-1 ao MESMO handle em
+// todos os ticks, com barrasSerie=barrasGrafico e serieSync=1. Um handle que
+// o terminal declara ERRADO nao aquece com o tempo: ao contrario do ramo de
+// 'sem barras' do P1.108/P1.113, onde esperar e o comportamento certo, aqui
+// esperar deixa o simbolo dependente da serie para sempre. O P1.134 garante
+// que o ATR nao fica cego; este garante que o handle primario volta a existir.
+//
+// Carimbo por simbolo limita a recriacao a 1x/ATR_4807_DROP_SEC, para um
+// terminal que recusa sempre nao ser bombardeado com iATR no tester.
+// Nenhum limite, lote, alvo, stop, spread, preco, regra de entrada ou de
+// saida muda: muda apenas QUANDO a entrada da cache e descartada.
+bool ATRDropShouldForce(string symbol)
+{
+   int slot = ATRIdentitySlot(symbol);
+   if(slot < 0)
+      return false;
+
+   datetime agora = TimeCurrent();
+   if(g_atrIdDrop[slot] > 0 && agora - g_atrIdDrop[slot] < ATR_4807_DROP_SEC)
+      return false;
+
+   g_atrIdDrop[slot] = agora;
+   return true;
+}
+
 // ATR da propria serie do simbolo: True Range + suavizacao de Wilder.
 // Nao usa handle, logo nao pode ficar ligado a serie de outro instrumento.
 double ATRFromRates(string symbol, ENUM_TIMEFRAMES tf, int period)
@@ -306,7 +349,33 @@ double ATRFromRates(string symbol, ENUM_TIMEFRAMES tf, int period)
       return 0.0;
 
    MqlRates rates[];
-   int need = period * 3 + 3;
+   // v1.2.173 - P1.137: A JANELA DE AQUECIMENTO ERA CURTA DE MAIS.
+   //
+   // MEDIDO no journal do expert a 06/11 as 14:11:29, logo depois do reload
+   // do perfil: [ATR] IDENTIDADE ERRADA | XAUUSD | doHandle=15.890000 |
+   // daSerie=22.774173 e, no mesmo segundo, USDSGD | doHandle=0.000350 |
+   // daSerie=0.000511. Os dois desvios sao o MESMO racio (0.698 e 0.685) em
+   // instrumentos sem relacao nenhuma (ouro com duas casas, SGD com seis).
+   // Um handle preso noutra serie - que e o que o P1.132 procura - devolve o
+   // ATR do OURO dentro de um par de FX: racios de milhares, nunca 0.69. Um
+   // racio constante em simbolos diferentes e vies de CALCULO, nao troca de
+   // identidade; a comparacao do P1.132 estava a medir o aquecimento DESTA
+   // funcao em vez da identidade do handle.
+   //
+   // Causa: period*3+3 = 45 barras dao apenas 31 iteracoes de Wilder depois
+   // da semente SMA, logo o peso que resta a semente e (13/14)^31 = 10% e o
+   // valor depende do troco de 45 barras atras, nao do presente. O iATR usa a
+   // serie inteira e esta convergido. Numa sessao em que a volatilidade subiu,
+   // a semente antiga puxa o resultado para baixo do real; com o ATR a subir
+   // depressa, a semente puxa para cima - que e a direcao medida (daSerie >
+   // doHandle nos dois simbolos).
+   //
+   // Com period*20+10 = 290 barras o residuo da semente e (13/14)^275 ~ 1e-9,
+   // portanto a funcao passa a devolver o Wilder CONVERGIDO, que e a definicao
+   // do ATR e o que o handle devolve. Nenhum limite, lote, alvo, stop, spread,
+   // preco, RR, regra de entrada ou de saida muda: muda o valor de um
+   // indicador que estava a ser calculado com aquecimento insuficiente.
+   int need = period * 20 + 10;
    int copied = CopyRates(symbol, tf, 0, need, rates);
    if(copied < period + 2)
       return 0.0;
@@ -511,11 +580,17 @@ double GetATRInstance()
 //==================================================
 void ATRLogNoRead(string symbol, string motivo)
   {
+   // P1.133: o contador sobrevive ao throttle - a linha diz QUANTAS vezes
+   // o ramo disparou, nao so que disparou. Sem isto, com o gate a filtrar,
+   // a frequencia do defeito ficaria invisivel no journal.
+   static int s_ocorrSemLeitura = 0;
+   s_ocorrSemLeitura++;
    if(!AccountLogGatePodeImprimir("atr_no_read_" + symbol + "_" + IntegerToString((long)__DATETIME__), 3600))
       return;
 
    Print("[ATR] SEM LEITURA | ", symbol,
          " | ", motivo,
+         " | ocorrencias_instancia=", IntegerToString(s_ocorrSemLeitura),
          " | grafico=", _Symbol);
   }
 
@@ -604,6 +679,45 @@ double GetATR(string symbol)
       // aquecimento impede o indicador de aquecer.
       int copyErr=GetLastError();
       int barsCalcAgora=(int)BarsCalculated(handle);
+      // v1.2.172 - P1.135: 4807 e handle ERRADO, nao handle a aquecer. Deita
+      // fora a entrada da cache (no maximo 1x/ATR_4807_DROP_SEC por simbolo)
+      // para a leitura seguinte criar handle novo. A serie do P1.134 continua
+      // a servir o valor enquanto o handle nao volta.
+      if(copyErr == 4807 && ATRDropShouldForce(symbol))
+        {
+         ATRCacheDrop(symbol);
+
+         if(AccountLogGatePodeImprimir("atr_handle_recriado_" + symbol + "_" + IntegerToString((long)__DATETIME__), 3600))
+            Print("[ATR] HANDLE RECRIADO | ", symbol,
+                  " | erro=4807 (ERR_INDICATOR_WRONG_HANDLE) | barsCalc=", IntegerToString(barsCalcAgora),
+                  " | entrada antiga removida da cache | grafico=", _Symbol);
+        }
+
+
+      // v1.2.171 - P1.134: um handle recusado nao pode cegar o ATR.
+      // MEDIDO no B-031b a 06/11 00:26: no tester o handle 10 e recusado
+      // pelo terminal (erro=4807, barsCalc=-1) em todos os ticks depois da
+      // virada de dia simulada, com barrasSerie=barrasGrafico e serieSync=1.
+      // O P1.132 so mandava ler a serie DEPOIS de ATR_IDENTITY_MAX_FAIL
+      // falhas de IDENTIDADE, e essas so contam quando o CopyBuffer devolve
+      // valor: com o handle sempre recusado o simbolo nunca chegava ao
+      // rates-only e o ATR ficava em 0.0 para sempre (fail-closed). Aqui a
+      // serie do proprio simbolo passa a ser a primeira alternativa quando
+      // o handle falha, logo o ATR fica disponivel mesmo com handle morto.
+      // Nenhum limite, lote, alvo, stop, spread, preco ou regra de entrada
+      // ou de saida muda: muda de ONDE vem o ATR quando o handle nao serve.
+      double atrDaSerieAgora=ATRFromRates(symbol, (ENUM_TIMEFRAMES)Period(), VOLATILITY_ATR_PERIOD);
+      if(atrDaSerieAgora>0.0)
+        {
+         if(AccountLogGatePodeImprimir("atr_rates_ok_" + symbol + "_" + IntegerToString((long)__DATETIME__), 3600))
+            Print("[ATR] SERIE OK | ", symbol,
+                  " | atrSerie=", DoubleToString(atrDaSerieAgora, symbolDigits),
+                  " | handleRecusado=", IntegerToString(handle),
+                  " | barsCalc=", IntegerToString(barsCalcAgora),
+                  " | erro=", IntegerToString(copyErr),
+                  " | grafico=", _Symbol);
+         return NormalizeDouble(atrDaSerieAgora, symbolDigits);
+        }
       // v1.2.160 - P1.122: a falha passa a publicar a IDENTIDADE do handle.
       // MEDIDO no mestre USDCNH,H1 a 05/11 entre as 18:51:02 e as 19:07:18: a
       // MESMA instancia alterna [CENARIO] USDCNH | ATR%=0.03 (leitura boa) e

@@ -853,9 +853,7 @@ int AILearningImportHistory(int days)
    if(vistos>0)
       LearningMarkImportDone();
    else
-      Print(
-         "[LEARN] historico ainda nao disponivel | nova tentativa no proximo ciclo"
-      );
+      if(AccountLogGatePodeImprimir("learn_sem_hist", 3600)) Print("[LEARN] historico ainda nao disponivel | nova tentativa no proximo ciclo");   // P1.133: 1x/h por instancia no tester
 
    // v1.2.11 (29/10/2026): mostra SEMPRE o resultado da varredura.
    // Antes o resumo so saia quando havia deal novo; como a memoria ja tem

@@ -339,9 +339,9 @@ string CConfigManager::GetStatus()
 {
    if(!m_initialized) Init();
    int idx = (int)m_current_profile;
-   return StringFormat("Perfil: %s | Lot=%.2f | SL=%.0f | TP=%.0f | MaxDD=%.1f%% | Trades=%d",
+   return StringFormat("Perfil '%s' e CATALOGO de referencia e NAO entra em decisao (GetProfile sem consumidores) | referencia: Lot=%.2f SL=%.0f TP=%.0f MaxDD=%.1f%% Trades=%d | EM VIGOR: SL=%d pts TP=%d pts Trades/dia=%d MaxDD=%.1f%% Risk=%.1f%% MaxDailyLossUsd=%.1f",
       m_profiles[idx].name, m_profiles[idx].lot_size, m_profiles[idx].stop_loss,
-      m_profiles[idx].take_profit, m_profiles[idx].max_daily_dd, m_profiles[idx].max_trades_per_day);
+      m_profiles[idx].take_profit, m_profiles[idx].max_daily_dd, m_profiles[idx].max_trades_per_day, StopLossPoints, TakeProfitPoints, MaxTradesPerDay, MaxDrawdownPercent, RiskPercent, MaxDailyLossUsd);
 }
 
 void CConfigManager::LogStatus()

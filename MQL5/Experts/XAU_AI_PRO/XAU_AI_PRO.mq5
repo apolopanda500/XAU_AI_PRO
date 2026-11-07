@@ -19,7 +19,7 @@
 // A versao legivel ("1.2.27") vai na descricao do projeto (XAU_AI_PRO.mqproj),
 // tambem exibida na aba de propriedades. O build do projeto ja injeta essa
 // propriedade; repetir com `#property description` gera `warning 90`.
-#property version   "1.367"
+#property version   "1.380"
 
 #include <Trade/Trade.mqh>
 
@@ -37,6 +37,11 @@ CTrade trade;
 // P1.61 (v1.2.75): fonte unica de verdade das permissoes de negociacao.
 // Incluido logo apos Config, antes de qualquer modulo que possa negociar.
 #include "Core/TradeGate.mqh"
+// F2.1 (v1.2.176): kill switch do PLANO_10_10. Incluido DEPOIS de
+// <Trade/Trade.mqh> (usa CTrade) e de Monitoring/AccountLogGate.mqh (usa
+// AccountLogGatePodeImprimir), e antes de qualquer modulo que negocie.
+#include "Core/KillSwitch.mqh"
+#include "Core/StalenessGuard.mqh"
 // v1.2.42 (31/10/2026) P1.17: portao de diagnostico do journal. Incluido
 // logo apos Config para estar disponivel a TODOS os modulos seguintes
 // (StateMachine, RiskEngine, ExecutionEngine). Nao depende de inputs.
@@ -576,6 +581,16 @@ bool InitializeModules()
    CVersionManager::LogStatus();
 
 //------------------------------------------------
+// F2.1 (v1.2.176) - KILL SWITCH: estado no arranque
+//------------------------------------------------
+// Sem esta linha, um EA que arranca ARMADO (ficheiro esquecido de uma paragem
+// anterior) ficava calado a nao negociar e o operador procurava o defeito no
+// sitio errado. Publica sempre, mesmo quando LIVRE, porque "LIVRE" e a
+// informacao que autoriza confiar no silencio seguinte.
+   if(AccountLogGatePodeImprimir("killswitch_arranque", XAI_KS_LOG_SEC))
+      Print("[KILL SWITCH] estado no arranque | ", CKillSwitch::Estado());
+
+//------------------------------------------------
 // ETAPA MCP - SERVIDOR MCP (Model Context Protocol)
 //------------------------------------------------
    if(EnableMCPServer)
@@ -1005,6 +1020,14 @@ int OnInit()
    PeakEquity = AccountInfoDouble(ACCOUNT_EQUITY);
    // v1.2.10: recupera trades do dia, sequencia e PICO de equity do mesmo dia
    SessionStateRestore();
+//------------------------------------------------
+// F2.9 (v1.2.179) - FONTE UNICA do limite de frescura
+//------------------------------------------------
+// EnableStaleDataGuard/MaxSymbolTickAgeSec ja eram as inputs do
+// SymbolDataFresh() do MarketScanner. O guarda do OnTick/OnTimer passa a
+// ler as MESMAS, em vez de carregar 120 s escondidos no codigo: uma
+// pergunta, uma resposta. Sem esta chamada o guarda usa o valor de recurso.
+   CStalenessGuard::Configurar(EnableStaleDataGuard, MaxSymbolTickAgeSec);
    EventSetTimer(30);   // executa a cada 30 segundos
 
    SystemInitialized = true;
@@ -1178,6 +1201,22 @@ void OnTick()
 // Portao de negociacao (v1.2.75: 5 bits, fonte unica)
 //------------------------------------------------
 
+//------------------------------------------------
+// F2.1 (v1.2.176) - KILL SWITCH: precedencia sobre todos os portoes
+//------------------------------------------------
+// MEDIDO em 06/11/2026: nao existia neste EA nenhum interruptor accionavel
+// por uma pessoa (busca por KillSwitch|Halt|Freeze|Panic|EmergencyStop em toda
+// a arvore: zero ocorrencias). O PLANO_10_10 F2.1 exige-o e o GATE F2 e
+// bloqueante para conta real.
+// Este teste vem ANTES do portao de permissoes de proposito:
+//  (1) quem manda parar quer ver a PARAGEM como primeira causa no journal, e
+//      nao uma linha [TRADE BLOCK] que sugere que o problema e do terminal;
+//  (2) e o que torna o interruptor observavel enquanto o P0 mantem
+//      MQL_TRADE_ALLOWED=0 nos 13 graficos - sem isto, o kill switch ficaria
+//      atras de um portao fechado e nao se podia provar que funciona.
+   if(CKillSwitch::Verificar(MagicNumber, true))
+      return;
+
    ETradeGate tradeGate = CTradeGate::Evaluate();
 
    if(tradeGate != TG_OK)
@@ -1212,6 +1251,28 @@ void OnTick()
 // nao faz nada, e o operador acredita que parou o sistema quando nao parou.
 // Este bloco nao substitui os gates; e o interruptor que eles nao cobrem.
 //
+//------------------------------------------------
+// F2.9 (v1.2.178) - COTACAO VELHA NAO OPERA
+//------------------------------------------------
+// O portao de permissoes le TERMINAL_CONNECTED. Estar LIGADO ao servidor
+// nao e o mesmo que estar a RECEBER precos: um feed congelado, um simbolo
+// suspenso ou uma sessao que fechou deixam o bit a 1 e a ultima cotacao
+// parada. Decidir sobre um preco parado nao e operar, e adivinhar - e o
+// resultado e uma entrada com preco e spread de um mercado que ja nao
+// existe. Fail-closed: sem leitura de tick tambem nao opera.
+   if(CStalenessGuard::CotacaoVelha(_Symbol))
+     {
+      static datetime g_lastEventStale = 0;
+      datetime _agoraStale = TimeLocal();   // relogio do PC: avanca mesmo sem ticks
+      if(_agoraStale - g_lastEventStale >= 300)
+        {
+         if(AllowBlockPrint())
+            Print("[TRADE BLOCK] COTACAO VELHA | ", CStalenessGuard::Diagnostico(_Symbol), " | preco parado nao opera");
+         g_lastEventStale = _agoraStale;
+        }
+      return;
+     }
+
    if(!AutoTrade)
      {
       static datetime g_lastEventAutoTradeBlock = 0;
@@ -2133,6 +2194,58 @@ void OnTimer()
 //------------------------------------------------
 
    CSafetyManager::UpdateStats();
+
+//------------------------------------------------
+// F2.1 (v1.2.176) - KILL SWITCH tambem SEM TICK
+//------------------------------------------------
+// O OnTimer corre a cada 30 s e nao depende de cotacoes. MEDIDO em 06/11/2026
+// 23:59:58 (hora do servidor): sexta-feira, mercado fechado, journal do EA
+// parado as 18:58:59 locais. Um interruptor que so vivesse no OnTick estaria
+// morto exactamente no fim de semana, que e quando o operador tem tempo para
+// o accionar. Nao retorna: o timer tem de continuar a alimentar o
+// HealthMonitor (ver o comentario de P1.84 acima).
+   CKillSwitch::Verificar(MagicNumber, true);
+//------------------------------------------------
+// F2.9b (v1.2.179) - COTACAO VELHA: deteccao tambem SEM TICK
+//------------------------------------------------
+// O F2.9 decide no OnTick, porque e la que se decide operar - mas e
+// exactamente quando o feed morre que o OnTick deixa de correr. MEDIDO em
+// 07/11/2026 01:33 (sabado): 21/21 simbolos com cotacao velha (5590 s a
+// 30796 s) e ZERO linhas [TRADE BLOCK] no journal do EA, porque o guarda
+// nunca chegou a ser avaliado. Aqui, no timer de 30 s, publica-se a
+// TRANSICAO (congelou / voltou) e nao um aviso por ciclo: o estado muda
+// duas vezes por fim de semana, nao a cada 30 s.
+// Nao retorna: o timer tem de continuar a alimentar o HealthMonitor, a
+// ponte e o resto (mesma regra do F2.1 acima).
+   {
+    static bool     s_cotacaoVelhaPublicada = false;
+    static datetime s_cotacaoVelhaAviso     = 0;
+
+    bool cotacaoVelhaAgora = CStalenessGuard::CotacaoVelha(_Symbol);
+
+    if(cotacaoVelhaAgora && !s_cotacaoVelhaPublicada)
+      {
+       s_cotacaoVelhaPublicada = true;
+       s_cotacaoVelhaAviso     = TimeLocal();
+       Print("[TRADE BLOCK] COTACAO VELHA (timer) | ", CStalenessGuard::Diagnostico(_Symbol),
+             " | sem tick o OnTick nao corre: preco parado nao opera");
+      }
+    else if(cotacaoVelhaAgora && s_cotacaoVelhaAviso > 0 &&
+            (TimeLocal() - s_cotacaoVelhaAviso) >= 3600)
+      {
+       s_cotacaoVelhaAviso = TimeLocal();
+       Print("[TRADE BLOCK] COTACAO VELHA (timer, lembrete 1h) | ",
+             CStalenessGuard::Diagnostico(_Symbol), " | continua sem tick");
+      }
+    else if(!cotacaoVelhaAgora && s_cotacaoVelhaPublicada)
+      {
+       s_cotacaoVelhaPublicada = false;
+       s_cotacaoVelhaAviso     = 0;
+       Print("[TRADE BLOCK] COTACAO VOLTOU (timer) | ", CStalenessGuard::Diagnostico(_Symbol),
+             " | feed vivo outra vez, o OnTick volta a decidir");
+      }
+   }
+
 
 //------------------------------------------------
 // Atualizacao IA

@@ -128,6 +128,41 @@ input double MinFreeMargin      = 10.0;  // Margem livre minima (moeda da conta)
 input int    MaxTradesPerDay    = 100;
 input int    MaxOpenPositions   = 50;
 
+//==================================================
+// F2.2 (v1.2.180) - TETO DE EXPOSICAO EM MARGEM (D-066) - DESLIGADO
+//==================================================
+// `MaxOpenPositions` e um tecto de CONTAGEM. Estas duas inputs medem MARGEM:
+// somam a margem exigida pelas posicoes do EA e comparam com o equity.
+//
+// CORRECCAO DE 06/11/2026 21:35 - a leitura inicial desta sessao ("nao existe
+// limite de exposicao somada na conta") estava ERRADA. O CMD refutou-a com
+// codigo executavel, e eu verifiquei linha a linha:
+//   * `MaxTotalRiskPercent = 10.0`      -> Config.mqh:336
+//   * `MaxTotalRiskOpenUsd = 60.0`      -> Config.mqh:353
+//   * `RiscoAbertoUSD()` soma entrada->SL -> Config.mqh:1219
+//   * envelope = min(saldo*10%, 60 USD)  -> Config.mqh:1318-1322
+//   * recusa com `RISK_ENVELOPE_FULL`    -> ExecutionEngine.mqh:686-701
+// Ou seja: o RISCO ABERTO SOMADO ja era limitado. O que nao existia era uma
+// medida de MARGEM. Sao grandezas diferentes, mas o envelope existente e muito
+// mais apertado (60 USD de risco contra 2527 USD de margem a 20%), portanto e
+// ele que manda na pratica e esta guarda praticamente nunca seria a primeira a
+// disparar.
+//
+// Por isso fica DESLIGADA por omissao: um segundo bloqueio NAO PROVADO sobre um
+// sistema que tem de comecar a operar e risco sem contrapartida, e o modo de
+// falha desta guarda (fail-closed) recusa entradas legitimas quando a medicao
+// de margem falha num simbolo exotico. Liga-se com EnableExposureCap=true e um
+// MaxExposurePercent dentro da banda 10%..50% autorizada pelo DONO (Q-065,
+// 06/11/2026 21:19).
+//
+// DEFEITO CONHECIDO, partilhado com o envelope existente: os dois somatorios
+// filtram por `MagicNumber`. Hoje os 13 graficos usam MagicNumber=2026001, logo
+// o somatorio ve as 13 instancias. Se o F2.8 der magic unico por grafico, o
+// limite FRAGMENTA-SE em 13 limites independentes. O F2.2 so fecha quando o
+// somatorio passar a ser da CONTA e nao do magic.
+input bool   EnableExposureCap  = false;
+input double MaxExposurePercent = 20.0;
+
 // v1.3.0 (Etapa 3): quando o risco configurado exige lote abaixo do
 // minimo do broker. true = opera no minimo (comportamento antigo,
 // risco real maior que o configurado). false = estrito, bloqueia.

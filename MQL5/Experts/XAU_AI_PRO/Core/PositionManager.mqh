@@ -143,6 +143,119 @@ int ManualGuardState(string symbol,int sinal)
    return -1;   // guarda ligada: qualquer posicao de fora bloqueia
 }
 
+//==================================================
+// F2.2 (v1.2.180) - EXPOSICAO TOTAL DO EA (D-066)
+//==================================================
+// Soma a margem exigida por todas as posicoes do EA (filtro por MagicNumber,
+// nunca por simbolo: o teto e da CONTA, nao do grafico). Devolve -1.0 quando
+// alguma leitura falha, para que o chamador possa falhar FECHADO em vez de
+// tratar "nao consegui medir" como "nao ha exposicao".
+double MargemUsadaEA()
+{
+   double total = 0.0;
+   bool   erro  = false;
+
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0)
+         continue;
+
+      if(!PositionSelectByTicket(ticket))
+         continue;
+
+      if(PositionGetInteger(POSITION_MAGIC) != MagicNumber)
+         continue;
+
+      string sym   = PositionGetString(POSITION_SYMBOL);
+      double vol   = PositionGetDouble(POSITION_VOLUME);
+      double preco = PositionGetDouble(POSITION_PRICE_CURRENT);
+
+      if(preco <= 0.0)
+         preco = PositionGetDouble(POSITION_PRICE_OPEN);
+
+      if(sym == "" || vol <= 0.0 || preco <= 0.0)
+      {
+         erro = true;
+         continue;
+      }
+
+      ENUM_ORDER_TYPE lado = (PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY ? ORDER_TYPE_BUY : ORDER_TYPE_SELL);
+      double margem = 0.0;
+
+      if(!OrderCalcMargin(lado, sym, vol, preco, margem))
+      {
+         erro = true;
+         continue;
+      }
+
+      total += margem;
+   }
+
+   return(erro ? -1.0 : total);
+}
+
+bool ExposicaoDentroDoTeto(const string symbol)
+{
+   if(!EnableExposureCap)
+      return(true);
+
+   if(MaxExposurePercent <= 0.0)
+      return(true);
+
+   double equity = AccountInfoDouble(ACCOUNT_EQUITY);
+
+   if(equity <= 0.0)
+   {
+      static datetime g_lastExpPrintEquity = 0;
+      datetime agoraEq = TimeLocal();
+      if(agoraEq - g_lastExpPrintEquity >= 60)
+      {
+         g_lastExpPrintEquity = agoraEq;
+         Print("[EXPOSURE CAP] equity ilegivel (", DoubleToString(equity, 2),
+               ") | nova entrada recusada | fail-closed");
+      }
+      return(false);
+   }
+
+   double usado = MargemUsadaEA();
+
+   if(usado < 0.0)
+   {
+      static datetime g_lastExpPrintLeitura = 0;
+      datetime agoraLeitura = TimeLocal();
+      if(agoraLeitura - g_lastExpPrintLeitura >= 60)
+      {
+         g_lastExpPrintLeitura = agoraLeitura;
+         Print("[EXPOSURE CAP] ", symbol,
+               " | nao foi possivel medir a margem das posicoes abertas",
+               " | nova entrada recusada | fail-closed");
+      }
+      return(false);
+   }
+
+   double teto = equity * MaxExposurePercent / 100.0;
+
+   if(usado < teto)
+      return(true);
+
+   static datetime g_lastExpPrint = 0;
+   datetime agoraExp = TimeLocal();
+
+   if(agoraExp - g_lastExpPrint >= 60)
+   {
+      g_lastExpPrint = agoraExp;
+      Print("[EXPOSURE CAP] ", symbol,
+            " | margem em uso=", DoubleToString(usado, 2),
+            " | teto=", DoubleToString(teto, 2),
+            " (", DoubleToString(MaxExposurePercent, 2), "% de ",
+            DoubleToString(equity, 2), " )",
+            " | nova entrada recusada | desligue EnableExposureCap para ignorar");
+   }
+
+   return(false);
+}
+
 bool CanOpenPosition(string symbol)
 {
    if(HasPosition(symbol))
@@ -166,6 +279,9 @@ bool CanOpenPosition(string symbol)
 
       return false;
    }
+
+   if(!ExposicaoDentroDoTeto(symbol))
+      return false;
 
    if(CountPositions()>=MaxOpenPositions)
       return false;
