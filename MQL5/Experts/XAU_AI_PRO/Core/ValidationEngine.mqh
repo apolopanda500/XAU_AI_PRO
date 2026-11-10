@@ -363,7 +363,11 @@ bool ValidateTrade(
       // por que, senao a permissao parece falha de filtro. O motivo carrega
       // "OK" de proposito (nao e um veto, nao deve poluir
       // g_validationLastBlock).
-      if(StringFind(trendWhy, "contramao PERMITIDA") == 0)
+      // v1.2.186 - P1.2339: o prefixo era "contramao PERMITIDA" e a folga da
+      // Q-079/B publica "contramao dentro da folga...". Resultado: o veto era
+      // impresso e a PERMISSAO nao, logo a unica autorizacao nova do build era
+      // invisivel no journal. "contramao" cobre as duas.
+      if(StringFind(trendWhy, "contramao") == 0)
       {
          if(ValidationLogAllowed(symbol, "TREND CONTRA OK"))
             Print(

@@ -25,6 +25,15 @@
 // PROTOTYPES
 //==================================================
 
+// v1.2.186 - P1.2341: selo da ultima leitura de IA (ver GetAIConfidence).
+bool g_aiLeituraReal = false;
+
+// Verdadeiro quando a ultima GetAIConfidence leu o modelo e nao o fallback.
+bool AILeituraReal()
+{
+   return(g_aiLeituraReal);
+}
+
 double GetAIConfidence(int signal,string symbol="");
 bool   AITradeAllowed(string symbol="");
 int    GetAIEngineSignal(string symbol="");
@@ -124,6 +133,11 @@ double GetAIConfidence(int signal,string symbol="")
    // tambem com IA real a responder, ele fechava o gate para sempre (ver
    // o bloco abaixo).
    bool aiReal = (LoadAIPrediction(symbol) && AI_Signal!="UNAVAILABLE");
+
+   // v1.2.186 - P1.2341: o piso de score e condicional (D-088 #5). Este selo
+   // diz se a ULTIMA leitura veio mesmo do modelo, para o DecisionEngine poder
+   // escolher entre MinMarketScore e MinMarketScoreNoAI sem adivinhar.
+   g_aiLeituraReal = aiReal;
 
    if(aiReal)
    {

@@ -664,8 +664,63 @@ double GetATR(string symbol)
             double desvio=MathAbs(result-atrDaSerie)/atrDaSerie*100.0;
             if(desvio>ATR_IDENTITY_TOL_PCT)
               {
-               ATRIdentityFail(symbol, result, atrDaSerie);
-               result=NormalizeDouble(atrDaSerie, symbolDigits);
+               //================================================
+               // v1.2.183 (07/11/2026) - P1.137
+               // A IDENTIDADE ERRADA ESCOLHIA O LADO ERRADO
+               //================================================
+               // MEDIDO no reload das 00:07:12 e 00:07:38 de 07/11, build
+               // v1.2.182, conta 113568614:
+               //   [ATR] IDENTIDADE ERRADA | USDCLP | doHandle=4.315000 |
+               //        daSerie=203.576255 | falhas=1 | usaHandleAgora=SIM
+               //   [ATR] LEITURA SUSPEITA | USDCLP | ATR=203.576300 |
+               //        preco=971.0500 | ATR%=20.96
+               //   [ATR] IDENTIDADE ERRADA | USDCOP | doHandle=14.780000 |
+               //        daSerie=73950.936209 | falhas=1 | usaHandleAgora=SIM
+               //   [ATR] LEITURA SUSPEITA | USDCOP | ATR=73950.940000 |
+               //        preco=3251.56 | ATR%=2274.32
+               // O handle dava o ATR PLAUSIVEL (4.315 sobre 971.05 = 0.44%;
+               // 14.78 sobre 3251.56 = 0.45%) e a serie dava o impossivel
+               // (20.96% e 2274.32%). A regra existente assumia sempre que o
+               // handle era o culpado e substituia-o pelo valor da serie, ou
+               // seja escolhia o lado errado exactamente nos dois simbolos.
+               // Pior: ATRIdentityFail contava a falha e, apos
+               // ATR_IDENTITY_MAX_FAIL=2 leituras, ATRRatesOnly(symbol) ficava
+               // verdadeiro para o resto do build - o simbolo passava a ler a
+               // serie errada para sempre e a guarda de plausibilidade
+               // devolvia 0.0 em cada ciclo: ATR permanentemente sem leitura.
+               // CORRECCAO: quando a serie e fisicamente impossivel (> 
+               // ATR_MAX_PLAUSIBLE_PCT do preco) ela nao pode ser a leitura
+               // certa. Nesse caso mantem-se o valor do handle, a falha NAO e
+               // contada (ATRIdentityClear) e a escolha fica publicada uma vez
+               // por simbolo por build. Quando a serie e plausivel, o
+               // comportamento anterior mantem-se intacto: adopta-se a serie
+               // e conta-se a falha. Nenhum limite, lote, stop, alvo, spread,
+               // preco, regra de entrada ou de saida muda: muda de ONDE vem o
+               // ATR quando as duas fontes discordam e uma delas e absurda.
+               double precoRef = SymbolInfoDouble(symbol, SYMBOL_BID);
+
+               bool seriePlausivel = true;
+
+               if(precoRef > 0.0)
+                  seriePlausivel = ((atrDaSerie / precoRef) * 100.0 <= ATR_MAX_PLAUSIBLE_PCT);
+
+               if(!seriePlausivel)
+                 {
+                  ATRIdentityClear(symbol);
+
+                  if(AccountLogGatePodeImprimir("atr_id_serie_maluca_" + symbol + "_" + IntegerToString((long)__DATETIME__), 3600))
+                     Print("[ATR] IDENTIDADE | ", symbol,
+                           " | serie impossivel descartada | daSerie=", DoubleToString(atrDaSerie, symbolDigits),
+                           " | ATR%=", DoubleToString((atrDaSerie / precoRef) * 100.0, 2),
+                           " | limite=", DoubleToString(ATR_MAX_PLAUSIBLE_PCT, 2), "%",
+                           " | mantido doHandle=", DoubleToString(result, symbolDigits),
+                           " | grafico=", _Symbol);
+                 }
+               else
+                 {
+                  ATRIdentityFail(symbol, result, atrDaSerie);
+                  result=NormalizeDouble(atrDaSerie, symbolDigits);
+                 }
               }
             else
                ATRIdentityClear(symbol);

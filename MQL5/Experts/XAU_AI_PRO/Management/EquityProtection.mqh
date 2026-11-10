@@ -127,6 +127,21 @@ Print(
 DoubleToString(drawdown, 2),
 "%"
 );
+
+// Q-025 (v1.2.182) - CKillSwitch::ArmarAutomatico estava implementado em
+// Core/KillSwitch.mqh:227 e tinha ZERO chamadores: um controlo sem gatilho.
+// Passa a ser accionado no primeiro aviso de capital que o EA ja publica
+// (0,8 x MaxDrawdownPercent). A partir dai as ENTRADAS ficam bloqueadas ate
+// reiniciar o EA e as posicoes do magic passam a ser fechadas por
+// CKillSwitch::Verificar(magic,true) no OnTick (XAU_AI_PRO.mq5:1217) e no
+// OnTimer (:2207). Dependencia de ordem: Core/KillSwitch.mqh entra em
+// XAU_AI_PRO.mq5 antes deste ficheiro.
+if(!CKillSwitch::Ativo())
+   CKillSwitch::ArmarAutomatico(
+      "DRAWDOWN ALTO " +
+      DoubleToString(drawdown, 2) + "% >= " +
+      DoubleToString(MaxDrawdownPercent * 0.8, 2) + "%"
+   );
 }
 
 return true;

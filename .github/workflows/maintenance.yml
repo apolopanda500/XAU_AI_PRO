@@ -17,60 +17,47 @@ jobs:
   health:
     runs-on: ubuntu-latest
     steps:
+      # -----------------------------------------------------------------------
+      # POR QUE SEM `ref: develop` (medido em 05/11/2026 - leia antes de repor)
+      # -----------------------------------------------------------------------
+      # O cron falhou todos os dias de 28/10 a 04/11 (issue #43) e o motivo nao
+      # era codigo: este workflow fazia checkout da branch `develop` enquanto o
+      # default do repositorio e `main`.
+      #
+      # MEDIDO no run 41954293907 (dispatch manual, log completo):
+      #   5 failed, 1473 passed, 86 skipped, 2 errors
+      #   FAILED tests/test_vip_progress.py   (5 testes, `assert 0.0 == 100.0`)
+      #   ERROR  tests/test_bundle_gateway_artefato.py (2 erros)
+      # E MEDIDO no diff `main..develop`:
+      #   `main` tem o commit 8fdc5b0 "fix(ci): testes com data relativa,
+      #   fixture de classe na ordem certa" - `develop` NAO tem.
+      # Ou seja: o job reprovava por testar uma branch 9 commits atras das
+      # correcoes que ja estavam na default. Nao era defeito de codigo.
+      #
+      # Enquanto o YAML ficar na default, o agendamento executa a versao da
+      # default; um `ref:` apontando para outra branch faz o health check medir
+      # algo que nao e o que se publica. O checkout abaixo, sem `ref`, mede
+      # exactamente o que embarca.
+      #
+      # Se um dia `develop` voltar a ser a branch de integracao, a correcao
+      # certa NAO e recolocar `ref:` aqui: e mergear a default na `develop`
+      # para ela nao ficar atras das correcoes. O passo seguinte publica a
+      # branch e o commit testados, para a proxima falha nao custar uma sessao.
       - uses: actions/checkout@v5
-        with:
-          # ---------------------------------------------------------------------
-          # POR QUE `ref: develop` (medido em 03/10/2026 - leia antes de "simplificar")
-          # ---------------------------------------------------------------------
-          # O workflow e AGENDADO. Workflow agendado executa o YAML que esta na
-          # branch DEFAULT do repositorio, e a default deste repositorio e `main`.
-          #
-          # JA HOUVE DUAS CORRECOES NESSE MESMO PONTO, E AS DUAS FICARAM PARCIAS:
-          #
-          # 1. `ref: develop` foi acrescentado (commit e857528) porque o cron
-          #    executava codigo de 01/10 e falhava com
-          #        ModuleNotFoundError: No module named 'fastapi'
-          #    `requirements-ci.txt` na `main` NAO tem `fastapi`; na `develop` tem.
-          #    O sintoma e identico ao de um defeito de codigo e nao e: e codigo velho.
-          #
-          # 2. MAS o `ref: develop` so funciona se ESTE YAML chegar na `main`. Em
-          #    03/10/2026 a `main` estava 53 commits atras, entao o GitHub executava
-          #    a VERSAO ANTIGA deste arquivo - sem o `ref` - e o cron reprovou de novo
-          #    com o MESMO ModuleNotFoundError, abrindo a issue #25.
-          #
-          # MEDIDO (03/10/2026):
-          #   gh repo view --json defaultBranchRef            ->  main
-          #   `ref:` em origin/main/.../maintenance.yml       ->  0 ocorrencias
-          #   `ref:` em origin/develop/.../maintenance.yml    ->  1 ocorrencia
-          #   commits de develop nao mergeados em main       ->  53
-          #
-          # OU SEJA: enquanto este arquivo nao estiver na branch default, o `ref`
-          # abaixo NAO EXISTE para o agendamento. Nao e bug do GitHub, e alei.
-          #
-          # CORRECAO DE VERDADE: mergear `develop` na branch default. Ate la este
-          # cron falha todo dia as 10:17 UTC por rodar codigo velho. O passo
-          # "Diagnosticar branch" abaixo existe para que a proxima falha diga a
-          # CAUSA, em vez de custar outra investigacao do zero.
-          ref: develop
-      - name: Diagnosticar branch (a causa real quando o cron reprova)
+
+      - name: Registar o codigo testado (branch + commit)
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          # Se o `ref: develop` acima nao surtiu efeito, a causa e quase sempre a
-          # mesma: o YAML veio da branch default e nao da develop. Dizer isso no
-          # log economiza a sessao inteira de investigacao seguinte.
-          ATUAL=$(git rev-parse --abbrev-ref HEAD)
-          echo "branch em execucao: $ATUAL @ $(git rev-parse --short HEAD)"
-          if [ "$ATUAL" != "develop" ]; then
-            echo ""
-            echo "::error::O cron rodou '$ATUAL', nao 'develop'."
-            echo "::error::Workflow agendado usa o YAML da branch DEFAULT do repositorio."
-            echo "::error::Se 'ref: develop' nao surtiu efeito, este YAML esta VELHO na default."
-            echo "::error::Correcao: mergear 'develop' na branch default. Nao e bug de codigo."
-            DEFAULT=$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name 2>/dev/null || echo main)
-            echo "::error::Branch default: $DEFAULT"
-            git fetch origin "$DEFAULT" --depth=50 2>/dev/null || true
-            echo "::error::Commits da develop que faltam na default:"
-            git log --oneline "origin/$DEFAULT..HEAD" 2>/dev/null | head -20 || true
+          echo "branch em execucao: ${{ github.ref_name }}"
+          echo "commit: $(git rev-parse --short HEAD)"
+          DEFAULT=$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name 2>/dev/null || echo main)
+          echo "branch default do repositorio: $DEFAULT"
+          if [ "${{ github.ref_name }}" != "$DEFAULT" ]; then
+            echo "::warning::Este run testou '${{ github.ref_name }}', nao a default '$DEFAULT'."
+            echo "::warning::Execucao manual numa branch nao-default e permitida, mas o resultado nao descreve o que embarca."
           fi
+
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
@@ -95,7 +82,7 @@ jobs:
           npm audit --audit-level=high
       # O passo "Verificar API Vercel" e a notificacao no Slack foram REMOVIDOS
       # em 04/10/2026: o projeto e 100% local e nao tem API hospedada para
-      # checar. O sinal de problema continua sendo a issue aberta abaixo.
+      # checar. O sinal de problema e a issue aberta abaixo.
       - name: Abrir issue de manutencao quando falhar
         if: failure()
         env:
@@ -103,5 +90,28 @@ jobs:
         run: |
           TITLE="Falha automática de manutenção"
           EXISTING=$(gh issue list --state open --search "$TITLE in:title" --json number --jq '.[0].number // empty')
-          BODY="A manutenção automática falhou no run $GITHUB_RUN_NUMBER. Analise os logs: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          BODY="A manutenção automática falhou no run $GITHUB_RUN_NUMBER (branch \`${{ github.ref_name }}\`, commit \`$(git rev-parse --short HEAD)\`). Analise os logs: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           if [ -n "$EXISTING" ]; then gh issue comment "$EXISTING" --body "$BODY"; else gh issue create --title "$TITLE" --body "$BODY" --label bug; fi
+      # -----------------------------------------------------------------------
+      # Fechar no sucesso (medido em 05/11/2026)
+      # -----------------------------------------------------------------------
+      # Ate aqui o workflow so sabia ABRIR issue: quando o problema era
+      # resolvido, a issue ficava aberta para sempre e o alerta virava ruido.
+      # A #43 acumulou 8 comentarios de falha e continuou aberta mesmo depois
+      # de o motivo ter sido corrigido. Agora o ciclo fecha sozinho, e o
+      # comentario diz qual run o fechou - fechar sem rastro seria o outro
+      # extremo.
+      - name: Fechar a issue quando o ciclo passar
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TITLE="Falha automática de manutenção"
+          EXISTING=$(gh issue list --state open --search "$TITLE in:title" --json number --jq '.[0].number // empty')
+          if [ -z "$EXISTING" ]; then
+            echo "Nenhuma issue de manutencao aberta - nada a fechar."
+            exit 0
+          fi
+          BODY="Ciclo de manutenção **verde** no run $GITHUB_RUN_NUMBER (branch \`${{ github.ref_name }}\`, commit \`$(git rev-parse --short HEAD)\`). Logs: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID - fechada automaticamente pelo workflow."
+          gh issue comment "$EXISTING" --body "$BODY"
+          gh issue close "$EXISTING" --reason completed

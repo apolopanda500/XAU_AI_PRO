@@ -1,0 +1,47 @@
+name: Pages
+
+# Publica o site estático de `site/` em https://apolopanda500.github.io/XAU_AI_PRO/
+#
+# O repositório já está configurado com Pages em build_type=workflow e origem
+# `main`, mas nenhum workflow publicava nada — por isso a URL da homepage
+# devolvia 404. Este arquivo é o único publicador.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Publicar site
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Configurar Pages
+        uses: actions/configure-pages@v5
+
+      - name: Empacotar site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Publicar
+        id: deployment
+        uses: actions/deploy-pages@v4

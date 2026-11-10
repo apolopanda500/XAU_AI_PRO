@@ -1,4 +1,4 @@
-// XAU_AI_PRO v1.2.9
+// XAU_AI_PRO v1.2.189
 #ifndef AICONNECTOR_MQH
 #define AICONNECTOR_MQH
 
@@ -331,6 +331,27 @@ bool ParsePredictionJSON(string json, string esperado, bool logOnce)
          "confidence"
       );
 
+   // D-068 (v1.2.182) - o contrato REAL do gateway, medido em 06/11/2026 23:57
+   // com GET /api/ai/predict?symbol=XAUUSD (payload de 1122 bytes):
+   //   ok, available, signal, confidence, prob_buy, prob_sell, prob_neutral,
+   //   price, atr, edge, accuracy, model, feature_hash
+   // Nao existe buy, nem sell, nem score. Eram exactamente essas tres chaves
+   // que o parser lia, vinham vazias, a conversao devolvia 0.0 e o resultado
+   // medido era AI_Score=0.0 com BlockZeroAIScore=true a bloquear TODA a
+   // entrada com a IA a responder. Estes dois campos passam a ser lidos; o
+   // ramo de recusa (available=false) acima fica intacto.
+   string jsonProbBuy=
+      ExtractJSON(
+         json,
+         "prob_buy"
+      );
+
+   string jsonProbSell=
+      ExtractJSON(
+         json,
+         "prob_sell"
+      );
+
    string jsonModelVersion=
       ExtractJSON(
          json,
@@ -506,22 +527,53 @@ bool ParsePredictionJSON(string json, string esperado, bool logOnce)
       );
 
 
+   // Legado (prediction_*.json local): buy / sell / score em 0..100.
    AI_BuyProbability=
       StringToDouble(
          jsonBuy
       );
-
 
    AI_SellProbability=
       StringToDouble(
          jsonSell
       );
 
-
    AI_Score=
       StringToDouble(
          jsonScore
       );
+
+   // D-068: gateway real. prob_buy e prob_sell vem em 0..1 e passam a 0..100,
+   // que e a escala do log BUY/SELL% e do AIEngine.mqh:139. Sem probabilidades,
+   // a direcao do signal decide a favorita, para nao ficar 0.0 contra 0.0 em
+   // AIEngine.mqh:301-304 e a IA perder a direcao que o gateway publicou.
+   if(jsonProbBuy != "" || jsonProbSell != "")
+   {
+      double pb=StringToDouble(jsonProbBuy);
+      double ps=StringToDouble(jsonProbSell);
+
+      if(pb>0.0 && pb<=1.0) pb*=100.0;
+      if(ps>0.0 && ps<=1.0) ps*=100.0;
+
+      if(pb<=0.0 && ps<=0.0)
+      {
+         string sg=jsonSignal;
+         StringToUpper(sg);
+
+         if(sg=="BUY")       pb=100.0;
+         else if(sg=="SELL") ps=100.0;
+         else { pb=50.0; ps=50.0; }
+      }
+
+      AI_BuyProbability  = pb;
+      AI_SellProbability = ps;
+   }
+
+   // score tambem nao existe no gateway: a confianca (0..100) e a mesma escala
+   // de MinAIConfidence e passa a alimentar AI_Score, que e o valor comparado
+   // em AIEngine.mqh:289 e o que BlockZeroAIScore bloqueia quando e 0.0.
+   if(AI_Score<=0.0)
+      AI_Score=StringToDouble(jsonConfidence);
 
 
    AI_Confidence=

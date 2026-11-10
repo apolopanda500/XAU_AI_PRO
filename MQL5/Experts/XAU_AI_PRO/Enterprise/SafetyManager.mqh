@@ -633,19 +633,53 @@ void CSafetyManager::UpdateStats()
       GetDailyPeakEquity();
 
    //------------------------------------------------
-   // P/L diário baseado no balance
+   // P/L diario do EA (por magic), nao do saldo
    //------------------------------------------------
+   // P1.3500 (09/11/2026): o limite diario media
+   // `Balance - STARTBAL`, isto e, o resultado LIQUIDO da
+   // conta inteira. MEDIDO em 09/11: o EA perdeu 119,40
+   // USD as 02:15 e ficou bloqueado; as 08:54 um lucro
+   // MANUAL de +117,20 do DONO subiu o saldo, o valor
+   // passou a +13,76 e o EA ficou RE-ARMADO no mesmo dia
+   // depois de ja ter estourado 199% do orcamento.
+   //
+   // Agora o gate soma os deals de HOJE com MagicNumber
+   // (profit + swap + comissao). Operacoes manuais
+   // (magic 0) deixam de abrir ou fechar o gate: o limite
+   // e da ESTRATEGIA, nao do saldo. Se o historico nao
+   // puder ser lido, mantem-se o valor anterior - o gate
+   // nunca cai para zero por falha de leitura.
 
-   double balance =
-      AccountInfoDouble(
-         ACCOUNT_BALANCE
-      );
+   MqlDateTime dts;
+   TimeToStruct(TimeCurrent(), dts);
+   dts.hour = 0;
+   dts.min  = 0;
+   dts.sec  = 0;
 
-   if(m_daily_start_balance > 0.0)
+   datetime dayStart = StructToTime(dts);
+   datetime dayEnd   = dayStart + 86400;
+
+   if(HistorySelect(dayStart, dayEnd))
    {
-      m_daily_profit =
-         balance -
-         m_daily_start_balance;
+      double eaDaily = 0.0;
+      int    deals   = HistoryDealsTotal();
+
+      for(int i = 0; i < deals; i++)
+      {
+         ulong deal = HistoryDealGetTicket(i);
+
+         if(deal == 0)
+            continue;
+
+         if(HistoryDealGetInteger(deal, DEAL_MAGIC) != MagicNumber)
+            continue;
+
+         eaDaily += HistoryDealGetDouble(deal, DEAL_PROFIT)
+                  + HistoryDealGetDouble(deal, DEAL_SWAP)
+                  + HistoryDealGetDouble(deal, DEAL_COMMISSION);
+      }
+
+      m_daily_profit = eaDaily;
    }
 }
 

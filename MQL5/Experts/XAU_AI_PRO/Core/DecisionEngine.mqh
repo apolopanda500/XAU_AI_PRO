@@ -199,7 +199,10 @@ double CalculateMarketScore(
    // BASE SCORE
    //================================================
 
-   double score=50.0;
+   // v1.2.184 (P1.138) - G3: sem base arbitraria. Base 50 + EMA 20 + RSI 15 +
+   // ADX 15 = 100.00 antes da IA e do KCI, logo MinMarketScore=65.0 nunca
+   // filtrava nada (162/162 amostras em TOTAL=100.00). Ver normalizacao no fim.
+   double score=0.0;
 
 
    //================================================
@@ -460,6 +463,19 @@ double CalculateMarketScore(
    // LIMIT SCORE
    //================================================
 
+   // v1.2.184 (P1.138) - GATE_REAL G3: o total passa a ser a FRACAO dos pontos
+   // possiveis, em escala 0..100, em vez de uma soma com base arbitraria.
+   // Maximo real = 20 (EMA) + 15 (RSI) + 15 (ADX) + 10 (KCI dir) + 5 (KCI vol)
+   // + 50 (IA a 100%) = 115. Nenhuma parcela mudou de peso relativo; muda a
+   // escala em que `MinMarketScore` (65.0) e comparado.
+   const double maxScorePoints=115.0;
+   double scorePoints=score;
+
+   score=
+      100.0*
+      score/
+      maxScorePoints;
+
    if(score>100.0)
       score=100.0;
 
@@ -542,6 +558,11 @@ double CalculateMarketScore(
          ),
          " | WARMUP=",
          (indicadoresProntos ? "NAO" : "SIM"),
+         " | PTS=",
+         DoubleToString(
+            scorePoints,
+            2
+         ),
          " | TOTAL=",
          DoubleToString(
             MarketScore,
@@ -617,6 +638,29 @@ bool AllowTradeEx(
       reason=
          "VALIDATION: "+
          ((g_validationLastBlock=="")?"sem detalhe":g_validationLastBlock);
+
+      //--------------------------------------------------
+      // v1.2.188 (08/11/2026) - P1.139
+      // O PASSO 1 DO AllowTradeEx VETAVA EM SILENCIO.
+      // MEDIDO (D-079/DELTA): 1 576 sinais no dia, 1 576 entraram em
+      // AllowTradeEx e 0 passaram, e o passo da VALIDACAO era o unico dos
+      // gates que devolvia false sem escrever a causa por inteiro - a razao
+      // real do veto (TREND, SPREAD, AI, SESSION...) ficava so no contador
+      // interno. Os passos 2 (NEWS) e 2c (MARKET INTEL) ja imprimiam
+      // "DECISION BLOCKED"; este passa a imprimir o mesmo, com o motivo.
+      // No maximo 1 linha por hora por CONTA e por simbolo+motivo, com o
+      // motivo novo a sair na hora. A tag reusa ValidationGateTag (ja
+      // saneada para nome de ficheiro, P2.15) com prefixo proprio, para nao
+      // gastar a vez da linha [VALIDATION] BLOCK escrita pelo ValidateTrade.
+      // So impressao: nenhum passo, condicao, limite, lote, alvo, stop,
+      // spread, preco, regra de entrada ou de saida muda.
+      //--------------------------------------------------
+      string motivoVeto = (g_validationLastBlock == "" ? "sem detalhe" : g_validationLastBlock);
+
+      if(AccountLogGatePodeImprimir("dblock_" + ValidationGateTag(symbol, motivoVeto), 3600))
+         Print("DECISION BLOCKED | VALIDATION | Symbol=", symbol,
+               " | Signal=", signal,
+               " | Reason=", reason);
 
       return false;
    }
@@ -720,14 +764,18 @@ bool AllowTradeEx(
 
 
    if(
-      score<MinMarketScore
+      // v1.2.186 - P1.2341 (D-088 #5): piso CONDICIONAL. Com leitura de IA
+      // real continua MinMarketScore (65,0); sem IA vale MinMarketScoreNoAI
+      // (default 45,0), porque as parcelas tecnicas somam no maximo 56,52 de
+      // 100 e 65 nunca seria atingido sem o modelo.
+      score<(AILeituraReal() ? MinMarketScore : MinMarketScoreNoAI)
    )
    {
       reason=
          "SCORE "+
          DoubleToString(score,2)+
          " < MinMarketScore "+
-         DoubleToString(MinMarketScore,2);
+         DoubleToString(AILeituraReal() ? MinMarketScore : MinMarketScoreNoAI,2);
 
       if(allowLogOnce)
          Print(
@@ -740,7 +788,7 @@ bool AllowTradeEx(
             ),
             " | Min=",
             DoubleToString(
-               MinMarketScore,
+               (AILeituraReal() ? MinMarketScore : MinMarketScoreNoAI),
                2
             )
          );

@@ -277,4 +277,41 @@ double CalculateLotByRiskAuto(
    return CalculateLotByRisk(symbol, RiskPercent, stopPoints);
 }
 
+//==================================================
+// MOTIVO DO LOTE ZERO (P1.3514 - v1.2.191)
+//==================================================
+// O lote pode ser recusado por razoes diferentes e quem chama
+// (CalculateDynamicLot) escrevia sempre "risco/escala", que e' a causa ERRADA
+// quando a ficha do simbolo nao tem dados de tick. MEDIDO no servidor actual:
+// USDCLP e USDRUB tem tick_value=0.00000000, tick_size=0.00000000 e
+// margin_initial=0.00, e nesse caso a recusa acontece em CalculateLotByRiskUSD
+// com a linha "RISK: valor do ponto indisponivel"; a mensagem seguinte
+// atribuia o bloqueio ao risco, ou seja o operador ficava com duas frases
+// contraditorias sobre o mesmo evento.
+//
+// Esta funcao mede a MESMA ficha que as guardas leem e devolve o motivo medido.
+// Nao decide nada: as guardas de divisao por zero (Config.mqh:1046,
+// Config.mqh:1102, RiskEngine.mqh:114) continuam a recusar exactamente onde
+// recusavam. Muda so o texto que explica a recusa.
+string RiskLotBlockReason(string symbol)
+{
+   double tv = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE);
+   double ts = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_SIZE);
+   double pt = SymbolInfoDouble(symbol, SYMBOL_POINT);
+
+   if(tv <= 0.0 || ts <= 0.0 || pt <= 0.0)
+      return("ficha do simbolo sem dados de tick (tick_value=" +
+             DoubleToString(tv, 5) + " tick_size=" + DoubleToString(ts, 5) +
+             " point=" + DoubleToString(pt, 5) +
+             ") -> nao e' limite de risco, e' dado do broker");
+
+   double minLot = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
+
+   if(minLot <= 0.0)
+      return("ficha do simbolo sem volume_min (volume_min=" +
+             DoubleToString(minLot, 2) + ")");
+
+   return("risco/escala: ver a linha RISK: anterior (equity, perda diaria, stop ou lote minimo)");
+}
+
 #endif
