@@ -486,7 +486,18 @@ def _carregar_artefato(candidato: str, nome: str) -> tuple[Any | None, dict[str,
     if not (pkl.exists() and meta.exists()):
         _CACHE[chave] = (None, {}, None)
         return _CACHE[chave][0], _CACHE[chave][1]
-    mtime = pkl.stat().st_mtime
+    # A CHAVE DE CACHE tem de ver O `.meta.json` TAMBEM.
+    #
+    # MEDIDO em 10/11/2026 (D-159): a chave usava so o mtime do `.pkl`. Uma
+    # correccao de GOVERNANCA (`publicable`, `min_edge`, `publish_reason`) vive
+    # no `.meta.json` - e nao toca o `.pkl` - logo o gateway continuava a servir
+    # a metadada antiga enquanto o ficheiro no disco ja dizia outra coisa. O
+    # sintoma era o gateway "nao reiniciado": o `/api/ai/predict` respondia
+    # `available=true` para um modelo que ja estava recusado em disco, e as
+    # recusas continuavam a citar o piso antigo (+0.0500) depois da politica
+    # mudar para +0.0200. A chave passa a ser o par (mtime do .pkl, mtime do
+    # .meta.json): qualquer mudanca num dos dois invalida a cache.
+    mtime = (pkl.stat().st_mtime, meta.stat().st_mtime)
     # A entrada do cache e (modelo, meta, mtime). O mtime decide se o arquivo
     # em disco mudou desde a leitura: sem ele, retreinar o modelo no mesmo
     # processo continuaria servindo o artefato antigo, e o operador veria o

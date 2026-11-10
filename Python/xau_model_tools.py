@@ -55,7 +55,7 @@ MIN_EDGE = 0.02
 # alta" acerta 52-58% sem nenhum sinal. O gate passa a medir DISCRIMINACAO
 # (balanced accuracy, que e a media dos dois recalls) e AUC. A acuracia bruta
 # continua medida e publicada como referencia, mas nao decide sozinha.
-MIN_EDGE_BAL = 0.03
+MIN_EDGE_BAL = 0.02
 MIN_AUC = 0.52
 LOOKAHEAD = {"M5": 12, "M15": 8, "H1": 6, "H4": 4}
 CLASS_THRESHOLD = 0.5        # em unidades de ATR
