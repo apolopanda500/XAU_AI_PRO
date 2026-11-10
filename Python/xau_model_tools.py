@@ -49,7 +49,7 @@ DATASET_FALLBACK = DATA_DIR / "dataset.csv"
 
 SYMBOL = "XAUUSD"
 TIMEFRAMES = ("M5", "M15", "H1", "H4")
-MIN_EDGE = 0.05
+MIN_EDGE = 0.02
 # A acuracia contra a classe maioritaria pune o modelo que reconhece a classe
 # minoritaria: no ouro o periodo tem deriva de alta, entao "apostar sempre na
 # alta" acerta 52-58% sem nenhum sinal. O gate passa a medir DISCRIMINACAO
