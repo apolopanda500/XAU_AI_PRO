@@ -78,6 +78,69 @@ double TargetFactorForGrade(int grade)
 }
 
 //==================================================
+// 1R REAL DA ENTRADA SEM STOP (P1.3507 - v1.2.190)
+//==================================================
+// Quando `EnableStoplessEntry` esta ligado a ordem sai SEM stop e a perda
+// maxima real da posicao e a distancia de emergencia que o vigia
+// `CheckStoplessEmergency` usa para a fechar. Ate a v1.2.189 o teto de
+// `MaxRiskPerTradeUsd` media o risco com `NoiseDistancePointsForRisk()`, que
+// e a distancia de ARMADURA (~0,8 ATR) e nao a de emergencia (1,5 x 1R).
+// Resultado medido em 09/11/2026: 0,06 lote XAUUSD sem SL, ~2000 pontos ate
+// 4076,21 = -119,40 USD, contra um teto de 8,00 USD por operacao e 60,00 USD
+// por dia. O cap nunca disparava porque o 1R usado era pequeno de mais.
+//
+// A formula e a mesma de `StoplessEmergencyDistance()` (PositionManager.mqh),
+// para que o risco MEDIDO pelo cap e o risco FECHADO pelo vigia sejam o mesmo
+// numero. A conta e refeita aqui de proposito: este ficheiro e incluido antes
+// de PositionManager.mqh no XAU_AI_PRO.mq5, e depender dessa ordem tornaria o
+// cap refem de um #include.
+double StoplessRiskDistancePoints(string symbol)
+{
+   if(symbol == "")
+      return(0.0);
+
+   double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
+
+   if(point <= 0.0)
+      return(0.0);
+
+   if(StoplessEmergencyPoints > 0)
+      return((double)StoplessEmergencyPoints);
+
+   double mult = RealGuardStoplessEmergencyRMult();
+
+   if(mult <= 0.0)
+      return(0.0);
+
+   double atr  = GetATR(symbol);
+   double umR  = ((atr > 0.0) ? (atr * StoplessArmATRMult / point) : 0.0);
+   double piso = (double)StoplessArmMinPoints;
+
+   if(umR < piso)
+      umR = piso;
+
+   return(umR * mult);
+}
+
+// 1R usado pelo teto de risco: a distancia de emergencia quando a entrada
+// nao leva stop, o SL real quando leva, e a distancia de armadura como
+// ultimo recurso (nunca 0, para o teto nao desaparecer).
+double RiskDistancePointsForCap(string symbol, int slRefPoints)
+{
+   if(EnableStoplessEntry)
+   {
+      double stoplessR = StoplessRiskDistancePoints(symbol);
+
+      if(stoplessR > 0.0)
+         return(stoplessR);
+   }
+   else if(slRefPoints > 0)
+      return((double)slRefPoints);
+
+   return(NoiseDistancePointsForRisk(symbol));
+}
+
+//==================================================
 // LOTE DINAMICO (29/10/2026) - NAO existe lote fixo
 //==================================================
 // O lote e o MENOR entre:
@@ -104,7 +167,8 @@ double CalculateDynamicLot(
    if(baseLot <= 0.0)
    {
       Print("[TRADE] BLOQUEADA | ", symbol,
-            " | lote de referencia invalido (risco/escala)");
+            " | lote de referencia = 0 | motivo medido: ",
+            RiskLotBlockReason(symbol));
       return(0.0);
    }
 
@@ -163,7 +227,7 @@ double CalculateDynamicLot(
    //--------------------------------------------------
    if(MaxRiskPerTradeUsd > 0.0)
    {
-      double oneRPoints = NoiseDistancePointsForRisk(symbol);
+      double oneRPoints = RiskDistancePointsForCap(symbol, slRefPoints);
 
       if(oneRPoints > 0.0)
       {
@@ -516,13 +580,10 @@ bool ExecuteTrade(string symbol,int signal)
    //   2) quando o lote cai no minimo do simbolo o risco VOLTA a subir sem
    //      ninguem recalcular nada (era o caso do aviso FORCA LOTE MINIMO).
    // Aqui o risco e medido com o LOTE FINAL e com a distancia que o stop
-   // realmente usa: 1R da armadura na entrada sem stop, ou o SL de verdade
-   // quando a entrada leva stop. Toda ordem passa a declarar o proprio risco
-   // em USD ANTES do envio - numero, nao confianca.
-   double oneRDist = NoiseDistancePointsForRisk(symbol);
-
-   if(!EnableStoplessEntry && slRefPts > 0)
-      oneRDist = (double)slRefPts;
+   // realmente usa: a distancia de EMERGENCIA na entrada sem stop (o que a
+   // posicao pode mesmo perder), ou o SL de verdade quando a entrada leva
+   // stop. Toda ordem declara o proprio risco em USD ANTES do envio.
+   double oneRDist = RiskDistancePointsForCap(symbol, slRefPts);
 
    if(MaxRiskPerTradeUsd > 0.0 && oneRDist > 0.0)
    {

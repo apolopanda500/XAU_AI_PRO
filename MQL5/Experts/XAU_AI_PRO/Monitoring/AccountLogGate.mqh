@@ -70,13 +70,47 @@ bool LogSessaoPodeImprimir(const string tag)
 //| Tabela cheia -> devolve true (fail-open): erro de log nunca       |
 //| esconde informacao.                                              |
 //+------------------------------------------------------------------+
-#define TESTER_GATE_MAX_TAGS 128
+//+------------------------------------------------------------------+
+//| v1.2.188 (08/11/2026) - P1.3479                                  |
+//| A TABELA DO TESTER ENCHIA E O PORTAO DESLIGAVA-SE EM SILENCIO.   |
+//|                                                                  |
+//| MEDIDO nos ficheiros de gate da pasta Common\Files\XAU_AI_PRO:   |
+//| o sufixo __DATETIME__ e CONSTANTE por build (ex.:               |
+//| loggate_atr_no_read_XAUUSD_1793915847.bin repete-se em todas as  |
+//| chamadas daquele build), portanto a tag com marcador NAO cresce  |
+//| por segundo. O que enchia a tabela era outro facto: as 7 tags do |
+//| ATR levam o simbolo no nome, logo 7 x 15 simbolos do universo =   |
+//| 105 vagas das 128, e com as restantes familias (~20 por simbolo) |
+//| o universo potencial passa de 400 chaves. Ao encher, o ramo       |
+//| antigo NAO registava a tag e devolvia true: desse instante em     |
+//| diante TODA a tag nova falava sem throttle. Foi assim que o       |
+//| [TREND] LEITURA SUSPEITA saiu 278 536 vezes (USDSEK 73 464) com   |
+//| uma janela de 3600 s - 85x acima do maximo teorico.               |
+//|                                                                  |
+//| CORRECAO: a tabela passa a 512 vagas (cobre o universo medido,     |
+//| ~340 chaves no tester) e, se mesmo assim encher, LIBERTA a chave   |
+//| usada ha mais tempo em vez de desligar o portao - o mesmo padrao    |
+//| do P1.114 no DiagGate, ja provado. A saturacao passa a ser        |
+//| VISIVEL: 1 linha [DIAG] com o maximo de vagas e a contagem de      |
+//| evacuacoes, no maximo 1x/hora.                                     |
+//|                                                                  |
+//| O marcador __DATETIME__ das 7 tags do ATR NAO foi removido: ele    |
+//| e o P1.121 (um build novo tem de falar mesmo que um build antigo   |
+//| ja tenha gasto a hora, no ficheiro da producao) e, por ser         |
+//| constante por build, nao consome vaga nenhuma a mais.            |
+//| Isto decide APENAS se uma linha de diagnostico e escrita. Nenhum  |
+//| limite, lote, alvo, stop, spread, preco, regra de entrada ou de   |
+//| saida, ou parametro de risco passa por aqui.                      |
+//+------------------------------------------------------------------+
+#define TESTER_GATE_MAX_TAGS 512
 
 bool TesterGatePodeImprimir(const string tag,const int janelaSeg)
   {
-   static string s_tag[TESTER_GATE_MAX_TAGS];
+   static string   s_tag[TESTER_GATE_MAX_TAGS];
    static datetime s_ultimo[TESTER_GATE_MAX_TAGS];
-   static int s_usados = 0;
+   static int      s_usados = 0;
+   static int      s_evictadas = 0;
+   static datetime s_ultimoAvisoCheia = 0;
 
    datetime agora = TimeCurrent();
       // tempo SIMULADO do passe: e o que a janela deve medir dentro do tester
@@ -99,12 +133,39 @@ bool TesterGatePodeImprimir(const string tag,const int janelaSeg)
       return(false);
      }
 
-   if(s_usados < TESTER_GATE_MAX_TAGS)
+   int vaga = s_usados;
+
+   if(vaga >= TESTER_GATE_MAX_TAGS)
      {
-      s_tag[s_usados]    = tag;
-      s_ultimo[s_usados] = agora;
-      s_usados++;
+      // P1.3479: com a tabela cheia o ramo antigo NAO registava a tag e
+      // devolvia true, logo a partir daqui toda a tag nova falava sem
+      // throttle para o resto do passe. Passa a libertar a vaga da chave
+      // usada ha mais tempo: a chave nova continua a sair (nada e
+      // escondido) e o portao continua a abafar as repeticoes.
+      int vitima = 0;
+
+      for(int i = 1; i < TESTER_GATE_MAX_TAGS; i++)
+        {
+         if(s_ultimo[i] < s_ultimo[vitima])
+            vitima = i;
+        }
+
+      vaga = vitima;
+      s_evictadas++;
+
+      if(s_evictadas == 1 || (agora - s_ultimoAvisoCheia) >= 3600)
+        {
+         s_ultimoAvisoCheia = agora;
+         Print("[DIAG] LOGGATE TESTER tabela cheia | vagas=", TESTER_GATE_MAX_TAGS,
+               " | libertei a tag usada ha mais tempo | evacuacoes=", s_evictadas,
+               " | o portao continua a abafar");
+        }
      }
+   else
+      s_usados++;
+
+   s_tag[vaga]    = tag;
+   s_ultimo[vaga] = agora;
 
    return(true);
   }

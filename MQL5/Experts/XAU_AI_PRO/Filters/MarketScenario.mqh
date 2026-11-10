@@ -186,13 +186,32 @@ bool ScenarioTrendGate(string symbol, int signal, string &reason)
       return(true);
    }
 
-   // Daqui para baixo: sinal CONTRA a tendencia de referencia.
+   //==================================================
+   // Q-079 = B (07/11/2026, decisao do DONO): FOLGA DE 1 ATR
+   //
+   // MEDIDO em 05/11/2026 (D-079): 1576 sinais, 1576 entraram em
+   // AllowTradeEx e 0 passaram; 58,5% dos vetos amostrados eram TREND.
+   // O sinal exige EMA50>EMA200 + RSI<45 (pullback fundo) e este portao
+   // exigia bid>EMA200(H1): no pullback fundo o bid fura a EMA200 H1 por
+   // pouco e o portao lia contramao - o EA vetava o sinal que a regra
+   // procura. Quanto melhor o pullback pela regra, mais certo o veto.
+   //
+   // A folga NAO apaga a guarda: ela isenta SO o teste da EMA200 (D-086,
+   // v1.2.187). O veto de tendencia formada (ScenarioCounterTrendMaxADX)
+   // vale tambem DENTRO da banda; acima de ScenarioTrendAtrSlack ATR de
+   // distancia continua a ser contramao e segue as regras abaixo (ADX e
+   // cenario). Sem leitura de EMA, de ATR ou de ADX, o rigor antigo fica
+   // intacto.
+   //==================================================
    if(!EnableAdaptiveTrendGate)
    {
       reason = "contramao vetada (EnableAdaptiveTrendGate=false)";
       return(false);
    }
 
+   // v1.2.187 - D-086: o ADX passou a ser lido ANTES da folga Q-079/B.
+   // A folga isenta apenas o teste da EMA200; o veto de tendencia formada
+   // (ScenarioCounterTrendMaxADX) continua valendo DENTRO da banda.
    double adx = GetADX(symbol);
 
    // ADX <= 0 = sem leitura: mantem o rigor antigo (contramao veta).
@@ -201,6 +220,41 @@ bool ScenarioTrendGate(string symbol, int signal, string &reason)
       reason = "contramao vetada | ADX indisponivel";
       return(false);
    }
+
+   // v1.2.186 - P1.2338: a folga so vale quando o ATR lido e do MESMO timeframe
+   // da EMA de referencia (`TrendTF`, H1). `GetATR(symbol)` usa
+   // `(ENUM_TIMEFRAMES)Period()`, ou seja o periodo do GRAFICO: num grafico M5
+   // a folga compararia 1 ATR de M5 com uma distancia medida em H1 e valeria
+   // uma fraccao do que o parametro diz. Sem coincidencia de timeframe nao se
+   // aplica folga - fica o rigor antigo.
+   if(ScenarioTrendAtrSlack > 0.0 && Period() == TrendTF)
+   {
+      double emaRef = 0.0;
+      double bidRef = SymbolInfoDouble(symbol, SYMBOL_BID);
+      double atrRef = GetATR(symbol);
+
+      if(GetTrendEMA(emaRef, symbol) && bidRef > 0.0 && atrRef > 0.0)
+      {
+         double folga = ScenarioTrendAtrSlack * atrRef;
+
+         if(MathAbs(bidRef - emaRef) <= folga)
+         {
+            // v1.2.187 - D-086: a folga isenta so o teste da EMA200; o veto
+            // de tendencia formada continua valendo DENTRO da banda.
+            if(adx < ScenarioCounterTrendMaxADX)
+            {
+               reason = "contramao dentro da folga de " +
+                        DoubleToString(ScenarioTrendAtrSlack, 2) +
+                        " ATR | dist=" + DoubleToString(bidRef - emaRef, 5) +
+                        " | ATR=" + DoubleToString(atrRef, 5) +
+                        " | Q-079/B | ADX=" + DoubleToString(adx, 1);
+               return(true);
+            }
+         }
+      }
+   }
+
+   // Daqui para baixo: sinal CONTRA a tendencia de referencia.
 
    ENUM_MARKET_SCENARIO s = MarketScenarioDetect(symbol);
 

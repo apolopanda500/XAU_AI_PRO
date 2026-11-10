@@ -296,6 +296,11 @@ void ScanFlush(datetime now)
    // por instancia e por ciclo. O caminho silencioso mantem-se igual.
    bool falarAgora = (!silencioso || g_scanSilencio == 0 || (now - g_scanSilencio) >= SCAN_SILENT_SEC);
 
+   // P1.2336: publica a janela inteira ou nao publica nada; o relogio do
+   // ciclo (g_scanJanela) continua a avancar em todos os ciclos, porque e
+   // ele que marca os 60 s entre varreduras.
+   bool publicouResumo = false;
+
    if(falarAgora && AccountLogGatePodeImprimir("scan_resumo", SCAN_SILENT_SEC))
      {
       Print("[SCANNER] RESUMO | visitas=", g_scanSimbolos,
@@ -304,6 +309,8 @@ void ScanFlush(datetime now)
             " | bloqueios=", totalBloqueios,
             (partes == "" ? "" : " | " + partes),
             prova);
+
+      publicouResumo = true;
 
       g_scanSilencio = now;
 
@@ -316,12 +323,26 @@ void ScanFlush(datetime now)
       g_scanSigNeutroPub = sigR;
      }
 
-   for(int i = 0; i < SCAN_BUCKETS; i++)
+   //--------------------------------------------------
+   // v1.2.188 (08/11/2026) - P1.2336
+   // A JANELA PUBLICADA TEM DE SER A JANELA CONTADA.
+   // Antes estes contadores eram zerados em TODOS os ciclos (~60 s), mas a
+   // linha so saia quando o portao por conta a deixava passar (15 min).
+   // Resultado medido pelo DELTA: 7 429 janelas com trades=0 enquanto o dia
+   // tinha 34 deals reais - publicava-se o ultimo ciclo, nao o intervalo
+   // anunciado na propria linha. Passam a ser zerados APENAS quando a linha
+   // sai. So contadores de journal: nada aqui decide entrada, saida, lote,
+   // alvo, stop, spread, preco ou parametro de risco.
+   //--------------------------------------------------
+   if(publicouResumo)
+     {
+      for(int i = 0; i < SCAN_BUCKETS; i++)
       g_scanQtd[i] = 0;
 
    g_scanSimbolos = 0;
    g_scanSinais   = 0;
-   g_scanTrades   = 0;
+      g_scanTrades   = 0;
+     }
    g_scanJanela   = now;
 }
 

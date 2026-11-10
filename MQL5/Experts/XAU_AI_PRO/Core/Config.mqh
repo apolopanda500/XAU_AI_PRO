@@ -110,7 +110,15 @@ input string MCPServerToken       = "";     // Token de autenticação (8+ carac
 
 input double RiskPercent        = 1.0;
 
-input double MaxDailyLossPercent= 10.0;
+// v1.2.191 (09/11/2026) - P1.3515: o default compilado passa a ser o valor
+// APROVADO em operacao. Estava 10.0 enquanto os 15 graficos corriam 3.0: um
+// reattach que omitisse esta input caia no default e o teto diario saltava de
+// 379,67 (3,00% de 12 655,63) para 600,00, porque o teto efetivo e
+// MIN(MaxDailyLossUsd, saldo * MaxDailyLossPercent/100). O default e rede de
+// seguranca, nao sugestao: 10.0 -> 3.0 (aperta, nao afrouxa) e fica igual ao
+// valor da DECISAO DO DONO de 09/11/2026 15:01 (opcao A: 600 USD + 3,0%).
+// `0` desliga o teto percentual e deixa mandar so o teto em USD.
+input double MaxDailyLossPercent= 3.0;
 
 // v1.2.35 (30/10/2026) - P1.2b: teto da perda do dia em DINHEIRO.
 // MEDIDO: com `MaxDailyLossPercent=10` e saldo 12 351,78 o limite diario era
@@ -119,8 +127,29 @@ input double MaxDailyLossPercent= 10.0;
 // segue a expectativa do dono: ele escala junto com o saldo.
 // O limite efetivo passa a ser o MENOR entre o de % e o de USD - mesma regra
 // ja usada em `MaxTotalRiskOpenUsd`. `0` desliga este teto e mantem so o de %.
-input double MaxDailyLossUsd    = 60.0;
-input double MaxDrawdownPercent = 15.0;
+// DECISAO DO DONO (09/11/2026 15:01, opcao A) - 60.0 -> 600.0.
+// MEDIDO antes de tocar no numero (OrcamentoDiarioPerda, abaixo):
+//   teto efetivo = MIN(MaxDailyLossUsd, saldo * MaxDailyLossPercent/100).
+//   Com saldo 12 655,63 e MaxDailyLossPercent=3.0 o teto percentual e 379,67,
+//   logo o teto efetivo sobe de 60,00 para 379,67 (3,00% da banca), NAO 600.
+//   Para o teto ser literalmente 600 seria preciso MaxDailyLossPercent >= 4,75.
+// O DONO escolheu A para manter o teto diario dentro do MANDATO (drawdown 6%).
+// `0` continua a desligar este teto e a manter so o de %.
+input double MaxDailyLossUsd    = 600.0;
+// Q-071 (DONO, 06/11 23:42) - 15.0 -> 50.0. MEDIDO antes de tocar no numero:
+// esta input governa DUAS guardas de capital e nao uma.
+//   * Management/EquityProtection.mqh CheckEquityProtection(): DRAWDOWN
+//     CRITICO aos MaxDrawdownPercent -> EmergencyCloseAll(), e DRAWDOWN ALTO
+//     aos MaxDrawdownPercent*0.8.
+//   * Core/RiskEngine.mqh:88-90 e :210-215: a escada de reducao de risco
+//     (100% / 75% / 50% / 25%) e tambem derivada de MaxDrawdownPercent.
+// Com 15.0 o fecho de emergencia da conta disparava aos 1.895,45 USD (15% de
+// 12.636,32) e a escada aos 10,05% e 4,95%. Com 50.0 passa a disparar aos
+// 6.318,16 USD e a escada aos 33,5% e 16,5% - o EA corre a risco cheio por
+// 3,3x mais drawdown. Custo aceito por escrito pelo DONO em DEMO. Em conta
+// REAL o criterio de aceitacao continua a ser o do CICLO_FINAL: drawdown
+// realizado abaixo de 8% no forward de 30 dias, sem alterar criterio.
+input double MaxDrawdownPercent = 50.0;
 input double MinEquityPercent   = 10.0;  // Equity minima (% do balance) para operar
 
 input double MinFreeMargin      = 10.0;  // Margem livre minima (moeda da conta)
@@ -621,7 +650,7 @@ input double MinAIConfidence    = 60.0;
 // `true` existe para o Strategy Tester, onde o pipeline Python nao roda.
 // Nesse modo o fallback e CAPADO em `AIUnavailableConfidenceCap`, para que o
 // numero nao volte a mentir sobre a existencia de uma IA.
-input bool   AllowTradeWithoutAI           = false;
+input bool   AllowTradeWithoutAI           = true;    // v1.2.186: D-088 #6 (DONO 07/11/2026) OPERAR TODOS
 
 //==================================================
 // CONFLITO IA x TECNICO (v1.2.10 - 29/10/2026)
@@ -1154,6 +1183,25 @@ input bool   EnableAutonomousMode = false;   // IA real: veta e exige gateway (e
 // no codigo; agora e ajustavel sem recompilar.
 input double MinMarketScore       = 65.0;
 
+//==================================================
+// PISO CONDICIONAL DO MARKETSCORE (v1.2.186 - P1.2341 / D-088 #5)
+//==================================================
+// O MarketScore e 100 x pontos / maxScorePoints (115). As parcelas TECNICAS
+// somam no maximo 65 pontos:
+//   20 EMA + 15 RSI + 15 ADX + 10 KCI_direcao + 5 KCI_volume = 65
+// e a parcela da IA vale ate 50 (50 x confianca). Sem o modelo o teto e
+// 65/115 = 56,52 de 100 - ABAIXO do piso de 65,0. Consequencia:
+// `AllowTradeWithoutAI=true` sozinho NAO abre nenhuma entrada; quem decide
+// e o piso. Por isso existe este segundo piso.
+//
+//   * com leitura de IA real (AILeituraReal() == true) -> vale MinMarketScore
+//   * sem leitura de IA                               -> vale MinMarketScoreNoAI
+//
+// 45,0 = 79,6% do teto tecnico sem IA (56,52). Referencias: 50,0 = 88,5%
+// (mais rigoroso) e 40,0 = 70,8% (mais permissivo). O numero e do DONO
+// (D-088 #5 = REVER); muda por input, sem recompilar.
+input double MinMarketScoreNoAI   = 45.0;
+
 //----------------------------------------------
 // VETO DE SCORE ZERO DA IA AVANCADA (29/10/2026)
 //----------------------------------------------
@@ -1483,6 +1531,23 @@ input bool   EnableScenarioLog           = true;   // linha [CENARIO] no journal
 input double ScenarioADXStrong           = 25.0;   // ADX >= isto = TENDENCIA_FORTE
 input double ScenarioADXWeak             = 18.0;   // ADX >= isto = TENDENCIA_FRACA
 input double ScenarioCounterTrendMaxADX  = 22.0;   // ADX >= isto VETA contramao
+
+//==================================================
+// Q-079 = B (07/11/2026, decisao do DONO): FOLGA DE 1 ATR
+//
+// MEDIDO em 05/11/2026 (D-079): 1576 sinais, 1576 entraram em AllowTradeEx
+// e 0 passaram; 58,5% dos vetos amostrados eram TREND. O sinal exige
+// EMA50>EMA200 + RSI<45 (pullback fundo) e o portao exigia bid>EMA200(H1).
+// Num pullback fundo o bid fura a EMA200 H1 e o portao lia contramao - o EA
+// vetava o sinal que a propria regra procura.
+//
+// A folga NAO apaga a guarda: um preco a mais de `ScenarioTrendAtrSlack` ATR
+// da EMA200 continua a ser contramao e segue as regras de ADX/cenario. Sem
+// leitura de EMA ou de ATR, o rigor antigo fica intacto. Nenhum limite de
+// risco, lote, SL ou TP muda aqui: `ScenarioLotFactor` e o envelope
+// (`MaxTotalRiskPercent`) continuam a mandar.
+//==================================================
+input double ScenarioTrendAtrSlack      = 1.0;   // Q-079/B: folga em ATR junto a EMA200
 input double ScenarioVolPctMax           = 2.00;   // ATR% >= isto = VOLATILIDADE_ALTA
 
 input double ScenarioLotStrong           = 1.00;   // lote em tendencia forte

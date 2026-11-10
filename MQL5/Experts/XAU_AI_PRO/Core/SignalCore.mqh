@@ -367,7 +367,88 @@ int GetSignal(string symbol)
    // classificacao fica identica (o return e o mesmo 1/-1); muda apenas
    // QUANDO a linha vai para o journal: na mudanca de direcao e, no maximo,
    // 1x/hora por CONTA e por simbolo.
-   int sinalLocal = 0;
+   //==================================================
+   // v1.2.192 - P1.3515 (09/11/2026): GUARDA DE PLAUSIBILIDADE DO SINAL
+   //
+   // MEDIDO no backtest do Tester (2026.08.08-2026.11.08, XAUUSD H1):
+   //   "[SIGNAL] NEUTRO | XAUUSD | tendencia=ALTA |
+   //    EMA50=31.14 EMA200=0.00 | RSI[1]=64.03 RSI[2]=66.78"
+   // com XAUUSD a ~4000 USD. CopyBuffer devolvia SUCESSO, mas os handles em
+   // cache (v1.2.161) ja nao apontavam para as EMAs do simbolo: a serie lida
+   // vinha em escala de oscilador (familia 0-100, RSI/ADX) e a lenta devolvia
+   // 0.00. Consequencia: fast[1] > slow[1] sempre verdadeiro -> SELL nunca
+   // dispara; RSI nunca abaixo de 45 -> BUY nunca dispara. Medido em 3 meses:
+   // 845 varreduras, 845 NoSignal, 0 sinais. Uma EMA de preco tem de estar
+   // perto do bid do proprio simbolo; se nao estiver, a cache e descartada e
+   // o sinal e relido com handles temporarios. Sem esta guarda o EA fica mudo
+   // e nenhuma variante de risco/gate faz o sinal disparar.
+   //==================================================
+   {
+      double bidRef = SymbolInfoDouble(symbol, SYMBOL_BID);
+
+      if(bidRef > 0.0)
+      {
+         bool fastLixo = (fast[1] <= 0.0 || (MathAbs(fast[1] - bidRef) / bidRef) > 0.25);
+         bool slowLixo = (slow[1] <= 0.0 || (MathAbs(slow[1] - bidRef) / bidRef) > 0.25);
+
+         if(fastLixo || slowLixo)
+         {
+            // Cache suspeita: descartar e reler com handles novos (uma vez).
+            SignalCacheDrop(symbol);
+
+            int hFastTmp = iMA(symbol, PERIOD_CURRENT, FastEMA, 0, MODE_EMA, PRICE_CLOSE);
+            int hSlowTmp = iMA(symbol, PERIOD_CURRENT, SlowEMA, 0, MODE_EMA, PRICE_CLOSE);
+
+            bool releu = false;
+
+            if(hFastTmp != INVALID_HANDLE && hSlowTmp != INVALID_HANDLE)
+            {
+               double fTmp[];
+               double sTmp[];
+
+               ArrayResize(fTmp, 3);
+               ArrayResize(sTmp, 3);
+               ArraySetAsSeries(fTmp, true);
+               ArraySetAsSeries(sTmp, true);
+
+               if(CopyBuffer(hFastTmp, 0, 0, 3, fTmp) > 0 &&
+                  CopyBuffer(hSlowTmp, 0, 0, 3, sTmp) > 0 &&
+                  fTmp[1] > 0.0 && sTmp[1] > 0.0 &&
+                  (MathAbs(fTmp[1] - bidRef) / bidRef) <= 0.25 &&
+                  (MathAbs(sTmp[1] - bidRef) / bidRef) <= 0.25)
+               {
+                  fast[1] = fTmp[1];
+                  fast[2] = fTmp[2];
+                  slow[1] = sTmp[1];
+                  slow[2] = sTmp[2];
+                  releu = true;
+               }
+            }
+
+            if(hFastTmp != INVALID_HANDLE)
+               IndicatorRelease(hFastTmp);
+
+            if(hSlowTmp != INVALID_HANDLE)
+               IndicatorRelease(hSlowTmp);
+
+            if(!releu)
+            {
+               g_sigNoRead++;
+
+               if(AccountLogGatePodeImprimir("signolixo_" + symbol, 600))
+                  Print("[SIGNAL] SEM LEITURA | ", symbol,
+                        " | series de EMA implausiveis | EMAfast=", DoubleToString(fast[1], _Digits),
+                        " | EMAslow=", DoubleToString(slow[1], _Digits),
+                        " | bid=", DoubleToString(bidRef, _Digits),
+                        " | cache DESCARTADO");
+
+               return 0;
+            }
+         }
+      }
+   }
+
+   int sinalLocal = 0;   // D-141: filtro "metade forte" revertido - era impossivel (BUY pedia RSI<45 e >50)
 
    if(fast[1]>slow[1] && rsi[1]<RSIPullbackBuy && rsi[1]>rsi[2])
       sinalLocal = 1;
