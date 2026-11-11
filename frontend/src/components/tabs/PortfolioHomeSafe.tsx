@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiBase } from '../../lib/api';
-import { brokerLabel, MARKET_LABELS } from '../../lib/brokerCatalog';
+import { brokerLabel, BROKERS, MARKET_LABELS } from '../../lib/brokerCatalog';
 import { clsPnl, fmtSigned } from '../../lib/format';
 
 // Base resolvida por chamada (13/10/2026), nunca congelada no topo do modulo.
@@ -17,13 +17,10 @@ import { clsPnl, fmtSigned } from '../../lib/format';
  * o silencio de uma linha por uma posicao FALTANDO na soma — e aqui a regra do
  * projeto vale: dois lados do mesmo dado nao podem discordar do nome.
  */
-const SOURCES: ReadonlyArray<{ broker: string; market: string }> = [
-  { broker: 'mt5', market: 'other' },
-  { broker: 'mexc', market: 'crypto-spot' },
-  { broker: 'binance', market: 'crypto-spot' },
-  { broker: 'bybit', market: 'crypto-spot' },
-  { broker: 'okx', market: 'crypto-spot' },
-];
+const SOURCES: ReadonlyArray<{ broker: string; market: string }> = BROKERS.map((b) => ({
+  broker: b.id,
+  market: (b as any).markets?.[0] ?? 'other',
+}));
 const sources = SOURCES.map(
   (s) => [brokerLabel(s.broker), MARKET_LABELS[s.market] ?? s.market, s.market, s.broker] as const,
 );

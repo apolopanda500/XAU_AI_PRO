@@ -7,10 +7,6 @@ export interface BrokerOption {
 
 export const BROKERS: BrokerOption[] = [
   { id: 'mt5', label: 'MT5', readOnly: false },
-  { id: 'binance', label: 'Binance', readOnly: false },
-  { id: 'mexc', label: 'MEXC', readOnly: false },
-  { id: 'bybit', label: 'Bybit', readOnly: false },
-  { id: 'okx', label: 'OKX', readOnly: false },
 ];
 
 export const MARKETS_BY_BROKER: Record<string, string[]> = {
@@ -25,10 +21,6 @@ export const MARKETS_BY_BROKER: Record<string, string[]> = {
     'crypto-futures',
     'other',
   ],
-  binance: ['crypto-spot', 'crypto-futures'],
-  mexc: ['crypto-spot', 'crypto-futures'],
-  bybit: ['crypto-spot', 'crypto-futures'],
-  okx: ['crypto-spot', 'crypto-futures'],
 };
 
 export const MARKET_LABELS: Record<string, string> = {

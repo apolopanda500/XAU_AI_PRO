@@ -16,7 +16,7 @@ from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_ope
 from backend.broker_registry import normalize_market as normalize_registry_market
 from backend.broker_registry import normalize_read_scope
 
-Broker = Literal["mt5", "mexc", "binance", "bybit", "okx"]
+Broker = str
 Market = Literal["crypto-spot", "crypto-futures", "forex", "indices", "metals", "stocks", "commodities", "bonds", "other"]
 CryptoMarket = Literal["crypto-spot", "crypto-futures"]
 Side = Literal["buy", "sell"]

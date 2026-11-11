@@ -45,8 +45,8 @@ describe('escopoAtivo — sem conta gravada, sem escopo', () => {
   it('mercado incompativel com a corretora cai no primeiro dela, nao em forex', () => {
     // `compatibleMarket`: a lista e da corretora ESCOLHIDA. Presumir `forex`
     // para uma exchange seria o mesmo defeito com outra letra.
-    definirEscopoAtivo('binance', 'forex');
-    expect(escopoAtivo()).toEqual({ broker: 'binance', market: 'crypto-spot' });
+    definirEscopoAtivo('mt5', 'acoes');
+    expect(escopoAtivo()).toEqual({ broker: 'mt5', market: 'forex' });
   });
 });
 

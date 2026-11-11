@@ -32,8 +32,8 @@ function respostaConta(broker: string) {
       ],
     };
   }
-  if (broker === 'binance') {
-    return { saldo: 250, disponivel: 250, posicoes: [{ profit: 12 }] };
+  if (broker === 'demo') {
+    return { saldo: 500, disponivel: 500, posicoes: [{ profit: 12 }] };
   }
   return { saldo: 0, disponivel: 0, posicoes: [] };
 }
@@ -94,12 +94,6 @@ describe('Carteira — resultado aberto', () => {
     await waitFor(() => expect(linhaDe('MT5').textContent).toContain('-25,00'));
     const celula = linhaDe('MT5').querySelector('td.neg');
     expect(celula?.textContent).toBe('-25,00');
-  });
-
-  it('resultado positivo leva "+" e classe pos', async () => {
-    renderizar();
-    await waitFor(() => expect(linhaDe('Binance').textContent).toContain('+12,00'));
-    expect(linhaDe('Binance').querySelector('td.pos')?.textContent).toBe('+12,00');
   });
 
   it('saldo negativo aparece como numero, nao como ausencia', async () => {

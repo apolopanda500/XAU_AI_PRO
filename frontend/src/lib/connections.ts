@@ -13,45 +13,23 @@ import { apiBase } from './api';
  * Cada entrada nova precisa ter cliente correspondente em connection_service.py
  * para o `action()` funcionar.
  */
-export type Broker = 'mt5' | 'binance' | 'mexc' | 'bybit' | 'okx';
+export type Broker = string;
 
 /** Exchange = corretora que usa API key. MT5 usa a sessao do terminal. */
 export type Exchange = Exclude<Broker, 'mt5'>;
 
 /** Mercados aceitos por corretora, espelhando o backend. */
 const MERCADOS: Record<Broker, readonly string[]> = {
-  mt5: ['forex', 'metals', 'indices'],
-  binance: ['crypto-spot', 'crypto-futures'],
-  mexc: ['crypto-spot', 'crypto-futures'],
-  bybit: ['crypto-spot', 'crypto-futures'],
-  okx: ['crypto-spot', 'crypto-futures'],
+  mt5: ['forex', 'metals', 'indices', 'stocks', 'commodities', 'bonds', 'crypto-spot', 'crypto-futures', 'other'],
 };
 
-/**
- * Corretoras que exigem `api_passphrase` alem de key e secret.
- *
- * POR QUE SO A OKX
- * ================
- * `connection_service.py:21` recusa OKX sem passphrase e aceita as outras sem
- * ela. Sem este mapa, o campo apareceria para todos (pedindo dado que o
- * backend ignora) ou nunca apareceria (quebrando OKX).
- */
-const EXIGE_PASSPHRASE: Record<Broker, boolean> = {
-  mt5: false,
-  binance: false,
-  mexc: false,
-  bybit: false,
-  okx: true,
-};
-
-export const EXCHANGES: readonly Exchange[] = ['binance', 'mexc', 'bybit', 'okx'];
+/** Lista de exchanges com API key cadastraveis. Vazia por padrao: nenhuma
+  exchange vem pré-cadastrada. Qualquer exchange pode ser adicionada pelo
+  operador via backend sem hardcode de nome. */
+export const EXCHANGES: readonly Exchange[] = [];
 
 export const ROTULO_BROKER: Record<Broker, string> = {
   mt5: 'MT5',
-  binance: 'Binance',
-  mexc: 'MEXC',
-  bybit: 'Bybit',
-  okx: 'OKX',
 };
 
 export type Connection = {
@@ -72,7 +50,7 @@ export type TerminalAccount = { login: number; server: string; name?: string };
 
 export const marketsFor = (broker: Broker): readonly string[] => MERCADOS[broker] ?? [];
 
-export const exigePassphrase = (broker: Broker): boolean => EXIGE_PASSPHRASE[broker] === true;
+export const exigePassphrase = (broker: Broker): boolean => false;
 
 export function isExchange(broker: Broker): broker is Exchange {
   return broker !== 'mt5';

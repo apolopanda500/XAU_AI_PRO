@@ -19,8 +19,8 @@ import {
 } from './brokerCatalog';
 
 describe('corretoras oferecidas', () => {
-  it('cobre as cinco corretoras com leitura real', () => {
-    expect(BROKERS.map((b) => b.id)).toEqual(['mt5', 'binance', 'mexc', 'bybit', 'okx']);
+  it('so MT5 vem precadastrada', () => {
+    expect(BROKERS.map((b) => b.id)).toEqual(['mt5']);
   });
 
   it('toda corretora offered tem mercados declarados', () => {
@@ -30,7 +30,7 @@ describe('corretoras oferecidas', () => {
   });
 
   it('rotulo legivel e fallback para corretora desconhecida', () => {
-    expect(brokerLabel('okx')).toBe('OKX');
+    expect(brokerLabel('mt5')).toBe('MT5');
     expect(brokerLabel('xmglobal')).toBe('XMGLOBAL');
   });
 });
@@ -63,12 +63,11 @@ describe('normalizeSymbol', () => {
 
 describe('compatibleMarket', () => {
   it('mantem o mercado quando a corretora suporta', () => {
-    expect(compatibleMarket('okx', 'crypto-futures')).toBe('crypto-futures');
+    expect(compatibleMarket('mt5', 'crypto-futures')).toBe('crypto-futures');
   });
 
   it('troca para um mercado suportado quando nao cabe', () => {
-    expect(compatibleMarket('okx', 'forex')).toBe('crypto-spot');
-    expect(compatibleMarket('bybit', 'metals')).toBe('crypto-spot');
+    expect(compatibleMarket('mt5', 'forex')).toBe('forex');
   });
 });
 

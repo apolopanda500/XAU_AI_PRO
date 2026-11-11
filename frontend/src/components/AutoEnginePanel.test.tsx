@@ -148,12 +148,10 @@ describe('AutoEnginePanel — par, comandos e config', () => {
   it('escolhendo a corretora o caminho feliz fica disponivel', async () => {
     render(<AutoEnginePanel />);
     const seletor = await screen.findByLabelText('Corretora do motor automatico');
-    fireEvent.change(seletor, { target: { value: 'binance' } });
+    fireEvent.change(seletor, { target: { value: 'mt5' } });
     const mercado = screen.getByLabelText('Mercado do motor automatico');
-    // Binance so opera cripto: a lista de mercado tem de acompanhar a
-    // corretora, senao o motor aceitaria "binance + forex" e so recusaria
-    // no envio.
-    expect(mercado.querySelector('option[value="forex"]')).toBeNull();
+    // MT5 opera todos os mercados: a lista acompanha a corretora escolhida.
+    expect(mercado.querySelector('option[value="forex"]')).not.toBeNull();
     expect(screen.getByRole('button', { name: /Aplicar e ligar|Aplique antes/ })).toBeTruthy();
   });
 

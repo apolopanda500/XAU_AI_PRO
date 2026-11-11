@@ -45,13 +45,14 @@ EXECUTION_ACTIONS: dict[str, tuple[str, ...]] = {
 
 BROKERS: dict[str, BrokerDefinition] = {
     "mt5": BrokerDefinition("mt5", "MetaTrader 5", MT5_MARKETS, ("forex", "metal", "index", "equity", "commodity", "bond", "crypto", "other"), True, True, True, True, True, "active"),
-    "binance": BrokerDefinition("binance", "Binance", EXCHANGE_MARKETS, ("crypto",), True, True, False, True, True, "active"),
-    "mexc": BrokerDefinition("mexc", "MEXC", EXCHANGE_MARKETS, ("crypto",), True, True, False, True, True, "active"),
-    # Bybit e OKX passaram a active para dados publicos depois que os clientes
-    # responderam a API publica real (catalogo, ticker, klines, depth, trades).
-    # A leitura de conta continua dependendo de credencial configurada pelo usuario.
-    "bybit": BrokerDefinition("bybit", "Bybit", EXCHANGE_MARKETS, ("crypto",), True, True, False, True, True, "active"),
-    "okx": BrokerDefinition("okx", "OKX", EXCHANGE_MARKETS, ("crypto",), True, True, False, True, True, "active"),
+    # Corretoras de exchange: nomes removidos da lista ATIVA por pedido do
+    # dono (projeto limpo, sem corretoras fixas). Cada uma permanece no
+    # catalogo como "planned" para compatibilidade futura — qualquer
+    # broker_id pode ser cadastrado via backend sem hardcode de nome.
+    "binance": BrokerDefinition("binance", "Binance", EXCHANGE_MARKETS, ("crypto",), True, False, False, False, False, "planned"),
+    "mexc": BrokerDefinition("mexc", "MEXC", EXCHANGE_MARKETS, ("crypto",), True, False, False, False, False, "planned"),
+    "bybit": BrokerDefinition("bybit", "Bybit", EXCHANGE_MARKETS, ("crypto",), True, False, False, False, False, "planned"),
+    "okx": BrokerDefinition("okx", "OKX", EXCHANGE_MARKETS, ("crypto",), True, False, False, False, False, "planned"),
     "bitget": BrokerDefinition("bitget", "Bitget", EXCHANGE_MARKETS, ("crypto",), True, False, False, False, False, "planned"),
     "coinbase": BrokerDefinition("coinbase", "Coinbase", EXCHANGE_MARKETS, ("crypto",), True, False, False, False, False, "planned"),
     "kraken": BrokerDefinition("kraken", "Kraken", EXCHANGE_MARKETS, ("crypto",), True, False, False, False, False, "planned"),

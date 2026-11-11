@@ -4,7 +4,7 @@
 > `backend/broker_registry.py`. **Nao editar a mao**: a fonte da verdade e o
 > registro, e `--check` reprova se o arquivo estiver desatualizado.
 >
-> Dados publicos: 2026-10-03
+> Dados publicos: 2026-11-11
 
 ## A coluna "Leitura" estava invertida (corrigido 01/10/2026)
 
@@ -62,14 +62,6 @@ Sobre o resto:
 | `mt5` | `crypto-spot` | sim | `active` | `assets`, `quotes`, `batch_quotes`, `candles`, `account`, `positions`, `orders`, `history`, `journal` |
 | `mt5` | `crypto-futures` | sim | `active` | `assets`, `quotes`, `batch_quotes`, `candles`, `account`, `positions`, `orders`, `history`, `journal` |
 | `mt5` | `other` | sim | `active` | `assets`, `quotes`, `batch_quotes`, `candles`, `account`, `positions`, `orders`, `history`, `journal` |
-| `binance` | `crypto-spot` | sim | `active` | `assets`, `quotes`, `batch_quotes`, `candles`, `depth`, `trades`, `stats24h`, `account`, `positions`, `history` |
-| `binance` | `crypto-futures` | sim | `active` | `assets`, `quotes`, `batch_quotes`, `candles`, `depth`, `trades`, `stats24h`, `account`, `positions`, `history` |
-| `mexc` | `crypto-spot` | sim | `active` | `assets`, `quotes`, `batch_quotes`, `candles`, `depth`, `trades`, `stats24h`, `account`, `positions`, `history` |
-| `mexc` | `crypto-futures` | sim | `active` | `assets`, `quotes`, `batch_quotes`, `candles`, `depth`, `trades`, `stats24h`, `account`, `positions`, `history` |
-| `bybit` | `crypto-spot` | sim | `active` | `assets`, `quotes`, `batch_quotes`, `candles`, `depth`, `trades`, `stats24h`, `account`, `positions`, `history` |
-| `bybit` | `crypto-futures` | sim | `active` | `assets`, `quotes`, `batch_quotes`, `candles`, `depth`, `trades`, `stats24h`, `account`, `positions`, `history` |
-| `okx` | `crypto-spot` | sim | `active` | `assets`, `quotes`, `batch_quotes`, `candles`, `depth`, `trades`, `stats24h`, `account`, `positions`, `history` |
-| `okx` | `crypto-futures` | sim | `active` | `assets`, `quotes`, `batch_quotes`, `candles`, `depth`, `trades`, `stats24h`, `account`, `positions`, `history` |
 
 ## Execucao
 
@@ -82,6 +74,14 @@ demo validada, teste de rejeicao, auditoria e kill switch conferidos.
 
 | Corretora | Mercado | Status | Capabilities |
 | --- | --- | --- | --- |
+| `binance` | `crypto-spot` | planejada | nenhuma |
+| `binance` | `crypto-futures` | planejada | nenhuma |
+| `mexc` | `crypto-spot` | planejada | nenhuma |
+| `mexc` | `crypto-futures` | planejada | nenhuma |
+| `bybit` | `crypto-spot` | planejada | nenhuma |
+| `bybit` | `crypto-futures` | planejada | nenhuma |
+| `okx` | `crypto-spot` | planejada | nenhuma |
+| `okx` | `crypto-futures` | planejada | nenhuma |
 | `bitget` | `crypto-spot` | planejada | nenhuma |
 | `bitget` | `crypto-futures` | planejada | nenhuma |
 | `coinbase` | `crypto-spot` | planejada | nenhuma |
