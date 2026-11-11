@@ -265,7 +265,9 @@ def tool_call(name, args):
     if name == "fear_greed_index":
         return _http("https://api.alternative.me/fng/?limit=1")
     if name == "crypto_ticker":
-        simbolo = str(args.get("symbol", "BTCUSDT")).strip().upper()
+        simbolo = str(args.get("symbol", "")).strip().upper()
+        if not simbolo:
+            return {"error": "symbol e obrigatorio; nenhum ativo e presumido"}
         return _http(f"https://api.binance.com/api/v3/ticker/24hr?symbol={simbolo}")
     return {"error": f"ferramenta desconhecida: {name}"}
 
