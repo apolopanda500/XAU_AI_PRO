@@ -10,6 +10,7 @@ import {
   createChart,
   type IChartApi,
   type ISeriesApi,
+  type AutoscaleInfo,
   type CandlestickData,
   type LineData,
   type UTCTimestamp,
@@ -58,15 +59,19 @@ import type { LinhaOrdem } from '../../lib/ordemGrafico';
   tem agregacao propria de trimestre nem de ano. Um `3M` seria soma de 12
   semanas feita na mao, e o preco viria de uma vela que o operador nao ve.
   `MAX` tambem nao: e um intervalo, nao um timeframe.
+
+  A lista mora em `./timeframes` (11/11/2026) porque o menu do botao direito
+  tambem a usa e o menu e filho deste componente — importar daqui seria circuito.
+  O `export` abaixo mantem o caminho de sempre para quem ja importa daqui.
 */
-export const TIMEFRAMES = ['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1', 'W1', 'MN1'] as const;
-export type ChartTimeframe = (typeof TIMEFRAMES)[number];
+import { TIMEFRAMES, type ChartTimeframe } from './timeframes';
+export { TIMEFRAMES, type ChartTimeframe };
 
 type PriceChartProps = {
   symbol?: string;
   broker?: MarketBroker;
   market?: MarketKind;
-  height?: number;
+  height?: number | string;
   candles?: MarketCandle[];
   timeframe?: ChartTimeframe;
   onTimeframeChange?: (timeframe: ChartTimeframe) => void;
@@ -98,8 +103,16 @@ type PriceChartProps = {
    */
   rsi?: boolean;
   macd?: boolean;
+  /**
+   * Estocastico (%K/%D) como painel abaixo do preco — mesma casa do RSI/MACD:
+   * segundo canvas com o proprio eixo, sem pane (o `lightweight-charts` 4.2.3 so
+   * tem pane a partir da v5). `false` por padrao; o dono liga pelo painel.
+   */
+  stoch?: boolean;
   /** Chamado quando o operador liga/desliga um indicador pela tela. */
-  onIndicadoresChange?: (estado: { rsi: boolean; macd: boolean; ema: boolean }) => void;
+  onIndicadoresChange?: (
+    estado: { rsi: boolean; macd: boolean; ema: boolean; stoch?: boolean },
+  ) => void;
   /*
     AS LINHAS DA ORDEM (06/10/2026, revisto em 08/10/2026)
     =====================================================
@@ -158,6 +171,7 @@ export type EstadoGrafico = {
   rsi: boolean;
   macd: boolean;
   ema: boolean;
+  stoch?: boolean;
   /** Overlays calculados dos candles exibidos. Opcionais: passos antigos de
    *  desfazer continuam validos sem eles. */
   sma?: boolean;
@@ -293,6 +307,53 @@ export function macdValores(
   });
 
   return { macd, sinal, histograma };
+}
+
+export type Stochastic = {
+  k: Array<number | null>;
+  d: Array<number | null>;
+};
+
+/**
+ * Estocastico (%K/%D), dos candles exibidos.
+ *
+ * `%K` e a posicao do fechamento em relacao ao range (high/low) da janela de
+ * `periodo` — a definicao que as plataformas de referencia (MT5 / TradingView)
+ * usam no Stochastic Oscillator. `%D` e a EMA de `dPeriodo` sobre os valores de
+ * `%K`. Sem janela valida, tudo e `null`: nunca zero (AGENTS.md §2 — ausencia, nao
+ * numero).
+ */
+export function stocValores(
+  candles: Array<{ high: number; low: number; close: number }>,
+  periodo = 14,
+  smooth = 3,
+  dPeriodo = 3,
+): Stochastic {
+  const n = candles.length;
+  const k: Array<number | null> = new Array(n).fill(null);
+  const d: Array<number | null> = new Array(n).fill(null);
+  if (periodo < 2 || smooth < 2 || dPeriodo < 2) return { k, d };
+  const primeiro = periodo - 1;
+  if (n <= primeiro) return { k, d };
+  for (let i = primeiro; i < n; i += 1) {
+    let hi = candles[i].low;
+    let lo = candles[i].high;
+    for (let j = i - periodo + 1; j < i; j += 1) {
+      hi = Math.max(hi, candles[j].high);
+      lo = Math.min(lo, candles[j].low);
+    }
+    const span = hi - lo;
+    k[i] = span > 0 ? ((candles[i].close - lo) / span) * 100 : null;
+  }
+  const validos = k.map((v, i) => (v === null ? -1 : i)).filter((i) => i >= 0);
+  if (validos.length < dPeriodo) return { k, d };
+  const series = validos.map((i) => k[i] as number);
+  const ema = emaValores(series, dPeriodo);
+  validos.forEach((i, idx) => {
+    const v = ema[idx];
+    d[i] = v === null ? null : v;
+  });
+  return { k, d };
 }
 
 /*
@@ -510,6 +571,7 @@ export default function PriceChart({
   ema: emaProp,
   rsi: rsiProp,
   macd: macdProp,
+  stoch: stochProp,
   onIndicadoresChange,
   onMoveLine,
   modoOrdem = false,
@@ -543,6 +605,50 @@ export default function PriceChart({
   const candlesEnquadrados = useRef(0);
   const [chartReady, setChartReady] = useState(false);
   const [internalTimeframe, setInternalTimeframe] = useState<ChartTimeframe>('M5');
+
+  /*
+    DESLOCAMENTO VERTICAL "ESTILO TRADINGVIEW" (11/11/2026)
+    ========================================================
+    O pedido do dono: "rolar ... na barra lateral direita com valores igual no
+    traderview, tudo livre e solto".
+
+    O lightweight-charts 4.2.3 NAO tem API publica de pan vertical: `IPriceScaleApi`
+    so tem `applyOptions`, `options` e `width`. O que existe e o
+    `autoscaleInfoProvider` da serie — o punto de extensao documentado: ele
+    devolve a faixa de preco que a escala vai usar, e e chamado em TODA
+    recalculacao (scroll, zoom, dado novo, resize).
+
+    `deslocamentoPreco` e um DESLOCAMENTO em unidades de preco somado a faixa
+    que a serie calculou. Zero = escala pura, igual a hoje. A escala continua
+    `autoScale: true` (recalcula sozinha com o dado novo); o deslocamento e o
+    que o operador move com a roda por cima da escala ou com o botao do meio.
+  */
+  const deslocamentoPreco = useRef(0);
+  /*
+    GRADE E VOLUMES DO MENU "EXIBIR" (11/11/2026)
+    --------------------------------------------
+    Estado com CONSUMIDOR: `grade` vira `grid.vertLines.visible` no proprio
+    grafico, e `volume` vira `visible` na serie de volume. O padrao de hoje nao
+    muda (verticais escondidas, volume ligado) — o item so alterna o que ja
+    existe no `createChart`.
+  */
+  const [gradeVisivel, setGradeVisivel] = useState(false);
+  const [volumeVisivel, setVolumeVisivel] = useState(true);
+  /*
+    O ARRASTE COM O BOTAO DO MEIO (11/11/2026)
+    -------------------------------------------
+    `ref`, e nao estado: ele e lido 60 vezes por segundo dentro de `mousemove`,
+    e um `setState` ali re-renderizaria o gráfico inteiro a cada pixel.
+    Guarda o ponto de partida (mouse, faixa visiva e deslocamento vertical)
+    para que o arraste seja RELATIVO — mover e voltar ao ponto zero nao tem
+    efeito acumulado errado.
+  */
+  const arrasteMeio = useRef<{
+    x: number;
+    y: number;
+    faixa: { from: number; to: number } | null;
+    off: number;
+  } | null>(null);
 
   /*
     O MENU DO BOTAO DIREITO (09/10/2026)
@@ -640,6 +746,7 @@ export default function PriceChart({
   const [rsiInterno, setRsiInterno] = useState(false);
   const [macdInterno, setMacdInterno] = useState(false);
   const [emaInterno, setEmaInterno] = useState(false);
+  const [stochInterno, setStochInterno] = useState(false);
   /*
     SMA, BOLLINGER E VWAP (23/10/2026)
     ----------------------------------
@@ -700,6 +807,7 @@ export default function PriceChart({
   const rsiExterno = rsiProp ?? rsiInterno;
   const macdExterno = macdProp ?? macdInterno;
   const emaExterno = emaProp ?? emaInterno;
+  const stochExterno = stochProp ?? stochInterno;
   const setRsi = (v: boolean) => {
     if (rsiProp === undefined) setRsiInterno(v);
     onIndicadoresChange?.({ ...indicadoresAtuais, rsi: v });
@@ -734,7 +842,24 @@ export default function PriceChart({
       );
     }
   };
-  const indicadoresAtuais = { rsi: rsiExterno, macd: macdExterno, ema: emaExterno };
+  const setStoch = (v: boolean) => {
+    if (stochProp === undefined) setStochInterno(v);
+    onIndicadoresChange?.({ ...indicadoresAtuais, stoch: v });
+    if (v !== stochExterno) {
+      registrarPasso(
+        {
+          tipo: tipoGrafico,
+          timeframe: activeTimeframe,
+          rsi: rsiExterno,
+          macd: macdExterno,
+          ema: emaExterno,
+          stoch: v,
+        },
+        v ? 'ligar Estocástico' : 'desligar Estocástico',
+      );
+    }
+  };
+  const indicadoresAtuais = { rsi: rsiExterno, macd: macdExterno, ema: emaExterno, stoch: stochExterno };
 
   /*
     O TIPO DE GRAFICO E O HISTORICO (06/10/2026)
@@ -870,8 +995,21 @@ const activeMarket = mercadoParaConsulta(market, broker);
     indicadores, zoom do menu e a tabela de dados. O clique continua
     sem armar nada (08/10/2026).
   */
+  /*
+    TROCAR DE TIMEFRAME, UM SO LUGAR (11/11/2026)
+    --------------------------------------------
+    `changeTimeframe` subiu para cima de `acaoDoMenu` porque o menu do botao
+    direito ganhou o bloco PERIODO e chama a MESMA funcao da barra de baixo —
+    dois caminhos na tela, um so consumidor. Era `const` declarado DEPOIS do
+    callback que o usa, o que so funcionaria por acidente de hoisting.
+  */
+  const changeTimeframe = (next: ChartTimeframe) => {
+    if (onTimeframeChange) onTimeframeChange(next);
+    else setInternalTimeframe(next);
+  };
+
   const acaoDoMenu = useCallback(
-    (acao: AcaoDoMenu, preco: number | null) => {
+    (acao: AcaoDoMenu, preco: number | null, valor?: string) => {
       const ts = chartRef.current?.timeScale();
 
       switch (acao) {
@@ -908,17 +1046,50 @@ const activeMarket = mercadoParaConsulta(market, broker);
           alternarTelaCheia();
           return;
         case 'copiar-preco': {
-          const valor = preco ?? displayCandles[displayCandles.length - 1]?.close;
-          if (valor === undefined || !Number.isFinite(valor)) return;
-          void navigator.clipboard?.writeText(String(valor)).catch(() => undefined);
+          const ponto = preco ?? displayCandles[displayCandles.length - 1]?.close;
+          if (ponto === undefined || !Number.isFinite(ponto)) return;
+          void navigator.clipboard?.writeText(String(ponto)).catch(() => undefined);
           return;
         }
         case 'ajustar':
+          // Ajustar e VOLTAR AO AUTO: sem zerar, a escala continuaria com o
+          // deslocamento vertical que o operador deu e "ajustar" nao ajustava
+          // nada — o defeito exato do controle que promete e nao entrega.
+          deslocamentoPreco.current = 0;
           ts?.fitContent();
           return;
+        case 'timeframe': {
+          /*
+            O BLOCO PERIODO DO MENU (11/11/2026). O MESMO consumidor da barra
+            de baixo (`changeTimeframe`), e so o que o gateway aceita: o valor
+            vem da lista `TIMEFRAMES`, nunca do rotulo do botao.
+          */
+          if (!valor) return;
+          if ((TIMEFRAMES as readonly string[]).includes(valor)) {
+            changeTimeframe(valor as ChartTimeframe);
+          }
+          return;
+        }
+        case 'grade':
+          setGradeVisivel((g) => !g);
+          return;
+        case 'volumes':
+          setVolumeVisivel((v) => !v);
+          return;
+        /*
+          EXAUSTIVIDADE COMPILADA. Se amanha entrar uma acao nova no menu e
+          ninguem escrever o que ela faz, o `tsc --noEmit` reprova em `never`
+          em vez de deixar o item morto na tela — e "item que nao faz nada" e
+          o defeito que o dono pediu para nao existir ("cada acao tem que
+          existir").
+        */
+        default: {
+          const nunca: never = acao;
+          return nunca;
+        }
       }
     },
-    [onOperarNoMenu, onEscolherPreco, alternarTelaCheia, displayCandles],
+    [onOperarNoMenu, onEscolherPreco, alternarTelaCheia, displayCandles, changeTimeframe],
   );
 
   /*
@@ -946,11 +1117,15 @@ const activeMarket = mercadoParaConsulta(market, broker);
 
   useEffect(() => {
     if (!containerRef.current) return undefined;
+    // Altura numerica para a lightweight-charts (aceita apenas number). Quando
+    // o chamador passa "100%" (preencher o container), usamos 360 de fallback
+    // para criar o canvas e o CSS faz o redimensionamento real.
+    const chartHeight = typeof height === 'number' ? height : 360;
     // Padrao XM: fundo do tema, grade quase invisivel, sem borda gritando.
     // Leve = pouca tinta, so preco. Candles + volume embaixo, legenda OHLC
     // no canto — o resto some.
     const chart = createChart(containerRef.current, {
-      height,
+      height: chartHeight,
       layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: '#8b93a7' },
       grid: {
         vertLines: { visible: false },
@@ -958,6 +1133,37 @@ const activeMarket = mercadoParaConsulta(market, broker);
       },
       timeScale: { timeVisible: true, secondsVisible: false, borderVisible: false },
       rightPriceScale: { borderVisible: false },
+      /*
+        DESLOCAMENTO LIVRE, MEDIDO E NOSSO (11/11/2026)
+        =================================================
+        MEDIDO no fonte da 4.2.3: a roda NATIVA so faz duas coisas —
+        `deltaY` vira ZOOM (`handleScale.mouseWheel`) e `deltaX` vira scroll
+        horizontal de um unico coeficiente (`deltaX * -80 / 100` = 0,8px por
+        unidade). Ocorrencia: com uma roda COMUM (que so manda `deltaY`) nao
+        havia como ROLAR o grafico, so aproximar — e o dono pediu "poder
+        rolar ... tudo livre e solto ficar mais rapido".
+
+        Por isso as duas opcoes nativas ficam LIGADAS NO NOSSO handler de
+        `wheel` (container, `passive: false`), que rola tempo na escala de
+        tempo, rola preco na barra lateral e da zoom so com Ctrl. Se alguma
+        ficasse `true`, as duas rodas agiriam e o grafico pularia.
+
+        `kineticScroll.mouse: true` e o "solto": o arraste com botao esquerdo
+        continua com inercia no soltar (padrao era `false`).
+      */
+      handleScroll: {
+        mouseWheel: false,
+        pressedMouseMove: true,
+        horzTouchDrag: true,
+        vertTouchDrag: true,
+      },
+      handleScale: {
+        mouseWheel: false,
+        pinch: true,
+        axisPressedMouseMove: { time: true, price: true },
+        axisDoubleClickReset: { time: true, price: true },
+      },
+      kineticScroll: { touch: true, mouse: true },
       crosshair: {
         /*
           MOUSE LIVRE EM TODA PARTE (12/10/2026, decisao do dono).
@@ -1073,6 +1279,85 @@ chartRef.current = chart;
     perderia o zoom e a posicao do operador, que sao estado do grafico e nao
     do componente.
 */
+/*
+  A ESCALA VERTICAL "LIVRE E SOLTA", COMO NO TRADINGVIEW (11/11/2026)
+  ===================================================================
+  Quatro pecas, todas lendo `ref` (nada de estado no meio do evento):
+
+    1. `fornecerEscala`  — o `autoscaleInfoProvider` da serie: soma o
+       deslocamento a faixa que o grafico calculou sozinho. E o UNICO ponto
+       publico da 4.2.3 que devolve faixa de preco.
+    2. `precoPorPixel`   — conversao de pixel em preco (inclinacao da escala
+       atual), para a roda e o arraste moverem na medida certa.
+    3. `sobreEscalaDePreco` — onde o mouse esta: por cima da barra lateral
+       direita (rolagem vertical) ou sobre o grafico (rolagem de tempo).
+    4. `recalcularEscalaPreco` — obriga o grafico aconsultar o provedor HOJE.
+       `setVisibleLogicalRange` chama `setVisibleRange`, que chama
+       `recalculateAllPanes`, que recalcula a escala direita enquanto ela
+       esta em `autoScale` (medido no fonte da 4.2.3, dev build).
+*/
+const VELOCIDADE_ROLAGEM = 1.5;
+
+const fornecerEscala = useCallback((base: () => AutoscaleInfo | null) => {
+  const info = base();
+  const off = deslocamentoPreco.current;
+  if (!info || off === 0) return info;
+  return {
+    ...info,
+    priceRange: {
+      minValue: info.priceRange.minValue + off,
+      maxValue: info.priceRange.maxValue + off,
+    },
+  };
+}, []);
+
+/** Quantos PRECOS cabem em 1px da escala de agora. 0 quando nao da pra medir. */
+const precoPorPixel = useCallback((): number => {
+  const serie = seriesRef.current;
+  if (!serie) return 0;
+  try {
+    const topo = serie.coordinateToPrice(0);
+    const meio = serie.coordinateToPrice(50);
+    if (typeof topo !== 'number' || typeof meio !== 'number') return 0;
+    const delta = (topo - meio) / 50;
+    return Number.isFinite(delta) && delta > 0 ? delta : 0;
+  } catch {
+    return 0;
+  }
+}, []);
+
+/** Largura da barra de precos da direita. 0 quando nao existe/escondida. */
+const larguraEscalaPreco = useCallback((): number => {
+  const chart = chartRef.current;
+  if (!chart) return 0;
+  try {
+    return chart.priceScale('right').width() || 0;
+  } catch {
+    return 0;
+  }
+}, []);
+
+/** O mouse esta por cima da BARRA LATERAL de precos? */
+const sobreEscalaDePreco = useCallback(
+  (clientX: number): boolean => {
+    const el = containerRef.current;
+    if (!el) return false;
+    const rect = el.getBoundingClientRect();
+    const largura = larguraEscalaPreco();
+    if (!(largura > 0) || !(rect.width > 0)) return false;
+    return clientX - rect.left >= rect.width - largura;
+  },
+  [larguraEscalaPreco],
+);
+
+/** Faz o grafico reler o provedor da escala agora (ver nota 4 acima). */
+const recalcularEscalaPreco = useCallback(() => {
+  const ts = chartRef.current?.timeScale();
+  if (!ts) return;
+  const faixa = ts.getVisibleLogicalRange();
+  if (faixa) ts.setVisibleLogicalRange(faixa);
+}, []);
+
 const criarSerie = useCallback(
   (chart: IChartApi, tipo: TipoGrafico) => {
     if (tipo === 'candles') {
@@ -1082,6 +1367,7 @@ const criarSerie = useCallback(
         borderVisible: false,
         wickUpColor: '#2ecc71',
         wickDownColor: '#e74c3c',
+        autoscaleInfoProvider: fornecerEscala,
       }) as ISeriesApi<'Candlestick'>;
     }
     if (tipo === 'area') {
@@ -1090,14 +1376,16 @@ const criarSerie = useCallback(
         topColor: 'rgba(79,124,255,.28)',
         bottomColor: 'rgba(79,124,255,.02)',
         lineWidth: 2,
+        autoscaleInfoProvider: fornecerEscala,
       }) as unknown as ISeriesApi<'Candlestick'>;
     }
     return chart.addLineSeries({
       color: '#4f7cff',
       lineWidth: 2,
+      autoscaleInfoProvider: fornecerEscala,
     }) as unknown as ISeriesApi<'Candlestick'>;
   },
-  [],
+  [fornecerEscala],
 );
 
 useEffect(() => {
@@ -1120,6 +1408,203 @@ useEffect(() => {
     seriesRef.current = null;
   };
 }, [chartReady, tipoGrafico, criarSerie]);
+
+  /*
+    A RODA DO MOUSE, COMO NO MT5 E NO TRADINGVIEW (11/11/2026)
+    ===========================================================
+    Tres destinos para o MESMO gesto, decididos pelo LADO onde o mouse esta:
+
+      Ctrl/ Cmd + roda  -> zoom em torno do ponteiro (o gesto de quem ja sabe);
+      sobre a ESCALA    -> rolagem VERTICAL dos precos ("barra lateral direita
+                           com valores igual no traderview");
+      sobre o GRAFICO   -> rolagem do TEMPO, na hora e sem espera.
+
+    `passive: false` e obrigatorio: e o unico jeito de `preventDefault` e
+    segurar a pagina de rolar junto com o grafico.
+  */
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return undefined;
+    const aoRolar = (e: WheelEvent) => {
+      const chart = chartRef.current;
+      const ts = chart?.timeScale();
+      if (!chart || !ts) return;
+      if (e.cancelable) e.preventDefault();
+      const faixa = ts.getVisibleLogicalRange();
+      if (!faixa) return;
+
+      if (e.ctrlKey || e.metaKey) {
+        if (e.deltaY === 0) return;
+        const rect = el.getBoundingClientRect();
+        const largura = Math.max(1, rect.width - larguraEscalaPreco());
+        const rel = Math.min(1, Math.max(0, (e.clientX - rect.left) / largura));
+        const fator = e.deltaY > 0 ? 1.12 : 0.89;
+        const ancora = faixa.from + rel * (faixa.to - faixa.from);
+        ts.setVisibleLogicalRange({
+          from: ancora - (ancora - faixa.from) * fator,
+          to: ancora + (faixa.to - ancora) * fator,
+        });
+        return;
+      }
+
+      if (sobreEscalaDePreco(e.clientX)) {
+        const px = precoPorPixel();
+        if (px > 0) {
+          // Roda pra BAIXO = escala desce = precos menores na tela, como a
+          // barra de rolagem de qualquer janela.
+          deslocamentoPreco.current -= e.deltaY * px;
+          recalcularEscalaPreco();
+        }
+        return;
+      }
+
+      // Rolar o grafico. `deltaX` (touchpad) manda quando existe; a roda
+      // comum so manda `deltaY`. VELOCIDADE_ROLAGEM: 1,5px por unidade contra
+      // os 0,8px da rolagem nativa — quase o dobro, e roda de VERDADE onde
+      // antes so existia zoom.
+      const bruto = e.deltaX !== 0 ? -e.deltaX : e.deltaY;
+      const barra = ts.options().barSpacing || 6;
+      const barras = (bruto * VELOCIDADE_ROLAGEM) / barra;
+      if (barras !== 0) {
+        ts.setVisibleLogicalRange({ from: faixa.from + barras, to: faixa.to + barras });
+      }
+    };
+    el.addEventListener('wheel', aoRolar, { passive: false });
+    return () => el.removeEventListener('wheel', aoRolar);
+  }, [larguraEscalaPreco, precoPorPixel, sobreEscalaDePreco, recalcularEscalaPreco]);
+
+  /*
+    O BOTAO DO MEIO: ARRASTAR O GRAFICO INTEIRO (11/11/2026)
+    =========================================================
+    O lightweight-charts ignora `button === 1` (so o esquerdo arrasta, e o
+    proprio codigo dele so PREVINE o autoscroll do Chrome no meio) — entao o
+    gesto e todo nosso: horizontal pela faixa visivel, vertical pelo
+    deslocamento da escala. `preventDefault` no `mousedown` e o que mata o
+    autoscroll do Windows (a luva que o sistema desenha ao apertar a roda).
+  */
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return undefined;
+    const aoPressionar = (e: MouseEvent) => {
+      if (e.button !== 1) return;
+      e.preventDefault();
+      const ts = chartRef.current?.timeScale();
+      arrasteMeio.current = {
+        x: e.clientX,
+        y: e.clientY,
+        faixa: ts?.getVisibleLogicalRange() ?? null,
+        off: deslocamentoPreco.current,
+      };
+      el.style.cursor = 'grabbing';
+    };
+    const aoMover = (e: MouseEvent) => {
+      const m = arrasteMeio.current;
+      if (!m) return;
+      /*
+        ORDEM QUE O NUMERO DEPENDE: o deslocamento vertical entra PRIMEIRO, e
+        so depois vem `setVisibleLogicalRange` — quando existe faixa visivel,
+        e ela que recalcula a escala (recalculateAllPanes) e ja le o provedor
+        com o deslocamento novo. Chamar as duas coisas seria DUAS leituras e
+        dois repaints por pixel.
+      */
+      const px = precoPorPixel();
+      if (px > 0) {
+        // Arrastou pra BAIXO = o conteudo foi junto = a faixa de precos subiu.
+        deslocamentoPreco.current = m.off + (e.clientY - m.y) * px;
+      }
+      const ts = chartRef.current?.timeScale();
+      if (ts && m.faixa) {
+        const barra = ts.options().barSpacing || 6;
+        const barras = -(e.clientX - m.x) / barra;
+        ts.setVisibleLogicalRange({ from: m.faixa.from + barras, to: m.faixa.to + barras });
+      } else if (px > 0) {
+        // Sem faixa visivel nao ha scroll que force a leitura: recalcula na
+        // mao ou o deslocamento so apareceria no proximo dado.
+        recalcularEscalaPreco();
+      }
+    };
+    const aoSoltar = () => {
+      if (!arrasteMeio.current) return;
+      arrasteMeio.current = null;
+      el.style.cursor = '';
+    };
+    el.addEventListener('mousedown', aoPressionar);
+    window.addEventListener('mousemove', aoMover);
+    window.addEventListener('mouseup', aoSoltar);
+    return () => {
+      el.removeEventListener('mousedown', aoPressionar);
+      window.removeEventListener('mousemove', aoMover);
+      window.removeEventListener('mouseup', aoSoltar);
+      el.style.cursor = '';
+      arrasteMeio.current = null;
+    };
+  }, [precoPorPixel, recalcularEscalaPreco]);
+
+  /*
+    DUPLO CLIQUE NA BARRA LATERAL = VOLTAR AO AUTO (11/11/2026)
+    -----------------------------------------------------------
+    E o gesto de resetar a escala em toda plataforma. Sem esta captura em fase
+    de captura, o reset NATIVO rodaria e o provedor somaria o deslocamento de
+    novo — o duplo clique pareceria nao fazer nada.
+  */
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return undefined;
+    const aoDuplo = (e: MouseEvent) => {
+      if (!sobreEscalaDePreco(e.clientX)) return;
+      if (deslocamentoPreco.current === 0) return;
+      e.stopPropagation();
+      e.preventDefault();
+      deslocamentoPreco.current = 0;
+      recalcularEscalaPreco();
+    };
+    el.addEventListener('dblclick', aoDuplo, true);
+    return () => el.removeEventListener('dblclick', aoDuplo, true);
+  }, [sobreEscalaDePreco, recalcularEscalaPreco]);
+
+  /*
+    OS ITENS DO BLOCO EXIBIR APLICAM NO GRAFICO (11/11/2026)
+    --------------------------------------------------------
+    Depois de `chartReady` (a serie de volume nasce junto com o grafico), e de
+    novo quando o estado muda. Rodar no montante (so `[gradeVisivel]`) deixaria
+    a opcao esquecida se o grafico fosse recriado por `height`.
+  */
+  useEffect(() => {
+    if (!chartReady) return;
+    chartRef.current?.applyOptions({ grid: { vertLines: { visible: gradeVisivel } } });
+  }, [gradeVisivel, chartReady]);
+
+  useEffect(() => {
+    if (!chartReady) return;
+    volumeRef.current?.applyOptions({ visible: volumeVisivel });
+  }, [volumeVisivel, chartReady]);
+
+  /*
+    A TECLA `F` DO PROPRIO BOTAO (11/11/2026)
+    ------------------------------------------
+    MEDIDO antes: o botao prometia "Grafico em tela cheia (F)" e nao havia
+    NENHUM handler de `f` no frontend inteiro — o titulo mentia, que e o
+    defeito do §9 na forma mais silenciosa. `Esc` sai da tela cheia pelo
+    proprio navegador (e o `fullscreenchange` acima ja repinta), por isso so
+    a `F` entra aqui. Com o menu aberto a tecla e do menu, nao da tela cheia.
+  */
+  useEffect(() => {
+    const teclar = (e: KeyboardEvent) => {
+      if (menu.aberto) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const alvo = e.target;
+      if (
+        alvo instanceof HTMLElement &&
+        (alvo.tagName === 'INPUT' || alvo.tagName === 'TEXTAREA' || alvo.tagName === 'SELECT' || alvo.isContentEditable)
+      )
+        return;
+      if (e.key.toLowerCase() !== 'f') return;
+      e.preventDefault();
+      alternarTelaCheia();
+    };
+    window.addEventListener('keydown', teclar);
+    return () => window.removeEventListener('keydown', teclar);
+  }, [alternarTelaCheia, menu.aberto]);
 
 useEffect(() => {
     if (candles !== undefined || !symbol) return undefined;
@@ -1372,6 +1857,10 @@ useEffect(() => {
   */
   if (data.length && data.length !== candlesEnquadrados.current) {
     candlesEnquadrados.current = data.length;
+    // O CONJUNTO mudou: o enquadramento volta ao padrao, e o deslocamento
+    // vertical junto — senao a escala ficaria com o operador "empurrada" e o
+    // `fitContent` novo sairia com os precos fora do lugar (11/11/2026).
+    deslocamentoPreco.current = 0;
     chartRef.current?.timeScale().fitContent();
   }
   }, [chartReady, displayCandles, markers, lines, emaExterno, tipoGrafico, seriesAtivo, extras]);
@@ -1746,11 +2235,6 @@ useEffect(() => {
     };
   }, [chartReady, ordem, modoOrdem, onMoverLinhaOrdem, onRemoverLinha, tipoGrafico, seriesAtivo]);
 
-  const changeTimeframe = (next: ChartTimeframe) => {
-    if (onTimeframeChange) onTimeframeChange(next);
-    else setInternalTimeframe(next);
-  };
-
   return (
     <div className="card compact-card price-chart" ref={wrapRef} aria-busy={loading}>
       <div className="section-head">
@@ -1956,6 +2440,7 @@ useEffect(() => {
             vwap: extras.vwap,
             rsi: rsiExterno,
             macd: macdExterno,
+            stoch: stochExterno,
           }}
           onAlternar={(id: IndicadorId) => {
             if (id === 'ema') {
@@ -1968,6 +2453,10 @@ useEffect(() => {
             }
             if (id === 'macd') {
               setMacd(!macdExterno);
+              return;
+            }
+            if (id === 'stoch') {
+              setStoch(!stochExterno);
               return;
             }
             const proximo = { ...extras, [id]: !extras[id] };
@@ -2094,7 +2583,7 @@ useEffect(() => {
         <div
           ref={containerRef}
           className="market-chart-canvas"
-          style={{ height: telaCheia ? '100%' : height }}
+          style={{ height: telaCheia ? '100%' : (typeof height === 'number' ? height + 'px' : height ?? '100%') }}
           aria-label={`Gráfico de candles de ${symbol || 'ativo'}`}
           aria-describedby="price-chart-summary"
           role="img"
@@ -2119,6 +2608,9 @@ useEffect(() => {
           precoNoPonto={menu.preco}
           aoEscolher={acaoDoMenu}
           aoFechar={() => setMenu((m) => ({ ...m, aberto: false }))}
+          timeframeAtual={activeTimeframe}
+          grade={gradeVisivel}
+          volumes={volumeVisivel}
         />
         {/*
           A CAMADA DOS `x`. So existe em `modoOrdem`, e so recebe conteudo
@@ -2143,6 +2635,7 @@ useEffect(() => {
       {macdExterno && (
         <GraficoIndicador candles={displayCandles} indicador="macd" />
       )}
+      {stochExterno && <GraficoIndicador candles={displayCandles} indicador="stoch" />}
       <div ref={legendaRef} className="muted mono" aria-hidden="true" style={{ fontSize: 12 }} />
       {/*
         A BASE DO GRAFICO (05/10/2026) — o dono mandou "como XM".

@@ -65,10 +65,71 @@ def carregar(caminhos: list[Path]) -> pd.DataFrame:
     return tudo
 
 
+# Banda de plausibilidade da barra contra o preco do PROPRIO simbolo.
+# MEDIDO 11/11/2026 no journal dos 15 graficos: USDBRL trazia 7 barras de 810
+# com valores 89657.89780..89658.77740 contra um par que vale 5.62, e USDCOP
+# trazia 2270000.00000 e 1.39000 dentro de uma serie de 3312.72. O EA ja
+# descarta essas barras (banda de 25% em Indicators/VolatilityFilter e em
+# Core/SignalCore, P1.3596/P1.3598). O pipeline Python TEM de fazer o mesmo:
+# treinar sobre barras que o EA nunca produz deixa o feature_hash a descrever
+# um mundo que nao existe em producao.
+SANE_TOL_PCT = 0.25
+SANE_JANELA = 500
+
+
+def sanear_barras(base: pd.DataFrame, simbolo: str) -> pd.DataFrame:
+    """Descarta barras fora da banda de 25% em volta do preco do simbolo.
+
+    A referencia e a mediana CORRENTE dos fechos (janela de 500 barras, sempre
+    deslocada para tras): uma serie de 16 meses tem tendencia legitima e um
+    preco unico de referencia cortaria historico real junto com as barras
+    corrompidas. Sem o deslocamento a barra julgaria a si propria.
+    """
+    if base.empty:
+        return base
+    fecho = pd.to_numeric(base["Close"], errors="coerce")
+    referencia = fecho.rolling(SANE_JANELA, min_periods=20).median().shift(1).bfill().ffill()
+    referencia = referencia.where(referencia > 0.0, fecho.abs())
+    piso = referencia * (1.0 - SANE_TOL_PCT)
+    teto = referencia * (1.0 + SANE_TOL_PCT)
+
+    alto = pd.to_numeric(base["High"], errors="coerce")
+    baixo = pd.to_numeric(base["Low"], errors="coerce")
+    sanas = (
+        (fecho > 0.0) & (alto > 0.0) & (baixo > 0.0) & (alto >= baixo)
+        & (fecho >= piso) & (fecho <= teto)
+        & (alto >= piso) & (alto <= teto)
+        & (baixo >= piso) & (baixo <= teto)
+    ).fillna(False)
+
+    descartadas = int((~sanas).sum())
+    if descartadas:
+        exemplo = base.loc[~sanas].head(3)
+        valores = ", ".join("%.5f" % float(v) for v in exemplo["Close"].tolist())
+        print(
+            f"  [SANE] {simbolo} | descartadas={descartadas} de {len(base)}"
+            f" | exemplos de fecho={valores}"
+        )
+    return base.loc[sanas].reset_index(drop=True)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Retreino da IA com porta de qualidade")
     parser.add_argument("--symbol", default="XAUUSD")
     parser.add_argument("--todos", action="store_true", help="treina todos os simbolos do dataset")
+    parser.add_argument(
+        "--simbolos",
+        default="",
+        help="lista explicita separada por virgula (ex.: EURUSD,GBPUSD). "
+        "Treina so esses, sem carregar simbolo de layout misto do dataset antigo.",
+    )
+    parser.add_argument(
+        "--fontes",
+        default="",
+        help="CSVs explicitos separados por virgula. Vazio usa os datasets "
+        "padrao (legacy, dataset.csv e dataset_mt5_*.csv). Serve para treinar "
+        "sobre um export fresco, sem misturar dataset antigo.",
+    )
     parser.add_argument("--timeframes", default=",".join(TIMEFRAMES))
     parser.add_argument("--min-edge", type=float, default=t.PUBLICACAO_MIN_EDGE)
     parser.add_argument("--min-amostras", type=int, default=300)
@@ -108,8 +169,14 @@ def main() -> int:
     for simbolo in simbolos:
         base = df[df["Symbol"].astype(str).str.upper() == simbolo.upper()]
         base = base.sort_values("Time").reset_index(drop=True)
+        # As barras de outra escala sao descartadas ANTES do treino, com a
+        # mesma banda de 25% que o EA aplica ao vivo.
+        base = sanear_barras(base, simbolo)
         if base.empty:
-            print(f"\n{simbolo}: sem linhas no dataset")
+            print(f"\n{simbolo}: sem barras sanas no dataset")
+            continue
+        if base.empty:
+            # serie vazia ja recusada acima, depois do saneamento
             continue
         print(f"\n=== {simbolo} ({len(base):,} candles M5) ===")
         print(f"{'tf':<5}{'acc':>8}{'f1':>8}{'edge':>9}{'treino':>9}{'teste':>8}  disposicao")

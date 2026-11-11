@@ -286,6 +286,23 @@
 }
 
 /*
+  GRAFICO VIA VIEWPORT (v1.2.203)
+  -------------------------------
+  O `grafico-viewport` define a altura disponível (calc(100vh - elementos acima))
+  e o `market-chart-wrap` preenche 100% dela, para o canvas com `height: 100%`
+  não colapsar. Antes o canvas tinha `height={640}` fixo e nascia abaixo da
+  dobra em telas baixas (medido: y=1089 em viewport 900px).
+*/
+.grafico-viewport {
+  display: flex;
+  flex-direction: column;
+}
+.grafico-viewport .market-chart-wrap {
+  height: 100%;
+  min-height: 340px;
+}
+
+/*
   PAINEL DE INDICADOR (05/10/2026)
   ================================
   MEDIDO: lightweight-charts 4.2.3 nao tem pane, entao RSI e MACD ficam em

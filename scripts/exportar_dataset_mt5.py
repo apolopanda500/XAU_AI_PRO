@@ -34,7 +34,19 @@ from pathlib import Path
 RAIZ = Path(__file__).resolve().parent.parent
 DATA = RAIZ.parent / "Data"
 
-SIMBOLOS = ("XAUUSD", "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "NZDUSD", "USDCAD")
+# MEDIDO 11/11/2026: a lista tinha 7 simbolos e os 8 exoticos da frota
+# (USDCHF, USDBRL, USDCLP, USDCOP, USDCZK, USDCNH, USDSEK, USDSGD) ficavam
+# sem dataset MT5 fresco — a ronda de treino por ativo nao tinha com que
+# aprender, e o modelo de cada um continuava reprovado. Simbolo ausente na
+# corretora ou sem historico e ignorado com mensagem; nunca e inventado.
+SIMBOLOS = (
+    "XAUUSD",
+    "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "NZDUSD", "USDCAD", "USDCHF",
+    "USDBRL", "USDCLP", "USDCOP", "USDCZK", "USDCNH", "USDSEK", "USDSGD",
+    # USDRUB esta excluido da execucao por SymbolsExclude: o historico e
+    # exportado para medicao, o treino e que nao publica modelo para ele.
+    "USDRUB",
+)
 
 COLUNAS = 15  # Time, Symbol, O/H/L/C, Volume, Spread, ATR, ADX, RSI, 4x KCI
 PAGINA = 50_000  # limite pratico do copy_rates_from_pos (medido)

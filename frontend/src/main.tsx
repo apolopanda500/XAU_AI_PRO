@@ -179,8 +179,33 @@ async function bootstrap() {
       );
     }
     const token = await invoke<string>('gateway_token_command');
-    if (!/^[a-f0-9]{64}$/.test(token)) throw new Error('token de sessao invalido');
-    installGatewayAuth(token);
+    /*
+      O FORMATO do token (MEDIDO 11/11/2026)
+      =======================================
+      A validacao era `/^[a-f0-9]{64}$/`. Isso so vale para o token que o
+      Rust GERAVA: 32 bytes aleatorios em hexadecimal, 64 chars.
+
+      Mas o token que o gateway aceita hoje vem do `.env`
+      (`XAU_GATEWAY_TOKEN`), e esse tem 64 chars em BASE64 - com `+` e `=`
+      nos ultimos. MEDIDO: `len=64`, `hex64=False`, caracteres especiais `+`
+      e `=`.
+
+      Resultado: o app recusava o token CORRETO e dizia "token de sessao
+      invalido" - mandando o operador procurar um token que estava certo.
+      E o AGENTS.md 5: o sintoma(recusa com motivo errado) apontava para o
+      cliente, e o defeito real era o cliente a medir o token por um formato
+      que o outro lado nunca prometeu.
+
+      O QUE PASSA A SER EXIGIDO: um token nao vazio. E o que o gateway exige
+      (`Authorization: Bearer <token>` comparado com o dele). O
+      comprimento minimo (16) mantem a recusa de um valor obviamente errado,
+      sem recusar um token legitimo.
+
+      O `+` e o `=` nao precisam de escape: vao no HEADER, e o `fetch` treatа
+      o valor como opaco.
+    */
+    if (!token || token.trim().length < 16) throw new Error('token de sessao invalido');
+    installGatewayAuth(token.trim());
     await waitForGateway();
   }
   if (mobile) {

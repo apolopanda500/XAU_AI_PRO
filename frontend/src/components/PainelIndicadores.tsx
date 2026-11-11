@@ -5,18 +5,18 @@
   item com nome, parametros, o que mede e botao Liga/Desliga — a mesma leitura
   dos cards de modelo, sem exigir que o operador descubra sigla.
 
-  O QUE LIGA DE VERDADE: EMA, SMA, BOLLINGER, VWAP, RSI e MACD. Todos sao
-  calculados dos candles exibidos e desenhados pelo `PriceChart`; o painel so
+  O QUE LIGA DE VERDADE: EMA, SMA, BOLLINGER, VWAP, RSI, MACD e ESTOCÁSTICO. Todos
+  sao calculados dos candles exibidos e desenhados pelo `PriceChart`; o painel so
   chama `onAlternar`, e o grafico e o consumidor. Controle sem consumidor e
   pior que ausencia (AGENTS.md 9).
 
-  ESTOCASTICO aparece como ROTEIRO (texto, nao botao): o calculo e o desenho
-  ainda nao existem, e um botao para ele seria o botao que parece funcionar e
-  nao funciona. Quando o desenho existir, vira item.
+  O ESTOCÁSTICO ganhou botao no ciclo em que ganhou calculo e desenho — antes era
+  ROTEIRO (texto, sem botao), porque um botao sem desenho e o defeito que o
+  AGENTS.md 9 proibe.
 */
 import '../theme/indicadores.css';
 
-export type IndicadorId = 'ema' | 'sma' | 'bollinger' | 'vwap' | 'rsi' | 'macd';
+export type IndicadorId = 'ema' | 'sma' | 'bollinger' | 'vwap' | 'rsi' | 'macd' | 'stoch';
 
 export type EstadoIndicadores = Record<IndicadorId, boolean>;
 
@@ -64,10 +64,12 @@ const ITENS: Item[] = [
     params: '12 · 26 · 9',
     mede: 'macd, sinal e histograma, em painel próprio',
   },
-];
-
-const ROTEIRO = [
-  { nome: 'Estocástico', params: '14 · 3 · 3', mede: '%K/%D 0–100 com faixas 80/20, em painel próprio' },
+  {
+    id: 'stoch',
+    nome: 'Estocástico',
+    params: '14 · 3 · 3',
+    mede: '%K/%D 0–100 com faixas 80/20, em painel próprio',
+  },
 ];
 
 type Props = {
@@ -102,18 +104,6 @@ export default function PainelIndicadores({ ativos, onAlternar }: Props) {
           );
         })}
       </ul>
-      <div className="painel-indicadores-roteiro">
-        <span className="muted">A caminho com a barra de ferramentas:</span>
-        <ul>
-          {ROTEIRO.map((r) => (
-            <li key={r.nome}>
-              <strong>{r.nome}</strong> <span className="muted">{r.params}</span>
-              {' — '}
-              <span>{r.mede}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
     </div>
   );
 }

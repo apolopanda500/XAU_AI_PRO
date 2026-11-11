@@ -20,10 +20,58 @@ static GATEWAY_TOKEN: OnceLock<String> = OnceLock::new();
 // assim que a 1.2.5 abriu em tela preta (main.rs e main.tsx com 1.2.4).
 const EXPECTED_GATEWAY_BUILD: &str = env!("XAU_GATEWAY_BUILD");
 
+/// O TOKEN que este app fala.
+///
+/// MEDIDO 11/11/2026: o app abria em "Falha ao inicializar o ambiente local
+/// seguro / Motivo: gateway local nao autenticado / Endereco consultado:
+/// http://127.0.0.1:9011".
+///
+/// A CAUSA, e ela e a regra do AGENTS.md 5: dois lados do mesmo dado com
+/// nomes diferentes. O gateway le `XAU_GATEWAY_TOKEN` do AMBIENTE (e do
+/// `.env` da raiz) - `backend/mt5_gateway.py::_token_do_ambiente_ou_dotenv`.
+/// O Rust gerava um token NOVO, aleatorio, por sessao. Os dois tokens
+/// discordavam, o gateway respondia 401 a tudo, e o sintoma era "nao
+/// autenticado" - que manda o operador culpar o servidor.
+///
+/// A CORRECAO: o token vem do MESMO lugar de onde o gateway o le.
+///
+///   1. `XAU_GATEWAY_TOKEN` do ambiente. E o caso do autostart: o gateway que
+///      ja esta a correr em 9011 foi lancado com esta variavel, e e este
+///      token que o faz aceitar.
+///   2. Sem isso: token NOVO por sessao. Mantem o comportamento de quando o
+///      app e o dono do gateway - e e este token que vai por
+///      `.env("XAU_GATEWAY_TOKEN", token)` para o bridge que ele cria.
+///
+/// O QUE NAO MUDA (e e o que nao pode):
+///   - sem token em lado nenhum, o gateway continua a recusar TUDO (401,
+///     fail-closed). Um token errado tambem continua a ser recusado.
+///   - quando o app cria o bridge, o token de sessao continua a prevalecer
+///     sobre o `.env` do filho, porque o `.env()` do `Command` e lido pelo
+///     ambiente antes do ficheiro.
+///
+/// Este `XAU_GATEWAY_TOKEN` e o mesmo segredo que o gateway ja exige. O que
+/// o app deixa de fazer e INVENTAR outro - que e o que produzia o 401.
 fn gateway_token() -> Result<String, String> {
     if let Some(token) = GATEWAY_TOKEN.get() {
         return Ok(token.clone());
     }
+    // 1. O token do AMBIENTE: e o que o gateway JA esta a usar.
+    if let Ok(token) = std::env::var("XAU_GATEWAY_TOKEN") {
+        let token = token.trim().to_string();
+        if !token.is_empty() {
+            let _ = GATEWAY_TOKEN.set(token.clone());
+            return Ok(token);
+        }
+    }
+    // 2. O token do `.env`: e a MESMA fonte que o Python usa
+    //    (`backend/mt5_gateway.py::_token_do_ambiente_ou_dotenv`). Sem esta
+    //    leitura, o Rust inventava um token e o gateway recusava tudo com 401
+    //    - e o sintoma mandava o operador culpar o servidor (AGENTS.md 5).
+    if let Some(token) = token_do_dotenv() {
+        let _ = GATEWAY_TOKEN.set(token.clone());
+        return Ok(token);
+    }
+    // 3. Sem token em lado nenhum: sessao nova, para o bridge que o app cria.
     let mut bytes = [0_u8; 32];
     getrandom::fill(&mut bytes)
         .map_err(|err| format!("falha ao gerar token da sessao: {}", err))?;
@@ -33,6 +81,56 @@ fn gateway_token() -> Result<String, String> {
         .collect::<String>();
     let _ = GATEWAY_TOKEN.set(token.clone());
     Ok(token)
+}
+
+/// `XAU_GATEWAY_TOKEN` do `.env`, lido como o Python o lê.
+///
+/// O `.env` esta em RAIZES diferentes conforme onde o app corre:
+///
+///   - no DESENVOLVIMENTO: `<repo>/Files/XAU_AI_PRO/.env`, e o executavel
+///     vive em `<repo>/Files/XAU_AI_PRO/Temp/cargo-target/debug/`. Da' a
+///     subida de 4 niveis.
+///   - no APP INSTALADO: `<install>/.env`, ao lado do executavel.
+///
+/// Por isso o ficheiro e procurado a partir do executavel, subindo ate 5
+/// niveis. O que estiver mais perto ganha - e o mais proximo e o do proprio
+/// app.
+///
+/// O parser e o MESMO do Python: `chave=valor`, `#` comenta, e o valor vem
+/// sem aspas. Devolve `None` quando nao ha token - e o gateway continua
+/// fail-closed.
+fn token_do_dotenv() -> Option<String> {
+    let exe = std::env::current_exe().ok()?;
+    let mut dir = exe.parent().map(|p| p.to_path_buf());
+    for _ in 0..6 {
+        let atual = dir.clone()?;
+        let caminho = atual.join(".env");
+        if let Ok(texto) = fs::read_to_string(&caminho) {
+            for linha in texto.lines() {
+                let limpa = linha.trim();
+                if limpa.is_empty() || limpa.starts_with('#') || !limpa.contains('=') {
+                    continue;
+                }
+                let (chave, valor) = limpa.split_once('=')?;
+                if chave.trim() != "XAU_GATEWAY_TOKEN" {
+                    continue;
+                }
+                let valor = valor
+                    .trim()
+                    .trim_matches('"')
+                    .trim_matches('\'')
+                    .to_string();
+                if !valor.is_empty() {
+                    return Some(valor);
+                }
+            }
+            // O `.env` existe mas nao tem token: NAO se procura mais abaixo.
+            // Um `.env` mais proximo sem token e um ficheiro sem token.
+            return None;
+        }
+        dir = atual.parent().map(|p| p.to_path_buf());
+    }
+    None
 }
 
 #[tauri::command]

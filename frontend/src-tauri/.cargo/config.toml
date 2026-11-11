@@ -21,3 +21,28 @@ rustflags = ["-C", "link-arg=/PDB:NONE"]
 # Sem isto o `target/` cresce para GB dentro do disco de codigo. Ver
 # `AGENTS.md` — o cache do Rust vive em `Temp\cargo-target`.
 target-dir = "../../Temp/cargo-target"
+
+# O CRASH DO RUSTC (11/11/2026)
+# ============================
+# MEDIDO: o build parava em `url`, `tauri-build` e `windows` com
+#
+#     process didn't exit successfully ... (exit code: 0xc0000409,
+#     STATUS_STACK_BUFFER_OVERRUN)
+#
+# 0xc0000409 e o Windows a dizer que o `__fastfail` disparou - e o rustc
+# CRASHA dentro de uma PROC-MACRO, nao do codigo do projeto. As proc-macros
+# correm em threads com pilha pequena (2 MB por omissao no Rust); a arvore do
+# Tauri (`windows`, `url`, `tauri-build`) empilha mais do que isso e o
+# compilador morre.
+#
+# `RUST_MIN_STACK` e a variavel que o rustc le para o tamanho minimo da
+# pilha dessas threads. 32 MB e folgado para esta arvore.
+#
+# `CARGO_BUILD_JOBS` limitado a 3: cada job e um rustc inteiro, e cada um
+# reserva memoria e ficheiros. Com tudo em paralelo o build consome o disco
+# e a RAM ao mesmo tempo - e aqui o disco ja estava a 0 MB.
+#
+# NOTA: `/PDB:NONE` continua a valer (LNK1140). Sao dois defeitos diferentes.
+[env]
+RUST_MIN_STACK = { value = "33554432", force = true }
+CARGO_BUILD_JOBS = { value = "3", force = true }

@@ -59,6 +59,22 @@
   outline: none;
 }
 
+/*
+  O Item LIGADO (11/11/2026): `Grade`, `Volumes` e o timeframe atual trazem
+  `aria-pressed` — e o estado TEM de ser visivel, nao so acessivel. Sem esta
+  regra o operador nao sabe qual periodo esta na tela pelo menu, so pelo
+  cabecalho la em cima.
+*/
+.menu-grafico-item[aria-pressed='true'] {
+  color: var(--accent, #4f7cff);
+  font-weight: 600;
+}
+
+/* Com os 4 blocos o menu passou a rolar; barrinha fina, sem roubar texto. */
+.menu-grafico {
+  scrollbar-width: thin;
+}
+
 /* A acao que move dinheiro. A UNICA cor do menu. */
 .menu-grafico-item.perigosa {
   color: var(--warn, #d9a441);

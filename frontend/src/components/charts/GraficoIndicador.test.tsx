@@ -115,4 +115,30 @@ describe('GraficoIndicador — o painel', () => {
     expect(head).toContain('sinal');
     expect(head).toContain('histograma');
   });
+
+  it('Stochastic desenha as duas series: %K e %D, com faixas 80/20', () => {
+    const { container } = render(<GraficoIndicador candles={candles(60)} indicador="stoch" />);
+    expect(container.querySelector('[data-indicador="stoch"]')).toBeTruthy();
+    // 2a serie (K) + 2a serie (D): duas linhas com a propria leitura.
+    expect(createLineSeries).toHaveBeenCalledTimes(2);
+    expect(seriesSetData).toHaveBeenCalledTimes(2);
+    const head = container.querySelector('.market-subchart-head')?.textContent ?? '';
+    expect(head).toContain('Stochastic (14, 3, 3)');
+    expect(head).toContain('%K');
+    expect(head).toContain('%D');
+  });
+
+  it('Stochastic incompleto tambem diz o que falta, com o total certo', () => {
+    // Stochastic (14, 3, 3): %K com 14 candles e %D com 3 — o requisito e a
+    // CONSTANTE do indicador, nao um numero que muda com o que chegou.
+    render(<GraficoIndicador candles={candles(10)} indicador="stoch" />);
+    expect(screen.getByText(/Stochastic \(14, 3, 3\) precisa de 16 candles; há 10\./)).toBeTruthy();
+  });
+
+  it('PROVA NEGATIVA: Stochastic sem candles nenhum, nao inventa grafico', () => {
+    const { container } = render(<GraficoIndicador candles={[]} indicador="stoch" />);
+    expect(container.querySelector('.market-subchart-canvas')).toBeNull();
+    expect(screen.getByText(/Stochastic \(14, 3, 3\) precisa de 16 candles; há 0\./)).toBeTruthy();
+    expect(screen.queryByText(/precisa de -\d+ candles/)).toBeNull();
+  });
 });

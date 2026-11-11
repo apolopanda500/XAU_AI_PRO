@@ -917,10 +917,15 @@ const [periodoDoGrafico, setPeriodoDoGrafico] = useState<string>('');
           (botão Ativar da conexão) para ver o gráfico.
         </p>
       )}
-      <PriceChart
-        symbol={simbolo}
-        height={640}
-        broker={broker as never}
+      {/* GRÁFICO: ocupa o restante da viewport, não uma altura fixa de 640px que
+        nasce abaixo da dobra em telas baixas (medido: y=1089 em 900px = "tabelas
+        fora da visão"). O container define a altura disponível e o canvas preenche
+        100% dela. */}
+      <div className="grafico-viewport" style={{ height: 'calc(100vh - 330px)', minHeight: 340, overflow: 'hidden' }}>
+        <PriceChart
+          symbol={simbolo}
+          height="100%"
+          broker={broker as never}
         market={market as never}
         timeframe={tempoEscolhido as never}
         onTimeframeChange={(periodo) => setPeriodoDoGrafico(String(periodo).toUpperCase())}
@@ -1021,6 +1026,7 @@ const [periodoDoGrafico, setPeriodoDoGrafico] = useState<string>('');
           else setAlvoArmado(risco.toFixed(2));
         }}
       />
+      </div>
       {/*
         O PAINEL DE CONFIRMACAO
         =======================

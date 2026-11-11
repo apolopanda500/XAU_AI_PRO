@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { createChart, CrosshairMode, type IChartApi, type ISeriesApi, type UTCTimestamp } from 'lightweight-charts';
 import type { MarketCandle } from '../../lib/marketApi';
-import { rsiValores, macdValores } from './PriceChart';
+import { rsiValores, macdValores, stocValores } from './PriceChart';
 
 /*
   PAINEL DE INDICADOR ABAIXO DO PRECO (05/10/2026)
@@ -20,7 +20,7 @@ import { rsiValores, macdValores } from './PriceChart';
   indicador vindo de servidor. `null` vira buraco, nunca zero.
 */
 
-export type IndicadorId = 'rsi' | 'macd';
+export type IndicadorId = 'rsi' | 'macd' | 'stoch';
 
 type Props = {
   candles: MarketCandle[];
@@ -98,6 +98,47 @@ export function GraficoIndicador({ candles, indicador, altura = 132 }: Props) {
         axisLabelVisible: true,
         title: 'sobrevendido',
       });
+    } else if (indicador === 'stoch') {
+      const serieK: ISeriesApi<'Line'> = chart.addLineSeries({
+        color: '#5aa9e6',
+        lineWidth: 1,
+        priceLineVisible: false,
+        lastValueVisible: true,
+      });
+      const serieD: ISeriesApi<'Line'> = chart.addLineSeries({
+        color: '#e6a54a',
+        lineWidth: 1,
+        priceLineVisible: false,
+        lastValueVisible: true,
+      });
+      const serie = stocValores(candles, 14, 3, 3);
+      serieK.setData(
+        serie.k
+          .map((v, i) => (v === null ? null : { time: Math.floor(candles[i].time) as UTCTimestamp, value: v }))
+          .filter((p): p is { time: UTCTimestamp; value: number } => p !== null) as never,
+      );
+      serieD.setData(
+        serie.d
+          .map((v, i) => (v === null ? null : { time: Math.floor(candles[i].time) as UTCTimestamp, value: v }))
+          .filter((p): p is { time: UTCTimestamp; value: number } => p !== null) as never,
+      );
+      // As faixas 80/20 sao o que da leitura ao numero (sobrecomprado/sobrevendido).
+      serieK.createPriceLine({
+        price: 80,
+        color: 'rgba(214,106,106,0.5)',
+        lineWidth: 1,
+        lineStyle: 2,
+        axisLabelVisible: true,
+        title: 'sobrecomprido',
+      });
+      serieK.createPriceLine({
+        price: 20,
+        color: 'rgba(106,190,150,0.5)',
+        lineWidth: 1,
+        lineStyle: 2,
+        axisLabelVisible: true,
+        title: 'sobrevendido',
+      });
     } else {
       const histo: ISeriesApi<'Histogram'> = chart.addHistogramSeries({
         priceFormat: { type: 'price', precision: 5, minMove: 0.00001 },
@@ -153,8 +194,8 @@ export function GraficoIndicador({ candles, indicador, altura = 132 }: Props) {
     O teste chegou a cravar esse defeito como se fosse o esperado. O requisito
     e uma CONSTANTE do indicador, e ele nao muda conforme o que chegou.
   */
-  const rotulo = indicador === 'rsi' ? 'RSI (14)' : 'MACD (12, 26, 9)';
-  const minimo = indicador === 'rsi' ? 15 : 35;
+  const rotulo = indicador === 'rsi' ? 'RSI (14)' : indicador === 'macd' ? 'MACD (12, 26, 9)' : 'Stochastic (14, 3, 3)';
+  const minimo = indicador === 'rsi' ? 15 : indicador === 'macd' ? 35 : 16;
   const semDados = candles.length < minimo;
 
   return (
@@ -168,6 +209,15 @@ export function GraficoIndicador({ candles, indicador, altura = 132 }: Props) {
             <span style={{ color: '#e6a54a' }}>sinal</span>
             {' · '}
             <span className="muted">histograma</span>
+          </span>
+        )}
+        {indicador === 'stoch' && (
+          <span className="muted">
+            <span style={{ color: '#5aa9e6' }}>%K</span>
+            {' · '}
+            <span style={{ color: '#e6a54a' }}>%D</span>
+            {' · '}
+            <span className="muted">faixas 80/20</span>
           </span>
         )}
       </div>

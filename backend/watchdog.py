@@ -27,6 +27,29 @@ from pathlib import Path
 HEARTBEAT_FILE = Path(os.getenv("XAU_HEARTBEAT_FILE", str(
     Path(os.environ.get("APPDATA", "")) / "MetaQuotes" / "Terminal" / "Common" / "Files" / "XAU_AI_PRO_heartbeat.json")))
 HEARTBEAT_TTL_SEC = float(os.getenv("XAU_HEARTBEAT_TTL", "120") or 120)
+# UM TIMESTAMP NO FUTURO NAO E VIDA (medido 11/11/2026)
+#
+# MEDIDO no aparelho: o EA grava `TimeCurrent()` - a hora do SERVIDOR MT5
+# (`Integration/EAHeartbeat.mqh:25`) - e este modulo le o campo como UTC
+# (`ea_state`, linha do `strptime`). Com o MetaQuotes-Demo em UTC+2 o valor
+# nasce 2h no FUTURO do relogio daqui:
+#
+#     arquivo mtime 13:11:39 local (= 16:11:39 UTC), idade 1638 s
+#     conteudo      "timestamp": "18:11:39"   -> offset exato +2h00m00s
+#     age = 16:38 - 18:11 = NEGATIVO
+#
+# O `max(0.0, ...)` de `ea_state` truncava esse negativo em 0 e a linha
+# `now - hb_time <= TTL` aceitava o resto: o resultado era
+# `state=alive, heartbeat_age_sec=0` enquanto o EA nao escrevia o arquivo ha
+# 27 minutos. O monitor dizia vida exatamente quando nao havia sinal nenhum
+# - e o frontend mostrava "EA: sem leitura". Dois lados do mesmo dado com
+# significados diferentes (AGENTS.md §5), e o sintoma apontava pro lado errado.
+#
+# A tolerancia cobre a latencia normal de escrita/leitura (o arquivo e escrito
+# em um tick e lido logo em seguida); um offset de fuso, de minutos ou de
+# horas passa reto por ela e cai em `unknown`.
+HEARTBEAT_FUTURO_TOLERANCIA_SEC = float(
+    os.getenv("XAU_HEARTBEAT_FUTURO_TOLERANCIA", "60") or 60)
 RING_MAX = 500
 _RING: list[dict] = []
 _LOCK = threading.Lock()
@@ -45,6 +68,12 @@ def _classify_heartbeat(hb: dict, age_sec: float, file_age_sec: float) -> str:
     hb_time = float(hb_ts) if isinstance(hb_ts, (int, float)) and hb_ts > 0 else 0.0
     now = _now()
     if hb_time <= 0:
+        return "unknown"
+    # Prova de vida e so o que veio do PASSADO. Um valor futuro e relogio ou
+    # fuso errado dos dois lados - nunca e um EA vivo (ver a nota de medição
+    # em `HEARTBEAT_FUTURO_TOLERANCIA_SEC`). Sem este ramo, um offset de +2h
+    # mantinha o estado `alive` por ~2h depois do EA parar de escrever.
+    if hb_time - now > HEARTBEAT_FUTURO_TOLERANCIA_SEC:
         return "unknown"
     if now - hb_time <= HEARTBEAT_TTL_SEC:
         return "alive"
@@ -76,11 +105,16 @@ def ea_state() -> dict:
             invalid = True
         else:
             invalid = False
-    age = max(0.0, _now() - hb_time) if hb_time > 0 else -1.0
+    # Idade HONESTA: sem `max(0.0, ...)`. Um timestamp futuro produz idade
+    # NEGATIVA, e o classificador decide o estado (`unknown`); truncar em 0
+    # aqui era o que fazia o EA mudo ha 27 min aparecer como `alive` com
+    # `heartbeat_age_sec: 0` (nota de medição em HEARTBEAT_FUTURO_TOLERANCIA_SEC).
+    # `-1.0` continua sendo o marcador de "sem timestamp valido" -> None.
+    age = (_now() - hb_time) if hb_time > 0 else -1.0
     state = _classify_heartbeat(
         {"invalid": invalid, "ts_epoch": hb_time}, age, file_age)
     result = {"ok": True, "state": state,
-              "heartbeat_age_sec": round(age, 1) if age >= 0 else None,
+              "heartbeat_age_sec": round(age, 1) if hb_time > 0 else None,
               "file_age_sec": round(file_age, 1) if file_age >= 0 else None,
               "ttl_sec": HEARTBEAT_TTL_SEC, "file": str(path),
               "payload": payload, "source": "watchdog"}

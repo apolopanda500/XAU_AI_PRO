@@ -16,10 +16,10 @@ from backend import ai_inference as ai
 from backend.ai_inference import _RE_SIMBOLO, _nome_de_artefato
 
 
-def _candles(n: int = 1200, seed: int = 11) -> pd.DataFrame:
-    """Serie M5 com vol coerente com o ATR (ver train_v2 para o porque)."""
+def _candles(n: int = 1200, seed: int = 11, freq: str = "5min") -> pd.DataFrame:
+    """Serie com vol coerente com o ATR (ver train_v2 para o porque)."""
     rng = np.random.default_rng(seed)
-    idx = pd.date_range("2026-01-01", periods=n, freq="5min")
+    idx = pd.date_range("2026-01-01", periods=n, freq=freq)
     preco = 2000.0 * np.exp(np.cumsum(rng.normal(0, 0.0006, n)))
     wiggle = np.abs(rng.normal(0, 0.0004, n)) * preco
     return pd.DataFrame({
@@ -42,12 +42,52 @@ def test_sem_candles_nao_inventa_sinal():
     assert "candles" in r.motivo
 
 
-def test_timeframe_sem_modelo_publicado_e_recusado():
-    # M5 tem edge negativo: o servico tem de recusar, nao estimar.
+def test_periodo_reprovado_no_ativo_e_coberto_pela_classe():
+    """OPCAO (b) DA Q-177 — AUTORIZADA PELO DONO EM 10/11/2026 (D-175).
+
+    O XAUUSD M5 tem modelo proprio, e ele foi REPROVADO pela governanca (edge
+    negativo). Ate a autorizacao a resposta era recusa e o modelo de classe
+    nunca entrava. Agora ele cobre o periodo — e o payload diz as DUAS coisas:
+    qual artefato decidiu (`MULTI_METALS`) e POR QUE o do ativo nao decidiu.
+
+    O teste anterior travava a regra revogada. O que NAO pode mudar e a
+    honestidade do payload, e e isso que este teste passa a medir.
+    """
+    ai.limpar_cache()
     r = ai.inferir("XAUUSD", _candles(), "M5")
+    assert r.disponivel is True, "o modelo de classe deveria cobrir o M5"
+    assert r.modelo_classe == "MULTI_METALS"
+    assert "MULTI_METALS" in r.modelo, f"rotulo do artefato que decidiu: {r.modelo!r}"
+    assert "XAUUSD" in r.modelo, f"e o ativo que ele atendeu: {r.modelo!r}"
+    assert r.modelo_classe in r.para_dict()["class_model"]
+
+
+def test_a_recusa_do_modelo_do_ativo_nao_e_apagada():
+    """A cobertura da classe NAO pode esconder que o ativo foi reprovado.
+
+    Sem esta clausula, o operador veria sinal de um ativo cujo modelo proprio
+    foi recusado e nada na tela diria por que — o oposto do que a governanca
+    existe para entregar.
+    """
+    ai.limpar_cache()
+    r = ai.inferir("XAUUSD", _candles(), "M5")
+    assert "reprovado" in r.motivo, r.motivo
+    assert "edge" in r.motivo, r.motivo
+
+
+def test_ativo_sem_classe_nenhuma_continua_recusado():
+    """PROVA NEGATIVA da opcao (b): sem classe nao ha cobertura.
+
+    `AAPL` nao esta em nenhuma classe da tabela, logo `_tentativas_multi`
+    devolve vazio e a recusa continua a ser recusa. Sem este teste, "o MULTI
+    cobre tudo" viraria crenca em vez de consequencia medida.
+    """
+    ai.limpar_cache()
+    r = ai.inferir("AAPL", _candles(), "M5")
     assert r.disponivel is False
     assert r.confianca == 0.0
     assert r.motivo
+    assert "modelo_de_classe" not in r.motivo
 
 
 def test_timeframe_invalido_e_recusado():
@@ -137,8 +177,32 @@ def test_inferencia_usa_as_mesmas_features_do_treino():
     r = ai.inferir("XAUUSD", _candles(), "H1")
     if not r.disponivel:
         pytest.skip("modelo H1 nao publicado neste ambiente")
-    # O hash sai do mesmo modulo usado no treino.
-    assert r.feature_hash == t.feature_hash()
+    # O CONTRATO VEM DO ARTEFATO (corrigido 10/11/2026)
+    # ===============================================
+    # O teste comparava o hash com `train_v2.feature_hash()` para todo mundo.
+    # O unico XAUUSD publicavel fala XAU-30F-v4 (30 features, alvo binario):
+    # para ele o hash do 25F-v2 nunca ia bater, e a falha ficou desde 04/11 sem
+    # relacao com este ciclo. Comparar `feature_count` e a ordem das colunas
+    # com o que o runtime monta e o que prova de facto "o modelo ve a mesma
+    # coisa" — e nao apenas que duas copias da mesma string sao iguais.
+    from Python.ai import features_estacionarias as fe
+
+    _, meta = ai._carregar("XAUUSD", "H1")
+    versao = str(meta.get("feature_version") or "")
+    if versao == ai._VERSAO_30F:
+        colunas = tuple(ai._COLS_30F)
+    elif versao == ai._VERSAO_EST:
+        colunas = tuple(fe.FEATURES_ESTACIONARIAS)
+    else:
+        colunas = tuple(t.FEATURES)
+    assert int(meta.get("feature_count") or 0) == len(colunas), (
+        f"{versao}: a inferencia monta {len(colunas)} colunas e o treino gravou "
+        f"{meta.get('feature_count')} — contrato descasado"
+    )
+    gravadas = meta.get("features")
+    if gravadas:
+        assert tuple(gravadas) == colunas, f"{versao}: ordem das features diverge"
+    assert r.feature_hash == str(meta.get("feature_hash") or "")
     # O nome na tela e limpo e legivel: `Floresta · XAUUSD 1H`.
     # Nao usa mais `_H1`: o operador pediu nome sem sublinhado, e o timeframe
     # ja vem traduzido por `_ROTULO_TF`. O artefato em disco continua
@@ -249,10 +313,15 @@ class TestNenhumAtivoPresumido:
         ai.limpar_cache()
         _, meta = ai._carregar("btcusd", "H1")
         declarado = str(meta.get("symbol") or meta.get("modelo") or "")
-        if declarado:
-            assert "BTCUSD" in declarado.upper(), (
-                f"pediu BTCUSD e recebeu {declarado!r}"
-            )
+        assert declarado, "o artefato que respondeu tem de se declarar"
+        # Proprio OU da classe do BTC: depois de (b) o `MULTI_CRYPTO` cobre o
+        # ativo. Nunca o de OUTRO ativo — e essa a regra do §3 do AGENTS.
+        assert "BTC" in declarado.upper() or declarado.upper() == "MULTI_CRYPTO", (
+            f"pediu BTCUSD e recebeu {declarado!r}"
+        )
+        assert "XAU" not in declarado.upper(), (
+            f"pediu BTCUSD e recebeu o modelo de ouro: {declarado!r}"
+        )
 
 
 @pytest.mark.skipif(
@@ -276,9 +345,14 @@ class TestQuoteDaCorretora:
         ai.limpar_cache()
         modelo, meta = ai._carregar("BTCUSDT", "H1")
         assert modelo is not None, (
-            "BTCUSDT deveria resolver para o artefato BTCUSD_H1"
+            "BTCUSDT deveria resolver (BTCUSD_H1, ou MULTI_CRYPTO pela classe)"
         )
-        assert ai.mesmo_ativo(meta.get("symbol", ""), "BTCUSDT")
+        # MEDIDO 10/11/2026: `BTCUSD_H1` existe e NAO e publicavel (edge
+        # -0.0233), entao quem responde e o `MULTI_CRYPTO`. Exigir
+        # `mesmo_ativo(MULTI_CRYPTO, BTCUSDT)` seria exigir que a classe
+        # declarasse um par — o artefato de classe nao tem par, tem CLASSE.
+        artefato = str(meta.get("symbol") or "").upper()
+        assert "BTC" in artefato or artefato == "MULTI_CRYPTO", artefato
 
     def test_usdt_nao_troca_de_ativo(self):
         ai.limpar_cache()
@@ -291,18 +365,38 @@ class TestQuoteDaCorretora:
         modelo, _ = ai._carregar("ZZZQUSDT", "H1")
         assert modelo is None
 
-    def test_recusa_diz_onde_o_ativo_opera(self):
-        ai.limpar_cache()
-        r = ai.inferir("XAUUSD", _candles(), "M5")
+    def test_recusa_diz_onde_o_ativo_opera(self, monkeypatch):
+        """A recusa continua a dizer ONDE o ativo opera.
+
+        Depois de (b) a recusa com lista de periodos ficou rara — a classe
+        cobre quase todos —, por isso o MECANISMO e medido directo: ativo sem
+        modelo publicado, com outro periodo publicado. Sem este teste a
+        mensagem poderia apodrecer sem ninguem notar.
+        """
+        monkeypatch.setattr(
+            ai, "_carregar", lambda s, tf: (None, {"publish_reason": "edge negativo"})
+        )
+        monkeypatch.setattr(ai, "timeframes_capazes", lambda s: ["H1", "H4"])
+        r = ai.inferir("EURTRY", _candles(), "M5")
         assert r.disponivel is False
-        assert "H1" in r.motivo or "H4" in r.motivo, (
+        assert "H1" in r.motivo and "H4" in r.motivo, (
             f"a recusa deveria dizer os timeframes capazes: {r.motivo!r}"
         )
 
     def test_timeframes_capazes_por_ativo(self):
+        """Onde o ativo opera: o proprio publicado MAIS a cobertura da classe.
+
+        MEDIDO em 10/11/2026: `BTCUSD_H1` existe e NAO e publicavel (edge
+        -0.0233), e a lista voltava VAZIA mesmo com o `MULTI_CRYPTO` publicavel
+        cobrindo H1/H4/M15/M5 — a tela diria que o ativo nao opera onde ele
+        opera. Depois de (b) a classe entra (D-175).
+        """
         ai.limpar_cache()
-        assert ai.timeframes_capazes("BTCUSDT") == ["H1", "H4", "M15"]
-        assert "M5" not in ai.timeframes_capazes("XAUUSD")
+        capazes = ai.timeframes_capazes("BTCUSDT")
+        for tf in ("H1", "H4", "M15"):
+            assert tf in capazes, f"{tf} deveria estar em {capazes}"
+        # Ativo sem classe e sem artefato nao opera em periodo nenhum.
+        assert ai.timeframes_capazes("ZZZQINEXISTENTE") == []
         assert ai.timeframes_capazes("") == []
 
 
@@ -504,3 +598,73 @@ class TestTabelaNaoRepeteOMesmoNome:
         ms = [m for m in ai.listar_modelos() if m["symbol"] == "AUDUSD"]
         assert ms, "AUDUSD sumiu da lista"
         assert all("AUDUSD" in m["label"] and m["timeframe"][1:] in m["label"] for m in ms)
+# ------------------------------------------------- grafia do gateway (11/11)
+
+
+class TestGrafiaDoGatewayNaoCegaAInferencia:
+    """O DataFrame do gateway chega em MINUSCULAS; o contrato exige `Time`.
+
+    MEDIDO em 11/11/2026, no gateway REAL: `_mt5_candles` devolve as chaves
+    canonicas ``time/open/high/low/close/volume/timestamp`` e a rota faz
+    ``pd.DataFrame(candles["candles"])``. O caminho 25F-v2 / 25F-est-v1 indexa
+    por ``Time`` e agrega ``Open/High/Low/Close``, entao a resposta era
+    ``available=false`` com ``erro na inferencia: "None of ['Time'] are in the
+    columns"`` em 14 dos 15 simbolos. O XAUUSD nao sentia porque usa o contrato
+    30F, que normaliza as colunas por conta propria.
+
+    POR QUE A SUITE FICAVA VERDE COM O DEFEITO VIVO: o duble ``_candles()`` fala
+    a grafia CAPITALIZADA, que o gateway nunca envia. Um teste que fala um
+    dialeto que o produtor nao fala prova o consumidor e esconde o produtor
+    (AGENTS Â§6). Este teste constroi o payload com as chaves EXATAS de
+    ``_candle_row``.
+    """
+
+    @staticmethod
+    # A FREQUENCIA E A DO PEDIDO (corrigido 11/11/2026). Gerar 1200 velas
+    # de 5 min e pedir H1 deixa UMA barra depois do `resample` e a
+    # inferencia recusa por "features incompletas" â€” era falha do
+    # FIXTURE, nao do codigo. A serie tem de nascer no periodo pedido.
+    def _candles_do_gateway(n: int = 1200, timeframe: str = "M5") -> pd.DataFrame:
+        """As chaves EXATAS que `_mt5_candles` produz (backend/mt5_gateway.py)."""
+        freq = {"M5": "5min", "M15": "15min", "M30": "30min", "H1": "60min", "H4": "240min"}
+        base = _candles(n, freq=freq.get(timeframe, "5min"))
+        epoch = base["Time"].astype("int64") // 10 ** 9
+        return pd.DataFrame({
+            "time": epoch,
+            "open": base["Open"], "high": base["High"], "low": base["Low"],
+            "close": base["Close"], "volume": base["Volume"],
+            "timestamp": base["Time"].dt.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        })
+
+    def test_inferencia_publica_com_as_chaves_do_gateway(self):
+        """PROVA POSITIVA: com a grafia do produtor, a previsao SAI."""
+        ai.limpar_cache()
+        r = ai.inferir("USDRUB", self._candles_do_gateway(), "M5")
+        assert r.disponivel is True, r.motivo
+        assert r.confianca > 0.0, r.motivo
+        assert r.modelo_classe == "MULTI_FIAT", r.modelo
+
+    def test_h1_do_gateway_tambem_publica(self):
+        """O EA pede H1 em todos os 15 graficos; e o periodo que falhava."""
+        ai.limpar_cache()
+        r = ai.inferir("USDCLP", self._candles_do_gateway(timeframe="H1"), "H1")
+        assert r.disponivel is True, r.motivo
+
+    def test_normalizacao_nao_altera_o_dataframe_do_chamador(self):
+        """PROVA NEGATIVA de efeito colateral: a copia e do consumidor."""
+        bruto = self._candles_do_gateway(200)
+        antes = list(bruto.columns)
+        ai._com_volume_padrao(bruto)
+        assert list(bruto.columns) == antes, "a normalizacao vazou para o chamador"
+
+    def test_candles_ja_capitalizados_passam_intactos(self):
+        """Sem coluna faltando, nada e copiado nem renomeado."""
+        base = _candles(200)
+        assert ai._com_volume_padrao(base) is base
+
+    def test_time_do_gateway_vira_datetime(self):
+        """Epoch em segundos sem conversao faz o `resample` levantar TypeError."""
+        ajustado = ai._com_volume_padrao(self._candles_do_gateway(50))
+        assert str(ajustado["Time"].dtype).startswith("datetime64")
+        for coluna in ("Open", "High", "Low", "Close", "Volume"):
+            assert coluna in ajustado.columns, coluna

@@ -49,6 +49,7 @@ for _caminho in (RAIZ, RAIZ / "Python"):
         sys.path.insert(0, str(_caminho))
 
 from Python.ai import train_v2 as t  # noqa: E402
+from Python.ai import features_estacionarias as fe  # noqa: E402
 
 
 def _resolver_modelos() -> Path:
@@ -152,6 +153,11 @@ class Inferencia:
     folds: list[dict[str, Any]] | None = None
     inferencia_ms: float = 0.0
     modelo: str = ""
+    #: Nome do artefato de CLASSE que decidiu (`MULTI_FIAT`), vazio quando quem
+    #: decidiu foi o modelo do proprio ativo. Campo separado e nao texto:
+    #: quem consome precisa saber QUE modelo respondeu sem partir o rotulo de
+    #: exibicao (`model`) — AGENTS §5.
+    modelo_classe: str = ""
     feature_hash: str = ""
 
     def para_dict(self) -> dict[str, Any]:
@@ -172,6 +178,7 @@ class Inferencia:
             "folds": self.folds,
             "inference_ms": round(self.inferencia_ms, 2),
             "model": self.modelo,
+            "class_model": self.modelo_classe,
             "feature_hash": self.feature_hash,
             "cpu_threads": cpu_threads(),
         }
@@ -355,6 +362,189 @@ def _caminho_confinado(nome: str) -> Path | None:
     return Path(alvo)
 
 
+#==================================================
+# MODELO DE CLASSE (`MULTI_*`) — O RECURSO QUE FALTAVA
+#==================================================
+# MEDIDO em 10/11/2026 (P0 do CMD): na conta nova, so o XAUUSD tinha modelo. O
+# EA registava "[AI] INDISPONIVEL | BNB | MOTIVO=modelo nao publicado ou
+# ausente" e o mesmo para XAUT, USDCOP, USDCLP, USDCZK, USDRUB e USDSGD. Nao
+# era falta de dado: `MULTI_FIAT.pkl`, `MULTI_CRYPTO.pkl` e `MULTI_METALS.pkl`
+# estao no disco, `publicable: true`, com o maior edge do catalogo. Faltava o
+# resolvedor saber que um simbolo SEM modelo proprio pode ser atendido pelo
+# modelo da CLASSE dele.
+#
+# O que este pedaco NAO faz:
+#  - nao adivinha classe. A classe vem da tabela de `asset_classes.py`, e
+#    simbolo fora dela e `OUTROS`, que devolve recusa com motivo;
+#  - nao substitui o modelo do ativo. O unitario e tentado ANTES e ganha
+#    sempre que existe e e publicavel;
+#  - nao afrouxa defesa nenhuma: o nome passa pelas mesmas
+#    `_nome_de_artefato` e `_caminho_confinado`, e o `.pkl` continua conferido
+#    por SHA-256 antes do `joblib.load`.
+
+#: Decisao de acesso ao MULTI, com TTL. Ler a assinatura e I/O de arquivo; sem
+#: cache seria uma leitura por tique por simbolo (15 simbolos a 2-3 tiques/s).
+_TTL_MULTI_S = 300.0
+_CACHE_MULTI: dict[str, Any] = {"valor": None, "quando": 0.0}
+
+
+def _multi_permitido() -> bool:
+    """O modelo de CLASSE e beneficio de plano pago (regua do dono, 02/10).
+
+    `limite_multi_modelos()` era funcao SEM consumidor: a docstring dela ja
+    dizia "o `inferir()` trata 0 como so modelo unico" e o `inferir()` nunca a
+    chamava (AGENTS §9 — controle sem consumidor e pior que a ausencia dele).
+    Este e o consumidor: plano sem MULTI nao recebe MULTI, e o operador segue
+    vendo recusa com motivo em vez de um modelo que o plano dele nao cobre.
+
+    Fail-closed: assinatura ilegivel nao libera recurso pago.
+    """
+    agora = time.monotonic()
+    idade = agora - float(_CACHE_MULTI.get("quando") or 0.0)
+    if _CACHE_MULTI.get("valor") is not None and idade < _TTL_MULTI_S:
+        return bool(_CACHE_MULTI.get("valor"))
+    try:
+        from backend.acesso import limite_multi_modelos
+
+        permitido = limite_multi_modelos() > 0
+    except Exception:
+        permitido = False
+    _CACHE_MULTI["valor"] = permitido
+    _CACHE_MULTI["quando"] = agora
+    return bool(permitido)
+
+
+def _classe_multi_de(simbolo: str) -> str:
+    """Classe do ATIVO, nao do texto; `OUTROS` quando nao ha classe.
+
+    MEDIDO em 10/11/2026, logo depois da opcao (b): `classe_de("BTCUSDT")`
+    devolve `OUTROS` e `classe_de("BTCUSD")` devolve `CRYPTO`. A tabela
+    classifica o PAR do terminal, e `BTCUSDT` e o MESMO ativo escrito no quote
+    da exchange. Perguntar so pela forma literal deixava `BTCUSDT` sem
+    cobertura de classe enquanto `BTCUSD` tinha — dois nomes do mesmo ativo
+    respondendo diferente, que e o defeito que o AGENTS §5 cobra.
+
+    A pergunta passa a ser feita a cada forma do ativo, na ordem de
+    `candidatos_de_simbolo` (o pedido literal primeiro). Nenhuma lista de
+    ativos e criada aqui: quem decide a classe continua sendo a tabela.
+    """
+    from backend.asset_classes import classe_de
+
+    for forma in candidatos_de_simbolo(simbolo):
+        classe = classe_de(forma)
+        if classe != "OUTROS":
+            return classe
+    return "OUTROS"
+
+
+def _tentativas_multi(simbolo: str, timeframe: str) -> list[tuple[str, str]]:
+    """Pares (candidato, nome) do artefato da CLASSE; vazio quando nao ha.
+
+    `MULTI_FIAT` nao tem timeframe no nome — o horizonte entra como feature
+    (`Timeframe_Cod`). O "especifico" (`MULTI_FIAT_H1`) nunca existe no disco e
+    `_nomes_de_artefato` ja devolve so o nome geral, sem caso especial aqui.
+
+    Chamada em `_carregar` DEPOIS do laco do modelo do ativo e ANTES da recusa
+    dele (D-175, autorizada pelo dono em 10/11/2026): publicavel proprio ganha
+    sempre, e recusa de governanca do modelo do ativo cede a cobertura da
+    classe. O motivo recusado nao se perde — viaja em `cobertura_sobre_recusa`.
+    """
+    from backend.asset_classes import nome_do_modelo_multi
+
+    classe = _classe_multi_de(simbolo)
+    if classe == "OUTROS":
+        return []
+    if not _multi_permitido():
+        return []
+    multi = nome_do_modelo_multi(classe)
+    return [(multi, nome) for nome in _nomes_de_artefato(multi, timeframe)]
+
+
+def _classe_do_artefato(simbolo: str, meta: dict[str, Any]) -> str:
+    """Classe para a feature `Classe_Cod`: do artefato, senao do simbolo.
+
+    O `.meta.json` do MULTI grava `"class": "FIAT"` no treino. Ler dali e o que
+    garante que a codificacao da inferencia e a MESMA do treino; `classe_de`
+    fica como reserva para um meta antigo sem o campo.
+    """
+    from backend.asset_classes import classe_de
+
+    classe = str(meta.get("class") or "").strip().upper()
+    return classe or classe_de(simbolo)
+#: Nomes de volume que chegam ao runtime, na ordem em que devem ser lidos. O
+#: MT5 entrega `Tick_volume`; o dataset de treino usa `Volume`.
+_COLS_VOLUME: tuple[str, ...] = (
+    "Volume", "volume", "Tick_volume", "tick_volume",
+    "Real_volume", "real_volume", "Tickvol", "tickvol",
+)
+
+
+#: Grafia do CONTRATO de features, na ordem em que deve ser lida.
+#:
+#: MEDIDO em 11/11/2026 com o gateway real: `_mt5_candles` entrega as chaves
+#: canonicas em MINUSCULAS (`time/open/high/low/close/volume/timestamp`) e o
+#: caminho 25F-v2 / 25F-est-v1 indexa por `Time` e agrega `Open/High/Low/Close`
+#: (`train_v2.reamostrar`). O resultado era `available=false` com
+#: `erro na inferencia: "None of ['Time'] are in the columns"` em 14 dos 15
+#: simbolos, enquanto o XAUUSD publicava â€” ele usa o contrato 30F, que
+#: normaliza as colunas por conta propria. Dois lados do mesmo dado com nomes
+#: diferentes, e o operador lia "IA sem modelo" (AGENTS Â§5). O defeito era do
+#: lado do CONSUMIDOR: o dado chegava certo, com outra grafia.
+_GRAFIA_DO_CONTRATO: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("Open", ("Open", "open")),
+    ("High", ("High", "high")),
+    ("Low", ("Low", "low")),
+    ("Close", ("Close", "close")),
+    ("Volume", _COLS_VOLUME),
+)
+
+
+def _com_volume_padrao(candles: pd.DataFrame) -> pd.DataFrame:
+    """Entrega `candles` na grafia que o contrato de features exige.
+
+    HISTORICO desta funcao, para nao regredir. Nasceu em 10/11/2026 cobrindo
+    SO `Volume`, depois de o caminho 25F-v2 morrer em `KeyError: 'Volume'`.
+    Faltava o resto â€” `Time` e os quatro precos â€” e era exatamente o que
+    impedia os 15 simbolos de publicar previsao: o XAUUSD nao sentia porque
+    usa o contrato 30F, que se normaliza sozinho.
+
+    Nao inventa dado: copia o que existe, e so quando a coluna de destino nao
+    existe. Sem nenhuma das grafias, devolve o DataFrame como veio e o
+    reamostrador diz o que falta.
+    """
+    if not isinstance(candles, pd.DataFrame) or candles.empty:
+        return candles
+    ajustado = candles
+    for destino, origens in _GRAFIA_DO_CONTRATO:
+        if destino in ajustado.columns:
+            continue
+        for origem in origens:
+            if origem not in ajustado.columns:
+                continue
+            if ajustado is candles:
+                ajustado = candles.copy()
+            ajustado[destino] = ajustado[origem]
+            break
+    # `Time` nao e so nome: e TIPO. O MT5 entrega epoch em segundos, e sem esta
+    # conversao o `resample` levanta `TypeError` em vez de agregar.
+    if "Time" not in ajustado.columns:
+        for origem in ("time", "timestamp"):
+            if origem not in ajustado.columns:
+                continue
+            if ajustado is candles:
+                ajustado = candles.copy()
+            bruto = ajustado[origem]
+            if pd.api.types.is_numeric_dtype(bruto):
+                ajustado["Time"] = pd.to_datetime(bruto, unit="s", errors="coerce")
+            else:
+                ajustado["Time"] = pd.to_datetime(bruto, errors="coerce", format="mixed")
+            break
+    if ajustado is not candles and "Time" in ajustado.columns:
+        # Linha sem instante nao entra num reamostrador por tempo: viraria NaT
+        # e derrubaria a janela inteira.
+        ajustado = ajustado.dropna(subset=["Time"])
+    return ajustado
+
 def _carregar(symbol: str, timeframe: str) -> tuple[Any | None, dict[str, Any]]:
     """Carrega .pkl e .meta.json de um timeframe de um simbolo.
 
@@ -429,7 +619,53 @@ def _carregar(symbol: str, timeframe: str) -> tuple[Any | None, dict[str, Any]]:
                 return carregado, meta
             if meta:
                 ultimo_meta = meta
+    # MODELO DA CLASSE ANTES DA RECUSA DO MODELO DO ATIVO (D-175)
+    # ==========================================================
+    # AUTORIZADO PELO DONO em 10/11/2026, resposta "b" a Q-177: o modelo de
+    # classe PODE operar um ativo cujo modelo proprio foi reprovado pela
+    # governanca, para toda a classe.
+    #
+    # POR QUE A ORDEM MUDOU. A versao anterior era "MULTI e cobertura, nao
+    # substituicao": ativo com `.meta.json` proprio — ainda que recusado por
+    # edge — devolvia a recusa e o MULTI nunca entrava. MEDIDO na frota: os 10
+    # pares FIAT NAO estao sem modelo, eles TEM `USDCOP_H1.pkl` e irmaos, e e o
+    # modelo proprio que os recusa (EURUSD -0.0161, USDCOP -0.0584, USDCLP
+    # -0.0281, USDCZK -0.0072, USDRUB +0.0166, USDSGD +0.0193: abaixo do
+    # minimo +0.0200 ou com folds insuficientes). A regra estrita destravava
+    # UM simbolo; a regra autorizada destrava a classe inteira.
+    #
+    # O QUE A ORDEM NOVA NAO AFROUXA:
+    #  1. modelo proprio PUBLICAVEL continua ganhando SEMPRE: o laco acima ja
+    #     devolveu antes de chegar aqui. O MULTI so entra quando o unitario
+    #     nao publicou nada;
+    #  2. a recusa do unitario NAO e apagada: ela viaja no meta devolvido
+    #     (`cobertura_sobre_recusa`), entao a resposta diz qual modelo estava
+    #     reprovado e por que, mesmo quando a classe decide;
+    #  3. se o MULTI tambem nao existir ou nao publicar, a recusa citada e a do
+    #     modelo do ATIVO, que e a mais especifica (`if meta and not
+    #     ultimo_meta`). Esse guard estava MORTO na versao estrita — o laco so
+    #     rodava com `ultimo_meta` vazio —; agora o laco roda sempre e ele volta
+    #     a decidir;
+    #  4. classe fora da tabela (`OUTROS`) nao tem MULTI: `_tentativas_multi`
+    #     devolve vazio e a recusa segue sem fallback nenhum.
+    recusa_do_ativo = ultimo_meta
+    for candidato, nome in _tentativas_multi(simbolo, timeframe):
+        carregado, meta = _carregar_artefato(candidato, nome)
+        if carregado is not None:
+            if recusa_do_ativo:
+                # COPIA OBRIGATORIA: `_carregar_artefato` devolve o dict que
+                # esta na cache, e ele nao pode ganhar chave por simbolo
+                # consultado (o mesmo MULTI_FIAT atende 15 pares).
+                meta = dict(meta)
+                meta["cobertura_sobre_recusa"] = str(
+                    recusa_do_ativo.get("publish_reason") or ""
+                )
+            return carregado, meta
+        if meta and not ultimo_meta:
+            ultimo_meta = meta
     if ultimo_meta:
+        # NADA PUBLICAVEL PARA ESTE ATIVO NESTE PERIODO. A recusa citada e a
+        # mais especifica que existe: a do modelo do ativo, quando ha uma.
         _CACHE[f"modelo:{simbolo}:{timeframe}"] = (None, ultimo_meta)
         return None, ultimo_meta
     # Nome fora do formato aceito: e recusao COM MOTIVO, nao ausencia de
@@ -466,6 +702,17 @@ def _nomes_de_artefato(candidato: str, timeframe: str) -> list[str]:
     NENHUM ARQUIVO E RENOMEADO. O artefato continua como o treino o gravou;
     o que muda e que o codigo passa a saber PROCURAR-lo.
     """
+    # PERIODO FORA DA ALLOWLIST NAO TEM NOME — NEM O GERAL (10/11/2026)
+    # -----------------------------------------------------------------
+    # O nome GERAL (`<SIMBOLO>.pkl`) significa "um modelo que cobre VARIOS
+    # periodos", e a lista deles esta no `.meta.json` do proprio artefato. Ele
+    # so pode ser pedido para um periodo VALIDO: com `M1` ou `H1/../..` a
+    # degradacao para o geral fazia o `MULTI_METALS` — treinado em M5/M15/H1/H4
+    # — responder a um pedido de M1, e o motivo da recusa virava erro de
+    # reamostragem. Antes da opcao (b) isso ficava escondido porque o caminho
+    # do ativo nao tem `.pkl` geral; o MULTI e, por construcao, geral.
+    if timeframe not in TIMEFRAMES_VALIDOS:
+        return []
     especifico = _nome_de_artefato(candidato, timeframe)
     geral = _nome_de_artefato(candidato, "")
     saida: list[str] = []
@@ -573,6 +820,8 @@ def _carregar_artefato(candidato: str, nome: str) -> tuple[Any | None, dict[str,
 
 def limpar_cache() -> None:
     _CACHE.clear()
+    _CACHE_MULTI["valor"] = None
+    _CACHE_MULTI["quando"] = 0.0
 
 
 def timeframes_capazes(symbol: str) -> list[str]:
@@ -611,6 +860,30 @@ def timeframes_capazes(symbol: str) -> list[str]:
                 achados[tf] = True
     except OSError:
         return []
+    # MODELO DE CLASSE COBRE O ATIVO MESMO SEM MODELO PROPRIO (D-175)
+    # --------------------------------------------------------------
+    # Depois de (b), "onde este ativo opera" inclui os periodos que o
+    # `MULTI_<CLASSE>` cobre — o gateway responde por eles. Manter a lista so
+    # com o artefato do proprio ativo diria ao operador que ele nao opera onde
+    # ele opera: dois lados do mesmo dado discordando (AGENTS §5).
+    try:
+        classe = _classe_multi_de(s)
+        if classe != "OUTROS" and _multi_permitido():
+            from backend.asset_classes import nome_do_modelo_multi
+
+            nome_classe = nome_do_modelo_multi(classe)
+            caminho = _caminho_confinado(f"{nome_classe}.meta.json")
+            if caminho is not None and caminho.exists():
+                with caminho.open(encoding="utf-8") as f:
+                    m_classe = json.load(f)
+                if m_classe.get("publicable"):
+                    for tf_classe in m_classe.get("timeframes") or []:
+                        tf_up = str(tf_classe).strip().upper()
+                        if tf_up in TIMEFRAMES_VALIDOS:
+                            achados[tf_up] = True
+    except (OSError, ValueError):
+        # Catalogo ilegivel nao inventa capacidade: a lista fica a do ativo.
+        pass
     return [tf for tf in ("H1", "H4", "M15", "M5") if achados.get(tf)]
 
 
@@ -659,6 +932,22 @@ def _nome_do_modelo(symbol: str, timeframe: str, meta: dict[str, Any]) -> str:
     # Este e o AGENTS.md §9: formatação de numero e nome e configuração, nao
     # enfeite. E a forma como o nome aparecia era ruido entre o operador e o
     # dado que ele precisa.
+    #
+    # MODELO DE CLASSE: O NOME DO ARTEFATO E A RESPOSTA (D-175)
+    # ========================================================
+    # Pedido do dono ao autorizar a opcao "b" da Q-177: o rotulo do modelo de
+    # classe tem de aparecer. Sem isto a tela diria `USDCOP 1H` e o operador
+    # compararia a ordem com um modelo que NAO foi o que decidiu — o
+    # `MULTI_FIAT` e UM artefato para os 15 pares da classe, e o par entra so
+    # como amostra. Dois lados do mesmo dado com nomes diferentes e o defeito
+    # do AGENTS §5.
+    #
+    # Artefato primeiro, alvo depois: `MULTI_FIAT · USDCOP 1H` responde as duas
+    # perguntas de quem vai montar a ordem — QUE modelo decidiu e PARA QUE ativo.
+    artefato = str(meta.get("symbol") or "").strip().upper()
+    if str(meta.get("model_type") or "").strip().lower() == "multi" and artefato:
+        alvo = rotulo_modelo(symbol, timeframe, comPrefixo=False)
+        return f"{artefato} · {alvo}".strip() if alvo else artefato
     return rotulo_modelo(symbol, timeframe, comPrefixo=False)
 
 
@@ -714,6 +1003,15 @@ def _predict_proba(modelo: Any, amostra: pd.DataFrame) -> np.ndarray:
 # tamanho contra o modulo antes de prever: divergencia vira recusa, nunca uma
 # previsao com a coluna trocada.
 _VERSAO_30F = "XAU-30F-v4"
+
+#: Versao ESTACIONARIA: 22 features, escala normalizada por ATR, e o horizonte
+#: e a classe entram como feature (`Timeframe_Cod`, `Classe_Cod`). E o contrato
+#: dos tres `MULTI_*` — ver `Python/ai/features_estacionarias.py`.
+#:
+#: Sem esta constante o `inferir` caia no construtor de 25 features para um
+#: artefato de 22: o `predict_proba` levantava e o operador lia "erro na
+#: inferencia". O sintoma parecia falta de modelo; era contrato trocado.
+_VERSAO_EST = "25F-est-v1"
 
 _COLS_30F: tuple[str, ...] = (
     "ret1", "ret3", "ret5", "ret10", "ret20",
@@ -863,9 +1161,18 @@ def inferir(symbol: str, candles: pd.DataFrame, timeframe: str = "H1") -> Infere
             # resamplear 46 mil candles a cada tique (eram ~2,4 s por inferencia).
             # 600 candles M5 dao 200 de H1, mais que o suficiente para as
             # features rolling/ewm ficarem identicas ao treino.
-            janela = t.reamostrar(candles.tail(1200), timeframe)
-            base = t.construir_features(janela)
-            colunas = t.FEATURES
+            janela = t.reamostrar(_com_volume_padrao(candles.tail(1200)), timeframe)
+            if versao == _VERSAO_EST:
+                # 22 features estacionarias, com o horizonte e a classe dentro.
+                # A janela reamostrada e a mesma do caminho 25F-v2: o MULTI ve
+                # o timeframe PEDIDO, e `Timeframe_Cod` diz qual e.
+                base = fe.construir_features_estacionarias(
+                    janela, timeframe, _classe_do_artefato(symbol, meta)
+                )
+                colunas = tuple(fe.FEATURES_ESTACIONARIAS)
+            else:
+                base = t.construir_features(janela)
+                colunas = t.FEATURES
             col_preco = "Close"
             atr_abs = 0.0
 
@@ -888,7 +1195,16 @@ def inferir(symbol: str, candles: pd.DataFrame, timeframe: str = "H1") -> Infere
             atr_abs = float(linha.get("ATR", 0.0))
         return Inferencia(
             disponivel=True,
-            motivo="inferencia real do modelo publicado",
+            motivo=(
+                "inferencia real do modelo de classe publicado"
+                + (
+                    f" (modelo do ativo reprovado: {meta['cobertura_sobre_recusa']})"
+                    if meta.get("cobertura_sobre_recusa")
+                    else ""
+                )
+                if str(meta.get("model_type") or "") == "multi"
+                else "inferencia real do modelo publicado"
+            ),
             symbol=symbol,
             timeframe=timeframe,
             signal=rotulo,
@@ -904,8 +1220,14 @@ def inferir(symbol: str, candles: pd.DataFrame, timeframe: str = "H1") -> Infere
             folds=metricas.get("folds"),
             inferencia_ms=ms,
             modelo=_nome_do_modelo(symbol, timeframe, meta),
+            modelo_classe=(
+                str(meta.get("symbol") or "").strip().upper()
+                if str(meta.get("model_type") or "").strip().lower() == "multi"
+                else ""
+            ),
             feature_hash=(str(meta.get("feature_hash") or "")
-                          if versao == _VERSAO_30F else t.feature_hash()),
+                          if versao in (_VERSAO_30F, _VERSAO_EST)
+                          else t.feature_hash()),
         )
     except Exception as exc:  # pragma: no cover
         return Inferencia(False, f"erro na inferencia: {exc}", symbol, timeframe)

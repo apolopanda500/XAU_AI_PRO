@@ -95,6 +95,17 @@ FIAT: frozenset[str] = frozenset({
     "AUDUSD", "USDCAD", "NZDUSD", "USDCHF",
     # exoticos
     "USDSEK", "USDCNH", "USDBRL",
+    # exoticos que a corretora lista e que NAO tem modelo unitario.
+    #
+    # MEDIDO em 10/11/2026 na conta Headway: a frota opera USDCOP, USDCLP,
+    # USDCZK, USDRUB e USDSGD, e nenhum deles esta no dataset de treino — logo
+    # nao existe `<SIMBOLO>_<TF>.pkl` para eles. Sem esta lista `classe_de()`
+    # devolvia `OUTROS`, o MULTI_FIAT (o artefato que cobre a classe inteira)
+    # ficava inalcancavel, e o EA registava "modelo nao publicado ou ausente"
+    # em 5 dos 15 simbolos da frota. Nao e presuncao de ativo: e tabela de
+    # mapeamento (AGENTS §3 permite), e cada nome so entra depois de medido
+    # no Market Watch.
+    "USDCOP", "USDCLP", "USDCZK", "USDRUB", "USDSGD",
 })
 
 #: Classes para as quais **existe** dado neste dataset.
