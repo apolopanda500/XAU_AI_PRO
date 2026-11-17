@@ -216,6 +216,23 @@ export function classificarJournal(mensagem: string): JournalKind {
   //    O veredito da propria linha vence a severidade nominal da etiqueta.
   const tag = tagDaLinha(linha);
   const pelaTag = tag ? SEVERIDADE_POR_TAG[tag] : undefined;
+
+  // `[BACKUP] snapshots antigos removidos=N` e a ROTINA normal de rotacao:
+  // o EA descarta snapshots velhos para nao lotar a pasta de backup e devolve
+  // a contagem. Nao e erro, nao e aviso e nao pede resposta do operador.
+  // MEDIDO na Tela 2 do Trading Desk: a linha saia em vermelho como ERROR
+  // (etiqueta BACKUP mapeava para ERROR) e parecia um incidente que nao
+  // aconteceu. As variantes com falha continuam ERROR: `FAIL | ... | falhas=98`
+  // tem falhas >= 1, por isso o caso benigno exige `removidos=` sem contagem
+  // de falhas acima de zero.
+  const backupRotinaRemovidos =
+    tag === 'BACKUP' &&
+    /removidos\s*(=|:)/i.test(linha) &&
+    !/\b(FAIL(ED|URE)?\b|falhou|falhas?\s*(=|:)\s*[1-9])/i.test(linha);
+  if (backupRotinaRemovidos) {
+    return 'INFO';
+  }
+
   if (pelaTag) {
     if ((pelaTag === 'ERROR' || pelaTag === 'WARN') && PASSOU.test(linha)) return 'INFO';
     return pelaTag;

@@ -88,6 +88,9 @@ import './theme/figma-tokens.css';
 // de `transition` escrita em `global.css`, `quantum.css` ou `mining.css`
 // venceria a regra de fluidez por estar mais abaixo na cascata.
 import './theme/fluidness.css';
+// Polimento do Trading Desk 10/10: contraste dos cards de modelo e
+// marca d'água de fundo. Vence as folhas acima por definição.
+import './theme/desk_polish.css';
 
 // Ajusta para Tauri (mobile viewport)
 const metaViewport = document.querySelector('meta[name="viewport"]');

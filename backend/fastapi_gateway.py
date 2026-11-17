@@ -561,6 +561,31 @@ async def auto_tick() -> dict:
     return {"ok": True, "decision": decisao.para_dict()}
 
 
+@app.post("/api/auto/sugerir-limites")
+async def auto_sugerir_limites(request: Request) -> JSONResponse:
+    """A IA SUGERE limites de risco. NÃO grava NADA: quem aplica é o operador.
+
+    Mesma rota que o gateway legado (`backend/mt5_gateway.py`,
+    `/api/auto/sugerir-limites`): leitura com corpo JSON `{simbolo, timeframe,
+    broker, market}` — declarar/sugerir não executa ordem, não liga motor e não
+    grava limites. Sem isso a aba de Risco ficava com `HTTP 404` porque a rota
+    só existia no servidor legado.
+    """
+    try:
+        corpo = await request.json()
+    except Exception:
+        return _send({"ok": False, "error": "corpo JSON invalido"}, 400)
+    if not isinstance(corpo, dict):
+        return _send({"ok": False, "error": "corpo JSON invalido"}, 400)
+
+    return _send(auto_engine.sugerir_limites(
+        str(corpo.get("simbolo") or ""),
+        str(corpo.get("timeframe") or ""),
+        str(corpo.get("broker") or ""),
+        str(corpo.get("market") or ""),
+    ))
+
+
 @app.get("/api/universal/overview")
 async def universal_overview() -> dict:
     return await _read_call(gw._universal_overview, timeout=30.0)

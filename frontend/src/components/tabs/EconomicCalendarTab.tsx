@@ -758,7 +758,12 @@ className={`cal-row${evento.horario.getTime() < Date.now() ? ' passado' : ''}${
               </span>
               <span className="cal-row-pais" title={evento.nomePais}>
                 <span className="cal-bandeira">{evento.codigoPais}</span>
-                <span className="cal-pais-nome">{evento.nomePais}</span>
+                {/*
+                  UMA sigla, não duas. A coluna Moeda já tem 68px: bandeira +
+                  sigla do país é o que cabe. O nome do país fica na dica da
+                  linha (`title`), que diz a mesma coisa sem triplicar o
+                  código (`US E. US`, medido na Tela 7 do Trading Desk).
+                */}
                 <span className="cal-pais-sigla">{evento.codigoPais}</span>
               </span>
               <span className="cal-row-title">

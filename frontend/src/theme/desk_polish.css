@@ -1,0 +1,39 @@
+/* ==========================================================================
+   Trading Desk 10/10 — polimento de contraste e densidade visual
+   ==========================================================================
+   1. Cards de modelo (abas Operação → Modelos): o título ficava ilegível em
+      tema Light, porque o texto herdava a cor do tema claro e as capas são
+      sempre escuras (MC_ART de fundo escuro). Forçar texto de alto contraste
+      é o que a mesa precisa para ler `METALS 5M` / `GBPUSD 15M` sem esforço.
+   2. Marca d'água de fundo (`.app-shell`): existia uma imagem de capa de
+      desfoque fixa atrás de tudo, competindo com tabelas e inputs. A cobertura
+      sobe para 0,94, deixando a identidade presente mas o dado legível.
+   ========================================================================== */
+
+/* 1. Cards de modelo: título e métricas em cor consistente (ambos os temas). */
+.model-cover .mc-nome,
+.model-cover .mc-tf,
+.robo-modelo-mini dd,
+.robo-modelo-mini strong {
+  color: #f8fafc !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+}
+
+.model-cover .mc-metricas {
+  color: #cbd5e1 !important;
+}
+
+.model-cover .mc-selo {
+  color: #cbd5e1 !important;
+}
+
+.robo-modelo-mini dt {
+  color: #94a3b8 !important;
+}
+
+/* 2. Marca d'água de fundo: mantém a capa, tira o peso sobre os dados. */
+.app-shell {
+  background-image:
+    linear-gradient(rgba(5, 10, 20, 0.94), rgba(5, 10, 20, 0.97)),
+    url('/xau-ai-pro-quantum-cover.png') !important;
+}
