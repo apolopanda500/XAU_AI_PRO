@@ -34,6 +34,46 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      # A versao do site sai de `Docs/version.json`, a MESMA fonte que
+      # `scripts/sync_version.py` usa. MEDIDO em 17/11/2026: o HTML trazia
+      # `1.2.191` escrito a mao (linha 114) e o workflow nao injetava nada —
+      # o mesmo defeito do banner "1.2.9". Uma fonte, dois leitores.
+      #
+      # `VERSION` nao e lida aqui de proposito: seria uma segunda fonte da
+      # mesma verdade (AGENTS.md §12).
+      #
+      # O numero de modulos do site (115) fica FIXO: e a contagem curada de
+      # modulos, nao a contagem de arquivos. `find -name "*.mqh"` devolveria
+      # 199, porque conta os 173 arquivos da pasta EQUIPE/.
+      - name: Injetar versao no site
+        run: |
+          set -euo pipefail
+          VER=$(python3 -c "import json,pathlib;print(json.loads(pathlib.Path('Docs/version.json').read_text(encoding='utf-8'))['version'])")
+          if [ -z "$VER" ]; then
+            echo "ERRO: versao vazia em Docs/version.json"
+            exit 1
+          fi
+          sed -i "s/{{APP_VERSION}}/${VER}/g" site/index.html
+          echo "versao injetada: ${VER}"
+          # Falha fechado: se o placeholder continuar no HTML, o site nao publica.
+          if grep -q "{{APP_VERSION}}" site/index.html; then
+            echo "ERRO: placeholder {{APP_VERSION}} nao foi substituido"
+            exit 1
+          fi
+          grep -q "${VER}" site/index.html
+          # Selo do EA: FIXO e deliberado (ver comentario em site/index.html).
+          # Este guarda mede a PRESENCA e a forma do selo, nunca o valor:
+          # fixar 1.2.214 aqui criaria uma segunda fonte da mesma verdade.
+          if ! grep -Eq "EA MQL5 <code>1\.2\.[0-9]+</code>" site/index.html; then
+            echo "ERRO: selo do EA ausente ou malformado em site/index.html"
+            exit 1
+          fi
+          # Fail-closed geral: qualquer placeholder restante cancela a publicacao.
+          if grep -q "{{" site/index.html; then
+            echo "ERRO: placeholder nao substituido em site/index.html"
+            exit 1
+          fi
+
       - name: Configurar Pages
         uses: actions/configure-pages@v5
 
