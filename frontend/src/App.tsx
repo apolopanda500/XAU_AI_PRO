@@ -1,8 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAppStore, type TabType } from './hooks/useAppStore';
 import { useTheme } from './hooks/useTheme';
 import { useCoreBootstrap } from './hooks/useCoreBootstrap';
 import { useMarketWebSocket } from './hooks/useMarketWebSocket';
+import { useMobileResilientSync } from './hooks/useMobileResilientSync';
+import { isMobileRuntime } from './lib/api';
 import AuthGate from './components/AuthGate';
 import UserSessionGate from './components/auth/UserSessionGate';
 import QuantumBackground from './components/QuantumBackground';
@@ -13,6 +16,7 @@ import RobotTabs from './components/RobotTabs';
 import HistoryTab from './components/tabs/HistoryTab';
 import SystemHealth from './components/SystemHealthOnly';
 import MobileCommandCenter from './components/MobileCommandCenter';
+import MobileBottomNav from './components/MobileBottomNav';
 import SettingsCore from './components/SettingsCore';
 import ExitAppButton from './components/ExitAppButton';
 import EconomicCalendarTab from './components/tabs/EconomicCalendarTab';
@@ -104,10 +108,17 @@ export default function App() {
   const setActiveTab = useAppStore((state) => state.setActiveTab);
   const contentRef = useRef<HTMLElement | null>(null);
   const scrollByTab = useRef<Record<string, number>>({});
+  const queryClient = useQueryClient();
   useTheme();
   useCoreBootstrap();
   const { applySubscriptions } = useMarketWebSocket();
   const subscribeSymbols = useAppStore((state) => state.subscribeSymbols);
+  const mobile = isMobileRuntime();
+  const syncMobileNow = useCallback(() => {
+    if (!mobile) return;
+    void queryClient.invalidateQueries();
+  }, [mobile, queryClient]);
+  useMobileResilientSync(syncMobileNow, 7000);
   useEffect(() => {
     applySubscriptions(subscribeSymbols);
   }, [applySubscriptions, subscribeSymbols]);
@@ -143,10 +154,11 @@ export default function App() {
               <section ref={contentRef} className="content">
                 {renderActiveTab(activeTab)}
               </section>
+              <MobileBottomNav />
               {/* A BARRA INFERIOR SAIU (25/10/2026, decisao do dono):
                   o par/timeframe agora e escolhido SO na lista da Operacao
                   Automatica. Dois lugares para o mesmo dado era o caminho
-                  para os dois discordarem — e o operador acreditar no
+                  para os dois discordarem - e o operador acreditar no
                   errado (AGENTS.md §5). */}
             </main>
           </div>

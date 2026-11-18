@@ -29,8 +29,12 @@
 // configurado nao vira permissao no cliente. Prova negativa em
 // `MobileCommandCenter.test.tsx`.
 import React, { useCallback, useEffect, useState } from 'react';
-import { apiBase } from '../lib/api';
+import { apiBase, isMobileRuntime, sessionToken } from '../lib/api';
+import { exportarJson } from '../lib/mobileExport';
 import { clsPnl, fmtMoney, fmtNum, fmtPct } from '../lib/format';
+import MarketSessionsClock from './MarketSessionsClock';
+import MobileLotCalculator from './MobileLotCalculator';
+import MobilePermissionsHub from './MobilePermissionsHub';
 import '../theme/mobile-command-center.css';
 
 type Lado = 'compra' | 'venda' | 'desconhecido';
@@ -122,7 +126,11 @@ const INTERVALO_MS = 10_000;
 
 /** Le o status ANTES do corpo: 401 e 429 vem com `{ok:false}` e escondem a causa. */
 async function buscarRetrato(): Promise<{ status: number; corpo: unknown }> {
+  const token = sessionToken();
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
   const resposta = await fetch(`${apiBase()}/api/mobile/control`, {
+    headers,
     signal: AbortSignal.timeout(8_000),
   });
   const status = resposta.status;
@@ -441,6 +449,30 @@ export default function MobileCommandCenter({ intervaloMs = INTERVALO_MS }: { in
           {avisos.map((a) => (
             <p key={a}>{a}</p>
           ))}
+        </div>
+      )}
+
+      {isMobileRuntime() && (
+        <div className="mcc-mobile-pro" style={{ display: 'grid', gap: 12 }}>
+          <MarketSessionsClock />
+          <MobileLotCalculator defaultBalance={conta.saldo ?? 13038.61} />
+          <div className="mcc-bloco">
+            <div className="mcc-bloco-topo">
+              <h3>Exportação & Auditoria</h3>
+              <span className="mcc-tag ok">mobile</span>
+            </div>
+            <p className="mcc-motivo" style={{ marginTop: 0 }}>
+              Exporte um retrato somente leitura da conta, posições, ordens e risco para compartilhar ou arquivar.
+            </p>
+            <button
+              type="button"
+              className="btn sm"
+              onClick={() => void exportarJson(`xau-ai-pro-auditoria-${Date.now()}`, retrato)}
+            >
+              Exportar auditoria (JSON)
+            </button>
+          </div>
+          <MobilePermissionsHub />
         </div>
       )}
     </section>

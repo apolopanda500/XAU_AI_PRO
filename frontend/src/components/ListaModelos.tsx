@@ -36,7 +36,7 @@
 //  opera é feita aqui, uma linha de cada vez.
 // ===========================================================================
 import { useEffect, useMemo, useState } from 'react';
-import { apiBase } from '../lib/api';
+import { apiBase, isMobileRuntime } from '../lib/api';
 import { useAppStore } from '../hooks/useAppStore';
 import { useAutoState } from '../hooks/queries';
 import ModelCover from './ModelCover';
@@ -280,8 +280,9 @@ const escolher = async (m: ModeloTreinado) => {
 
       {!carregando && !modelos.length && !erro ? (
         <p className="hint">
-          Nenhum modelo treinado encontrado. Sem modelo não há inferência, e sem inferência o
-          automático não opera.
+          {isMobileRuntime()
+            ? 'Nenhum modelo ativo retornado pelo gateway remoto. Verifique a conexão com o servidor/gateway.'
+            : 'Nenhum modelo treinado encontrado. Sem modelo não há inferência, e sem inferência o automático não opera.'}
         </p>
       ) : null}
 
@@ -377,11 +378,11 @@ const escolher = async (m: ModeloTreinado) => {
                     <dd>
                       {podeOperar ? (
                         <span className={`chip ${emUso ? 'ok' : 'neutral'}`}>
-                          {emUso ? 'no motor agora' : 'pode operar'}
+                          {emUso ? 'no motor agora' : isMobileRuntime() ? 'ativo no gateway' : 'pode operar'}
                         </span>
                       ) : (
                         <span className="chip warn" title={m.reason ?? ''}>
-                          {m.pkl_present ? 'reprovado' : 'sem artefato'}
+                          {m.pkl_present ? 'reprovado' : isMobileRuntime() ? 'indisponível no gateway' : 'sem artefato'}
                         </span>
                       )}
                     </dd>
