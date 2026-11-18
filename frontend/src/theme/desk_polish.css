@@ -31,9 +31,18 @@
   color: #94a3b8 !important;
 }
 
-/* 2. Marca d'água de fundo: mantém a capa, tira o peso sobre os dados. */
+/* 2. Marca d'água de fundo: mantém a capa, tira o peso sobre os dados.
+   O overlay DEPENDE do tema: antes isto valia para todos os temas e o
+   tema Light perdia a variante clara de `global.css:2875` - o app inteiro
+   ficava escuro em cima de um tema claro. */
 .app-shell {
   background-image:
     linear-gradient(rgba(5, 10, 20, 0.94), rgba(5, 10, 20, 0.97)),
+    url('/xau-ai-pro-quantum-cover.png') !important;
+}
+
+[data-theme='light'] .app-shell {
+  background-image:
+    linear-gradient(rgba(243, 245, 249, 0.94), rgba(243, 245, 249, 0.97)),
     url('/xau-ai-pro-quantum-cover.png') !important;
 }

@@ -6,7 +6,7 @@
 [![Rust](https://github.com/apolopanda500/XAU_AI_PRO/actions/workflows/rust.yml/badge.svg?branch=main)](https://github.com/apolopanda500/XAU_AI_PRO/actions/workflows/rust.yml)
 [![Validação e Empacotamento](https://github.com/apolopanda500/XAU_AI_PRO/actions/workflows/deploy.yml/badge.svg?branch=main)](https://github.com/apolopanda500/XAU_AI_PRO/actions/workflows/deploy.yml)
 
-**Versão:** `1.2.9` · **Página:** <https://apolopanda500.github.io/XAU_AI_PRO/> · **Plataforma:** Windows
+**Versão:** [`Docs/version.json`](Docs/version.json) · **Site & Downloads:** <https://apolopanda500.github.io/XAU_AI_PRO/> · **Releases:** <https://github.com/apolopanda500/XAU_AI_PRO/releases/latest> · **Plataforma:** Windows 10/11 x64 · Android · MetaTrader 5
 
 Plataforma de operação para MetaTrader 5 e múltiplas corretoras: gateway local em
 Python, interface desktop em React/TypeScript (Tauri), núcleo em Rust, aplicação

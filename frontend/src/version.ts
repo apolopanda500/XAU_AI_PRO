@@ -8,4 +8,4 @@
 export const APP_VERSION = '1.2.181';
 
 /** Build do gateway exigido pelo bootstrap; gerado por sync_version.py. */
-export const GATEWAY_BUILD = 'xau-ai-pro-1.2.181-universal-20261107';;
+export const GATEWAY_BUILD = 'xau-ai-pro-1.2.181-universal-20261107';;;;;
