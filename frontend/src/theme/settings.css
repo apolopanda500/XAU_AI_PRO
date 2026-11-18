@@ -163,6 +163,10 @@
   .settings-layout {
     grid-template-columns: 1fr;
   }
+  .settings-nav {
+    position: static;
+    top: auto;
+  }
 }
 .settings-nav {
   display: flex;

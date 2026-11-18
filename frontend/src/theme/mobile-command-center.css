@@ -360,7 +360,59 @@
     margin-left: 0;
   }
 
+  .mcc-item-detalhe {
+    gap: 4px 10px;
+    font-size: 10.5px;
+  }
+
+  .mcc-item-detalhe span {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
   .mcc-avisos {
     padding: var(--space-2);
+  }
+}
+
+@media (max-width: 420px) {
+  .mcc {
+    padding: 8px;
+    gap: 8px;
+  }
+
+  .mcc-bloco {
+    padding: 10px;
+  }
+
+  .mcc-item-topo {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 4px 8px;
+  }
+
+  .mcc-simbolo {
+    grid-column: 1 / -1;
+  }
+
+  .mcc-volume,
+  .mcc-pnl,
+  .mcc-preco {
+    margin-left: 0;
+    text-align: right;
+    justify-self: end;
+    font-size: 12px;
+  }
+
+  .mcc-item-detalhe {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+
+  .mcc-linha .mcc-valor {
+    font-size: 12px;
   }
 }

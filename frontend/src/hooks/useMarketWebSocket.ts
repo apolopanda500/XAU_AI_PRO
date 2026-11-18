@@ -2,12 +2,23 @@
 // Handshake Hello, heartbeat com latencia e reconexao com backoff.
 
 import { useEffect, useRef, useCallback } from 'react';
-import { apiBase, wsUrl } from '../lib/api';
+import { apiBase, sessionToken, wsUrl } from '../lib/api';
 import { useAppStore } from './useAppStore';
 import { PROTOCOL_VERSION, WS_PING_INTERVAL_MS, type WsMessageV1 } from '../lib/protocol';
 import { normalizeSymbols } from '../lib/constants';
 
-const getWsUrl = (): string => wsUrl();
+const getWsUrl = (): string => {
+  const base = wsUrl();
+  const token = sessionToken();
+  if (!token) return base;
+  try {
+    const url = new URL(base);
+    url.searchParams.set('token', token);
+    return url.toString();
+  } catch {
+    return base;
+  }
+};
 const nowMs = (): number => Date.now();
 
 // Simbolos ativos: somente a watchlist escolhida pelo operador. Sem fallback

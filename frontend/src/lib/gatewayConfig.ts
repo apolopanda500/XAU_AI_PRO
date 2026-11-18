@@ -123,17 +123,19 @@ export function limparGateway(): void {
   }
 }
 
-/** Uma origem http:// em runtime mobile e recusa com explicacao. */
+/** Uma origem http:// em runtime mobile so avisa; loopback/emulador sao permitidos (adb reverse). */
 export function alertaSeguranca(origem: string, mobile: boolean): string | null {
   if (!mobile) return null;
+  if (!/^http:\/\//i.test(origem)) return null;
+  // Loopback e host do emulador sao usados em diagnostico local (USB/adb reverse).
   if (
-    /^http:\/\//i.test(origem) &&
-    !/^http:\/\/10\.0\.2\.2(:\d+)?$/i.test(origem) &&
-    !/^http:\/\/127\.0\.0\.1(:\d+)?$/i.test(origem)
+    /^http:\/\/127\.0\.0\.1(:\d+)?$/i.test(origem) ||
+    /^http:\/\/localhost(:\d+)?$/i.test(origem) ||
+    /^http:\/\/10\.0\.2\.2(:\d+)?$/i.test(origem)
   ) {
-    return 'Conexao sem TLS. Use https:// (o trafego com credencial nao deve viajar em texto claro).';
+    return null;
   }
-  return null;
+  return 'Conexao sem TLS. Use https:// em producao (o trafego com credencial nao deve viajar em texto claro).';
 }
 
 /** Testa o gateway chamando /api/health, que responde 401 sem token. */

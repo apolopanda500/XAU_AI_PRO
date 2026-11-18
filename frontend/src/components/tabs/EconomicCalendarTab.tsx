@@ -703,18 +703,20 @@ export function EconomicCalendarTab() {
 
       <div className="cal-body">
         {carregando && todosEventos.length === 0 ? (
-          <div className="cal-state">Carregando eventos…</div>
+          <div className="cal-state">Carregando eventos...</div>
         ) : linhas.length === 0 ? (
-          <div className="cal-state">
-            {semanaVazia ? (
+          <div className="cal-state" role="status">
+            {todosEventos.length === 0 && !carregando ? (
+              'Sem eventos econômicos relevantes na janela atual.'
+            ) : semanaVazia ? (
               <>
                 Nenhum evento nesta semana. O dado carregado vai de{' '}
-                {formatarChaveDia(semanaVazia.de)} até {formatarChaveDia(semanaVazia.ate)}.
+                {formatarChaveDia(semanaVazia.de)} atÃ© {formatarChaveDia(semanaVazia.ate)}.
               </>
+            ) : diaAtual ? (
+              'Nenhum evento neste dia com os filtros atuais.'
             ) : (
-              (diaAtual
-                ? 'Nenhum evento neste dia com os filtros atuais.'
-                : 'Nenhum evento encontrado.')
+              'Sem eventos econômicos relevantes na janela atual.'
             )}
           </div>
         ) : (
