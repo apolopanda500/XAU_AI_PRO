@@ -703,18 +703,20 @@ export function EconomicCalendarTab() {
 
       <div className="cal-body">
         {carregando && todosEventos.length === 0 ? (
-          <div className="cal-state">Carregando eventos…</div>
+          <div className="cal-state">Carregando eventos...</div>
         ) : linhas.length === 0 ? (
-          <div className="cal-state">
-            {semanaVazia ? (
+          <div className="cal-state" role="status">
+            {todosEventos.length === 0 && !carregando ? (
+              'Sem eventos econômicos relevantes na janela atual.'
+            ) : semanaVazia ? (
               <>
                 Nenhum evento nesta semana. O dado carregado vai de{' '}
-                {formatarChaveDia(semanaVazia.de)} até {formatarChaveDia(semanaVazia.ate)}.
+                {formatarChaveDia(semanaVazia.de)} atÃ© {formatarChaveDia(semanaVazia.ate)}.
               </>
+            ) : diaAtual ? (
+              'Nenhum evento neste dia com os filtros atuais.'
             ) : (
-              (diaAtual
-                ? 'Nenhum evento neste dia com os filtros atuais.'
-                : 'Nenhum evento encontrado.')
+              'Sem eventos econômicos relevantes na janela atual.'
             )}
           </div>
         ) : (
@@ -758,7 +760,12 @@ className={`cal-row${evento.horario.getTime() < Date.now() ? ' passado' : ''}${
               </span>
               <span className="cal-row-pais" title={evento.nomePais}>
                 <span className="cal-bandeira">{evento.codigoPais}</span>
-                <span className="cal-pais-nome">{evento.nomePais}</span>
+                {/*
+                  UMA sigla, não duas. A coluna Moeda já tem 68px: bandeira +
+                  sigla do país é o que cabe. O nome do país fica na dica da
+                  linha (`title`), que diz a mesma coisa sem triplicar o
+                  código (`US E. US`, medido na Tela 7 do Trading Desk).
+                */}
                 <span className="cal-pais-sigla">{evento.codigoPais}</span>
               </span>
               <span className="cal-row-title">

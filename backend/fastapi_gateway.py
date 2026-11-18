@@ -38,6 +38,7 @@ from Python.model_registry import model_catalog
 from backend.planos.social_paper import follow_strategy, following_strategies, list_strategies, unfollow_strategy
 from backend.planos.subscriptions import activate_local_plan, get_subscription, list_plans
 from backend import remote_auth
+from backend import mobile_control
 
 API_TOKEN = gw.API_TOKEN
 RATE_LIMIT_MAX = gw.RATE_LIMIT_MAX
@@ -561,6 +562,31 @@ async def auto_tick() -> dict:
     return {"ok": True, "decision": decisao.para_dict()}
 
 
+@app.post("/api/auto/sugerir-limites")
+async def auto_sugerir_limites(request: Request) -> JSONResponse:
+    """A IA SUGERE limites de risco. NÃO grava NADA: quem aplica é o operador.
+
+    Mesma rota que o gateway legado (`backend/mt5_gateway.py`,
+    `/api/auto/sugerir-limites`): leitura com corpo JSON `{simbolo, timeframe,
+    broker, market}` — declarar/sugerir não executa ordem, não liga motor e não
+    grava limites. Sem isso a aba de Risco ficava com `HTTP 404` porque a rota
+    só existia no servidor legado.
+    """
+    try:
+        corpo = await request.json()
+    except Exception:
+        return _send({"ok": False, "error": "corpo JSON invalido"}, 400)
+    if not isinstance(corpo, dict):
+        return _send({"ok": False, "error": "corpo JSON invalido"}, 400)
+
+    return _send(auto_engine.sugerir_limites(
+        str(corpo.get("simbolo") or ""),
+        str(corpo.get("timeframe") or ""),
+        str(corpo.get("broker") or ""),
+        str(corpo.get("market") or ""),
+    ))
+
+
 @app.get("/api/universal/overview")
 async def universal_overview() -> dict:
     return await _read_call(gw._universal_overview, timeout=30.0)
@@ -1055,6 +1081,47 @@ async def risk_state_route() -> JSONResponse:
         return _send(await _read_call(gw._risk_state, gw._mt5()))
     except Exception as exc:
         return _send({"ok": False, "error": str(exc)}, 503)
+
+
+@app.get("/api/mobile/control")
+async def mobile_control_route() -> JSONResponse:
+    """Retrato da conta ativa para a tela movel - SOMENTE LEITURA.
+
+    O QUE ESTA ROTA NAO FAZ: nao envia ordem, nao fecha posicao, nao altera
+    stop, nao cancela e nao movimenta saldo. Nao existe verbo de escrita para
+    ela em lugar nenhum - `backend/mobile_control.py` so normaliza leitura.
+
+    POR QUE ELA NAO REAPROVEITA `/api/positions`
+    --------------------------------------------
+    Aquele payload devolve a lista crua. O celular precisa de tres coisas que a
+    lista crua nao da: (a) `ok`/`motivo` por bloco, para separar "nao ha
+    posicao" de "nao consegui perguntar"; (b) simbolo vazio RECUSADO com
+    motivo, em vez de virar linha em branco; (c) o selo `read_only` explicito,
+    que a tela usa como fail-closed (servidor que nao declarar leitura nao e
+    exibido).
+
+    `positions_available`/`pending_orders_available` vem do terminal e NAO sao
+    presumidos: sem eles, lista vazia por falha seria lida como conta zerada.
+    """
+    bruto: dict = {}
+    erros: list[str] = []
+    try:
+        bruto = await _read_call(gw._payload)
+    except Exception as exc:  # noqa: BLE001 - leitura nunca derruba a rota
+        erros.append(f"terminal: {exc}")
+    try:
+        saude = gw._status_snapshot()
+    except Exception as exc:  # noqa: BLE001
+        saude = {"ok": False}
+        erros.append(f"saude: {exc}")
+    try:
+        risco = await _read_call(gw._risk_state, gw._mt5())
+    except Exception as exc:  # noqa: BLE001
+        risco = {}
+        erros.append(f"risco: {exc}")
+
+    corpo = mobile_control.montar_de_leitura(bruto, saude, risco, erros)
+    return _send(corpo)
 
 
 @app.get("/api/economic/alerts")

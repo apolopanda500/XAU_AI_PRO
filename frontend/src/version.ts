@@ -5,7 +5,7 @@
  * `Docs/version.json`. Nao editar a mao: o teste `version.test.ts` falha se o
  * valor divergir de `package.json`.
  */
-export const APP_VERSION = '1.2.181';
+export const APP_VERSION = '1.2.182';
 
 /** Build do gateway exigido pelo bootstrap; gerado por sync_version.py. */
-export const GATEWAY_BUILD = 'xau-ai-pro-1.2.181-universal-20261107';;
+export const GATEWAY_BUILD = 'xau-ai-pro-1.2.182-universal-20261118';

@@ -311,67 +311,87 @@ fn hardware_telemetry() -> HardwareTelemetry {
 fn hardware_telemetry_collect() -> HardwareTelemetry {
     #[cfg(target_os = "windows")]
     {
-        let script = r#"$os=Get-CimInstance Win32_OperatingSystem; $cpu=Get-CimInstance Win32_Processor | Select-Object -First 1; $gpu=Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue | Where-Object {$_.Name} | Select-Object -First 1; $tz=Get-CimInstance MSAcpi_ThermalZoneTemperature -ErrorAction SilentlyContinue | Select-Object -First 1; $disk=Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'" | Select-Object -First 1; $load=Get-CimInstance Win32_Processor | Measure-Object -Property LoadPercentage -Average; [pscustomobject]@{os=$os.Caption; arch=$os.OSArchitecture; cpu_name=$cpu.Name; cores=$cpu.NumberOfLogicalProcessors; usage=if($load.Average -ne $null){[math]::Round($load.Average,1)}else{$null}; mem_total=if($os.TotalVisibleMemorySize){[math]::Round($os.TotalVisibleMemorySize/1MB,2)}else{$null}; mem_free=if($os.FreePhysicalMemory){[math]::Round($os.FreePhysicalMemory/1MB,2)}else{$null}; disk_total=if($disk.Size){[math]::Round($disk.Size/1GB,2)}else{$null}; disk_free=if($disk.FreeSpace){[math]::Round($disk.FreeSpace/1GB,2)}else{$null}; temp=if($tz){[math]::Round(($tz.CurrentTemperature/10)-273.15,1)}else{$null}; gpu=if($gpu){$gpu.Name}else{$null}} | ConvertTo-Json -Compress"#;
-        let mut powershell = Command::new("powershell.exe");
-        use std::os::windows::process::CommandExt;
-        powershell.creation_flags(0x08000000);
-        if let Ok(output) = powershell
-            .args([
-                "-NoProfile",
-                "-NonInteractive",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-Command",
-                script,
-            ])
-            .output()
-        {
-            if let Ok(value) = serde_json::from_slice::<serde_json::Value>(&output.stdout) {
-                let cpu = value.get("cpu").and_then(|v| v.as_f64());
-                let gpu_name = value.get("gpu").and_then(|v| v.as_str()).map(str::to_owned);
+        use sysinfo::{CpuRefreshKind, Disks, MemoryRefreshKind, RefreshKind, System};
+
+        // Sysinfo nativo: sem powershell.exe, sem WMI, sem processos filhos.
+        // Duas chamadas de SO de milissegundos no lugar dos ~2s do CIM.
+        let mut system = match System::new_with_specifics(
+            RefreshKind::nothing()
+                .with_cpu(CpuRefreshKind::everything())
+                .with_memory(MemoryRefreshKind::everything()),
+        ) {
+            Ok(s) => s,
+            Err(_) => {
                 return HardwareTelemetry {
-                    os: value
-                        .get("os")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("Windows")
-                        .to_string(),
-                    architecture: value
-                        .get("arch")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("desconhecida")
-                        .to_string(),
-                    cpu_name: value
-                        .get("cpu_name")
-                        .and_then(|v| v.as_str())
-                        .map(str::to_owned),
-                    cpu_cores: value.get("cores").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
-                    cpu_usage_percent: value.get("usage").and_then(|v| v.as_f64()),
-                    memory_total_gb: value.get("mem_total").and_then(|v| v.as_f64()),
-                    memory_available_gb: value.get("mem_free").and_then(|v| v.as_f64()),
-                    disk_total_gb: value.get("disk_total").and_then(|v| v.as_f64()),
-                    disk_free_gb: value.get("disk_free").and_then(|v| v.as_f64()),
-                    cpu_temperature_c: cpu,
-                    gpu_available: gpu_name.is_some(),
-                    gpu_name,
-                    source: "Windows WMI".to_string(),
+                    os: "Windows".to_string(),
+                    architecture: std::env::consts::ARCH.to_string(),
+                    cpu_name: None,
+                    cpu_cores: 0,
+                    cpu_usage_percent: None,
+                    memory_total_gb: None,
+                    memory_available_gb: None,
+                    disk_total_gb: None,
+                    disk_free_gb: None,
+                    cpu_temperature_c: None,
+                    gpu_available: false,
+                    gpu_name: None,
+                    source: "sysinfo-rust (falhou)".to_string(),
                 };
             }
-        }
-        return HardwareTelemetry {
-            os: "Windows".to_string(),
-            architecture: "desconhecida".to_string(),
-            cpu_name: None,
-            cpu_cores: 0,
-            cpu_usage_percent: None,
-            memory_total_gb: None,
-            memory_available_gb: None,
-            disk_total_gb: None,
-            disk_free_gb: None,
-            cpu_temperature_c: None,
-            gpu_name: None,
-            gpu_available: false,
-            source: "Windows WMI indisponivel".to_string(),
         };
+        // CPU usage depende de DUAS amostras para medir a diferenca.
+        std::thread::sleep(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL);
+        system.refresh_cpu_all();
+        system.refresh_memory();
+
+        let cpus = system.cpus();
+        let cpu_name = cpus.first().map(|c| c.name().to_string());
+        let cpu_cores = cpus.len() as u32;
+        let cpu_usage = if cpus.is_empty() {
+            None
+        } else {
+            Some(cpus.iter().map(|c| c.usage() as f64).sum::<f64>() / cpus.len() as f64)
+        };
+
+        let gb = |bytes: u64| bytes as f64 / (1024.0f64.powi(3));
+        let mem_total_gb = Some(gb(system.total_memory()));
+        let mem_free_gb = Some(gb(system.available_memory()));
+
+        let (disk_total_gb, disk_free_gb) = match Disks::new_with_refreshed_list() {
+            Ok(disks) => disks
+                .into_iter()
+                .find(|d| {
+                    d.mount_point()
+                        .to_string_lossy()
+                        .to_ascii_uppercase()
+                        .starts_with("C:")
+                })
+                .map(|d| (Some(gb(d.total_space())), Some(gb(d.available_space()))))
+                .unwrap_or((None, None)),
+            Err(_) => (None, None),
+        };
+
+        let os = System::long_os_version().unwrap_or_else(|_| std::env::consts::OS.to_string());
+        let architecture = std::env::consts::ARCH.to_string();
+
+        // GPU e temperatura: sem caminho nativo honesto no sysinfo para
+        // Windows sem WMI/CIM (o custo de 2005 ms era exatamente isso).
+        // "none" aparece como "nao exposto" na tela, sem inventar numero.
+        HardwareTelemetry {
+            os,
+            architecture,
+            cpu_name,
+            cpu_cores,
+            cpu_usage_percent: cpu_usage,
+            memory_total_gb: mem_total_gb,
+            memory_available_gb: mem_free_gb,
+            disk_total_gb,
+            disk_free_gb,
+            cpu_temperature_c: None,
+            gpu_available: false,
+            gpu_name: None,
+            source: "sysinfo-rust".to_string(),
+        }
     }
     #[cfg(not(target_os = "windows"))]
     HardwareTelemetry {

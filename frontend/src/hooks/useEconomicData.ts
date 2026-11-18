@@ -271,21 +271,22 @@ export function useEconomicData(
         fontes?: ApiFontes;
       };
 
-      if (resposta.ok && dadosApi.events?.length) {
-        const eventosProcessados = processarEventosApi(dadosApi.events);
-        if (montadoRef.current) {
-          salvarNoCache(eventosProcessados);
-          setFontes(dadosApi.fontes ?? null);
-          setEstado({
-            dados: eventosProcessados,
-            carregando: false,
-            erro: null,
-            ultimaAtualizacao: new Date(),
-          });
-        }
-        return;
+      if (!resposta.ok) {
+        throw new Error(dadosApi.error ?? `Gateway respondeu ${resposta.status}`);
       }
-      throw new Error(dadosApi.error ?? 'Gateway sem eventos');
+
+      const eventosProcessados = processarEventosApi(dadosApi.events ?? []);
+      if (montadoRef.current) {
+        salvarNoCache(eventosProcessados);
+        setFontes(dadosApi.fontes ?? null);
+        setEstado({
+          dados: eventosProcessados,
+          carregando: false,
+          erro: null,
+          ultimaAtualizacao: new Date(),
+        });
+      }
+      return;
     } catch (e) {
       if (montadoRef.current) {
         setEstado({

@@ -1,0 +1,418 @@
+/* =============================================================================
+   CENTRAL DE COMANDO MOVEL — somente leitura
+   =============================================================================
+   Regras aplicadas (as mesmas do resto do tema):
+
+   1. TOKEN, NAO PIXEL SOLTO. Espaçamento, cor e tipografia vem das variaveis
+      do tema (`--space-*`, `--border`, `--mono`). Nenhum valor magico novo.
+   2. O NUMERO E O DADO. Símbolo, volume e PnL ficam em `tabular-nums` para
+      coluna alinhada — no celular o olho compara linha com linha.
+   3. ALVO DE CLIQUE. Nao ha botao de comando aqui de proposito. O que existe
+      e leitura; o unico alvo interativo e o proprio painel (rolagem).
+   4. O SELO NAO SOME. `SOMENTE LEITURA` e o aviso mais importante da tela e
+      aparece em TODOS os estados, inclusive erro e "sem sessao".
+   5. COR NAO E O UNICO SINAL. "compra"/"venda" vao escritos, nao so coloridos;
+      "lado nao informado" tem texto proprio em vez de herdar a cor de compra.
+   ========================================================================== */
+
+.mcc {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.mcc-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.mcc-titulo {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+/* SELO — sempre visivel, em qualquer estado. */
+.mcc-selo {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 2px var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.mcc-selo-ponto {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ok);
+  flex: none;
+}
+
+/* -------------------------------------------------------------------------
+   Aviso de estado. Cada estado tem sua frase no componente; aqui so o tom.
+   ------------------------------------------------------------------------- */
+.mcc-aviso {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: 6px;
+  color: var(--muted);
+}
+
+.mcc-aviso strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.mcc-aviso-sem-sessao,
+.mcc-aviso-cota,
+.mcc-aviso-divergente {
+  border-left-color: var(--warn);
+}
+
+.mcc-aviso-indisponivel {
+  border-left-color: var(--danger);
+}
+
+.mcc-aviso-medindo {
+  border-left-color: var(--border);
+}
+
+/* -------------------------------------------------------------------------
+   Blocos
+   ------------------------------------------------------------------------- */
+.mcc-bloco {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.mcc-bloco-saude {
+  border-style: dashed;
+}
+
+.mcc-bloco-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.mcc-bloco-topo h3 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.mcc-tag {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 1px var(--space-2);
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.mcc-tag.ok {
+  color: var(--ok);
+}
+
+.mcc-tag.falta {
+  color: var(--warn);
+}
+
+/* -------------------------------------------------------------------------
+   Linha rotulo/valor
+   ------------------------------------------------------------------------- */
+.mcc-linha {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.mcc-rotulo {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.mcc-valor {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.mcc-valor.pos {
+  color: var(--ok);
+}
+
+.mcc-valor.neg {
+  color: var(--danger);
+}
+
+.mcc-motivo {
+  margin: 0;
+  color: var(--warn);
+  font-size: 12px;
+}
+
+/* Recusa de leitura pesa mais que aviso: o dado NAO veio. */
+.mcc-motivo-forte {
+  color: var(--danger);
+}
+
+/* -------------------------------------------------------------------------
+   Listas (posicoes e ordens)
+   ------------------------------------------------------------------------- */
+.mcc-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.mcc-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--border);
+}
+
+.mcc-item:first-child {
+  border-top: 0;
+}
+
+.mcc-item-topo {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.mcc-simbolo {
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+/* A lateralidade e TEXTO, nao so cor (daltonismo). */
+.mcc-lado {
+  font-size: 11px;
+  padding: 0 var(--space-2);
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  text-transform: lowercase;
+}
+
+.mcc-lado-compra {
+  color: var(--ok);
+}
+
+.mcc-lado-venda {
+  color: var(--danger);
+}
+
+.mcc-lado-desconhecido {
+  color: var(--warn);
+  border-style: dashed;
+}
+
+.mcc-volume,
+.mcc-pnl,
+.mcc-preco {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* `margin-left: auto` empilha os dois ultimos a direita: preco depois de pnl. */
+.mcc-preco {
+  margin-left: var(--space-2);
+}
+
+.mcc-pnl.pos {
+  color: var(--ok);
+}
+
+.mcc-pnl.neg {
+  color: var(--danger);
+}
+
+.mcc-item-detalhe {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* -------------------------------------------------------------------------
+   Bloqueios de risco e avisos do servidor
+   ------------------------------------------------------------------------- */
+.mcc-bloqueios {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--warn);
+}
+
+.mcc-bloqueios li::before {
+  content: "! ";
+  font-family: var(--mono);
+}
+
+.mcc-avisos {
+  padding: var(--space-2) var(--space-3);
+  border-left: 3px solid var(--warn);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.mcc-avisos p {
+  margin: 0;
+}
+
+.mcc-avisos p + p {
+  margin-top: 2px;
+}
+
+/* -------------------------------------------------------------------------
+   TELEFONE (medido em 17/11/2026, SM-A057M 1080x2400 @420dpi)
+   -------------------------------------------------------------------------
+   No aparelho o painel era mais largo que a area visivel: `.content` tem
+   `contain: layout paint`, entao o que passava da borda era CORTADO, nao
+   rolavel - "SOMENTE LEITURA", tags e numeros apareciam pela metade.
+
+   Aqui nada e escondido: as linhas passam a quebrar, o valor alinha a
+   direita quando cabe e cai para a linha de baixo quando nao cabe. O selo
+   continua inteiro porque `white-space: nowrap` nele e proposital.
+   ------------------------------------------------------------------------- */
+@media (max-width: 720px) {
+  .mcc {
+    max-width: 100%;
+    padding: var(--space-2);
+    gap: var(--space-2);
+    font-size: 12px;
+  }
+
+  .mcc-topo,
+  .mcc-bloco-topo {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-1);
+  }
+
+  .mcc-linha {
+    flex-wrap: wrap;
+    gap: 0 var(--space-2);
+    align-items: baseline;
+  }
+
+  .mcc-rotulo {
+    min-width: 0;
+  }
+
+  /* O valor nunca empurra a caixa: encolhe, quebra e so entao desce. */
+  .mcc-linha .mcc-valor {
+    margin-left: auto;
+    min-width: 0;
+    max-width: 100%;
+    text-align: right;
+    overflow-wrap: anywhere;
+  }
+
+  .mcc-item-topo {
+    row-gap: 2px;
+  }
+
+  .mcc-volume,
+  .mcc-pnl,
+  .mcc-preco {
+    margin-left: 0;
+  }
+
+  .mcc-item-detalhe {
+    gap: 4px 10px;
+    font-size: 10.5px;
+  }
+
+  .mcc-item-detalhe span {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  .mcc-avisos {
+    padding: var(--space-2);
+  }
+}
+
+@media (max-width: 420px) {
+  .mcc {
+    padding: 8px;
+    gap: 8px;
+  }
+
+  .mcc-bloco {
+    padding: 10px;
+  }
+
+  .mcc-item-topo {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 4px 8px;
+  }
+
+  .mcc-simbolo {
+    grid-column: 1 / -1;
+  }
+
+  .mcc-volume,
+  .mcc-pnl,
+  .mcc-preco {
+    margin-left: 0;
+    text-align: right;
+    justify-self: end;
+    font-size: 12px;
+  }
+
+  .mcc-item-detalhe {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+
+  .mcc-linha .mcc-valor {
+    font-size: 12px;
+  }
+}

@@ -27,7 +27,10 @@ const M = vi.hoisted(() => ({
   simbolo: '',
 }));
 
-vi.mock('../lib/api', () => ({ apiBase: () => 'http://127.0.0.1:9000' }));
+vi.mock('../lib/api', () => ({
+  apiBase: () => 'http://127.0.0.1:9000',
+  isMobileRuntime: () => false,
+}));
 vi.mock('../hooks/useAppStore', () => ({
   useAppStore: (s: (x: unknown) => unknown) =>
     s({

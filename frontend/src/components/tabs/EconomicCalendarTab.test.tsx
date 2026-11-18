@@ -632,7 +632,9 @@ it('marca evento estimado como estimado', async () => {
   it('sem eventos mostra o estado vazio, nao uma tabela quebrada', () => {
     H.eventos = [];
     render(<EconomicCalendarTab />);
-    expect(document.querySelector('.cal-state')?.textContent).toContain('Nenhum evento');
+    expect(document.querySelector('.cal-state')?.textContent).toContain(
+      'Sem eventos econômicos relevantes na janela atual.',
+    );
   });
 });
 

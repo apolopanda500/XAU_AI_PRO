@@ -18,7 +18,10 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 const { invokeMock } = vi.hoisted(() => ({ invokeMock: vi.fn() }));
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: invokeMock }));
-vi.mock('../lib/api', () => ({ apiBase: () => 'http://127.0.0.1:9000' }));
+vi.mock('../lib/api', () => ({
+  apiBase: () => 'http://127.0.0.1:9000',
+  isMobileRuntime: () => false,
+}));
 
 const { default: SystemHealthOnly, limparCacheSistema } = await import('./SystemHealthOnly');
 

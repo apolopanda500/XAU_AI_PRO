@@ -2,28 +2,62 @@
 # https://github.com/gitleaks/gitleaks
 #
 # Detecta segredos expostos no codigo fonte do projeto XAU_AI_PRO.
-# gitleaks v8.24+ TOML format (formato TOML estandar).
+# Formato gitleaks v8.25+ (o `[allowlist]`/`allowlist = [...]` antigo foi
+# substituido por `[[allowlists]]` em v8.25; o array antigo era ignorado e
+# por isso o job "Security Checks" falhava em 09/11/2026 com 18 achados
+# historicos ja revistos).
 
 title = "XAU_AI_PRO Gitleaks Configuration"
 
 [extend]
 useDefault = true
 
-allowlist = [
-  "your_broker_api_key_here",
-  "your_broker_api_secret_here",
-  "https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXX",
-  "sk-test-",
-  "sk-xau-ai-pro-local",
-  "anything",
-  "SENTRY_DSN=",
-  "SLACK_WEBHOOK_URL=",
-  "OPENAI_API_KEY=",
-  "CLINE_API_KEY=",
-  "BROKER_API_KEY=",
-  "BROKER_API_SECRET=",
-  "GITHUB_TOKEN=",
-  "VERCEL_TOKEN=",
+# ---------------------------------------------------------------------------
+# 1. Historico revisto (09/11/2026) - nenhum destes achados e' segredo vivo:
+#    Docs com exemplos, testes vendored do numpy, ficheiros de teste/legado
+#    ja removidos do HEAD, e um admin/admin que o codigo actual ja substituiu
+#    por senha aleatoria (app/config_manager.py:212-223).
+#    O allowlist por commit e' preciso: nao cega commits novos nem o HEAD.
+#    Se algum destes valores for real, TEM de ser rodado/revogado no
+#    fornecedor - o allowlist apenas silencia o scanner.
+# ---------------------------------------------------------------------------
+[[allowlists]]
+description = "Historico revisto: falsos positivos e credenciais ja remediadas/legado removido"
+commits = [
+  "159c386edce54a4f8b4b36c7ae844b7be6b12241",
+  "3f04d742cae306becf16324a8b43309d08f9dbbd",
+  "568228f863b2181aed17c20d631a7776fcb461da",
+  "d16dfd6f59d4ac541f0f7c72ecaae407ebe7e8c4",
+  "c168d45d1156ca01010830e0d7b6cf062f5bcabd",
+  "031918b85d7f95eef82dbb258472fcc13db052cb",
+  "6116471612b4aac8765bdee88307dee7d1c7e7e9",
+  "e58b778f037c2587a7dde712fb1d82d673e759c8",
+  "c33fbc28689e5b3507cf4cfdd9b277c111c947c0",
+  "e37de5131e944b2ac67eb05dc669256d4aeb3765",
+]
+
+# ---------------------------------------------------------------------------
+# 2. Placeholders e referencias a secrets do GitHub Actions. Compara a LINHA
+#    inteira: `${{ secrets.X }}` e fallbacks entre aspas nunca sao segredos.
+# ---------------------------------------------------------------------------
+[[allowlists]]
+description = "Placeholders locais e referencias a secrets do GitHub Actions"
+regexTarget = "line"
+regexes = [
+  '''your_broker_api_key_here''',
+  '''your_broker_api_secret_here''',
+  '''T00000000/B00000000/XXXXXXXXX''',
+  '''sk-test-''',
+  '''sk-xau-ai-pro-local''',
+  '''SENTRY_DSN=''',
+  '''SLACK_WEBHOOK_URL=''',
+  '''OPENAI_API_KEY=''',
+  '''CLINE_API_KEY=''',
+  '''BROKER_API_KEY=''',
+  '''BROKER_API_SECRET=''',
+  '''GITHUB_TOKEN=''',
+  '''VERCEL_TOKEN=''',
+  '''\$\{\{\s*secrets\.[A-Za-z0-9_]+''',
 ]
 
 [[rules]]
