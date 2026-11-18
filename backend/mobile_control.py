@@ -77,6 +77,15 @@ _LADOS = {
     "sell": "venda",
     "venda": "venda",
     "short": "venda",
+    # Tipos de ORDEM PENDENTE do MT5 (ORDER_TYPE_BUY_LIMIT..SELL_STOP_LIMIT).
+    # Sem eles a ordem pendente aparecia como "lado nao informado" mesmo tendo
+    # lado definido no terminal. 2/4/6 abrem compra; 3/5/7 abrem venda.
+    "2": "compra",
+    "4": "compra",
+    "6": "compra",
+    "3": "venda",
+    "5": "venda",
+    "7": "venda",
 }
 
 

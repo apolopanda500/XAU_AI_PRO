@@ -141,6 +141,21 @@ class TestMapeamentoDoGateway:
         # Leitura NAO muda o estado de execucao do modulo.
         assert retrato["execution_enabled"] is False
 
+    @pytest.mark.parametrize(
+        "tipo, lado",
+        [(2, "compra"), (4, "compra"), (6, "compra"), (3, "venda"), (5, "venda"), (7, "venda")],
+    )
+    def test_ordem_pendente_tem_lado_pelo_tipo_do_mt5(self, tipo: int, lado: str):
+        # Medido no telefone (17/11/2026): com o mapa so de 0/1 a ordem pendente
+        # aparecia como "lado nao informado" mesmo tendo lado no terminal.
+        payload = payload_conta_ok()
+        payload["pending_orders"] = [
+            {"ticket": 7001, "symbol": "XAUUSD", "type": tipo, "volume": 0.05}
+        ]
+        payload["pending_orders_available"] = True
+        retrato = mobile_control.montar_de_leitura(payload, saude_ok(), risco_ok())
+        assert retrato["ordens"]["itens"][0]["lado"] == lado
+
 
 class TestNadaDeEscrita:
     """A guarda principal: o modulo movel nao tem caminho de escrita."""
