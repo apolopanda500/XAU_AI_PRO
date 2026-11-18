@@ -87,6 +87,13 @@ jobs:
         uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # O ficheiro do repo chama-se `.gitleaks.toml` (com ponto); a
+          # auto-deteccao do action so procura `gitleaks.toml`. Sem esta
+          # linha o action usa a config interna e ignora o allowlist.
+          GITLEAKS_CONFIG: .gitleaks.toml
+          # Config no formato v8.25+ (`[[allowlists]]`). Fixar a versao
+          # garante que o action usa o mesmo parser validado localmente.
+          GITLEAKS_VERSION: 8.30.1
 
       # O passo que caçava um DSN real do Sentry foi REMOVIDO em 04/10/2026: o
       # Sentry saiu do projeto e o `.env.example` nao tem mais essa variavel.
