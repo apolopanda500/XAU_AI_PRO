@@ -38,6 +38,7 @@ from Python.model_registry import model_catalog
 from backend.planos.social_paper import follow_strategy, following_strategies, list_strategies, unfollow_strategy
 from backend.planos.subscriptions import activate_local_plan, get_subscription, list_plans
 from backend import remote_auth
+from backend import mobile_control
 
 API_TOKEN = gw.API_TOKEN
 RATE_LIMIT_MAX = gw.RATE_LIMIT_MAX
@@ -1080,6 +1081,47 @@ async def risk_state_route() -> JSONResponse:
         return _send(await _read_call(gw._risk_state, gw._mt5()))
     except Exception as exc:
         return _send({"ok": False, "error": str(exc)}, 503)
+
+
+@app.get("/api/mobile/control")
+async def mobile_control_route() -> JSONResponse:
+    """Retrato da conta ativa para a tela movel - SOMENTE LEITURA.
+
+    O QUE ESTA ROTA NAO FAZ: nao envia ordem, nao fecha posicao, nao altera
+    stop, nao cancela e nao movimenta saldo. Nao existe verbo de escrita para
+    ela em lugar nenhum - `backend/mobile_control.py` so normaliza leitura.
+
+    POR QUE ELA NAO REAPROVEITA `/api/positions`
+    --------------------------------------------
+    Aquele payload devolve a lista crua. O celular precisa de tres coisas que a
+    lista crua nao da: (a) `ok`/`motivo` por bloco, para separar "nao ha
+    posicao" de "nao consegui perguntar"; (b) simbolo vazio RECUSADO com
+    motivo, em vez de virar linha em branco; (c) o selo `read_only` explicito,
+    que a tela usa como fail-closed (servidor que nao declarar leitura nao e
+    exibido).
+
+    `positions_available`/`pending_orders_available` vem do terminal e NAO sao
+    presumidos: sem eles, lista vazia por falha seria lida como conta zerada.
+    """
+    bruto: dict = {}
+    erros: list[str] = []
+    try:
+        bruto = await _read_call(gw._payload)
+    except Exception as exc:  # noqa: BLE001 - leitura nunca derruba a rota
+        erros.append(f"terminal: {exc}")
+    try:
+        saude = gw._status_snapshot()
+    except Exception as exc:  # noqa: BLE001
+        saude = {"ok": False}
+        erros.append(f"saude: {exc}")
+    try:
+        risco = await _read_call(gw._risk_state, gw._mt5())
+    except Exception as exc:  # noqa: BLE001
+        risco = {}
+        erros.append(f"risco: {exc}")
+
+    corpo = mobile_control.montar_de_leitura(bruto, saude, risco, erros)
+    return _send(corpo)
 
 
 @app.get("/api/economic/alerts")
