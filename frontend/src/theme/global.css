@@ -4399,3 +4399,43 @@ input:focus-visible {
   overflow-wrap: anywhere;}
 .tabela-conexoes td:last-child {min-width: 22rem;
   white-space: normal;}
+
+/* ---------------------------------------------------------------------------
+   TELEFONE: a barra lateral vira trilho de icones
+   ---------------------------------------------------------------------------
+   MEDIDO no SM-A057M (1080x2400 @420dpi), 17/11/2026: a sidebar fixa de
+   232px consumia a maior parte da largura util e o conteudo era espremido -
+   o cartao de saude mostrava "SEM L..." cortado e os valores do painel movel
+   apareciam pela metade. `.content` tem `contain: layout paint`, entao o
+   excesso era CORTADO, nao rolavel.
+
+   Abaixo de 720px o trilho fica com 64px: os icones continuam clicando e o
+   `aria-label` de cada item segue intacto (nada some do DOM, so o rotulo
+   visual). O botao de recolher sai porque no telefone o trilho ja e o estado
+   compacto - um controle que nao muda nada e ruido.
+   ------------------------------------------------------------------------ */
+@media (max-width: 720px) {
+  .sidebar,
+  .sidebar:not(.collapsed) {
+    width: 64px;
+  }
+
+  .sidebar .brand-name,
+  .sidebar .nav-label,
+  .sidebar-footer {
+    display: none;
+  }
+
+  .sidebar .brand {
+    justify-content: center;
+    padding-inline: 0;
+  }
+
+  .sidebar .collapse-btn {
+    display: none;
+  }
+
+  .content {
+    padding: 12px 12px 20px;
+  }
+}
