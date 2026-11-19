@@ -18,6 +18,6 @@ if ($adb) {
 } else { Write-Host "[4] Android: desconectado" -ForegroundColor Yellow }
 try {
   $rel = gh release view v$target --repo apolopanda500/XAU_AI_PRO --json assets --jq '.assets | length' 2>$null
-  Write-Host "[5] Release v$target: $rel assets" -ForegroundColor Green
+  Write-Host "[5] Release v${target}: $rel assets" -ForegroundColor Green
 } catch { Write-Host "[5] Release: falha na consulta" -ForegroundColor Yellow }
 Write-Host "======================================" -ForegroundColor Cyan
