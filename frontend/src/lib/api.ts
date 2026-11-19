@@ -73,9 +73,39 @@ export function wsUrl(): string {
 // ---------------------------------------------------------------------------
 
 const SESSION_KEY = 'xau-session-token';
+const SESSION_UNTIL_KEY = 'xau-session-until';
+const DAY_MS = 86_400_000;
 
 export function sessionToken(): string {
   return stored(SESSION_KEY);
+}
+
+/** Grava quando a sessao lembrada neste aparelho expira (ms epoch). */
+export function setSessionUntil(until: number | null): void {
+  try {
+    if (typeof window === 'undefined') return;
+    if (until && Number.isFinite(until)) {
+      window.localStorage.setItem(SESSION_UNTIL_KEY, String(Math.trunc(until)));
+    } else {
+      window.localStorage.removeItem(SESSION_UNTIL_KEY);
+    }
+  } catch {
+    // localStorage indisponível: segue sem prazo local.
+  }
+}
+
+/** Timestamp de expiração salvo, ou null quando não há prazo local. */
+export function sessionUntil(): number | null {
+  const raw = stored(SESSION_UNTIL_KEY);
+  if (!raw) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** `true` só quando há prazo salvo e ele já venceu. */
+export function sessionExpirou(): boolean {
+  const until = sessionUntil();
+  return until !== null && Date.now() >= until;
 }
 
 export function setSessionToken(token: string): void {
@@ -90,6 +120,12 @@ export function setSessionToken(token: string): void {
 
 export function clearSessionToken(): void {
   setSessionToken('');
+  setSessionUntil(null);
+}
+
+/** Lembra a sessão neste aparelho por N dias (0/odd = nunca). */
+export function lembrarSessao(dias: 0 | 7 | 30 | 90): void {
+  setSessionUntil(dias > 0 ? Date.now() + dias * DAY_MS : null);
 }
 
 export type LoginResult =

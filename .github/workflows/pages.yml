@@ -11,7 +11,10 @@ on:
     branches: [main]
     paths:
       - "site/**"
+      - "Docs/version.json"
       - ".github/workflows/pages.yml"
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:

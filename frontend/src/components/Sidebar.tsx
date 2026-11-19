@@ -62,7 +62,7 @@ export default function Sidebar() {
           aria-label={open ? 'Recolher menu' : 'Expandir menu'}
           onClick={() => setOpen(!open)}
         >
-          {open ? '‹' : '›'}
+          {open ? '«' : '»'}
         </button>
       </div>
       <nav className="nav-list">

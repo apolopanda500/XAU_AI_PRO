@@ -434,7 +434,7 @@ export default function HistoryTab() {
           coluna escreve vazio e nao "--": "--" aqui diria "o gateway nao
           mandou", e o gateway mandou: mandou vazio.
         */}
-        <div className="hist-flat">
+        <div className="hist-flat table-scroll">
           <table className="tbl compact-table history-grid history-deals">
             <caption className="sr-only">Histórico de operações e movimentações de saldo</caption>
             <thead>

@@ -5042,7 +5042,7 @@ dependencies = [
 
 [[package]]
 name = "xau-ai-pro-desktop"
-version = "1.2.182"
+version = "1.2.184"
 dependencies = [
  "dirs 5.0.1",
  "getrandom 0.3.4",

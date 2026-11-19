@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>XAU AI PRO — Status & Verificação (24/7)</title>
+  <style>
+    :root {
+      --bg: #070b14; --surface: #0f172a; --border: #1e293b;
+      --gold: #f59e0b; --text: #f8fafc; --muted: #94a3b8; --green: #10b981;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    body { background: var(--bg); color: var(--text); line-height: 1.6; }
+    .container { max-width: 980px; margin: 0 auto; padding: 2rem 1.5rem; }
+    header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 1rem; margin-bottom: 2rem; }
+    a { color: var(--gold); text-decoration: none; font-weight: 600; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; }
+    .card h2 { font-size: 1.15rem; color: var(--gold); margin-bottom: 0.75rem; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
+    .stat { background: #090d16; border: 1px solid var(--border); border-radius: 8px; padding: 1rem; }
+    .stat-label { font-size: 0.78rem; color: var(--muted); text-transform: uppercase; }
+    .stat-val { font-size: 1.1rem; font-weight: 700; color: var(--green); margin-top: 0.25rem; word-break: break-word; }
+    pre { background: #090d16; border: 1px solid var(--border); padding: 1rem; border-radius: 8px; overflow-x: auto; font-size: 0.85rem; color: #cbd5e1; white-space: pre-wrap; }
+    footer { color: var(--muted); font-size: 0.8rem; margin-top: 1.5rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div><strong>XAU_AI_PRO</strong> · Auditoria &amp; Integridade Online</div>
+      <nav><a href="index.html">← Voltar ao Portal</a></nav>
+    </header>
+
+    <div class="card">
+      <h2>Status Público do Ecossistema (tempo real)</h2>
+      <div class="grid">
+        <div class="stat">
+          <div class="stat-label">Última Release Oficial</div>
+          <div class="stat-val" id="rel-tag">Carregando...</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">EA MQL5 Canônico</div>
+          <div class="stat-val">v1.2.214 (MT5 x64)</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Arquitetura de Segurança</div>
+          <div class="stat-val">Local-First · Fail-Closed</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Disponibilidade Portal</div>
+          <div class="stat-val">24/7 · CDN Global (GitHub Pages)</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Artefatos &amp; Hashes SHA-256 Oficiais</h2>
+      <p style="color: var(--muted); font-size: 0.9rem; margin-bottom: 1rem;">
+        Confira sempre o hash SHA-256 do instalador (.exe) ou do app (.apk) antes de instalar.
+        Rode: <code>CertUtil -hashfile XAU_AI_PRO_1.2.183.apk SHA256</code> (Windows) ou <code>shasum -a 256 &lt;arquivo&gt;</code>.
+      </p>
+      <pre id="assets-box">Consultando a API oficial do GitHub Releases...</pre>
+    </div>
+
+    <footer>
+      Dados servidos em tempo real pela API pública do GitHub (releases/latest).
+      Repositórios: <a href="https://github.com/apolopanda500/XAU_AI_PRO">XAU_AI_PRO</a> ·
+      <a href="https://github.com/apolopanda500/mql5">mql5</a>
+    </footer>
+  </div>
+
+  <script>
+    (async function loadReleaseAudit() {
+      try {
+        const res = await fetch("https://api.github.com/repos/apolopanda500/XAU_AI_PRO/releases/latest");
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const data = await res.json();
+        document.getElementById("rel-tag").textContent =
+          data.tag_name + " (" + new Date(data.published_at).toLocaleDateString("pt-BR") + ")";
+        const lines = (data.assets || []).map(function (a) {
+          var mb = (a.size / (1024 * 1024)).toFixed(2);
+          return "• " + a.name + " (" + mb + " MB)\n  " + a.browser_download_url;
+        });
+        document.getElementById("assets-box").textContent =
+          lines.length ? lines.join("\n\n") : "Nenhum anexo encontrado nesta release.";
+      } catch (e) {
+        document.getElementById("assets-box").textContent =
+          "API indisponível agora. Acesse diretamente:\nhttps://github.com/apolopanda500/XAU_AI_PRO/releases";
+      }
+    })();
+  </script>
+</body>
+</html>

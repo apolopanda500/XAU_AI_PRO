@@ -967,67 +967,61 @@ describe('sem conta salva: recusa com motivo, nunca MT5 fixo (11/10/2026)', () =
   embaixo de qualquer sub-aba: o mesmo grafico em quatro lugares, quatro
   consultas e quatro polls para o mesmo par.
 */
-describe('um grafico so, na sub-aba Operacao (11/10/2026)', () => {
-  const quantosGraficos = (container: HTMLElement) =>
-    container.querySelectorAll('[data-testid="painel-grafico"]').length;
+describe('um grafico so, sempre montado e visivel so na Operacao (18/11/2026)', () => {
+  const montar = (container: HTMLElement) =>
+    container.querySelectorAll('[data-testid="painel-grafico"]');
+  const visivel = (container: HTMLElement) => {
+    const el = container.querySelector('[data-testid="painel-grafico"]');
+    if (!el) return false;
+    return el.closest('[hidden]') === null;
+  };
 
-  it('PROVA: na Operacao (padrao), o grafico esta la — e e UM so', () => {
+  it('PROVA: na Operacao (padrao), o grafico esta la, visivel, e e UM so', () => {
     const { container } = render(<RobotTabs />);
     expect(container.querySelector('.robo-sub-aba.ativa')?.textContent).toBe('Operação');
-    expect(quantosGraficos(container)).toBe(1);
+    expect(montar(container).length).toBe(1);
+    expect(visivel(container)).toBe(true);
   });
 
   it.each(['Modelos', 'Risco', 'Operações'] as const)(
-    'PROVA: na sub-aba %s, nao ha grafico nenhum',
+    'PROVA: na sub-aba %s o grafico fica oculto (hidden), mas segue montado',
     async (aba) => {
       const { container } = render(<RobotTabs />);
       fireEvent.click(screen.getByRole('tab', { name: aba }));
       await waitFor(() => {
         expect(container.querySelector('.robo-sub-aba.ativa')?.textContent).toBe(aba);
       });
-      expect(quantosGraficos(container)).toBe(0);
+      expect(montar(container).length).toBe(1);
+      expect(visivel(container)).toBe(false);
     },
   );
 
-  it('PROVA: voltar para a Operacao traz o grafico de volta — ainda UM so', async () => {
+  it('PROVA: voltar para a Operacao revela o grafico de novo - ainda UM so', async () => {
     const { container } = render(<RobotTabs />);
     fireEvent.click(screen.getByRole('tab', { name: 'Modelos' }));
     await waitFor(() => {
       expect(container.querySelector('.robo-sub-aba.ativa')?.textContent).toBe('Modelos');
     });
-    expect(quantosGraficos(container)).toBe(0);
+    expect(visivel(container)).toBe(false);
 
     fireEvent.click(screen.getByRole('tab', { name: 'Operação' }));
     await waitFor(() => {
       expect(container.querySelector('.robo-sub-aba.ativa')?.textContent).toBe('Operação');
     });
-    expect(quantosGraficos(container)).toBe(1);
+    expect(montar(container).length).toBe(1);
+    expect(visivel(container)).toBe(true);
   });
 
-  it('PROVA NEGATIVA: o grafico fora da Operacao voltaria sem nenhum teste reclamar', () => {
-    // Sem este caso, alguem recoloca o `<AcompanharModelos />` fora da
-    // condicao e so o caso da Operacao continuaria passando — o defeito
-    // (grafico em quatro lugares) voltaria verde.
+  it('PROVA NEGATIVA: sempre existe EXATAMENTE UMA montagem do grafico na pagina', () => {
     const { container } = render(<RobotTabs />);
     const abas = ['Operação', 'Modelos', 'Risco', 'Operações'] as const;
-    let total = 0;
     for (const aba of abas) {
       fireEvent.click(screen.getByRole('tab', { name: aba }));
-      total += quantosGraficos(container);
+      expect(montar(container).length).toBe(1);
     }
-    // Somadas as quatro sub-abas, ha exatamente UMA montagem de grafico.
-    expect(total).toBe(1);
   });
 });
 
-/*
-  UM PAINEL DE RISCO SO, NA SUB-ABA RISCO (12/10/2026)
-  =====================================================
-  Decisao do dono: o painel de risco estava em duas sub-abas — a grade aberta
-  na Risco e a mesma grade numa gaveta `<details>` na Operacao, com estados
-  SEPARADOS (cada visao e uma instancia). Declarar num lugar e ligar no outro
-  mandava limites diferentes sem o operador ver.
-*/
 describe('um painel de risco so, na sub-aba Risco (12/10/2026)', () => {
   it('PROVA: na Operacao nao ha grade de risco nenhuma', async () => {
     const { container } = render(<RobotTabs />);

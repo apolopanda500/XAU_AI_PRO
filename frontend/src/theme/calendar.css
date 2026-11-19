@@ -979,3 +979,49 @@
     opacity: 0.85;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   MOBILE (<=768px): datas curtas, EVENTO/IMPORTANCIA sem se fundirem
+   ---------------------------------------------------------------------------
+   MEDIDO no SM-A057M (18/11/2026): com ~360px de largura, o grid de 7 colunas
+   (462px minimo) cortava a borda direita, as abas de dia empilhavam a 2 linhas
+   cada (segunda-feira 16/11/2026 + sobreposicoes) e o cabecalho "Evento" lia
+   colado em "Importancia". As correcoes: grid com rolagem horizontal limpa,
+   dias compactados e nowrap com ellipsis.
+   ------------------------------------------------------------------------ */
+@media (max-width: 768px) {
+  .calendar-tab {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .cal-columns,
+  .cal-body {
+    min-width: 462px;
+  }
+
+  .cal-semana {
+    flex-wrap: wrap;
+  }
+
+  .cal-dias {
+    gap: 3px;
+    padding: 6px 8px;
+  }
+
+  .cal-dia {
+    min-width: 70px;
+    padding: 4px 6px;
+    gap: 1px;
+  }
+
+  .cal-dia-relato,
+  .cal-dia-nome,
+  .cal-dia-cont {
+    font-size: 9px;
+    max-width: 70px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}

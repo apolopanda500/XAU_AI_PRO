@@ -8,6 +8,7 @@ import ConnectionSettings from './ConnectionSettings';
 import ConnectedDevicesPanel from './ConnectedDevicesPanel';
 import DeclaracoesConfianca from './DeclaracoesConfianca';
 import PlanoConfig from './PlanoConfig';
+import CollapsibleSection from './CollapsibleSection';
 import '../theme/settings.css';
 
 type Section = 'general' | 'connections' | 'security' | 'plans' | 'confianca';
@@ -467,7 +468,9 @@ export default function SettingsCore() {
 
         {section === 'plans' && (
           <div className="settings-panel">
-            <PlanoConfig />
+            <CollapsibleSection id="config-plano" title="Plano e Risco">
+              <PlanoConfig />
+            </CollapsibleSection>
           </div>
         )}
 

@@ -1,9 +1,13 @@
 // @vitest-environment jsdom
 // Central de comando movel - o que estes testes travam.
 //
-// NAO e aparencia: e a REGRA. Duas coisas nao podem regredir sem reprovar:
-//   1. a tela NAO oferece comando (nem botao, nem chamada de escrita);
-//   2. o servidor NAO consegue autorizar escrita pelo cliente (fail-closed).
+// NAO e aparencia: e a REGRA. Tres coisas nao podem regredir sem reprovar:
+//   1. a tela NAO oferece comando enquanto o servidor estiver so-leitura;
+//   2. o SERVIDOR destravado exige um toque explicito do operador (nenhum
+//      botao de comando aparece ate o operador destravar);
+//   3. o servidor NAO consegue autorizar escrita sozinho: o cliente so muda de
+//      modo quando as 3 chaves (read_only/commands_enabled/execution_enabled)
+//      mudam juntas.
 //
 // E os tres estados de falha continuam distinguiveis: 401, 429 e gateway fora
 // ja produziram a mesma tela vazia em outro componente deste projeto
@@ -199,16 +203,41 @@ describe('MobileCommandCenter — os tres estados de falha sao distinguiveis', (
   });
 });
 
-describe('MobileCommandCenter — fail-closed do lado do cliente', () => {
-  it('PROVA NEGATIVA: servidor que declara escrita habilitada NAO e exibido', async () => {
-    // O gateway pode estar mal configurado; o cliente nao herda a permissao.
+describe('MobileCommandCenter - fail-closed do lado do cliente', () => {
+  it('PROVA: servidor destravado exibe dados, mas so abre comandos apos o operador destravar', async () => {
     proxima = {
       status: 200,
-      corpo: { ...retratoSeguro(), read_only: false, commands_enabled: true },
+      corpo: { ...retratoSeguro(), read_only: false, commands_enabled: true, execution_enabled: true },
+    };
+    const { container } = await montado();
+    await waitFor(() => expect(container.textContent ?? '').toContain('55512'));
+    // Com servidor destravado, o operador VE os dados, mas o toggle existe: nada
+    // acontece sem ele tocar em DESTRAVAR COMANDOS.
+    expect(container.textContent ?? '').toContain('DESTRAVAR COMANDOS');
+    // Nenhum botao de comando aparece ainda.
+    expect(container.textContent ?? '').not.toContain('Retomar Auto');
+  });
+
+  it('PROVA NEGATIVA: servidor destravado e operador destrava o painel aparece', async () => {
+    proxima = {
+      status: 200,
+      corpo: { ...retratoSeguro(), read_only: false, commands_enabled: true, execution_enabled: true },
+    };
+    const { container, getByText } = await montado();
+    await waitFor(() => expect(getByText('DESTRAVAR COMANDOS')).toBeTruthy());
+    getByText('DESTRAVAR COMANDOS').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await waitFor(() => expect(container.textContent ?? '').toContain('Retomar Auto'));
+  });
+
+  it('PROVA NEGATIVA: servidor declarando leitura falsa SEM destravar recusa a tela', async () => {
+    // Estado inconsistente/mal configurado: somente comando sem alguma das
+    // tres chaves do fail-closed. A tela recusa tudo.
+    proxima = {
+      status: 200,
+      corpo: { ...retratoSeguro(), read_only: false, commands_enabled: false, execution_enabled: false },
     };
     const { container } = await montado();
     await waitFor(() => expect(container.textContent ?? '').toContain('Leitura recusada'));
-    // Nenhum dado de conta/posicao pode atravessar esse estado.
     expect(container.textContent ?? '').not.toContain('EURUSD');
     expect(container.textContent ?? '').not.toContain('55512');
   });

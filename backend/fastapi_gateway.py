@@ -15,7 +15,7 @@ from typing import Any
 import asyncio
 from urllib.parse import unquote
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import Body, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -32,6 +32,7 @@ from backend import copilot
 from backend import intent_log
 from backend import persistent_queue
 from backend import watchdog
+from backend import mobile_command
 from backend.backtest import run_backtest
 from backend.third_party_ea import evaluate_all as evaluate_third_party_ea
 from Python.model_registry import model_catalog
@@ -1122,6 +1123,43 @@ async def mobile_control_route() -> JSONResponse:
 
     corpo = mobile_control.montar_de_leitura(bruto, saude, risco, erros)
     return _send(corpo)
+
+
+@app.post("/api/mobile/command")
+async def mobile_command_route(body: dict[str, Any] = Body(...)) -> JSONResponse:
+    """Comando ao painel movel - TRAVADO POR PADRAO (fail-closed).
+
+    So monta file quando `XAU_MOBILE_CONTROL_ENABLED=1` no ambiente; sem a
+    variavel a rota responde 403 e NAO escreve em lugar nenhum. Mesmo ligado,
+    "executar" significa APENAS gravar um comando unico em `Data/remote_cmd.json`
+    para quem quer que o consuma depois (EA, quando recompilado para ler o
+    arquivo). Esta rota NUNCA dispara ordem no MT5 diretamente.
+    """
+    if not mobile_command.comandos_habilitados():
+        return _send(
+            {
+                "ok": False,
+                "error": "controle movel desabilitado (XAU_MOBILE_CONTROL_ENABLED != 1)",
+            },
+            403,
+        )
+
+    confirm = body.get("confirm") is True
+    if not confirm:
+        return _send({"ok": False, "error": "confirm=true obrigatorio para destravar acao."}, 400)
+
+    try:
+        payload = mobile_command.montar_comando(
+            action=body.get("action"),
+            value=body.get("value"),
+            profile=body.get("profile"),
+            command_id=body.get("command_id"),
+            confirm=confirm,
+        )
+        resultado = mobile_command.escrever_comando(payload)
+    except ValueError as exc:
+        return _send({"ok": False, "error": str(exc)}, 400)
+    return _send(resultado)
 
 
 @app.get("/api/economic/alerts")

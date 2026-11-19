@@ -1,0 +1,95 @@
+/* ==========================================================================
+   XAU AI PRO — REFORCO DE COERENCIA VISUAL 10/10 (PC & ANDROID)
+   Camada de acabamento: numeros tabulares, linhas de tabela consistentes e
+   transicoes previsiveis. NAO sobrescreve tokens/cores de tema (o app tem
+   dark, light, btc_dark, violet_dark, xau_dark) - ela so endurece o que
+   independe de tema e que o sistema de design ja queria uniforme.
+
+   Carregado por ultimo em `main.tsx` DE PROPOSITO, depois de fluidness e
+   desk_polish, mas sem usar !important em cores ou backgrounds de tema.
+   ========================================================================== */
+
+/* 1. NUMEROS NUNCA TREMEM AO ATUALIZAR PRECO */
+.positions-table td,
+.positions-table th,
+.history-deals td,
+.history-deals th,
+.compact-table td,
+.compact-table th,
+.mt-events td,
+.mt-events th,
+.cal-columns,
+.cal-row,
+.cal-row td,
+[class*="kpi"],
+[class*="price"],
+[class*="balance"] {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 2. LINHAS DE TABELA: mesma altura/quebra e hover consistente */
+.compact-table tbody tr:hover {
+  background: color-mix(in srgb, var(--text, #f8fafc) 4%, transparent);
+}
+
+.compact-table caption {
+  text-align: left;
+}
+
+/* 3. TRANSICAO CURTA para botoes interativos (previsibilidade > animacao) */
+button,
+a,
+[role='button'] {
+  transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+
+button:focus-visible,
+a:focus-visible,
+[role='button']:focus-visible {
+  outline: 2px solid var(--accent, #f59e0b);
+  outline-offset: 2px;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+/* 4. COMPOSICAO EM GPU PARA AREAS DE TEMPO REAL (graficos/feeds) */
+.chart-viewport,
+.live-chart,
+[class*="chart"],
+.table-scroll,
+.log-box {
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+}
+
+/* 5. SELOS (BADGES/CHIPS) NUNCA QUEBRAM OU VAZAM */
+.badge,
+.chip,
+.pill,
+.status-pill,
+.symbol-badge,
+[class*="badge"],
+[class*="selo"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  flex-shrink: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+  vertical-align: middle;
+}
+
+/* 6. NENHUM CONTAINER VAZA NA HORIZONTAL NO CELULAR */
+@media (max-width: 768px) {
+  html,
+  body,
+  #root {
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+}
