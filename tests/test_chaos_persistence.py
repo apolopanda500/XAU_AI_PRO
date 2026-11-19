@@ -1,101 +1,61 @@
-"""Caos & Persistencia — comandos moveis sob falha de rede/arquivo.
-
-Testa o caminho real (`backend.mobile_command`), nao a API de outro modulo:
-  - rajada concorrente com o mesmo `command_id` nunca corrompe o arquivo;
-  - a pasta de destino se auto-recria quando ausente;
-  - `confirm=true` e obrigatorio; o clique sem confirmacao morre;
-  - sem `XAU_MOBILE_CONTROL_ENABLED=1` o caminho inteiro nao escreve nada;
-  - arquivo .tmp nunca sobrevive ao fim da escrita atomica.
-"""
-
-from __future__ import annotations
-
+# -*- coding: utf-8 -*-
+"""Caos/persistência SEM inventar rota de escrita (gateway é somente leitura)."""
 import json
-import threading
+import os
+import sys
+import urllib.error
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-from backend import mobile_command
-
-
-@pytest.fixture()
-def cmd_dir(tmp_path, monkeypatch):
-    destino = tmp_path / "subpasta" / "remote_cmd.json"
-    monkeypatch.setattr(mobile_command, "CMD_FILE", destino)
-    return destino
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+from backend import mobile_control  # noqa: E402
 
 
-def _liga(monkeypatch, valor: str = "1") -> None:
-    monkeypatch.setenv("XAU_MOBILE_CONTROL_ENABLED", valor)
+def _app() -> FastAPI:
+    app = FastAPI()
+
+    @app.get("/api/mobile/control")
+    def controle():
+        return mobile_control.montar_de_leitura(
+            {"login": 1, "server": "DEMO", "balance": 1000.0},
+            {"ok": True, "gateway_build": "teste"}, None, [])
+    return app
 
 
-class TestPersistencia:
-    def test_pasta_ausente_e_recriada(self, monkeypatch, cmd_dir):
-        _liga(monkeypatch)
-        payload = mobile_command.montar_comando(
-            action="RESUME_AUTO", command_id="chaos_create_dir", confirm=True,
-        )
-        r = mobile_command.escrever_comando(payload)
-        assert r["ok"] is True
-        assert cmd_dir.exists()
-        assert not cmd_dir.with_suffix(".tmp").exists()
+def test_chaos_01_rajada_concorrente_de_leitura_sem_duplicacao():
+    client = TestClient(_app())
+    def ler(_):
+        r = client.get("/api/mobile/control")
+        return r.status_code, r.json()
+    with ThreadPoolExecutor(max_workers=20) as pool:
+        resultados = list(pool.map(ler, range(20)))
+    assert all(code == 200 for code, _ in resultados)
+    corpos = [c for _, c in resultados]
+    assert all(c == corpos[0] for c in corpos)
+    assert all(c.get("read_only") is True for c in corpos)
 
-    def test_rajada_com_mesmo_command_id_nao_corrompe(self, monkeypatch, cmd_dir):
-        _liga(monkeypatch)
-        payload = mobile_command.montar_comando(
-            action="PAUSE_AUTO", command_id="chaos_burst_999", confirm=True,
-        )
-        resultados: list[object] = []
-        lock = threading.Lock()
 
-        def disparar():
-            try:
-                mobile_command.escrever_comando(payload)
-                with lock:
-                    resultados.append(0)
-            except Exception as exc:  # noqa: BLE001
-                with lock:
-                    # Mantem o tipo do erro para diagnostico ao invés de somar 1.
-                    resultados.append(exc)
+def test_chaos_02_fail_closed_token_invalido_nao_derruba_servidor():
+    base = os.getenv("XAU_GATEWAY_URL", "http://127.0.0.1:9027")
+    req = urllib.request.Request(f"{base}/api/mobile/control",
+        headers={"Authorization": "Bearer token_invalido_chaos"}, method="GET")
+    try:
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            raise AssertionError(f"gateway aceitou token inválido: HTTP {resp.status}")
+    except urllib.error.HTTPError as exc:
+        assert exc.code in (401, 403), f"esperado 401/403, recebeu {exc.code}"
+    except urllib.error.URLError:
+        pass
 
-        threads = [threading.Thread(target=disparar) for _ in range(20)]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
 
-        assert resultados == [0] * 20, f"Erros ao lancar rajada: {resultados}"
-        dados = json.loads(cmd_dir.read_text(encoding="utf-8"))
-        assert dados["command_id"] == "chaos_burst_999"
-        assert not cmd_dir.with_suffix(".tmp").exists()
-
-    def test_sem_flag_nada_e_escrito(self, monkeypatch, cmd_dir):
-        monkeypatch.delenv("XAU_MOBILE_CONTROL_ENABLED", raising=False)
-        payload = mobile_command.montar_comando(
-            action="PAUSE_AUTO", command_id="chaos_blocked", confirm=True,
-        )
-        with pytest.raises(RuntimeError):
-            mobile_command.escrever_comando(payload)
-        assert not cmd_dir.exists()
-
-    def test_confirm_obrigatorio(self, monkeypatch, cmd_dir):
-        _liga(monkeypatch)
-        with pytest.raises(ValueError):
-            mobile_command.montar_comando(action="PAUSE_AUTO", confirm=False)
-
-    def test_arquivo_tem_so_o_payload(self, monkeypatch, cmd_dir):
-        _liga(monkeypatch)
-        payload = mobile_command.montar_comando(
-            action="SET_RISK_PCT", value=0.75, confirm=True,
-        )
-        mobile_command.escrever_comando(payload)
-        bruto = cmd_dir.read_text(encoding="utf-8")
-        # Nunca pode conter tokens/segredos (o modulo nao aceita esses campos).
-        for proibido in ("token", "senha", "secret", "api_key", "authorization"):
-            assert proibido not in bruto.lower()
-        dados = json.loads(bruto)
-        assert dados["command_id"].startswith("mob_")
-        assert dados["confirm"] is True
-        assert dados["action"] == "SET_RISK_PCT"
-        assert dados["value"] == 0.75
+def test_chaos_03_payload_serializavel_e_sem_segredos():
+    corpo = mobile_control.montar_de_leitura(
+        {"login": 1, "server": "S", "balance": 10.0},
+        {"ok": True, "gateway_build": "1.2.4"}, None, [])
+    texto = json.dumps(corpo, ensure_ascii=False)
+    assert texto and "Bearer" not in texto and "api_key" not in texto

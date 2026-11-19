@@ -15,7 +15,6 @@ import PortfolioHome from './components/tabs/PortfolioHomeSafe';
 import RobotTabs from './components/RobotTabs';
 import HistoryTab from './components/tabs/HistoryTab';
 import SystemHealth from './components/SystemHealthOnly';
-import MobileCommandCenter from './components/MobileCommandCenter';
 import MobileBottomNav from './components/MobileBottomNav';
 import SettingsCore from './components/SettingsCore';
 import ExitAppButton from './components/ExitAppButton';
@@ -38,16 +37,8 @@ function renderActiveTab(tab: TabType): ReactNode {
     case 'history':
       return <HistoryTab />;
     case 'system':
-      // A central de comando movel fica AQUI porque e leitura de sistema:
-      // conta, posicoes, limites e saude do gateway num retrato so. Ela nao
-      // abre ordem nem fecha posicao - o selo "SOMENTE LEITURA" e o contrato
-      // da tela e do contrato `GET /api/mobile/control`.
-      return (
-        <>
-          <SystemHealth />
-          <MobileCommandCenter />
-        </>
-      );
+      // A Central de Comandos vive SOMENTE na sub-aba Risco do Robô.
+      return <SystemHealth />;
     case 'settings':
       return (
         <>

@@ -61,12 +61,18 @@
 //  quem rola é `.content`. É isso que impede um bloco de encavalitar sobre o
 //  outro — que foi o sintoma da versão quebrada anterior.
 // ===========================================================================
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import ErrorBoundary from './ErrorBoundary';
 import AcompanharModelos from './AcompanharModelos';
 import OperacaoAutomatica from './OperacaoAutomatica';
 import UniversalLiveTerminal from './UniversalLiveTerminal';
+import InstitutionalDesk from './InstitutionalDesk';
 import ListaModelos from './ListaModelos';
+import ModelCards3DGrid, { type DynamicAssetModelProfile } from './ModelCards3DGrid';
+import LiveAiRiskCopilot, { type LiveMarketTelemetry } from './LiveAiRiskCopilot';
+import MobileCommandCenter from './MobileCommandCenter';
+import { useAppStore } from '../hooks/useAppStore';
+import { apiBase } from '../lib/api';
 import '../theme/robo.css';
 
 function Secao({ nome, children, hidden = false }: { nome: string; children: React.ReactNode; hidden?: boolean }) {
@@ -91,6 +97,39 @@ const SUB_ABAS: Array<{ id: SubAba; rotulo: string }> = [
 
 export default function RobotTabs() {
   const [subAba, setSubAba] = useState<SubAba>('operacao');
+  const setSelectedSymbol = useAppStore((s) => s.setSelectedSymbol);
+  const setRobotSub = useAppStore((s) => s.setRobotSub);
+  const abrirNoGrafico = (symbol: string) => {
+    const limpo = String(symbol || '').trim();
+    if (limpo) {
+      setSelectedSymbol(limpo);
+      setRobotSub('mesa');
+    }
+  };
+  const quotes = useAppStore((s) => s.quotes);
+  const account = useAppStore((s) => s.account);
+  const selectedSymbol = useAppStore((s) => s.selectedSymbol);
+
+  const [profiles, setProfiles] = useState<DynamicAssetModelProfile[]>([]);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(`${apiBase()}/api/models/asset-profiles`, { signal: controller.signal })
+      .then((r) => (r.ok ? r.json() : {}))
+      .then((p: unknown) => {
+        const lista = (p as { profiles?: unknown })?.profiles;
+        if (!controller.signal.aborted && Array.isArray(lista)) setProfiles(lista as DynamicAssetModelProfile[]);
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, []);
+
+  const quote = (quotes || []).find((q) => q.symbol === selectedSymbol);
+  const telemetry: LiveMarketTelemetry | null = quote
+    ? { symbol: quote.symbol, timeframe: 'M15', bid: quote.bid, ask: quote.ask,
+        spreadPoints: Math.round((quote.spread || 0) / (quote.point || 1)),
+        rsi: 50, adx: 0, atrPoints: 0, balance: account?.balance ?? 0,
+        dailyDrawdownPct: 0, maxDailyDrawdownPct: 3, point: quote.point }
+    : null;
 
   return (
     <main className="robo">
@@ -117,19 +156,38 @@ export default function RobotTabs() {
 
       {subAba === 'modelos' && (
         <Secao nome="Modelos treinados">
+          <ModelCards3DGrid profiles={profiles} onSelectSymbol={abrirNoGrafico} />
           <ListaModelos />
         </Secao>
       )}
 
       {subAba === 'risco' && (
-        <Secao nome="Controle de risco">
-          <OperacaoAutomatica visao="risco" />
-        </Secao>
+        <>
+          <Secao nome="Controle de risco">
+            <OperacaoAutomatica visao="risco" />
+          </Secao>
+          {telemetry && (
+            <Secao nome="IA viva">
+              <LiveAiRiskCopilot telemetry={telemetry} />
+            </Secao>
+          )}
+          <Secao nome="Central de comando">
+            <MobileCommandCenter />
+          </Secao>
+        </>
       )}
 
       {subAba === 'operacoes' && (
         <Secao nome="Operações abertas">
           <UniversalLiveTerminal />
+        </Secao>
+      )}
+
+      {/* MESA INSTITUCIONAL (18/11/2026): banca, catálogo, ordens e boleta
+          somente-leitura. Na sub-aba Operações, sem montar gráfico. */}
+      {subAba === 'operacoes' && (
+        <Secao nome="Mesa institucional">
+          <InstitutionalDesk />
         </Secao>
       )}
 

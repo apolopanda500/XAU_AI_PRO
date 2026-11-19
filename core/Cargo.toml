@@ -1,6 +1,6 @@
 [package]
 name = "xau-ai-pro-core"
-version = "1.2.184"
+version = "1.2.185"
 edition = "2021"
 
 [lib]

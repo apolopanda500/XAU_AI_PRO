@@ -94,6 +94,8 @@ import './theme/desk_polish.css';
 // Acabamento numero/tabela/foco (10/10). Carregado por último, mas não
 // sobrescreve tokens de tema - só endurece o que é agnóstico a tema.
 import './theme/design_system_10_10.css';
+// Modos de leitura da Mesa Institucional (Compacto / Mesa / Auditoria).
+import './theme/reading_modes.css';
 
 // Ajusta para Tauri (mobile viewport)
 const metaViewport = document.querySelector('meta[name="viewport"]');

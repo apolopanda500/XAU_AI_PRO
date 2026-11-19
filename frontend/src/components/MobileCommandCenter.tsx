@@ -37,6 +37,11 @@ import MobileLotCalculator from './MobileLotCalculator';
 import MobilePermissionsHub from './MobilePermissionsHub';
 import '../theme/mobile-command-center.css';
 
+// GUARDRAIL FECHADO (19/11/2026): Central de Comando UMA SOLA no app.
+// O marcador no document.head é a fonte única de verdade do dono do slot:
+// uma segunda instância desliga, sem duplicar polls nem painéis.
+const INSTANCE_ATTR = 'data-xau-command-center-mounted';
+
 type Lado = 'compra' | 'venda' | 'desconhecido';
 
 type Conta = {
@@ -175,6 +180,24 @@ export default function MobileCommandCenter({ intervaloMs = INTERVALO_MS }: { in
   const [riskPct, setRiskPct] = useState('0.5');
   const [dailyTarget, setDailyTarget] = useState('50');
   const [perfil, setPerfil] = useState('STANDARD');
+  const [duplicada, setDuplicada] = useState(false);
+
+  // GUARDRAIL FECHADO: se outra Central já estiver em DOM, desliga esta.
+  useEffect(() => {
+    const existente = document.querySelector(`[${INSTANCE_ATTR}="true"]`);
+    if (existente) {
+      setDuplicada(true);
+      return;
+    }
+    const marcador = document.createElement('meta');
+    marcador.setAttribute(INSTANCE_ATTR, 'true');
+    document.head.appendChild(marcador);
+    return () => {
+      marcador.remove();
+    };
+  }, []);
+
+  // Todos os hooks acima — a duplicada sai só na renderização (regra dos hooks).
 
   const enviarComando = useCallback(
     async (action: string, extra?: { value?: number; profile?: string }) => {
@@ -325,6 +348,9 @@ export default function MobileCommandCenter({ intervaloMs = INTERVALO_MS }: { in
       SOMENTE LEITURA
     </div>
   );
+
+  // GUARDRAIL FECHADO: uma Central só. Depois de todos os hooks (regra React).
+  if (duplicada) return null;
 
   if (estado !== 'ok' || !retrato) {
     const frase = FRASES[estado];

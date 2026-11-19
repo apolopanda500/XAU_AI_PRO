@@ -1,0 +1,620 @@
+/* ==========================================================================
+   XAU AI PRO — MESA INSTITUCIONAL: MODOS DE LEITURA E COMPONENTES (18/11/2026)
+   Consome as variaveis --xau-* de `design_system_10_10.css`. Este arquivo e
+   importado DEPOIS dele: aqui so entra o que e especifico dos paineis novos.
+
+   Os tres modos mudam a DENSIDADE REAL (padding, fonte e gap), nao so o rotulo
+   do botao. Quem alterna ve a tabela inteira mudar de tamanho.
+   ========================================================================== */
+
+/* ---------- 1. BARRA DE MODO DE LEITURA ---------- */
+.modo-leitura-barra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  background: var(--xau-bg-surface);
+  border: 1px solid var(--xau-border);
+  border-radius: var(--xau-radius-md);
+}
+
+.modo-leitura-grupo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.modo-leitura-rotulo {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--xau-text-muted);
+}
+
+.modo-leitura-botao {
+  min-height: 28px !important;
+  padding: 0 10px !important;
+  font-size: 11px !important;
+  background: #090d16;
+  border: 1px solid var(--xau-border) !important;
+  color: var(--xau-text-muted);
+}
+
+.modo-leitura-botao.ativo {
+  background: rgba(245, 158, 11, 0.14);
+  border-color: var(--xau-border-strong) !important;
+  color: var(--xau-gold);
+}
+
+.modo-leitura-estado {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 11px;
+}
+
+.modo-leitura-canal {
+  color: var(--xau-green);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.modo-leitura-canal.canal-remoto {
+  color: var(--xau-blue);
+}
+
+.modo-leitura-ws {
+  color: var(--xau-text-muted);
+  font-weight: 600;
+}
+
+.modo-leitura-ws.ativo {
+  color: var(--xau-green);
+}
+
+.modo-leitura-fps,
+.modo-leitura-hora {
+  color: var(--xau-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.modo-leitura-sync {
+  min-height: 26px !important;
+  padding: 0 10px !important;
+  font-size: 11px !important;
+  background: var(--xau-bg-elevated);
+  border: 1px solid var(--xau-border) !important;
+  color: var(--xau-blue);
+}
+
+/* ---------- 2. SECAO RECOLHIVEL ---------- */
+.secao-recolhivel {
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+
+.secao-recolhivel-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--xau-bg-elevated);
+  border-bottom: 1px solid var(--xau-border);
+  padding-right: 10px;
+}
+
+.secao-recolhivel[data-aberta='0'] .secao-recolhivel-topo {
+  border-bottom: none;
+}
+
+.secao-recolhivel-cabecalho {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px !important;
+  padding: 0 12px !important;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  color: var(--xau-text-main);
+  text-align: left;
+  justify-content: flex-start !important;
+}
+
+.secao-recolhivel-cabecalho:hover {
+  background: rgba(56, 189, 248, 0.06) !important;
+}
+
+.secao-recolhivel-seta {
+  color: var(--xau-gold);
+  font-size: 10px;
+  width: 12px;
+}
+
+.secao-recolhivel-titulo {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.secao-recolhivel-badge {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.14);
+  color: var(--xau-blue);
+}
+
+.secao-recolhivel-acao {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.secao-recolhivel-corpo {
+  padding: 12px 14px;
+}
+
+/* ---------- 3. SELETOR DE ATIVOS ---------- */
+.seletor-ativos-filtros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.seletor-ativos-busca {
+  flex: 1;
+  min-width: 180px;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: var(--xau-radius-sm);
+  background: var(--xau-bg-canvas);
+  border: 1px solid var(--xau-border);
+  color: var(--xau-text-main);
+  font-size: 12.5px;
+}
+
+.seletor-ativos-classes {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.seletor-ativos-classe {
+  min-height: 28px !important;
+  padding: 0 10px !important;
+  font-size: 10.5px !important;
+  background: var(--xau-bg-canvas);
+  border: 1px solid var(--xau-border) !important;
+  color: var(--xau-text-muted);
+}
+
+.seletor-ativos-classe.ativa {
+  background: rgba(245, 158, 11, 0.14);
+  border-color: var(--xau-border-strong) !important;
+  color: var(--xau-gold);
+}
+
+.seletor-ativos-lista {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  scrollbar-width: thin;
+}
+
+.seletor-ativos-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px !important;
+  padding: 0 10px !important;
+  white-space: nowrap;
+  background: var(--xau-bg-canvas);
+  border: 1px solid var(--xau-border) !important;
+  color: var(--xau-text-main);
+}
+
+.seletor-ativos-item.ativo {
+  background: rgba(16, 185, 129, 0.14);
+  border-color: rgba(16, 185, 129, 0.55) !important;
+  color: var(--xau-green);
+}
+
+.seletor-ativos-simbolo {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.seletor-ativos-classe-tag {
+  font-size: 10px;
+  opacity: 0.7;
+  text-transform: uppercase;
+}
+
+.seletor-ativos-vazio {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--xau-text-muted);
+  line-height: 1.5;
+}
+
+/* ---------- 4. BANCA, ORDENS E BOLETA ---------- */
+.kpi-rotulo {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--xau-text-muted);
+  margin-bottom: 4px;
+}
+
+.kpi-info {
+  color: var(--xau-blue);
+}
+
+.kpi-positivo {
+  color: var(--xau-green);
+}
+
+.kpi-negativo {
+  color: var(--xau-red);
+}
+
+.banca-faixa {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: var(--xau-radius-sm);
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  font-size: 11.5px;
+  color: #fcd34d;
+}
+
+.banca-faixa-alerta {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #fca5a5;
+}
+
+.banca-faixa-noticia {
+  background: rgba(56, 189, 248, 0.07);
+  border-color: rgba(56, 189, 248, 0.25);
+  color: #bae6fd;
+}
+
+.banca-faixa-hora {
+  margin-left: auto;
+  color: var(--xau-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.ordens-subtitulo {
+  margin: 12px 0 8px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--xau-text-muted);
+}
+
+.tabela-vazia {
+  text-align: center;
+  color: var(--xau-text-muted);
+  padding: 16px !important;
+}
+
+.lado-compra {
+  color: var(--xau-green);
+  font-weight: 700;
+}
+
+.lado-venda {
+  color: var(--xau-red);
+  font-weight: 700;
+}
+
+.lado-nao.informado,
+.lado-nao {
+  color: var(--xau-text-muted);
+}
+
+/* Boleta */
+.boleta-topo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.boleta-titulo {
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  color: var(--xau-gold);
+}
+
+.boleta-cotacao {
+  font-size: 11.5px;
+  color: var(--xau-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.boleta-selo {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.boleta-selo-leitura {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--xau-gold);
+}
+
+.boleta-selo-armado {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--xau-green);
+}
+
+.boleta-tipos {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  margin-bottom: 12px;
+}
+
+.boleta-tipo {
+  min-height: 28px !important;
+  padding: 0 10px !important;
+  font-size: 11px !important;
+  white-space: nowrap;
+  background: var(--xau-bg-canvas);
+  border: 1px solid var(--xau-border) !important;
+  color: var(--xau-text-muted);
+}
+
+.boleta-tipo.ativo {
+  background: rgba(56, 189, 248, 0.16);
+  border-color: rgba(56, 189, 248, 0.6) !important;
+  color: var(--xau-blue);
+}
+
+.boleta-lados {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.boleta-lado {
+  min-height: 40px !important;
+  font-weight: 800 !important;
+  font-size: 12px !important;
+  background: var(--xau-bg-canvas) !important;
+}
+
+.boleta-lado-compra {
+  border: 1px solid var(--xau-green) !important;
+  color: var(--xau-green);
+}
+
+.boleta-lado-compra.ativo {
+  background: var(--xau-green) !important;
+  color: #04120c;
+}
+
+.boleta-lado-venda {
+  border: 1px solid var(--xau-red) !important;
+  color: var(--xau-red);
+}
+
+.boleta-lado-venda.ativo {
+  background: var(--xau-red) !important;
+  color: #fff;
+}
+
+.boleta-campos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.boleta-campos label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--xau-text-muted);
+}
+
+.boleta-campos input {
+  min-height: 34px;
+  padding: 0 10px;
+  border-radius: var(--xau-radius-sm);
+  background: var(--xau-bg-canvas);
+  border: 1px solid var(--xau-border);
+  color: var(--xau-text-main);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.boleta-resumo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: var(--xau-radius-sm);
+  background: var(--xau-bg-canvas);
+  border: 1px solid var(--xau-border);
+  font-size: 11.5px;
+}
+
+.boleta-resumo dt {
+  font-size: 10px;
+  color: var(--xau-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.boleta-resumo dd {
+  margin: 2px 0 0;
+  font-weight: 700;
+  color: var(--xau-text-main);
+  font-variant-numeric: tabular-nums;
+}
+
+.boleta-aviso {
+  margin: 0 0 10px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: #fcd34d;
+}
+
+.boleta-bloqueios {
+  margin: 0 0 10px;
+  padding: 8px 12px 8px 26px;
+  border-radius: var(--xau-radius-sm);
+  background: rgba(239, 68, 68, 0.07);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  color: #fca5a5;
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.boleta-confirmar {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: var(--xau-text-main);
+  line-height: 1.45;
+}
+
+.boleta-enviar {
+  width: 100%;
+  min-height: 44px !important;
+  font-weight: 800 !important;
+  font-size: 12.5px !important;
+}
+
+.boleta-enviar.compra {
+  background: var(--xau-green) !important;
+  color: #04120c !important;
+  border: none !important;
+}
+
+.boleta-enviar.venda {
+  background: var(--xau-red) !important;
+  color: #fff !important;
+  border: none !important;
+}
+
+.boleta-enviar:disabled {
+  background: var(--xau-bg-elevated) !important;
+  color: var(--xau-text-muted) !important;
+  border: 1px solid var(--xau-border) !important;
+}
+
+/* ---------- 5. RODAPE E LINKS ---------- */
+.mesa-link {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: rgba(56, 189, 248, 0.14);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  color: var(--xau-blue);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.mesa-rodape {
+  margin: 10px 0 0;
+  font-size: 11.5px;
+  color: var(--xau-text-muted);
+  line-height: 1.5;
+}
+
+.mesa-link-botao {
+  background: none !important;
+  border: none !important;
+  padding: 0 !important;
+  min-height: 0 !important;
+  color: var(--xau-gold) !important;
+  font-weight: 700 !important;
+  font-size: 11.5px !important;
+  text-decoration: underline;
+  display: inline !important;
+}
+
+/* ---------- 6. DENSIDADE POR MODO DE LEITURA ---------- */
+html[data-leitura='compacto'] .secao-recolhivel-corpo {
+  padding: 8px 10px;
+}
+
+html[data-leitura='compacto'] thead th,
+html[data-leitura='compacto'] tbody td {
+  padding: 5px 8px !important;
+  font-size: 11.5px !important;
+}
+
+html[data-leitura='compacto'] .boleta-campos {
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 8px;
+}
+
+html[data-leitura='compacto'] .secao-recolhivel-cabecalho {
+  min-height: 32px !important;
+}
+
+html[data-leitura='auditoria'] thead th,
+html[data-leitura='auditoria'] tbody td {
+  padding: 13px 14px !important;
+  font-size: 13.5px !important;
+}
+
+html[data-leitura='auditoria'] .boleta-resumo {
+  font-size: 13px;
+}
+
+html[data-leitura='auditoria'] .secao-recolhivel-titulo {
+  font-size: 13px;
+}
+
+/* ---------- 7. ANDROID ---------- */
+@media (max-width: 768px) {
+  .modo-leitura-barra {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .modo-leitura-estado {
+    justify-content: space-between;
+  }
+
+  .boleta-lados {
+    gap: 6px;
+  }
+
+  .secao-recolhivel-corpo {
+    padding: 10px 10px 12px;
+  }
+}

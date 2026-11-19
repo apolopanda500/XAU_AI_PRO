@@ -40,6 +40,7 @@ from backend.planos.social_paper import follow_strategy, following_strategies, l
 from backend.planos.subscriptions import activate_local_plan, get_subscription, list_plans
 from backend import remote_auth
 from backend import mobile_control
+from backend import models_profiles_api
 
 API_TOKEN = gw.API_TOKEN
 RATE_LIMIT_MAX = gw.RATE_LIMIT_MAX
@@ -244,6 +245,23 @@ async def auth_logout(request: Request) -> JSONResponse:  # type: ignore[no-unty
 @app.get("/api/ai/models")
 async def ai_models() -> dict:
     return {"ok": True, "models": model_catalog(), "source": "local_model_artifacts"}
+
+
+@app.get("/api/models/catalog")
+async def models_catalog() -> dict:
+    from Python.train_universal_onnx import read_manifest
+    manifest = read_manifest()
+    if not manifest:
+        return {"ok": False, "motivo": "model_manifest.json ausente", "models": []}
+    return {"ok": True, "model": manifest, "source": "model_manifest.json"}
+
+
+@app.get("/api/models/asset-profiles")
+async def models_asset_profiles(catalog_json: str = "[]") -> dict:
+    meta = models_profiles_api.load_manifest_metrics()
+    catalog = models_profiles_api.parse_catalog(catalog_json)
+    return {"ok": True, "count": len(models_profiles_api.build_profiles(catalog, meta)),
+            "profiles": models_profiles_api.build_profiles(catalog, meta)}
 
 
 @app.get("/api/ai/trained")
