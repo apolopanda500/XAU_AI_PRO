@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { isMobileRuntime, sessionToken } from '../../lib/api';
+import { clearSessionToken, isMobileRuntime, sessionExpirou, sessionToken } from '../../lib/api';
 import MobileBiometricLock from '../MobileBiometricLock';
 import LoginScreen from './LoginScreen';
+import FirstRunWizard from '../FirstRunWizard';
 
 interface Props {
   children: React.ReactNode;
@@ -16,9 +17,21 @@ interface Props {
 // AuthGate (PIN) nem em nada do desktop.
 export default function UserSessionGate({ children }: Props) {
   const mobile = isMobileRuntime();
-  // o token é lido uma vez na montagem: a tela de login é a que troca a sessão
-  const [autenticado, setAutenticado] = useState(() => !mobile || Boolean(sessionToken()));
+  // o token é lido uma vez na montagem: a tela de login é a que troca a sessão.
+  // Sessão vencida ("lembrar por 7/30/90 dias") conta como desconectada.
+  const [autenticado, setAutenticado] = useState(
+    () => !mobile || (sessionToken() !== '' && !sessionExpirou()),
+  );
+  useEffect(() => {
+    // Limpa o resíduo vencido: assim o próximo mount não reaparece autenticado.
+    if (sessionExpirou()) clearSessionToken();
+    // só no mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [bloqueado, setBloqueado] = useState(false);
+  const [onboardingDone, setOnboardingDone] = useState(
+    () => typeof window === 'undefined' || window.localStorage.getItem('xau_onboarding_done') === '1',
+  );
 
   useEffect(() => {
     if (!mobile || !autenticado) {
@@ -31,6 +44,7 @@ export default function UserSessionGate({ children }: Props) {
   }, [mobile, autenticado]);
 
   if (!mobile) return <>{children}</>;
+  if (!autenticado && !onboardingDone) return <FirstRunWizard onComplete={() => setOnboardingDone(true)} />;
   if (!autenticado) return <LoginScreen onAutenticado={() => setAutenticado(true)} />;
   if (bloqueado) {
     return (

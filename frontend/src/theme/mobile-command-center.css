@@ -416,3 +416,42 @@
     font-size: 12px;
   }
 }
+
+/* Selo Destravar (servidor destravado) + painel de comandos */
+.mcc-selo-unlock {
+  cursor: pointer;
+  background: rgba(245, 158, 11, 0.14);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: var(--primary, #f59e0b);
+  border-radius: 999px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  padding: 6px 12px;
+}
+.mcc-selo-unlock.on {
+  background: rgba(16, 185, 129, 0.16);
+  border-color: rgba(16, 185, 129, 0.45);
+  color: var(--ok, #10b981);
+}
+.mcc-commands {
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 10px;
+}
+.mcc-cmds-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.field-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+.mcc-cmds-row .input {
+  max-width: 110px;
+}

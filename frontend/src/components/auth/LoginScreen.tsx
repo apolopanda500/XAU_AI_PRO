@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { isLoginError, loginUser } from '../../lib/api';
+import { isLoginError, loginUser, lembrarSessao } from '../../lib/api';
 import { isMobileRuntime } from '../../lib/api';
 import {
   alertaSeguranca,
@@ -28,6 +28,7 @@ export default function LoginScreen({ onAutenticado }: Props) {
   const [senha, setSenha] = useState('');
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const [lembrarDias, setLembrarDias] = useState<0 | 7 | 30 | 90>(0);
   const [mostrarGateway, setMostrarGateway] = useState(false);
   const [atual, setAtual] = useState(gatewayConfigurado);
   const [apiBase, setApiBase] = useState(atual.apiBase);
@@ -48,6 +49,7 @@ export default function LoginScreen({ onAutenticado }: Props) {
       return;
     }
     setSenha('');
+    lembrarSessao(lembrarDias);
     onAutenticado();
   }
 
@@ -112,6 +114,23 @@ export default function LoginScreen({ onAutenticado }: Props) {
           />
         </div>
         {erro && <span className="auth-erro">{erro}</span>}
+        <div className="field">
+          <label htmlFor="login-lembrar">Lembrar sessão neste aparelho</label>
+          <select
+            id="login-lembrar"
+            className="input"
+            value={lembrarDias}
+            onChange={(e) => setLembrarDias(Number(e.target.value) as 0 | 7 | 30 | 90)}
+          >
+            <option value={0}>Não lembrar</option>
+            <option value={7}>7 dias</option>
+            <option value={30}>30 dias</option>
+            <option value={90}>90 dias</option>
+          </select>
+          <p className="hint" style={{ margin: '4px 0 0' }}>
+            O prazo vale para este aparelho; o servidor ainda pode encerrar a sessão antes.
+          </p>
+        </div>
 
         <div className="field">
           <label htmlFor="login-gateway">

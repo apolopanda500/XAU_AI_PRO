@@ -109,3 +109,34 @@
 .mini-terminal-universal .muted {
   font-size: 12px;
 }
+
+/* Telas estreitas (<=420px): PRICE/FLUTUANTE nao pode estourar a largura. */
+@media (max-width: 420px) {
+  .positions-table th,
+  .positions-table td {
+    padding: 3px 4px;
+    font-size: 10.5px;
+    white-space: normal;
+    word-break: break-word;
+    font-variant-numeric: tabular-nums;
+  }
+  .mini-terminal-head h2,
+  .mini-terminal-head strong {
+    word-break: break-word;
+  }
+}
+
+/* Feed de eventos do Mini Terminal no mobile: colunas compactas. */
+@media (max-width: 768px) {
+  .table-scroll:has(.mt-events) {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .mt-events th,
+  .mt-events td {
+    padding: 3px 5px;
+    font-size: 10px;
+    white-space: normal;
+    word-break: break-word;
+  }
+}

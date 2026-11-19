@@ -91,11 +91,17 @@ import './theme/fluidness.css';
 // Polimento do Trading Desk 10/10: contraste dos cards de modelo e
 // marca d'água de fundo. Vence as folhas acima por definição.
 import './theme/desk_polish.css';
+// Acabamento numero/tabela/foco (10/10). Carregado por último, mas não
+// sobrescreve tokens de tema - só endurece o que é agnóstico a tema.
+import './theme/design_system_10_10.css';
 
 // Ajusta para Tauri (mobile viewport)
 const metaViewport = document.querySelector('meta[name="viewport"]');
 if (metaViewport) {
-  metaViewport.setAttribute('content', 'width=device-width, initial-scale=1.0');
+  metaViewport.setAttribute(
+    'content',
+    'width=device-width, initial-scale=1.0, viewport-fit=cover',
+  );
 }
 
 const root = document.getElementById('root');

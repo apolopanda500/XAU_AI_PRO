@@ -69,7 +69,14 @@ import UniversalLiveTerminal from './UniversalLiveTerminal';
 import ListaModelos from './ListaModelos';
 import '../theme/robo.css';
 
-function Secao({ nome, children }: { nome: string; children: React.ReactNode }) {
+function Secao({ nome, children, hidden = false }: { nome: string; children: React.ReactNode; hidden?: boolean }) {
+  if (hidden) {
+    return (
+      <div hidden aria-hidden="true" style={{ display: 'none' }}>
+        <ErrorBoundary nome={nome}>{children}</ErrorBoundary>
+      </div>
+    );
+  }
   return <ErrorBoundary nome={nome}>{children}</ErrorBoundary>;
 }
 
@@ -143,11 +150,20 @@ export default function RobotTabs() {
         posicao (entrada/SL/TP arrastaveis) continuam no grafico da Operacao,
         que le as mesmas posicoes.
       */}
-      {subAba === 'operacao' && (
-        <Secao nome="Gráfico ao vivo">
-          <AcompanharModelos />
-        </Secao>
-      )}
+      {/*
+        UM GRAFICO SO, MAS SEMPRE VIVO NA MEMORIA (18/11/2026)
+        ======================================================
+        O grafico nunca desmonta: trocar de aba apenas o esconde com
+        `hidden`, que desliga layout e eventos e o tira da arvore de
+        acessibilidade. Isso elimina o flash branco e a perda de zoom/linhas
+        SL/TP ao voltar - sem reaparecer nas outras abas (que e o defeito
+        que a decisao anterior corrigia). O componente segue calculando o
+        feed de candles em background para quando a Operacao voltar a ficar
+        visivel.
+      */}
+      <Secao nome="Gráfico ao vivo" hidden={subAba !== 'operacao'}>
+        <AcompanharModelos />
+      </Secao>
     </main>
   );
 }

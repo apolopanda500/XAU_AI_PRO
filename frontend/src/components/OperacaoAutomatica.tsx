@@ -1,4 +1,4 @@
-// OPERAÇÃO AUTOMÁTICA — os comandos do motor (05/10/2026, reconstruída)
+﻿// OPERAÇÃO AUTOMÁTICA — os comandos do motor (05/10/2026, reconstruída)
 //
 // O DONO PEDIU
 // ============
@@ -989,7 +989,23 @@ export default function OperacaoAutomatica({
     o botao seja acionado por teclado, por teste ou por codigo. Botao
     desabilitado sozinho nao e garantia de que a ordem nao sai.
   */
-  const semConexao = !wsConnected;
+  /*
+    WS E TELEMETRIA; HTTP E O CAMINHO DE CONTROLE.
+
+    O botão AUTO liga/desliga o motor via POST /api/auto/... (HTTP). O
+    WebSocket carrega só quotes/conta e pode falhar sem impedir nada — no
+    Android ele pode nunca abrir. Por isso a guarda passa a ser:
+
+      - `wsConnected` (tempo real)         -> tudo ok, "Tempo real";
+      - `autoQ.isSuccess` (HTTP respondeu) -> caminho de controle OK,
+        chip "Gateway HTTP" e o botao funciona;
+      - nenhum dos dois                    -> SEM CONEXAO, botao recusa.
+
+    `autoQ.isPending` (primeiro poll) ainda conta como sem-conexao para
+    nao habilitar o botao antes de saber se o gateway responde.
+  */
+  const httpOk = autoQ.isSuccess;
+  const semConexao = !wsConnected && !httpOk;
 
   const alternar = () => {
     if (semConexao) {
@@ -1126,8 +1142,8 @@ export default function OperacaoAutomatica({
           >
             {iaLigada ? 'IA ligada' : 'Ligar IA'}
           </button>
-          <span className={`chip ${wsConnected ? 'ok' : 'warn'}`}>
-            {wsConnected ? 'Tempo real' : 'Reconectando…'}
+          <span className={`chip ${wsConnected || httpOk ? 'ok' : 'warn'}`}>
+            {wsConnected ? 'Tempo real' : httpOk ? 'Gateway HTTP' : 'Reconectando…'}
           </span>
           <span className={`chip ${autoAtivo ? 'ok' : 'neutral'}`}>
             {autoAtivo ? 'Ligado' : 'Parado'}
@@ -1136,8 +1152,8 @@ export default function OperacaoAutomatica({
         )}
         {risco && (
         <div className="btn-row">
-          <span className={`chip ${wsConnected ? 'ok' : 'warn'}`}>
-            {wsConnected ? 'Tempo real' : 'Reconectando…'}
+          <span className={`chip ${wsConnected || httpOk ? 'ok' : 'warn'}`}>
+            {wsConnected ? 'Tempo real' : httpOk ? 'Gateway HTTP' : 'Reconectando…'}
           </span>
           <span className={`chip ${autoAtivo ? 'ok' : 'neutral'}`}>
             {autoAtivo ? 'Ligado' : 'Parado'}

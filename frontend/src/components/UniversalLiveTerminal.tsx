@@ -20,14 +20,15 @@ import {
   usePositions,
   useJournal,
   useAllCryptoAccounts,
-  useAutoState,
   useUniversalOverview,
+  useAutoState,
   useUniversalAccount,
   useUniversalPositions,
 } from '../hooks/queries';
 import { fmtNum, clsPnl, sideOfPosition, extractSymbol, requestId } from '../lib/format';
 import { notify } from '../lib/notify';
 import { classificarJournal } from '../lib/journalKind';
+import { filtrarEventosAtivos } from '../lib/terminalFeed';
 import '../theme/mini-terminal.css';
 import '../theme/mt5-terminal.css';
 
@@ -366,8 +367,34 @@ export default function UniversalLiveTerminal() {
         kind: 'INFO',
       });
     }
-    return rows.sort((a, b) => b.at.getTime() - a.at.getTime()).slice(0, 14);
+    return rows.sort((a, b) => b.at.getTime() - a.at.getTime()).slice(0, 20);
+    // Corretoras planejadas (MEXC/BINANCE/BYBIT/OKX) so entram no feed
+    // quando a conta responde ok no gateway - e MT5/MOTOR sempre ficam.
+    // Ver lib/terminalFeed.ts.
   }, [journalQ.data, cryptoQ.data, auto]);
+
+  // Corretoras ATIVAS na carteira (MT5 + exchange conectada), vindas do MESMO
+  // overview que a Carteira exibe. Corretoras planejadas (MEXC/BINANCE/BYBIT/
+  // OKX) aparecem no feed SOMENTE quando conectadas - o dono nao quer ver
+  // restos de contas inativas, mesmo com credencial errada.
+  const conectadosKey = conexoes
+    .filter(
+      (c) =>
+        (c.active === true) || String(c.status ?? '').toLowerCase() === 'conectada',
+    )
+    .map((c) => String(c.broker ?? '').trim().toUpperCase())
+    .filter(Boolean)
+    .sort()
+    .join(',');
+
+  const eventosFiltrados = useMemo(
+    () =>
+      filtrarEventosAtivos(events, conectadosKey ? conectadosKey.split(',') : []).slice(0, 14),
+    // String estavel como dependencia: `conexoes` e um array novo a cada
+    // fetch e dispararia o memo a cada 15s sem mudar nada.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [events, conectadosKey],
+  );
 
   // Fechamento de posição via gateway.
   //
@@ -778,7 +805,7 @@ const flutuanteDoMt5 = account?.profit;
             </tr>
           </thead>
           <tbody>
-            {events.map((event) => (
+            {eventosFiltrados.map((event) => (
               <tr key={event.id}>
                 <td className="mono">{event.at.toLocaleTimeString('pt-BR')}</td>
                 <td>
@@ -790,7 +817,7 @@ const flutuanteDoMt5 = account?.profit;
                 <td>{event.info}</td>
               </tr>
             ))}
-            {!events.length && (
+            {!eventosFiltrados.length && (
               <tr>
                 <td colSpan={4} className="mt-empty">
                   {journalQ.isFetching ? 'Lendo journal…' : 'Nenhum evento.'}

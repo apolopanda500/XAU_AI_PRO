@@ -38,6 +38,7 @@ credencial. A varredura roda no autoteste, entao um campo novo chamado
 from __future__ import annotations
 
 import json
+import os
 from time import time
 from typing import Any, Iterable, Mapping
 
@@ -48,6 +49,16 @@ READ_ONLY = True
 COMMANDS_ENABLED = False
 EXECUTION_ENABLED = False
 WITHDRAWALS_ENABLED = False
+
+
+def _comandos_habilitados() -> bool:
+    """True SOMENTE quando o operador liga XAU_MOBILE_CONTROL_ENABLED=1.
+
+    Este e o unico caminho por onde a tela movel deixa de ser somente leitura.
+    O padrao (`0` ou ausente) mantem o retrato bloqueado - fail-closed.
+    `withdrawals_enabled` NUNCA vira True em lugar nenhum.
+    """
+    return os.getenv("XAU_MOBILE_CONTROL_ENABLED", "0").strip() == "1"
 
 # Nomes de chave que NUNCA podem aparecer no payload (comparados em minusculas,
 # por substring: `xau_api_key`, `gatewayToken` e `authorization` caem todos).
@@ -392,12 +403,14 @@ def montar_snapshot(
         if not bloco["ok"] and bloco["motivo"]:
             avisos.append(f"{bloco_nome}: {bloco['motivo']}")
 
+    destravado = _comandos_habilitados()
+
     return {
         "ok": True,  # a LEITURA funcionou; o estado de cada bloco diz o resto
-        "read_only": READ_ONLY,
-        "commands_enabled": COMMANDS_ENABLED,
-        "execution_enabled": EXECUTION_ENABLED,
-        "withdrawals_enabled": WITHDRAWALS_ENABLED,
+        "read_only": not destravado,
+        "commands_enabled": destravado,
+        "execution_enabled": destravado,
+        "withdrawals_enabled": WITHDRAWALS_ENABLED,  # sempre False (AGENTS §2)
         "gerado_em": int(time() if agora is None else agora),
         "conta": caixa,
         "posicoes": pos,
@@ -405,13 +418,17 @@ def montar_snapshot(
         "saude": saude_final,
         "risco": risco_final,
         "avisos": avisos,
-        "comandos_recusados": [
-            "abrir ordem",
-            "fechar posicao",
-            "alterar stop/take",
-            "cancelar ordem",
-            "saque ou transferencia",
-        ],
+        "comandos_recusados": (
+            []
+            if destravado
+            else [
+                "abrir ordem",
+                "fechar posicao",
+                "alterar stop/take",
+                "cancelar ordem",
+                "saque ou transferencia",
+            ]
+        ),
     }
 
 

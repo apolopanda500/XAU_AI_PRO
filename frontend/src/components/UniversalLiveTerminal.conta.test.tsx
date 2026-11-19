@@ -73,6 +73,7 @@ const contaDaCaptura = {
 const estado = vi.hoisted(() => ({
   conta: {} as Record<string, unknown>,
   criptos: [] as Array<Record<string, unknown>>,
+  overviewConnections: [] as Array<Record<string, unknown>>,
 }));
 
 vi.mock('../hooks/queries', () => ({
@@ -82,7 +83,7 @@ vi.mock('../hooks/queries', () => ({
   useJournal: () => ({ data: { lines: [] }, isFetching: false }),
   useAllCryptoAccounts: () => ({ data: estado.criptos }),
   useAutoState: () => ({ data: null }),
-  useUniversalOverview: () => ({ data: { connections: [] } }),
+  useUniversalOverview: () => ({ data: { connections: estado.overviewConnections } }),
   useUniversalAccount: () => ({ data: {} }),
   useUniversalPositions: () => ({ data: { positions: [] } }),
 }));
@@ -259,51 +260,60 @@ describe('a margem livre vem da chave que o PRODUTOR manda', () => {
 });
 
 /*
-  A LINHA DE CONTA FALHA DIZ O MOTIVO (12/10/2026)
-  =================================================
-  MEDIDO nas capturas do dono (Operacoes): quatro linhas WARN — "MEXC / Spot
-  indisponível", "MEXC / Futuros indisponível", e o mesmo para BINANCE — sem
-  dizer POR QUE. Chave invalida, IP bloqueado, sem permissao e gateway fora
-  produziam a mesma linha, e o operador nao tinha por onde comecar (a rede,
-  medida do repo, responde 200 nas duas — nao e conectividade).
-
-  O gateway devolve o motivo; o `catch` do `useAllCryptoAccounts` o engolia.
-  Agora ele viaja em `error` e a linha o mostra, cortado em 90.
+  CORRETORAS PLANEJADAS SAEM DO FEED (18/11/2026)
+  ===============================================
+  Decisao do dono: MEXC/BINANCE/BYBIT/OKX em estado planejado/inativo nao
+  aparecem no feed, mesmo com credencial invalida - so voltam ao ver quando
+  a conta responde `ok: true` no gateway. MT5 e MOTOR sempre ficam.
+  Ver lib/terminalFeed.ts (regras de src/lib/terminalFeed.test.ts).
 */
-describe('a conta de exchange que falha diz o motivo na linha', () => {
+describe('corretoras planejadas ficam fora do feed', () => {
   beforeEach(() => {
     estado.conta = { ...contaDaCaptura };
     estado.criptos = [];
+    estado.overviewConnections = [];
   });
   afterEach(cleanup);
 
-  it('PROVA: falha COM motivo mostra o motivo na linha', () => {
+  it('PROVA: falha com motivo NAO aparece - planejada nao conectada', () => {
     estado.criptos = [
       { broker: 'mexc', market: 'crypto-spot', ok: false, balance: null, currency: 'USDT', assets: [], error: 'API key invalida (401)' },
     ];
     const { container } = render(<UniversalLiveTerminal />);
     const corpo = container.textContent ?? '';
-    expect(corpo).toContain('Spot indisponível');
-    expect(corpo).toContain('API key invalida (401)');
+    expect(corpo).not.toContain('Spot indisponivel');
+    expect(corpo).not.toContain('API key invalida');
+    expect(corpo).toContain('MT5');
   });
 
-  it('PROVA: falha SEM motivo mantem o texto antigo, sem dois-pontos solto', () => {
+  it('PROVA: falha sem motivo tambem NAO aparece', () => {
     estado.criptos = [
       { broker: 'binance', market: 'crypto-futures', ok: false, balance: null, currency: 'USDT', assets: [] },
     ];
     const { container } = render(<UniversalLiveTerminal />);
     const corpo = container.textContent ?? '';
-    expect(corpo).toContain('Futuros indisponível');
-    expect(corpo).not.toContain('Futuros indisponível:');
+    expect(corpo).not.toContain('Futuros indisponivel');
   });
 
-  it('PROVA NEGATIVA: motivo longo e cortado — a linha continua sendo uma linha', () => {
+  it('PROVA NEGATIVA: motivo longo continua invisivel - planejada nao conectada', () => {
     estado.criptos = [
-      { broker: 'mexc', market: 'crypto-spot', ok: false, balance: null, currency: 'USDT', assets: [], error: `x`.repeat(200) },
+      { broker: 'mexc', market: 'crypto-spot', ok: false, balance: null, currency: 'USDT', assets: [], error: 'x'.repeat(200) },
     ];
     const { container } = render(<UniversalLiveTerminal />);
     const corpo = container.textContent ?? '';
-    expect(corpo).toContain('Spot indisponível: ' + 'x'.repeat(90));
-    expect(corpo).not.toContain('x'.repeat(91));
+    expect(corpo).not.toContain('x'.repeat(20));
+  });
+
+  it('PROVA POSITIVA: broker conectada na Carteira VOLTA a aparecer no feed', () => {
+    estado.criptos = [
+      { broker: 'mexc', market: 'crypto-spot', ok: true, balance: 10, currency: 'USDT', assets: [] },
+    ];
+    estado.overviewConnections = [
+      { broker: 'MT5', market: 'mt5', status: 'conectada', active: true },
+      { broker: 'MEXC', market: 'crypto-spot', status: 'conectada', active: true },
+    ];
+    const { container } = render(<UniversalLiveTerminal />);
+    const corpo = container.textContent ?? '';
+    expect(corpo).toContain('MEXC');
   });
 });

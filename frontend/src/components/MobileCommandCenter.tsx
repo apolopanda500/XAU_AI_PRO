@@ -138,11 +138,16 @@ async function buscarRetrato(): Promise<{ status: number; corpo: unknown }> {
   return { status, corpo };
 }
 
-/** Um retrato so e aceito se o servidor declarar leitura. Nada e presumido. */
+/** O retrato só atravessa o fail-closed quando o servidor declara leitura
+ *  OU declara destravar sob o modo `XAU_MOBILE_CONTROL_ENABLED=1`. */
 function ehRetratoSeguro(corpo: unknown): corpo is Retrato {
   if (!corpo || typeof corpo !== 'object') return false;
   const r = corpo as Partial<Retrato>;
-  return r.read_only === true && r.commands_enabled === false;
+  const somenteLeitura =
+    r.read_only === true && r.commands_enabled === false && r.execution_enabled === false;
+  const destravado =
+    r.read_only === false && r.commands_enabled === true && r.execution_enabled === true;
+  return somenteLeitura || destravado;
 }
 
 function Linha({ rotulo, valor, classe }: { rotulo: string; valor: string; classe?: string }) {
@@ -164,6 +169,47 @@ function Lado({ lado }: { lado: Lado }) {
 export default function MobileCommandCenter({ intervaloMs = INTERVALO_MS }: { intervaloMs?: number }) {
   const [retrato, setRetrato] = useState<Retrato | null>(null);
   const [estado, setEstado] = useState<Estado>('medindo');
+  const [unlocked, setUnlocked] = useState(false);
+  const [cmdMsg, setCmdMsg] = useState('');
+  const [pending, setPending] = useState(false);
+  const [riskPct, setRiskPct] = useState('0.5');
+  const [dailyTarget, setDailyTarget] = useState('50');
+  const [perfil, setPerfil] = useState('STANDARD');
+
+  const enviarComando = useCallback(
+    async (action: string, extra?: { value?: number; profile?: string }) => {
+      if (pending) return;
+      setPending(true);
+      setCmdMsg('');
+      try {
+        const token = sessionToken();
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (token) headers.Authorization = `Bearer ${token}`;
+        const resposta = await fetch(`${apiBase()}/api/mobile/command`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            action,
+            value: extra?.value,
+            profile: extra?.profile,
+            command_id: `mob_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+            confirm: true,
+          }),
+        });
+        const corpo = (await resposta.json().catch(() => null)) as Record<string, unknown> | null;
+        setCmdMsg(
+          resposta.ok
+            ? `Comando aceito: ${String(corpo?.action ?? action)}`
+            : `Recusado (${resposta.status}): ${String(corpo?.error ?? 'falha no gateway')}`,
+        );
+      } catch (e) {
+        setCmdMsg(e instanceof Error ? e.message : 'falha de rede');
+      } finally {
+        setPending(false);
+      }
+    },
+    [pending],
+  );
 
   const ler = useCallback(async () => {
     try {
@@ -239,8 +285,42 @@ export default function MobileCommandCenter({ intervaloMs = INTERVALO_MS }: { in
     },
   };
 
-  const selo = (
-    <div className="mcc-selo" role="status" title="Esta tela nao envia ordem, nao fecha posicao e nao movimenta saldo">
+  const confirmarEEnviar = (action: string, extra?: { value?: number; profile?: string }) => {
+    const alertas: Record<string, string> = {
+      CLOSE_ALL_POSITIONS: 'Fechar TODAS as posições abertas?',
+      MOVE_ALL_BREAKEVEN: 'Mover TODAS as posições para breakeven?',
+      RESUME_AUTO: 'Ligar o robô automaticamente?',
+      SET_RISK_PCT: `Alterar risco por operação para ${riskPct}%?`,
+      SET_DAILY_TARGET_USD: `Alterar meta diária para US$ ${dailyTarget}?`,
+      SET_PROP_PROFILE: `Alternar perfil Prop para ${perfil}?`,
+    };
+    if (!window.confirm(alertas[action] ?? action)) return;
+    void enviarComando(action, extra);
+  };
+
+  const destravadoServidor = Boolean(retrato?.commands_enabled && retrato?.execution_enabled);
+
+  const selo = destravadoServidor ? (
+    <button
+      type="button"
+      className={`mcc-selo mcc-selo-unlock ${unlocked ? 'on' : ''}`}
+      aria-pressed={unlocked}
+      onClick={() => setUnlocked((v) => !v)}
+      title={
+        unlocked
+          ? 'Tocar trava os controles novamente'
+          : 'Habilita os botões de comando neste aparelho'
+      }
+    >
+      <span className="mcc-selo-ponto" aria-hidden="true" />
+      {unlocked ? 'CONTROLES ATIVOS' : 'DESTRAVAR COMANDOS'}
+    </button>
+  ) : (
+    <div
+      className="mcc-selo"
+      role="status"
+      title="Esta tela nao envia ordem, nao fecha posicao e nao movimenta saldo"
+    >
       <span className="mcc-selo-ponto" aria-hidden="true" />
       SOMENTE LEITURA
     </div>
@@ -272,6 +352,66 @@ export default function MobileCommandCenter({ intervaloMs = INTERVALO_MS }: { in
         <h2 className="mcc-titulo">Central de comando</h2>
         {selo}
       </header>
+
+      {destravadoServidor && unlocked && (
+        <div className="mcc-bloco mcc-commands">
+          <div className="mcc-bloco-topo">
+            <h3>Comandos</h3>
+            <span className="mcc-tag ok">liberado</span>
+          </div>
+          <div className="mcc-cmds-row">
+            <button type="button" className="btn xs ghost" disabled={pending} onClick={() => confirmarEEnviar('PAUSE_AUTO')}>
+              Pausar Auto
+            </button>
+            <button type="button" className="btn xs ghost" disabled={pending} onClick={() => confirmarEEnviar('RESUME_AUTO')}>
+              Retomar Auto
+            </button>
+            <button type="button" className="btn xs ghost" disabled={pending} onClick={() => confirmarEEnviar('MOVE_ALL_BREAKEVEN')}>
+              Break-even todas
+            </button>
+            <button type="button" className="btn xs danger" disabled={pending} onClick={() => confirmarEEnviar('CLOSE_ALL_POSITIONS')}>
+              Fechar todas
+            </button>
+          </div>
+          <div className="mcc-cmds-row">
+            <label className="field field-inline">
+              <span>Risco %</span>
+              <input className="input" type="number" min={0.1} max={5.0} step={0.1} value={riskPct} onChange={(e) => setRiskPct(e.target.value)} />
+            </label>
+            <button type="button" className="btn xs primary" disabled={pending} onClick={() => confirmarEEnviar('SET_RISK_PCT', { value: Number(riskPct) })}>
+              Setar risco
+            </button>
+          </div>
+          <div className="mcc-cmds-row">
+            <label className="field field-inline">
+              <span>Meta diária US$</span>
+              <input className="input" type="number" min={1} step={1} value={dailyTarget} onChange={(e) => setDailyTarget(e.target.value)} />
+            </label>
+            <button type="button" className="btn xs primary" disabled={pending} onClick={() => confirmarEEnviar('SET_DAILY_TARGET_USD', { value: Number(dailyTarget) })}>
+              Setar alvo
+            </button>
+          </div>
+          <div className="mcc-cmds-row">
+            <label className="field field-inline">
+              <span>Perfil</span>
+              <select className="input" value={perfil} onChange={(e) => setPerfil(e.target.value)}>
+                <option value="STANDARD">Standard</option>
+                <option value="FTMO">FTMO</option>
+                <option value="FUNDEDNEXT">FundedNext</option>
+                <option value="THE5ERS">THE5ERS</option>
+              </select>
+            </label>
+            <button type="button" className="btn xs primary" disabled={pending} onClick={() => confirmarEEnviar('SET_PROP_PROFILE', { profile: perfil })}>
+              Aplicar perfil
+            </button>
+          </div>
+          {cmdMsg && (
+            <p className="hint" role="status" style={{ marginBottom: 0 }}>
+              {cmdMsg}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* ---------------------------------------------------------------- */}
       {/* CONTA                                                            */}
