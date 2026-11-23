@@ -1,0 +1,30 @@
+services:
+  xau-gateway:
+    build:
+      context: ../..
+      dockerfile: deploy/cloud_free/Dockerfile
+    container_name: xau_gateway_24_7
+    restart: unless-stopped
+    env_file:
+      - .env.cloud
+    volumes:
+      - xau_state:/app/data
+    networks:
+      - xau_net
+
+  cloudflare-tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: xau_https_tunnel
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - xau-gateway
+    networks:
+      - xau_net
+
+volumes:
+  xau_state:
+
+networks:
+  xau_net:
+    driver: bridge

@@ -473,7 +473,7 @@ const [limites, setLimites] = useState<Limites>({ ...ZERO });
         </label>
         <label
           className="field"
-          title="Classe de ativo. A lista segue a corretora escolhida: Binance nao opera forex."
+          title="Classe de ativo. A lista segue a corretora escolhida."
         >
           <span>Mercado</span>
           <select

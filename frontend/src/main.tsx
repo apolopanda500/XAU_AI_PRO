@@ -88,6 +88,10 @@ import './theme/figma-tokens.css';
 // de `transition` escrita em `global.css`, `quantum.css` ou `mining.css`
 // venceria a regra de fluidez por estar mais abaixo na cascata.
 import './theme/fluidness.css';
+// MODO DE LEITURA VERTICAL (22/11/2026, pedido do dono): importado DEPOIS de
+// todos os temas para ter a ultima palavra na cascata. Transforma a sidebar
+// em barra inferior, empilha tabelas/grades e garante toque de 44px no celular.
+import './theme/mobile-readability.css';
 
 // Ajusta para Tauri (mobile viewport)
 const metaViewport = document.querySelector('meta[name="viewport"]');

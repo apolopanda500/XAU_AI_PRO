@@ -114,11 +114,12 @@ export default function SettingsCore() {
     let active = true;
     const check = async () => {
       const items: Record<string, string> = {};
+      // Resíduos MEXC/Binance removidos (22/11/2026, pedido do dono):
+      // o operador só usa MT5. Consultar exchanges não conectadas a cada 15s
+      // enchia o painel de "Indisponível" e poluía a leitura da tela.
       for (const [name, path] of [
         ['Gateway local', '/api/health'],
         ['MT5', '/api/status'],
-        ['MEXC API', '/api/universal/account?broker=mexc&market=crypto-spot'],
-        ['Binance API', '/api/universal/account?broker=binance&market=crypto-spot'],
       ] as const) {
         const started = performance.now();
         try {

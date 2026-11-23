@@ -2,7 +2,7 @@
 // Handshake Hello, heartbeat com latencia e reconexao com backoff.
 
 import { useEffect, useRef, useCallback } from 'react';
-import { apiBase, wsUrl } from '../lib/api';
+import { apiBase, isMobileRuntime, temWsConfigurado, wsUrl } from '../lib/api';
 import { useAppStore } from './useAppStore';
 import { PROTOCOL_VERSION, WS_PING_INTERVAL_MS, type WsMessageV1 } from '../lib/protocol';
 import { normalizeSymbols } from '../lib/constants';
@@ -114,6 +114,15 @@ export function useMarketWebSocket() {
   );
 
   const connectWebSocket = useCallback(() => {
+    // SEM WS CONFIGURADO NO MOBILE, NAO TENTA (22/11/2026): o gateway e
+    // http-polling (websocket: false) e no Android nao ha Core na 9002.
+    // Tentar so gerava loop de reconexao + aviso de Mixed Content sem nenhum
+    // dado a mais. No DESKTOP o Core Rust roda na 9002 e o guarda NAO se
+    // aplica — o feed de preco continua via WS. Os dados vem por HTTP polling.
+    if (isMobileRuntime() && !temWsConfigurado()) {
+      console.info('[WS] mobile sem WebSocket configurado; feed via HTTP polling');
+      return;
+    }
     const attempt = retryRef.current;
     const delay = Math.min(1000 * 2 ** attempt, 30000);
     if (attempt > 0) console.log(`[WS] reconectando em ${delay}ms`);

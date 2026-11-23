@@ -296,10 +296,27 @@
 .grafico-viewport {
   display: flex;
   flex-direction: column;
+  /* CORRIGIDO 22/11/2026: era `height: auto`. Com o canvas em height="100%",
+     um pai `auto` nao tem altura resolvida e o grafico nasce com altura 0 —
+     era por isso que ele "nao aparecia". Altura real, com piso para telas
+     baixas e teto para nao empurrar o resto da pagina. */
+  height: clamp(280px, calc(100vh - 300px), 620px);
+  flex-shrink: 0;
 }
 .grafico-viewport .market-chart-wrap {
   height: 100%;
-  min-height: 340px;
+  min-height: 280px;
+}
+
+/* Celular vertical: o viewport util e menor (barra inferior + topnav),
+   entao o grafico recebe menos altura mas continua visivel e rolavel. */
+@media (max-width: 700px) and (orientation: portrait) {
+  .grafico-viewport {
+    height: clamp(260px, 48vh, 420px);
+  }
+  .grafico-viewport .market-chart-wrap {
+    min-height: 260px;
+  }
 }
 
 /*

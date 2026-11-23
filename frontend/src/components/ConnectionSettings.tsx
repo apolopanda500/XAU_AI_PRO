@@ -274,8 +274,8 @@ export default function ConnectionSettings() {
         fieldset: trocar corretora é sempre possível.
       */}
       <p className="muted">
-        MT5 usa a sessão do terminal. Binance e MEXC usam API key e secret. Validar leitura não
-        autoriza negociação.
+        MT5 usa a sessão do terminal. Outras corretoras usam credenciais próprias. Validar leitura
+        não autoriza negociação.
       </p>
 
       {/*
