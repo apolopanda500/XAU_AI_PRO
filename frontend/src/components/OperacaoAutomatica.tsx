@@ -34,6 +34,7 @@ import { notify } from '../lib/notify';
 import { escopoAtivo as contaAtiva, contaAtivaId } from '../lib/escopoAtivo';
 import { parNaTela } from '../lib/parNaTela';
 import { unidadeDeVolume, fichaDoAtivo, faixaDoAtivo, rotuloQuantidade, mercadoDoAtivo } from '../lib/volumeUnidade';
+import { mercadoCanonico } from '../lib/mercadoCanonico';
 import { valorDoNivel, nivelParaValor, contratoUtilizavel, SEM_CONTRATO } from '../lib/risco';
 import { useCatalogoAtivos } from '../hooks/useCatalogoAtivos';
 import SeletorModelo from './SeletorModelo';
@@ -394,7 +395,7 @@ export default function OperacaoAutomatica({
   */
   const catalogo = useCatalogoAtivos(
     broker as Parameters<typeof useCatalogoAtivos>[0],
-    String(auto?.market || marketSalvo || '').toLowerCase(),
+    mercadoCanonico(auto?.market || marketSalvo),
   );
   const ficha = fichaDoAtivo(catalogo, simbolo);
   const unidade = unidadeDeVolume(ficha?.assetClass);
@@ -405,9 +406,19 @@ export default function OperacaoAutomatica({
     que um palpite.
   */
   const mercadoDaFicha = mercadoDoAtivo(ficha?.assetClass);
-  const market = String(
-    mercadoDaFicha ?? auto?.market ?? marketSalvo ?? '',
-  ).toLowerCase();
+  /*
+    E O NOME QUE SAI DAQUI E O DO GATEWAY (12/11/2026)
+    ==================================================
+    MEDIDO no app 1.2.181 (captura 22:40): `auto.market` chega `metal`, do
+    singular da classe que a corretora publica. Enquanto esta linha repassava o
+    singular, o catalogo era recusado (`market=metal`), a ficha nao chegava e o
+    grafico caia para o dado publico — ver `mercadoCanonico` para a cadeia
+    inteira, medida elo por elo.
+
+    `mercadoDaFicha` ja vem canonico (`mercadoDoAtivo` traduz a classe); o
+    que faltava era o que vem do MOTOR, que e texto de payload.
+  */
+  const market = mercadoCanonico(mercadoDaFicha ?? auto?.market ?? marketSalvo ?? '');
 
   /*
     A UNIDADE E A FAIXA DO ATIVO (05/10/2026)

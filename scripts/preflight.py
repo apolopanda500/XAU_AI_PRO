@@ -472,6 +472,41 @@ AUTORIZACOES_MQL5: dict[str, dict[str, str]] = {
         "compilado": "PENDENTE - medir apos compilar",
         "reanexado": "NAO - o dono reanexa (AGENTS.md §7)",
     },
+    # ------------------------------------------------------------------
+    # Fase aditiva do plano 10/10 (17/11/2026). Os dois ficheiros sao NOVOS
+    # e ainda NAO estao incluidos na arvore de include do EA, portanto nao
+    # mudam uma linha do que o grafico executa: nem recompilacao nem
+    # reattach sao precisos, e o Forward Test em curso fica intacto.
+    # A virada (include + chamada) esta marcada para depois dos 30 dias.
+    # ------------------------------------------------------------------
+    "Core/RustBridge.mqh": {
+        "commit": "pendente",
+        "motivo": (
+            "Ponte FFI para o nucleo Rust (cdylib xau_core.dll). Enquanto a "
+            "DLL nao estiver em MQL5\\Libraries, o #import impede a "
+            "compilacao - por isso o ficheiro ainda nao e incluido no EA. "
+            "O envelope RustBridgeAvaliarRisco e fail-closed: qualquer "
+            "resultado invalido vira RECUSA com motivo no journal, nunca um "
+            "zero lido como risco liberado. Nenhum limite, lote, alvo, stop, "
+            "spread, preco, regra de entrada ou de saida, ou parametro de "
+            "risco foi alterado."
+        ),
+        "compilado": "NAO - nao incluido no EA; so entra na virada pos-Forward",
+        "reanexado": "NAO - depende do dono reanexar o EA no grafico",
+    },
+    "Monitoring/SlippageTracker.mqh": {
+        "commit": "pendente",
+        "motivo": (
+            "Telemetria real de derrapagem: mede a diferenca entre o preco "
+            "pedido e o DEAL_PRICE executado, em pontos, e acumula numa EMA. "
+            "Nao decide nada - o valor devolvido e insumo do gate de risco. "
+            "Ainda nao e incluido no EA. Nenhum limite, lote, alvo, stop, "
+            "spread, preco, regra de entrada ou de saida, ou parametro de "
+            "risco foi alterado."
+        ),
+        "compilado": "NAO - nao incluido no EA; so entra na virada pos-Forward",
+        "reanexado": "NAO - depende do dono reanexar o EA no grafico",
+    },
 }
 
 

@@ -4,22 +4,18 @@ import { useAppStore } from './useAppStore';
 export type ThemeName =
   | 'dark'
   | 'dourado_dark'
-  | 'laranja_dark'
   | 'light'
   | 'ocean_dark'
   | 'emerald_dark'
-  | 'rose_dark'
-  | 'violet_dark';
+  | 'rose_dark';
 
 export const THEMES: { id: ThemeName; label: string; desc: string }[] = [
-  { id: 'dark', label: 'Dark (Padrao)', desc: 'Azul elétrico' },
+  { id: 'dark', label: 'Dark (Padrao)', desc: 'Violeta profundo' },
   { id: 'dourado_dark', label: 'Dourado', desc: 'Fundo escuro com brilho dourado' },
-  { id: 'laranja_dark', label: 'Laranja', desc: 'Fundo escuro com brilho laranja' },
   { id: 'light', label: 'Light', desc: 'Claro' },
   { id: 'ocean_dark', label: 'Ocean Dark', desc: 'Ciano profundo' },
   { id: 'emerald_dark', label: 'Emerald Dark', desc: 'Verde esmeralda' },
   { id: 'rose_dark', label: 'Rose Dark', desc: 'Rosé' },
-  { id: 'violet_dark', label: 'Violet Dark', desc: 'Violeta' },
 ];
 
 const VALID: ThemeName[] = [...THEMES.map((t) => t.id)];
@@ -27,9 +23,12 @@ const VALID: ThemeName[] = [...THEMES.map((t) => t.id)];
 /**
  * Migracao dos IDs ANTIGOS, que tinham nome de ativo (09/10/2026).
  *
- * MEDIDO: os dois temas se chamavam `xau_dark` e `btc_dark` — apelidos de cor
+ * MEDIDO: os dois temas se chamavam `xau_dark` e `btc_dark` - apelidos de cor
  * com nome de ativo, que e o que a regra "nenhum nome de ativo no codigo"
- * proibe. Renomeados para a COR que descrevem: `dourado_dark` e `laranja_dark`.
+ * proibe. `dourado_dark` herdou o papel de `xau_dark`. `laranja_dark` foi
+ * removido em 13/11/2026, `btc_dark` migra para `dark`, e `violet_dark` foi
+ * fundido com `dark` no mesmo dia (13/11/2026): quem tinha violet ve o tema
+ * dark, e o mapa migra o ID para nao quebrar a preferencia salva.
  *
  * Sem este mapa, quem ja tinha escolhido um dos dois veria o tema voltar para
  * `dark` na proxima abertura: a preferencia esta no `localStorage` com o ID
@@ -38,7 +37,9 @@ const VALID: ThemeName[] = [...THEMES.map((t) => t.id)];
  */
 const ANTIGOS: Record<string, ThemeName> = {
   xau_dark: 'dourado_dark',
-  btc_dark: 'laranja_dark',
+  btc_dark: 'dark',
+  laranja_dark: 'dark',
+  violet_dark: 'dark',
 };
 
 export function normalizeTheme(name: string): ThemeName {
@@ -49,12 +50,10 @@ export function normalizeTheme(name: string): ThemeName {
 const WALLPAPER_CLASSES: Record<ThemeName, string> = {
   dark: 'wallpaper-quantum',
   dourado_dark: 'wallpaper-dourado',
-  laranja_dark: 'wallpaper-laranja',
   light: 'wallpaper-quantum',
   ocean_dark: 'wallpaper-quantum',
   emerald_dark: 'wallpaper-quantum',
   rose_dark: 'wallpaper-quantum',
-  violet_dark: 'wallpaper-quantum',
 };
 
 /**

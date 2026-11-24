@@ -1,0 +1,87 @@
+# XAU_AI_PRO - atualizacao automatica de dependencias.
+#
+# O repositorio tem CINCO ecossistemas em subpastas diferentes, e o Dependabot
+# so enxerga um ecossistema por `directory`. Sem este arquivo o GitHub olhava
+# apenas a raiz e deixava `core/` (Rust), `frontend/` (Node) e
+# `frontend/src-tauri/` (Rust do Tauri) envelhecerem em silencio.
+#
+# Agrupo por ecossistema (`groups`) para nao abrir um PR por dependencia: o
+# custo de revisao e o risco de conflito sobem com a quantidade, e a
+# atualizacao de uma dependencia de teste nao deve impedir a de seguranca.
+#
+# O `MetaTrader5` e ignorado de propósito: ele e um pacote do PyPI que embute
+# o build do terminal e quebra sem aviso quando o terminal local muda de
+# build. A versao usada e fixada em `requirements-lock.txt` e so sobe por
+# decisao do dono, nunca por PR automatico.
+version: 2
+updates:
+  # 1. GitHub Actions ( workflows )
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # 2. Gateway Python e pipeline de IA (raiz)
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: "MetaTrader5"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
+    groups:
+      python:
+        patterns: ["*"]
+
+  # 3. Nucleo Rust (core/)
+  - package-ecosystem: "cargo"
+    directory: "/core"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      rust-core:
+        patterns: ["*"]
+
+  # 4. Rust do Tauri (frontend/src-tauri/)
+  - package-ecosystem: "cargo"
+    directory: "/frontend/src-tauri"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      rust-tauri:
+        patterns: ["*"]
+
+  # 5. Interface React (frontend/)
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      frontend:
+        patterns: ["*"]
+
+  # 6. Ferramentas de testes do backend (backend/)
+  - package-ecosystem: "npm"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      backend-tools:
+        patterns: ["*"]

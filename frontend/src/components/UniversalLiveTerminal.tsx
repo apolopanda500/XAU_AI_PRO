@@ -19,7 +19,6 @@ import {
   useAccount,
   usePositions,
   useJournal,
-  useAllCryptoAccounts,
   useAutoState,
   useUniversalOverview,
   useUniversalAccount,
@@ -153,7 +152,6 @@ export default function UniversalLiveTerminal() {
   const accountQ = useAccount();
   const positionsQ = usePositions();
   const journalQ = useJournal(10); // journal MT5: 10s (baixa latência)
-  const cryptoQ = useAllCryptoAccounts(); // cripto: 30s (fundo de Rede)
   const autoQ = useAutoState(); // motor automático: 5s
   /*
     CONTAS CONECTADAS, SEM MT5 ABERTO (12/10/2026).
@@ -162,7 +160,7 @@ export default function UniversalLiveTerminal() {
     `Saldo 11.47 / Capital 16.53 / Margem 0.83 / Livre 15.70 / Nível
     1991.57%`. O terminal lia tudo por `/api/account` + `/api/positions`
     (MT5 fixo): com o terminal fechado a tela apagava, mesmo com
-    Binance/MEXC conectadas.
+    outras corretoras conectadas.
     O overview (`/api/universal/overview`) lista cada conexão com `status`
     próprio e `mt5_required: false`: MT5 pode estar `offline` e a exchange
     `conectada` na mesma resposta. Conta e posições abaixo preferem o
@@ -336,38 +334,8 @@ export default function UniversalLiveTerminal() {
       });
     }
 
-    // Contas de cripto (Spot/Futuros de MEXC e Binance) — conteúdo de conta real, não "informação básica"
-    for (const c of cryptoQ.data ?? []) {
-      if (!c.ok) {
-        /*
-          O MOTIVO VAI NA LINHA (12/10/2026). "Spot indisponível" sozinho fez
-          o dono perguntar o que havia de errado com a conta: chave invalida,
-          IP bloqueado e gateway fora produziam a mesma linha. O motivo vem em
-          `c.error` (ver `queries.ts`); cortado em 90 para a linha continuar
-          sendo uma linha. Sem motivo, o texto continua o de sempre.
-        */
-        const motivo = String(c.error ?? '').trim().slice(0, 90);
-        rows.push({
-          id: `cry-${c.broker}-${c.market}`,
-          source: c.broker.toUpperCase(),
-          info: `${c.market === 'crypto-spot' ? 'Spot' : 'Futuros'} indisponível${motivo ? `: ${motivo}` : ''}`,
-          at: now,
-          kind: 'WARN',
-        });
-        continue;
-      }
-      const bal = fmtNum(c.balance, 2);
-      const assets = c.assets.length ? ` · ${c.assets.length} ativos` : '';
-      rows.push({
-        id: `cry-${c.broker}-${c.market}`,
-        source: c.broker.toUpperCase(),
-        info: `${c.market === 'crypto-spot' ? 'Conta Spot' : 'Conta Futuros'} · saldo ${bal} ${c.currency}${assets}`,
-        at: now,
-        kind: 'INFO',
-      });
-    }
     return rows.sort((a, b) => b.at.getTime() - a.at.getTime()).slice(0, 14);
-  }, [journalQ.data, cryptoQ.data, auto]);
+  }, [journalQ.data, auto]);
 
   // Fechamento de posição via gateway.
   //
@@ -499,7 +467,6 @@ const flutuanteDoMt5 = account?.profit;
     void statusQ.refetch();
     void accountQ.refetch();
     void positionsQ.refetch();
-    void cryptoQ.refetch();
   };
 
   return (

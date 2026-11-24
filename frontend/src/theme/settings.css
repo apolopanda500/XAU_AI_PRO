@@ -26,13 +26,10 @@
   border: 1px solid rgba(255, 255, 255, 0.12);
 }
 .theme-swatch.t-dark {
-  background: linear-gradient(120deg, #0e1117 0 55%, #1c2333 55% 100%);
+  background: linear-gradient(120deg, #0e0a1a 0 55%, #a78bfa 55% 100%);
 }
-.theme-swatch.t-xau_dark {
+.theme-swatch.t-dourado_dark {
   background: linear-gradient(120deg, #100c06 0 55%, #f0a620 55% 100%);
-}
-.theme-swatch.t-btc_dark {
-  background: linear-gradient(120deg, #0d0f14 0 55%, #f7931a 55% 100%);
 }
 .theme-swatch.t-light {
   background: linear-gradient(120deg, #f5f7fb 0 55%, #1c2333 55% 100%);
@@ -45,9 +42,6 @@
 }
 .theme-swatch.t-rose_dark {
   background: linear-gradient(120deg, #16070c 0 55%, #fb7185 55% 100%);
-}
-.theme-swatch.t-violet_dark {
-  background: linear-gradient(120deg, #0e0a1a 0 55%, #a78bfa 55% 100%);
 }
 .theme-name {
   font-size: 13px;
@@ -259,16 +253,12 @@
   opacity: 1;
 }
 .theme-swatch-dark {
-  background: linear-gradient(120deg, #0e1117 0 55%, #4f7cff 55% 100%);
-  color: #4f7cff;
+  background: linear-gradient(120deg, #0e0a1a 0 55%, #a78bfa 55% 100%);
+  color: #a78bfa;
 }
-.theme-swatch-xau_dark {
+.theme-swatch-dourado_dark {
   background: linear-gradient(120deg, #14100a 0 55%, #f0b90b 55% 100%);
   color: #f0b90b;
-}
-.theme-swatch-btc_dark {
-  background: linear-gradient(120deg, #0c0f14 0 55%, #f7931a 55% 100%);
-  color: #f7931a;
 }
 .theme-swatch-light {
   background: linear-gradient(120deg, #f3f5f9 0 55%, #3554d1 55% 100%);
@@ -285,10 +275,6 @@
 .theme-swatch-rose_dark {
   background: linear-gradient(120deg, #16070c 0 55%, #fb7185 55% 100%);
   color: #fb7185;
-}
-.theme-swatch-violet_dark {
-  background: linear-gradient(120deg, #0e0a1a 0 55%, #a78bfa 55% 100%);
-  color: #a78bfa;
 }
 
 /* Saúde das conexões */

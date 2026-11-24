@@ -1124,6 +1124,117 @@ bool AllowBlockPrint()
    return false;
   }
 
+//==================================================
+// COPILOT HUB -> EA (Adaptador do Cloud MCP Hub)
+// v1.2.192 - a ordem do Copilot e executada pelo proprio EA, via
+// CExecutionEngine (RiskCenter unico gate de risco). O AdaptadorCopilot
+// separado foi removido; este modulo e a mesma ponte dentro do robao.
+//==================================================
+
+#define COPILOT_HUB_TIMEOUT_MS 10000
+
+string CopilotJsonGet(string json, string chave)
+{
+   string busca = "\"" + chave + "\"";
+   int inicio = StringFind(json, busca);
+   if(inicio < 0)
+   {
+      return("");
+   }
+   int pos = StringFind(json, ":", inicio);
+   int fim = StringFind(json, ",", pos);
+   if(fim < 0)
+   {
+      fim = StringFind(json, "}", pos);
+   }
+   if(fim < 0)
+   {
+      fim = StringLen(json);
+   }
+   int inicioValor = pos + 1;
+   int fimValor = fim;
+   while(inicioValor < fimValor && StringSubstr(json, inicioValor, 1) == " ")
+   {
+      inicioValor++;
+   }
+   while(fimValor > inicioValor && StringSubstr(json, fimValor - 1, 1) == " ")
+   {
+      fimValor--;
+   }
+   string valor = StringSubstr(json, inicioValor, fimValor - inicioValor);
+   if(StringLen(valor) > 1 && StringSubstr(valor, 0, 1) == "\"")
+   {
+      valor = StringSubstr(valor, 1, StringLen(valor) - 2);
+   }
+   return(valor);
+}
+
+bool CopilotHubExecute(string acao, string ativo)
+{
+   if(acao == "CLOSE_ALL")
+   {
+      for(int i = PositionsTotal() - 1; i >= 0; i--)
+      {
+         ulong ticket = PositionGetTicket(i);
+         if(PositionSelectByTicket(ticket))
+         {
+            trade.PositionClose(ticket);
+         }
+      }
+      return(true);
+   }
+   int signal = 0;
+   if(acao == "BUY")
+   {
+      signal = 1;
+   }
+   else
+   {
+      if(acao == "SELL")
+      {
+         signal = -1;
+      }
+   }
+   if(signal == 0)
+   {
+      return(false);
+   }
+   if(ativo == "")
+   {
+      return(false);
+   }
+   return(ExecuteTrade(ativo, signal));
+}
+
+bool CopilotHubPoll()
+{
+   if(!EnableCopilotHub)
+   {
+      return(false);
+   }
+   if(!CTradeGate::Ok())
+   {
+      return(false);
+   }
+   char post[];
+   char result[];
+   string result_headers;
+   string headers = "x-token: " + CopilotHubToken;
+   int res = WebRequest("GET", CopilotHubURL, headers, COPILOT_HUB_TIMEOUT_MS, post, result, result_headers);
+   if(res != 200)
+   {
+      return(false);
+   }
+   string json = CharArrayToString(result);
+   if(StringFind(json, "\"acao\"") < 0)
+   {
+      return(false); // resposta sem ordem (ex.: {"status":"IDLE"})
+   }
+   string acao = CopilotJsonGet(json, "acao");
+   string ativo = CopilotJsonGet(json, "ativo");
+   return(CopilotHubExecute(acao, ativo));
+}
+
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+
@@ -2311,6 +2422,8 @@ void OnTimer()
 //------------------------------------------------
 
    ExternalBridgePoll();
+
+  CopilotHubPoll();
 
 //------------------------------------------------
 // Salvar estatisticas

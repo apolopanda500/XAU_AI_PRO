@@ -22,6 +22,7 @@ interface ImportMeta {
 interface ImportMetaEnv {
   readonly VITE_API_BASE?: string;
   readonly VITE_WS_URL?: string;
+  readonly VITE_GATEWAY_TOKEN?: string;
 }
 
 function stored(key: string): string {
@@ -101,7 +102,10 @@ export function temWsConfigurado(): boolean {
 const SESSION_KEY = 'xau-session-token';
 
 export function sessionToken(): string {
-  return stored(SESSION_KEY);
+  const sessao = stored(SESSION_KEY);
+  if (sessao) return sessao;
+  // APK configurado pelo DONO: API_TOKEN fixo embutido no build (sem login/expiracao).
+  return import.meta.env.VITE_GATEWAY_TOKEN || "";
 }
 
 export function setSessionToken(token: string): void {

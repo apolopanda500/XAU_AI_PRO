@@ -76,6 +76,9 @@ def pedido_para_router(payload: dict[str, Any], broker: str, market: str,
         "side": "buy" if str(payload["side"]).upper() == "BUY" else "sell",
         "quantity": payload["quantity"],
         "price": payload.get("price"),
+        # CORRECAO 23/11: repassar SL/TP ao contrato universal (antes eram perdidos).
+        "stop_loss": payload.get("stop_loss"),
+        "take_profit": payload.get("take_profit"),
         "order_type": "market",
         "confirm": True,
         "account_id": account_id,
@@ -1032,6 +1035,26 @@ class MotorAuto:
                 agora, simbolo, timeframe, False,
                 "sem ATR ou preco real para dimensionar protecao", sinal, confianca, edge, modelo=modelo_ciclo))
 
+        # REFINE 23/11 (biblioteca MT5 / SpreadProfileByHour): na hora do
+        # servidor em que o spread p90 historically consome >= 100% do stop,
+        # NAO entra. E PROTECAO de custo, nao mexe em risco/lote/alvo/stop.
+        # O perfil e lido do cache (sem ler ticks): se nao houver cache, segue.
+        try:
+            from backend import spread_profile
+            perfil_sp = spread_profile.cache(simbolo)
+            if perfil_sp is not None and perfil_sp.get("available"):
+                hora = datetime.now(timezone.utc).hour
+                p90 = float(perfil_sp.get("spread_p90_points", 0.0) or 0.0)
+                pior = int(perfil_sp.get("worst_hour", -1))
+                custo1r = float(perfil_sp.get("spread_cost_1r_pct", 0.0) or 0.0)
+                if pior >= 0 and hora == pior and custo1r >= 100.0:
+                    return self._registrar(Decisao(
+                        agora, simbolo, timeframe, False,
+                        f"spread: hora {hora} e a pior do dia (p90={p90:.0f}pts = {custo1r:.0f}% do stop)",
+                        sinal, confianca, edge, modelo=modelo_ciclo))
+        except Exception:
+            pass
+
         # 4. Limites de exposicao vindos do risk_gate (modo avancado; no
         # simples o risk_gate do gateway continua valendo no envio).
         if not simples:
@@ -1157,6 +1180,11 @@ class MotorAuto:
         # motor respeita o teto em vez de descobrir a recusa na ordem.
         # Piso de 0.01 (lote minimo): conta de $1 calcula volume fracionario
         # que arredonda para zero — sem o piso, banca pequena nunca opera.
+        # LOTE CONFIGURADO e o TETO (DONO 18:31): banca baixa usa lote 0.01.
+        # Antes o volume=risco/distancia chegava a 0.1 e o MT5 recusava 10019 No money.
+        _lote_teto = float(limites.get("lote", 0.0) or 0.0)
+        if _lote_teto > 0:
+            volume = min(volume, _lote_teto)
         volume = min(volume, 0.10)
         if 0 < volume < 0.01:
             volume = 0.01
@@ -1165,6 +1193,38 @@ class MotorAuto:
                 agora, simbolo, timeframe, False, "volume calculado zero", sinal, confianca, edge, modelo=modelo_ciclo))
         # Arredonda para 2 casas: o MT5 so aceita volume com passo do simbolo.
         volume = round(volume, 2)
+
+        # ================================================================
+        # CRESCIMENTO / LOCK DE LUCRO (DONO 23/11)
+        # Banca < 100 = SEM stop de PERDA. Tendencia FORTE: stop ACIMA da
+        # entrada garante +0.25 USD (nunca fecha com prejuizo).
+        # Alvo 1.00 USD forte / 0.50 USD fraco.
+        # ================================================================
+        _edge = float(edge or 0.0)
+        _forte = (_edge >= 0.10 and confianca >= 45.0)
+        _alvo_usd = 1.00 if _forte else 0.50
+        _contrato = self.contract_size(simbolo)
+        if _contrato is None:
+            try:
+                import MetaTrader5 as _mt5c
+                _si = _mt5c.symbol_info(str(simbolo).upper())
+                if _si is not None and getattr(_si, "trade_contract_size", 0) > 0:
+                    _contrato = float(_si.trade_contract_size)
+            except Exception:
+                _contrato = None
+        if _contrato is not None and _contrato > 0:
+            try:
+                _lado = "sell" if sinal == "SELL" else "buy"
+                _niv = niveis_do_valor(preco, None, _alvo_usd, volume, _lado, _contrato)
+                if _niv.get("tp_preco") and _niv["tp_preco"] > 0:
+                    tp = round(float(_niv["tp_preco"]), 2)
+                if _forte:
+                    _trav = niveis_do_valor(preco, 0.25, volume, _lado, _contrato, papel="stop")
+                    sl = round(float(_trav["sl_preco"]), 2)
+                else:
+                    sl = 0.0
+            except Exception:
+                pass
 
         # 6. Idempotencia: um ciclo por slot de tempo, sem repetir ordem.
         # O slot inclui a corretora: o mesmo ativo na MEXC e no MT5 na
@@ -1209,11 +1269,16 @@ class MotorAuto:
             simbolo_envio = _para_corretora(_broker_envio, simbolo) or simbolo
         except Exception:
             simbolo_envio = simbolo
+        # CRESCIMENTO + LOCK (DONO 23/11): stop so vai na ordem quando
+        # sl > 0. Em banca pequena, sl>0 so acontece no LOCK de tendencia
+        # forte (acima da entrada, garante 0.25 USD - nunca da prejuizo).
+        # Em banca >= 100 o stop normal (abaixo da entrada) volta a valer.
+        _sl_enviar = round(sl, 2) if sl > 0 else None
         payload = {
             "symbol": simbolo_envio,
             "side": sinal,
             "quantity": volume,
-            "stop_loss": round(sl, 2),
+            "stop_loss": _sl_enviar,
             "take_profit": round(tp, 2),
             "confirm": True,
             "request_id": f"auto-{slot}",
@@ -1275,6 +1340,17 @@ class MotorAuto:
             _igual = _mesmo_ativo(treino, simbolo)
         except Exception:
             _igual = (treino == simbolo)
+        # Modelo de CLASSE (MULTI_CRYPTO/MULTI_FIAT/MULTI_METALS): cobre todo
+        # ativo da classe. Sem esta guarda, BTCUSD era recusado por MULTI_CRYPTO
+        # porque "MULTI_CRYPTO" != "BTCUSD" - bloqueio falso que impedia o motor.
+        if treino and not _igual and treino.startswith("MULTI_"):
+            try:
+                from backend.asset_classes import classe_de
+                from backend.symbols import formas as _formas
+                classe_modelo = treino.removeprefix("MULTI_")
+                _igual = any(classe_de(f) == classe_modelo for f in _formas(simbolo))
+            except Exception:
+                pass
         if treino and not _igual:
             self._registrar(Decisao(
                 datetime.now(timezone.utc).isoformat(), self.simbolo, self.timeframe,
@@ -1450,6 +1526,18 @@ class MotorAuto:
             corrigido.
             """
             broker, market = escopo()
+            # CORRECAO 23/11: volume minimo real do simbolo (ETHUSD exige 0.02).
+            # O motor calcula piso 0.01 fixo; sem isto o MT5 recusa 10014.
+            if broker == 'mt5':
+                try:
+                    import MetaTrader5 as _mt5_mod
+                    _info = _mt5_mod.symbol_info(str(payload.get('symbol', '')).upper())
+                    if _info is not None:
+                        _vmin = float(getattr(_info, 'volume_min', 0.0) or 0.0)
+                        if _vmin > 0 and float(payload.get('quantity', 0.0)) < _vmin:
+                            payload['quantity'] = round(_vmin, 2)
+                except Exception:
+                    pass
             pedido = pedido_para_router(
                 payload, broker, market, conta_da_corretora(broker, market))
             return router.execute(pedido, explicit_authorization=True)

@@ -249,11 +249,12 @@ describe('RobotTabs — a ordem que o dono pediu', () => {
       const { container } = render(<RobotTabs />);
       const filhos = Array.from(container.querySelectorAll('.robo > *'));
       // O primeiro e a nav de sub-abas, o segundo e o conteúdo da sub-aba ativa
-      // (Operação), e o terceiro e o gráfico (sempre visível).
+      // (Operação), e o terceiro e o slot do gráfico (sempre visível).
       expect(filhos).toHaveLength(3);
       expect(filhos[0].classList.contains('robo-sub-abas')).toBe(true);
       expect(filhos[1].getAttribute('aria-label')).toBe('Operação automática');
-      expect(filhos[2].getAttribute('data-testid')).toBe('painel-grafico');
+      expect(filhos[2].classList.contains('robo-grafico-slot')).toBe(true);
+      expect(filhos[2].querySelector('[data-testid="painel-grafico"]')).not.toBeNull();
     });
 
     it('PROVA NEGATIVA: o cabecalho "ROBÔ" nao volta para a pagina', () => {

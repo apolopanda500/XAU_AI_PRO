@@ -11,6 +11,7 @@ import PriceChart from './charts/PriceChart';
 import { nivelDoValor, linhasDaOrdem, rotuloDoBotao } from '../lib/ordemGrafico';
 import { parNaTela } from '../lib/parNaTela';
 import { fichaDoAtivo, faixaDoAtivo, mercadoDoAtivo, requisitoDeMargem, unidadeDeVolume, rotuloQuantidade } from '../lib/volumeUnidade';
+import { mercadoCanonico } from '../lib/mercadoCanonico';
 import { useCatalogoAtivos } from '../hooks/useCatalogoAtivos';
 import { useUniversalAccount } from '../hooks/queries';
 import { escopoAtivo as contaAtiva } from '../lib/escopoAtivo';
@@ -290,7 +291,7 @@ const [periodoDoGrafico, setPeriodoDoGrafico] = useState<string>('');
   */
   const catalogo = useCatalogoAtivos(
     (broker || '') as Parameters<typeof useCatalogoAtivos>[0],
-    String(auto?.market || '').toLowerCase(),
+    mercadoCanonico(auto?.market),
   );
   const ficha = useMemo(() => fichaDoAtivo(catalogo, simbolo), [catalogo, simbolo]);
 
@@ -318,7 +319,21 @@ const [periodoDoGrafico, setPeriodoDoGrafico] = useState<string>('');
     Aqui o `configurado` NAO pode aceitar `forex` como resposta: sem classe
     publicada nao ha mercado medido, e o painel avisa em vez de consultar.
   */
-  const market = String(mercadoDaFicha ?? auto?.market ?? '').toLowerCase();
+  /*
+    O NOME DO MERCADO PASSA PELA GRAFIA DO GATEWAY (12/11/2026)
+    ==========================================================
+    MEDIDO no app 1.2.181, captura das 22:40: `auto.market` chegou `metal`
+    (singular) e esta linha repassava o singular. O catalogo — pedido com
+    `market=metal` — era RECUSADO, a ficha nao chegava, o mercado derivado
+    ficava `''` e o grafico caia na rota livre: yahoo com a ultima vela
+    degenerada, declarado `dados publicos` e por isso sem cara de defeito.
+
+    `mercadoCanonico` e a MESMA tabela do gateway (`normalize_market`) e do
+    motor (`mercado_do_ativo`). Sem ficha (`mercadoDaFicha` nulo) o que veio do
+    motor continua mandando — e agora manda na grafia certa, entao o grafico
+    pede dado da CORRETORA em vez de cair para o publico.
+  */
+  const market = mercadoCanonico(mercadoDaFicha ?? auto?.market ?? '');
   const configurado = Boolean(broker && market && simbolo);
 
   /*
@@ -921,7 +936,7 @@ const [periodoDoGrafico, setPeriodoDoGrafico] = useState<string>('');
         nasce abaixo da dobra em telas baixas (medido: y=1089 em 900px = "tabelas
         fora da visão"). O container define a altura disponível e o canvas preenche
         100% dela. */}
-      <div className="grafico-viewport" style={{ height: 'calc(100vh - 330px)', minHeight: 340, overflow: 'hidden' }}>
+      <div className="grafico-viewport">
         <PriceChart
           symbol={simbolo}
           height="100%"

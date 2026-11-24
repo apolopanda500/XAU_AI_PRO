@@ -30,6 +30,7 @@
 */
 import { describe, expect, it } from 'vitest';
 
+import { normalizeMarketSource } from '../../lib/marketApi';
 import {
   erroVigente,
   mercadoParaConsulta,
@@ -137,6 +138,37 @@ describe('o mercado da consulta: medido, ou nao medido', () => {
     expect(mercadoParaConsulta(undefined, '' as never)).toBe('');
     expect(mercadoParaConsulta(undefined, 'mt5')).toBe('forex');
     expect(mercadoParaConsulta(undefined, 'binance')).toBe('crypto-spot');
+  });
+
+  it('PROVA: o singular do motor vira o plural do gateway AQUI, no ultimo portao', () => {
+    /*
+      MEDIDO no app 1.2.181, captura das 22:40: o motor manda `metal` (a classe
+      que a corretora publica, no singular) e o grafico de XAUUSD caia no
+      yahoo — porque `normalizeMarketSource('mt5','metal')` devolve `null` e o
+      `getCandles` LANCA antes de falar com o gateway.
+
+      Este e o ultimo ponto antes da consulta, e por isso a regra e medida aqui:
+      qualquer pai que entregue o singular continua pedindo dado da CORRETORA.
+    */
+    expect(mercadoParaConsulta('metal', 'mt5')).toBe('metals');
+    expect(normalizeMarketSource('mt5', 'metal')).toBeNull();
+    expect(normalizeMarketSource('mt5', mercadoParaConsulta('metal', 'mt5'))).not.toBeNull();
+    // E as outras classes com o mesmo problema de grafia, uma por uma.
+    expect(mercadoParaConsulta('index', 'mt5')).toBe('indices');
+    expect(mercadoParaConsulta('equity', 'mt5')).toBe('stocks');
+    expect(mercadoParaConsulta('commodity', 'mt5')).toBe('commodities');
+    expect(mercadoParaConsulta('bond', 'mt5')).toBe('bonds');
+    expect(mercadoParaConsulta('crypto', 'mt5')).toBe('crypto-spot');
+  });
+
+  it('PROVA NEGATIVA: nome desconhecido nao vira mercado por conversao', () => {
+    /*
+      Converter o que nao se conhece "para funcionar" seria a presuncao do
+      AGENTS.md 3 — e o operador leria o dado errado com a etiqueta certa. O
+      nome volta como veio e quem recusa e o `normalizeMarketSource`.
+    */
+    expect(mercadoParaConsulta('cfd', 'mt5')).toBe('cfd');
+    expect(normalizeMarketSource('mt5', 'cfd')).toBeNull();
   });
 });
 

@@ -78,6 +78,48 @@ def _request(base: str, method: str, path: str, payload: dict | None = None):
     return response.status, data
 
 
+@pytest.fixture()
+def exchange_ativa(monkeypatch):
+    """Promove `mexc` a `active` SO NESTE TESTE, como duble de catalogo.
+
+    MEDIDO 13/11/2026: as oito exchanges estao `planned` por ordem do dono
+    (12/11/2026) e `connection_service._gravar` recusa antes de qualquer outra
+    checagem ("MEXC ainda nao esta disponivel.", 422). O caminho de CREDENCIAL
+    (gravar, ler, testar, desativar, trocar chave sem excluir) continua
+    existindo no codigo e continua precisando de prova; ele e exercitado aqui
+    com o catalogo promovido. A recusa REAL, no catalogo real, fica provada em
+    `test_corretora_planejada_e_recusada_com_motivo`.
+    """
+    from dataclasses import replace
+
+    from backend.broker_registry import BROKERS
+
+    assert BROKERS["mexc"].status == "planned", (
+        "o catalogo mudou: se `mexc` voltou a `active` DE PROPOSITO, este "
+        "duble sai e o teste volta a usar o catalogo real")
+    monkeypatch.setitem(BROKERS, "mexc", replace(BROKERS["mexc"], status="active"))
+
+
+@pytest.fixture()
+def catalogo_ativo(monkeypatch):
+    """Fabrica: promove QUALQUER corretora `planned` a `active` SO no teste.
+
+    Mesmo motivo de `exchange_ativa`, mas parametrizado: alguns testes usam
+    `binance` em vez de `mexc` para provar o mesmo caminho de credencial.
+    """
+    from dataclasses import replace
+
+    from backend.broker_registry import BROKERS
+
+    def _promover(broker: str) -> None:
+        original = BROKERS[broker]
+        assert original.status == "planned", (
+            f"{broker} nao esta `planned`: se voltou a `active` DE PROPOSITO, "
+            "este duble sai e o teste volta a usar o catalogo real")
+        monkeypatch.setitem(BROKERS, broker, replace(original, status="active"))
+
+    return _promover
+
 def test_mt5_entra_no_mesmo_fluxo_de_conexao(gateway):
     """MT5 e uma conexao como as outras - a credencial vem da sessao.
 
@@ -115,18 +157,42 @@ def test_corretora_desconhecida_e_recusada(gateway):
 
 
 def test_mercado_incompativel_com_a_corretora_e_recusado(gateway):
-    """Binance so faz cripto. A recusa vem do catalogo, nao de uma lista local."""
+    """A checagem de mercado existe e tem motivo proprio.
+
+    MEDIDO 13/11/2026: `binance` esta `planned`, e a recusa de DISPONIBILIDADE
+    (`connection_service.py:147-148`) acontece ANTES da checagem de mercado —
+    o teste antigo exigia `"forex" in error` e passava a receber "Binance
+    ainda nao esta disponivel.", ou seja, media outra coisa. O mercado e
+    entao medido na corretora que existe: `mt5`.
+    """
+    status, data = _request(
+        gateway, "POST", "/api/connections",
+        {"id": "mt5:nao-existe:x", "broker": "mt5", "market": "nao-existe"},
+    )
+    assert status == 422 and data["ok"] is False
+    assert "nao-existe" in data["error"], data
+    assert "nao opera em" in data["error"], data
+
+
+def test_corretora_planejada_e_recusada_com_motivo(gateway):
+    """O caso que deveria reprovar: exchange `planned` NAO entra calada.
+
+    Nenhum caminho pode transformar uma exchange fora de operacao em conexao
+    valida, e a recusa precisa dizer QUAL corretora e POR QUE.
+    """
     status, data = _request(
         gateway, "POST", "/api/connections",
         {"id": "binance:forex:x", "broker": "binance", "market": "forex",
          "api_key": "k", "api_secret": "s"},
     )
-    assert status == 422 and data["ok"] is False
-    assert "forex" in data["error"]
+    assert status == 422, data
+    assert data["ok"] is False
+    assert data["credentials_exposed"] is False
+    assert "Binance" in data["error"] and "disponivel" in data["error"], data
 
 
 @_REQUERE_DPAPI
-def test_salva_e_testa_leitura_com_stub(gateway):
+def test_salva_e_testa_leitura_com_stub(gateway, exchange_ativa):
     payload = {"id": "mexc:crypto-spot:demo", "broker": "mexc", "market": "crypto-spot", "api_key": "KEY", "api_secret": "SECRET"}
 
     status, data = _request(gateway, "POST", "/api/connections", payload)
@@ -173,7 +239,7 @@ def test_leitura_de_conexoes_nao_cria_diretorio(gateway, tmp_path, monkeypatch):
 
 
 @_REQUERE_DPAPI
-def test_trocar_credencial_nao_exige_excluir_e_recriar(gateway):
+def test_trocar_credencial_nao_exige_excluir_e_recriar(gateway, exchange_ativa):
     """Trocar a chave reescreve o MESMO id. Nao existe PUT sem isso.
 
     O caminho que existia antes — excluir e cadastrar de novo com o mesmo
@@ -215,7 +281,7 @@ def test_trocar_credencial_nao_exige_excluir_e_recriar(gateway):
 
 
 @_REQUERE_DPAPI
-def test_campo_em_branco_na_update_mantem_a_credencial(gateway):
+def test_campo_em_branco_na_update_mantem_a_credencial(gateway, exchange_ativa):
     """Rotacionar so a chave nao pode apagar o secret.
 
     Este e o contrato que permite trocar a chave SEM ler a atual de volta: o
@@ -245,7 +311,7 @@ def test_campo_em_branco_na_update_mantem_a_credencial(gateway):
 
 
 @_REQUERE_DPAPI
-def test_update_sem_nada_a_gravar_e_recusado(gateway):
+def test_update_sem_nada_a_gravar_e_recusado(gateway, exchange_ativa):
     """Um PUT sem credencial nova nao pode responder 200.
 
     Responder "atualizado" sem ter atualizado nada faz o operador acreditar
@@ -273,7 +339,7 @@ def test_update_sem_nada_a_gravar_e_recusado(gateway):
 
 
 @_REQUERE_DPAPI
-def test_update_da_mesma_conexao_da_broker_e_mercado(gateway):
+def test_update_da_mesma_conexao_da_broker_e_mercado(gateway, exchange_ativa):
     """O `id` do path manda: um corpo divergente nao cria conexao paralela.
 
     Sem isto, um `id` digitado errado na tela criaria uma conexao nova e a
@@ -350,7 +416,7 @@ def test_update_de_conexao_por_sessao_nao_grava_segredo(gateway):
 
 
 @_REQUERE_DPAPI
-def test_update_nao_muda_o_mercado_da_conexao(gateway):
+def test_update_nao_muda_o_mercado_da_conexao(gateway, exchange_ativa):
     """Trocar chave nao pode trocar o mercado junto.
 
     A conexao e identificada por `broker:market:nome`. Mudar o mercado no PUT
@@ -378,7 +444,12 @@ def test_update_nao_muda_o_mercado_da_conexao(gateway):
 
 
 @_REQUERE_DPAPI
-def test_falha_de_validacao_retorna_502_sem_segredos(gateway):
+def test_falha_de_validacao_retorna_502_sem_segredos(gateway, catalogo_ativo):
+    # `binance` esta `planned` no catalogo real desde 12/11/2026: o duble
+    # promove so neste teste, e a recusa real fica em
+    # `test_corretora_planejada_e_recusada_com_motivo`.
+    catalogo_ativo("binance")
+    payload = {"id": "binance:crypto-spot:demo", "broker": "binance", "market": "crypto-spot", "api_key": "KEY", "api_secret": "SECRET"}
     payload = {"id": "binance:crypto-spot:demo", "broker": "binance", "market": "crypto-spot", "api_key": "KEY", "api_secret": "SECRET"}
 
     status, _ = _request(gateway, "POST", "/api/connections", payload)

@@ -1,0 +1,52 @@
+@echo off
+REM =====================================================================
+REM  start_gateway_autostart.cmd  -  AUTOSTART da tarefa agendada
+REM  (AIGateway9011_Watchdog  ->  AIGateway9027_Watchdog)
+REM
+REM  PORQUE ESTE ARQUIVO EXISTE
+REM  O autostart real era C:\Users\Micro\AppData\Local\XAU_AI_PRO\start_gateway_autostart.cmd
+REM  (fora da pasta do projeto), e subia o gateway em 9011. MEDIDO 11/11/2026 20:46:
+REM  gateway_autostart.log tinha [Errno 10048] em 9011 em cada tentativa, porque a
+REM  9011 e do mt5-gateway.exe (bridge/MCP) desde as 10:09. Preditor morto 19:19-20:20.
+REM  Este substituto roda em 9027, a porta que o .env (XAU_GATEWAY_PORT) declara e
+REM  que o EA e o servico XAI_RefreshPredictions leem.
+REM
+REM  SEGURANCA: MODO LEITURA. Todas as portas de ordem ficam em 0.
+REM  Nao arma execucao real, nao toca em ordens, nao apaga nada.
+REM =====================================================================
+setlocal
+set PROJ=%~dp0
+set PORTA=9027
+set LOG=%PROJ%gateway_autostart.log
+set PY=%PROJ%.venv\Scripts\python.exe
+
+REM  Se ja responde, nao faz nada (evita duplicar processo).
+set SERVE=000
+for /f "delims=" %%C in ('curl.exe -s -o nul -w "%%{http_code}" --max-time 3 http://127.0.0.1:%PORTA%/api/watchdog') do set SERVE=%%C
+if not "%SERVE%"=="000" goto :ok
+
+REM  Procura quem esta na porta (netstat + fallback para o caso do netstat nao ver).
+set PID_ANTIGO=
+for /f "tokens=5" %%P in ('netstat -ano ^| findstr ":%PORTA% " ^| findstr LISTENING') do set PID_ANTIGO=%%P
+if "%PID_ANTIGO%"=="" (
+   for /f "delims=" %%P in ('powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'python.exe' -and $_.CommandLine -like '*fastapi_gateway*' } | ForEach-Object { $_.ProcessId }"') do set PID_ANTIGO=%%P
+)
+if not "%PID_ANTIGO%"=="" (
+   taskkill /PID %PID_ANTIGO% /F >nul 2>&1
+)
+
+REM  Sobe o gateway em modo leitura.
+set XAU_GATEWAY_PORT=%PORTA%
+set XAU_ENABLE_REAL_ORDERS=0
+set XAU_ENABLE_DEMO_ORDERS=0
+set XAU_ENABLE_MT5_EXECUTION=0
+set XAU_ENABLE_TRADE_COMMANDS=0
+set XAU_ENABLE_EMERGENCY_RESUME=0
+set XAU_MCP_TRADING=0
+REM  P1.3651: roda o log antes de subir (o access-log ja nao e escrito; isto
+REM  trata do legado). So corre neste ramo, com a porta livre e sem handle.
+call "%PROJ%rotacionar_log_gateway.cmd" & cd /d "%PROJ%"
+start "XAU gateway (leitura)" /min cmd /c ""%PY%" -m uvicorn backend.fastapi_gateway:app --port %PORTA% --host 127.0.0.1 --no-access-log --log-level warning >> "%LOG%" 2>&1"
+
+:ok
+exit /b 0

@@ -1,4 +1,4 @@
-﻿// @vitest-environment jsdom
+// @vitest-environment jsdom
 /*
   POSICOES COM OS DOIS NOMES DO MESMO DADO (25/10/2026)
   =====================================================
@@ -26,7 +26,6 @@ vi.mock('../hooks/queries', () => ({
   }),
   usePositions: () => ({ data: { positions: [] } }),
   useJournal: () => ({ data: { lines: [] }, isFetching: false }),
-  useAllCryptoAccounts: () => ({ data: [] }),
   useAutoState: () => ({ data: null }),
   useUniversalOverview: () => ({ data: { connections: [] } }),
   useUniversalAccount: () => ({ data: {} }),

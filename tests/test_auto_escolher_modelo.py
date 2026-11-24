@@ -71,13 +71,32 @@ class TestEscolherModeloTrocaPeriodo:
         motor.configurar({"timeframe": "H1"})
         assert motor.timeframe == "H1"
 
-    def test_corretora_tambem_muda_antes_do_risco(self, motor: MotorAuto) -> None:
+    def test_apontar_a_lente_para_o_mt5_nao_pede_risco(self, motor: MotorAuto) -> None:
         # A corretora e o mercado estao no mesmo grupo: escolher onde observar
-        # nao arrisca dinheiro.
-        r = motor.configurar({"broker": "binance", "market": "crypto-spot"})
-        assert motor.broker == "binance"
-        assert motor.market == "crypto-spot"
+        # nao arrisca dinheiro. MEDIDO 13/11/2026: o catalogo so tem `mt5`
+        # com execucao habilitada; binance/mexc/bybit/okx/bitget/coinbase/
+        # kraken/kucoin estao `planned` desde 12/11/2026 por ordem do dono.
+        # Este teste era `broker: "binance"` e passou a receber `''`; a prova
+        # que importa e que APONTAR A LENTE, com a corretora que existe,
+        # continua nao exigindo lote/SL/TP.
+        r = motor.configurar({"broker": "mt5", "market": "metals"})
         assert r["ok"] is True
+        assert motor.broker == "mt5"
+        assert motor.market == "metals"
+
+    def test_corretora_planejada_recusa_com_motivo_e_nao_muda_o_estado(
+            self, motor: MotorAuto) -> None:
+        # O caso que deveria reprovar: a exchange nao voltou `active` as
+        # escondidas. Recusa com motivo, e o motor NAO fica meio trocado:
+        # continua exatamente onde estava.
+        motor.configurar({"broker": "mt5", "market": "metals", "simbolo": "XAUUSD"})
+        r = motor.configurar({"broker": "binance", "market": "crypto-spot"})
+        assert r["ok"] is False
+        assert "Binance" in r["error"]
+        assert "execucao habilitada" in r["error"]
+        assert motor.broker == "mt5", "a recusa deixou o motor apontado para outra corretora"
+        assert motor.market == "metals"
+        assert motor.simbolo == "XAUUSD"
 
 
 class TestLigarContinuaExigindoRisco:

@@ -144,9 +144,11 @@ export default function RobotTabs() {
         que le as mesmas posicoes.
       */}
       {subAba === 'operacao' && (
-        <Secao nome="Gráfico ao vivo">
-          <AcompanharModelos />
-        </Secao>
+        <div className="robo-grafico-slot">
+          <Secao nome="Gráfico ao vivo">
+            <AcompanharModelos />
+          </Secao>
+        </div>
       )}
     </main>
   );

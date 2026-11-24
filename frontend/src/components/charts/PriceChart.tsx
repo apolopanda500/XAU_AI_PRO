@@ -37,6 +37,7 @@ import {
   type Historico,
 } from '../../lib/historicoGrafico';
 import type { LinhaOrdem } from '../../lib/ordemGrafico';
+import { mercadoCanonico } from '../../lib/mercadoCanonico';
 
 /*
   A JANELA DE TEMPOS, E ELA QUE O MT5 ACEITA (09/10/2026)
@@ -65,6 +66,7 @@ import type { LinhaOrdem } from '../../lib/ordemGrafico';
   O `export` abaixo mantem o caminho de sempre para quem ja importa daqui.
 */
 import { TIMEFRAMES, type ChartTimeframe } from './timeframes';
+import { cssVar } from '../../hooks/useTheme';
 export { TIMEFRAMES, type ChartTimeframe };
 
 type PriceChartProps = {
@@ -460,7 +462,23 @@ export function mercadoParaConsulta(
     informou". `null` e "informou que nao ha".
   */
   if (market === null) return '';
-  return (String(market).trim() || '') as MarketKind;
+  /*
+    O ULTIMO PORTAO ANTES DO `normalizeMarketSource` (12/11/2026)
+    =============================================================
+    MEDIDO no app 1.2.181 (captura 22:40): o motor entrega `market` no SINGULAR
+    (`metal`, a classe que a corretora publica) e o grafico de XAUUSD caia no
+    dado publico do yahoo — ver `mercadoCanonico`, com a cadeia medida elo por
+    elo.
+
+    Aqui e onde o nome vira consulta: `normalizeMarketSource('mt5','metal')` e
+    `null`, e o `getCandles` LANCA. Canonizar neste ponto cobre TODO chamador do
+    grafico de uma vez — inclusive os que ainda nao existem —, em vez de
+    depender de cada pai lembrar de traduzir.
+
+    Nao e presuncao: nome desconhecido continua voltando como veio
+    (`cfd` -> `cfd`) e o consumidor recusa com motivo. E `''` continua `''`.
+  */
+  return mercadoCanonico(String(market).trim()) as MarketKind | '';
 }
 
 /**
@@ -1117,19 +1135,33 @@ const activeMarket = mercadoParaConsulta(market, broker);
 
   useEffect(() => {
     if (!containerRef.current) return undefined;
-    // Altura numerica para a lightweight-charts (aceita apenas number). Quando
-    // o chamador passa "100%" (preencher o container), usamos 360 de fallback
-    // para criar o canvas e o CSS faz o redimensionamento real.
-    const chartHeight = typeof height === 'number' ? height : 360;
+    // Altura numerica para a lightweight-charts (aceita apenas number).
+    // CORRIGIDO 22/11/2026 ("grafico nunca aparece"): quando o chamador passa
+    // "100%", o valor antigo era 360 FIXO. Se o container ainda nao tinha
+    // altura resolvida no momento da criacao, o canvas nascia descolado do pai
+    // e o ResizeObserver so corrigia se clientHeight > 0 — que era 0. Agora
+    // medimos o container primeiro e so caimos no piso se ele ainda estiver
+    // vazio. O CSS .grafico-viewport garante a altura real; aqui so a lemos.
+    const _medido = containerRef.current.clientHeight;
+    const chartHeight = typeof height === 'number'
+      ? height
+      : (_medido > 0 ? _medido : 360);
     // Padrao XM: fundo do tema, grade quase invisivel, sem borda gritando.
     // Leve = pouca tinta, so preco. Candles + volume embaixo, legenda OHLC
-    // no canto — o resto some.
+    // no canto - o resto some.
+    // A COR VEM DO TEMA (cssVar -> canvas): grid --border, texto --muted -
+    // com o Tema Light essa mesma configuracao desenha legivel; com modo
+    // escuro continua exatamente como estava (os dois variaveis que o tema
+    // define foram calibradas para o escuro). Antes o grid 'rgba(139,...,.06)'
+    // e o textColor '#8b93a7' eram fixos: no Light o texto sumia (graf. morto).
+    const corTexto = cssVar('muted', '#8b93a7');
+    const corGrade = cssVar('border', 'rgba(139,147,167,.06)');
     const chart = createChart(containerRef.current, {
       height: chartHeight,
-      layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: '#8b93a7' },
+      layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: corTexto },
       grid: {
         vertLines: { visible: false },
-        horzLines: { color: 'rgba(139,147,167,.06)' },
+        horzLines: { color: corGrade },
       },
       timeScale: { timeVisible: true, secondsVisible: false, borderVisible: false },
       rightPriceScale: { borderVisible: false },
@@ -1256,8 +1288,28 @@ chartRef.current = chart;
           })
         : null;
     observer?.observe(containerRef.current);
+    /*
+      O TEMA TROCA EM RUNTIME (OBSERVADOR). `useTheme` reescreve o atributo
+      `data-theme` no <html>. Recriar o grafico nunca e o caminho (perde zoom e
+      posicao); aqui so as cores legiveis mudam via applyOptions
+      (`initialLayout`), no mesmo formato do lega `layout`/`grid`.
+    */
+    const aplicarCores = () => {
+      const g = chartRef.current;
+      if (!g) return;
+      g.applyOptions({
+        layout: { textColor: cssVar('muted', '#8b93a7') } as never,
+        grid: { horzLines: { color: cssVar('border', 'rgba(139,147,167,.06)') } },
+      } as never);
+    };
+    let obsTema: MutationObserver | null = null;
+    if (typeof MutationObserver !== 'undefined' && typeof document !== 'undefined') {
+      obsTema = new MutationObserver(aplicarCores);
+      obsTema.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    }
     return () => {
       observer?.disconnect();
+      obsTema?.disconnect();
       chart.unsubscribeCrosshairMove(aoMirar);
       chart.remove();
       chartRef.current = null;
@@ -2432,6 +2484,8 @@ useEffect(() => {
           consumidor real (EMA/RSI/MACD pelas props, SMA/Bollinger/VWAP pelos
           `extras`), e o Estocastico continua como roteiro, sem botao.
         */}
+        <details className="painel-indicadores-wrap">
+          <summary>Indicadores (7)</summary>
         <PainelIndicadores
           ativos={{
             ema: emaExterno,
@@ -2477,6 +2531,7 @@ useEffect(() => {
             );
           }}
         />
+        </details>
         <div className="btn-row" role="group" aria-label="Tela do grafico">
           <button
             type="button"

@@ -25,9 +25,9 @@ function response(body: unknown, status = 200): Response {
 
 const base = {
   ok: true,
-  broker: 'binance',
+  broker: 'mt5',
   market: 'crypto-spot',
-  source: 'binance_api',
+  source: 'mt5_gateway',
   received_at: '2026-09-24T12:00:00.000Z',
   provider_timestamp: '2026-09-24T12:00:00.000Z',
 };
@@ -48,7 +48,7 @@ describe('marketApi', () => {
         errors: [],
       }),
     );
-    const result = await getQuotes({ broker: 'binance', market: 'crypto-spot' }, ['BTCUSDT'], {
+    const result = await getQuotes({ broker: 'mt5', market: 'crypto-spot' }, ['BTCUSDT'], {
       fetcher,
     });
     expect(result.quotes.map((quote) => quote.symbol)).toEqual(['BTCUSDT']);
@@ -67,21 +67,21 @@ describe('marketApi', () => {
       }),
     );
     const result = await getStats24h(
-      { broker: 'binance', market: 'crypto-spot', symbol: 'BTCUSDT' },
+      { broker: 'mt5', market: 'crypto-spot', symbol: 'BTCUSDT' },
       { fetcher },
     );
     expect(result.stats?.trades_count).toBe(8);
-    expect(result.stats?.broker).toBe('binance');
+    expect(result.stats?.broker).toBe('mt5');
   });
 
   it('rejeita resposta de outra corretora', async () => {
     const fetcher = vi
       .fn()
       .mockResolvedValue(
-        response({ ...base, broker: 'mexc', symbol: 'BTCUSDT', stats: { last: 100 } }),
+        response({ ...base, broker: 'okx', symbol: 'BTCUSDT', stats: { last: 100 } }),
       );
     await expect(
-      getStats24h({ broker: 'binance', market: 'crypto-spot', symbol: 'BTCUSDT' }, { fetcher }),
+      getStats24h({ broker: 'mt5', market: 'crypto-spot', symbol: 'BTCUSDT' }, { fetcher }),
     ).rejects.toMatchObject({ code: 'identity' });
   });
 
@@ -92,7 +92,7 @@ describe('marketApi', () => {
         response({ ...base, source: 'mock_market', symbol: 'BTCUSDT', stats: { last: 100 } }),
       );
     await expect(
-      getStats24h({ broker: 'binance', market: 'crypto-spot', symbol: 'BTCUSDT' }, { fetcher }),
+      getStats24h({ broker: 'mt5', market: 'crypto-spot', symbol: 'BTCUSDT' }, { fetcher }),
     ).rejects.toBeInstanceOf(MarketApiError);
   });
 
@@ -104,7 +104,7 @@ describe('marketApi', () => {
         received_at: '2026-09-24T12:00:00.000Z',
         matrix: [
           {
-            broker: 'binance',
+            broker: 'mt5',
             market: 'crypto-spot',
             status: 'active',
             read_only: true,
@@ -125,7 +125,7 @@ describe('marketApi', () => {
     const fetcher = vi
       .fn()
       .mockResolvedValue(response({ ...base, symbol: 'BTCUSDT', bids: [], asks: [] }));
-    await getDepth({ broker: 'binance', market: 'crypto-spot', symbol: 'BTCUSDT' }, 7, { fetcher });
+    await getDepth({ broker: 'mt5', market: 'crypto-spot', symbol: 'BTCUSDT' }, 7, { fetcher });
     const [url, init] = fetcher.mock.calls[0];
     expect(String(url)).toContain('limit=7');
     expect(init.method).toBe('GET');
@@ -158,23 +158,23 @@ describe('marketApi — procedencia da fonte publica', () => {
         ...base,
         symbol: 'BTCUSDT',
         candles: [vela(1788000000), vela(1788003600)],
-        fonte: 'binance',
+        fonte: 'yahoo',
         fallback_publico: true,
         execucao: false,
       }),
     );
     const result = await getCandles(
-      { broker: 'binance', market: 'crypto-spot', symbol: 'BTCUSDT' },
+      { broker: 'mt5', market: 'crypto-spot', symbol: 'BTCUSDT' },
       'M15',
       300,
       { fetcher },
     );
     expect(result.candles).toHaveLength(2);
-    expect(result.fonte).toBe('binance');
+    expect(result.fonte).toBe('yahoo');
     expect(result.fallback_publico).toBe(true);
     expect(result.execucao).toBe(false);
     // E `source` continua sendo a identidade do gateway, nao a venue.
-    expect(result.source).toBe('binance_api');
+    expect(result.source).toBe('mt5_gateway');
   });
 
   it('PROVA: sem fallback, os tres vem vazios — e nada e inventado', async () => {
@@ -182,7 +182,7 @@ describe('marketApi — procedencia da fonte publica', () => {
       response({ ...base, symbol: 'BTCUSDT', candles: [vela(1788000000)] }),
     );
     const result = await getCandles(
-      { broker: 'binance', market: 'crypto-spot', symbol: 'BTCUSDT' },
+      { broker: 'mt5', market: 'crypto-spot', symbol: 'BTCUSDT' },
       'M15',
       300,
       { fetcher },
@@ -219,14 +219,14 @@ describe('marketApi — velas livres sem corretora', () => {
         source: 'mt5_gateway',
         received_at: '2026-10-12T00:00:00.000Z',
         candles: [velaPublica(1788000000), velaPublica(1788003600)],
-        fonte: 'binance',
-        observacao: 'Binance BTCUSDT 15m — exchange, 1m real',
+        fonte: 'yahoo',
+        observacao: 'Yahoo BTCUSDT 15m — endpoint publico nao-oficial',
         execucao: false,
       }),
     );
     const result = await getCandlesLivres('BTCUSD', 'M15', 300, { fetcher });
     expect(result.candles).toHaveLength(2);
-    expect(result.fonte).toBe('binance');
+    expect(result.fonte).toBe('yahoo');
     expect(result.execucao).toBe(false);
     expect(result.symbol).toBe('BTCUSD');
     // A URL nao leva broker nem market: e a rota livre.

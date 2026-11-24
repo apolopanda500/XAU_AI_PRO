@@ -62,17 +62,44 @@ def test_periodo_reprovado_no_ativo_e_coberto_pela_classe():
     assert r.modelo_classe in r.para_dict()["class_model"]
 
 
-def test_a_recusa_do_modelo_do_ativo_nao_e_apagada():
+def test_a_recusa_do_modelo_do_ativo_nao_e_apagada(monkeypatch):
     """A cobertura da classe NAO pode esconder que o ativo foi reprovado.
 
     Sem esta clausula, o operador veria sinal de um ativo cujo modelo proprio
     foi recusado e nada na tela diria por que — o oposto do que a governanca
     existe para entregar.
+
+    POR QUE O TESTE MUDOU (medido 13/11/2026)
+    =========================================
+    O teste antigo pedia `inferir("XAUUSD", candles, "M5")` e exigia
+    "reprovado" no motivo. Isso so passava enquanto existia `XAUUSD_M5.pkl`
+    recusado pela governanca. MEDIDO no diretorio publicado: nao ha NENHUM
+    `XAUUSD_*.pkl` — so os tres `MULTI_*` e cinco pares de teste —, entao
+    `cobertura_sobre_recusa` nunca era populado e a recusa citada era vazia.
+    Ou seja: o teste media a AUSENCIA DE UM ARQUIVO, nao a guarda.
+
+    Aqui a guarda e CONSTRUIDA: o artefato do ativo devolve recusa e o de
+    classe devolve modelo; o que se prova e que a recusa do ativo sobrevive
+    no meta devolvido. PROVA NEGATIVA: sem o `if recusa_do_ativo:` dentro de
+    `_carregar`, a chave `cobertura_sobre_recusa` desaparece e isto reprova.
     """
     ai.limpar_cache()
-    r = ai.inferir("XAUUSD", _candles(), "M5")
-    assert "reprovado" in r.motivo, r.motivo
-    assert "edge" in r.motivo, r.motivo
+    recusa = "edge -0.0123 abaixo do minimo +0.0200"
+
+    def artefato_falso(candidato, nome):
+        # Nome iniciado em MULTI_ e o artefato de CLASSE, o que publica.
+        # Todo o resto e o modelo do ATIVO, que a governanca reprovou.
+        if candidato.startswith("MULTI_"):
+            return object(), {"model_type": "multi", "symbol": "MULTI_METALS"}
+        return None, {"publish_reason": recusa}
+
+    monkeypatch.setattr(ai, "_carregar_artefato", artefato_falso)
+    modelo, meta = ai._carregar("XAUUSD", "M5")
+    assert modelo is not None, "a classe devia cobrir o ativo reprovado"
+    assert meta.get("model_type") == "multi"
+    assert meta.get("cobertura_sobre_recusa") == recusa, (
+        f"a recusa do modelo do ativo foi apagada: {meta!r}"
+    )
 
 
 def test_ativo_sem_classe_nenhuma_continua_recusado():
@@ -208,7 +235,13 @@ def test_inferencia_usa_as_mesmas_features_do_treino():
     # ja vem traduzido por `_ROTULO_TF`. O artefato em disco continua
     # `XAUUSD_H1.pkl` — renomear o arquivo deixaria os 36 modelos orfaos.
     assert r.modelo.endswith("XAUUSD 1H"), r.modelo
-    assert "_" not in r.modelo, r.modelo
+    # O ALVO nao pode ter sublinhado — e o que o operador compara com a
+    # ordem que esta montando. O ID do artefato (`MULTI_METALS`) E nome de
+    # arquivo e tem `_` por construcao (D-175); proibir qualquer `_` no
+    # rotulo inteiro reprovava o nome do proprio modelo que decidiu.
+    alvo = " ".join(r.modelo.split()[-2:])
+    assert alvo == "XAUUSD 1H", r.modelo
+    assert "_" not in alvo, r.modelo
 
 
 def test_rotulo_modelo_nao_tem_sublinhado():

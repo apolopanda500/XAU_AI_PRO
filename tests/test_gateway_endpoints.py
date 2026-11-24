@@ -336,15 +336,46 @@ def test_universal_somente_leitura_e_previews(gateway, monkeypatch):
 
     with patch.object(service, "MexcClient", StubClient), \
             patch("backend.mt5_gateway.MexcClient", StubClient):
+        # MEDIDO 13/11/2026: `mexc` esta `planned` desde 12/11/2026 (ordem do
+        # dono), e o cliente esta PATCHADO aqui. Mesmo assim as rotas de dado
+        # de mercado recusam com 501 e nao entregam nada: a trava e o registro
+        # `READ_BROKERS`, nao a existencia do cliente. Era `assert 200` nos
+        # tres caminhos.
+        #
+        # ASSIMETRIA MEDIDA, registrada no PENDENCIAS: `/api/universal/account`
+        # continua 200 para a mesma corretora `planned`. Leitura de conta nao
+        # passa pela trava de `READ_BROKERS`; dado de mercado passa.
         status, _ = _request(gateway, "GET",
                              "/api/universal/account?broker=mexc&market=crypto-spot&account_id=mexc%3Acrypto-spot%3Atest")
         assert status == 200
-        status, _ = _request(gateway, "GET",
-                             "/api/universal/quote?broker=mexc&market=crypto-spot&symbol=BTCUSDT")
-        assert status == 200
-        status, _ = _request(gateway, "GET",
-                             "/api/universal/history?broker=mexc&market=crypto-spot&symbol=BTCUSDT&days=1&account_id=mexc%3Acrypto-spot%3Atest")
-        assert status == 200
+        status, cotacao = _request(gateway, "GET",
+                                   "/api/universal/quote?broker=mexc&market=crypto-spot&symbol=BTCUSDT")
+        assert status == 501, cotacao
+        assert cotacao["status"] == "unsupported"
+        assert cotacao["error"] == "corretora não suportada", cotacao
+        # `/api/universal/quote` e a rota SINGULAR (`_universal_quote`): ela
+        # nao tem a chave `quotes`, que e da rota PLURAL. O que se prova aqui
+        # e que nenhum preco foi inventado na recusa.
+        for campo in ("bid", "ask", "last", "price"):
+            assert cotacao.get(campo) in (None, ""), f"{campo} inventado: {cotacao}"
+        status, lote = _request(
+            gateway, "GET",
+            "/api/universal/quotes?broker=mexc&market=crypto-spot&symbols=BTCUSDT")
+        assert status == 501, lote
+        assert lote["status"] == "unsupported"
+        assert lote["error"] == "corretora não suportada", lote
+        assert lote["quotes"] == [] and lote["count"] == 0
+        # MEDIDO no HTTP real: `/api/universal/history` responde 200 para a
+        # mesma corretora `planned` e devolve o que o cliente patchado
+        # entregou. A trava `READ_BROKERS` cobre quote/quotes/depth/trades/
+        # candles; account e history NAO passam por ela. A assimetria esta
+        # registrada no PENDENCIAS (P1.3629) e e do backend, nao do teste.
+        status, historico = _request(
+            gateway, "GET",
+            "/api/universal/history?broker=mexc&market=crypto-spot&symbol=BTCUSDT&days=1&account_id=mexc%3Acrypto-spot%3Atest")
+        assert status == 200, historico
+        assert historico["status"] == "ok", historico
+        assert historico.get("error") in (None, ""), historico
     payload = {"broker": "mexc", "market": "spot", "symbol": "BTCUSDT", "side": "buy",
                "order_type": "market", "quantity": 0.01, "account_id": "mexc:crypto-spot:test",
                "request_id": "t1", "confirm": False}
@@ -470,11 +501,20 @@ def test_cobertura_restante_sem_envio(gateway, monkeypatch):
                  "/api/errors", "/api/capabilities", "/api/sync/status",
                  "/api/stream/status", "/api/update/check", "/api/config/themes",
                  "/api/config/languages", "/api/assets/details",
-                 "/api/execution/history", "/api/ea/status",
-                 "/api/universal/depth?broker=mexc&market=crypto-spot&symbol=BTCUSDT",
-                 "/api/universal/trades?broker=mexc&market=crypto-spot&symbol=BTCUSDT"):
+                 "/api/execution/history", "/api/ea/status"):
         status, _ = _request(gateway, "GET", path)
         assert status in {200, 503}, path
+    # MEDIDO 13/11/2026: as duas rotas de leitura universal de mercado saem do
+    # conjunto acima porque `mexc` esta `planned`: recusam com 501 e motivo, e
+    # mesmo com `_exchange_client` patchado nada e consultado.
+    for path in ("/api/universal/depth?broker=mexc&market=crypto-spot&symbol=BTCUSDT",
+                 "/api/universal/trades?broker=mexc&market=crypto-spot&symbol=BTCUSDT"):
+        status, recusa = _request(gateway, "GET", path)
+        assert status == 501, f"{path} -> {status} {recusa}"
+        assert recusa["status"] == "unsupported", path
+        assert recusa["error"] == "corretora não suportada", path
+        assert recusa.get("bids") in (None, []), path
+        assert recusa.get("trades") in (None, []), path
     for path, payload in (("/api/assets/select", {"symbol": "XAUUSD"}),
                           ("/api/assets/enable", {"symbol": "XAUUSD"}),
                           ("/api/assets/disable", {"symbol": "XAUUSD"})):
@@ -523,8 +563,11 @@ def test_rotas_restantes_sem_envio(gateway, monkeypatch):
             patch("backend.mt5_gateway.MexcClient", StubClient):
         for path in ("/api/universal/depth?broker=mexc&market=crypto-spot&symbol=BTCUSDT",
                      "/api/universal/trades?broker=mexc&market=crypto-spot&symbol=BTCUSDT"):
-            status, _ = _request(gateway, "GET", path)
-            assert status == 200, path
+            # MEDIDO 13/11/2026: 501, nao 200. O cliente patchado nao e
+            # consultado: a recusa vem de `READ_BROKERS`, onde `mexc` nao esta.
+            status, recusa = _request(gateway, "GET", path)
+            assert status == 501, f"{path} -> {status} {recusa}"
+            assert recusa["error"] == "corretora não suportada", path
     for path in ("/api/assets/XAUUSD", "/api/assets/INVALIDO_XYZ"):
         status, _ = _request(gateway, "GET", path)
         assert status in {200, 404}, path
@@ -563,13 +606,27 @@ def test_rotas_finais_ea_e_conexoes(gateway):
         assert status in {202, 503}, path
     payload = {"id": "mexc:crypto-spot:tmp", "broker": "mexc",
                "market": "crypto-spot", "api_key": "KEY", "api_secret": "SECRET"}
-    status, _ = _request(gateway, "POST", "/api/connections", payload)
-    assert status == 201
-    status, _ = _request(gateway, "GET", "/api/connections")
+    # MEDIDO 13/11/2026: 422, nao 201. `backend/connection_service.py:147-148`
+    # recusa corretora fora de {active, code_only} ANTES de checar o mercado,
+    # e e por isso que o operador le "MEXC ainda nao esta disponivel." e nunca
+    # a mensagem de mercado incompativel.
+    status, recusa = _request(gateway, "POST", "/api/connections", payload)
+    assert status == 422, recusa
+    assert recusa["ok"] is False
+    assert "MEXC" in recusa["error"] and "disponivel" in recusa["error"], recusa
+    status, listagem = _request(gateway, "GET", "/api/connections")
     assert status == 200
-    status, _ = _request(gateway, "POST",
-                         "/api/connections/mexc:crypto-spot:tmp/deactivate", {})
-    assert status == 200
+    # A recusa nao pode ter criado uma conexao pela metade.
+    linhas_listadas = listagem.get("connections") or listagem.get("items") or []
+    ids = [row.get("id") for row in linhas_listadas]
+    assert "mexc:crypto-spot:tmp" not in ids, f"a recusa gravou a conexao: {ids}"
+    # MEDIDO: sem a conexao criada, `deactivate` responde 404 com
+    # "Conexao nao encontrada." (`backend/connection_service.py:222-224`).
+    status, sumida = _request(gateway, "POST",
+                              "/api/connections/mexc:crypto-spot:tmp/deactivate", {})
+    assert status == 404, sumida
+    # O gateway traduz LookupError em "Conexao ou comando inexistente."
+    assert "inexistente" in str(sumida.get("error", "")).lower(), sumida
     status, _ = _request(gateway, "DELETE", "/api/connections/mexc:crypto-spot:tmp")
     assert status == 200
     status, _ = _request(gateway, "DELETE", "/api/connections/")

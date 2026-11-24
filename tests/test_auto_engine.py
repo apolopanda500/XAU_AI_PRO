@@ -521,15 +521,41 @@ class TestRoteamentoPorCorretora:
     def test_snapshot_reporta_a_corretora_configurada(self):
         """`snapshot()` nao pode inventar "mt5" quando o operador escolheu outra.
 
-        O `or "mt5"` das linhas 164 e 233 era a forma mais direta dessa
-        mentira: com `broker=""` ele mostrava MT5, e o `_loop` usava MT5.
+        O `or "mt5"` era a forma mais direta dessa mentira: com `broker=""`
+        ele mostrava MT5, e o `_loop` usava MT5.
+
+        MEDIDO 13/11/2026: o catalogo so tem `mt5` com execucao habilitada;
+        binance/mexc/bybit/okx/bitget/coinbase/kraken/kucoin estao `planned`
+        por ordem do dono (12/11/2026). Este teste era `broker: "binance"` e
+        passou a receber `""` porque a configuracao e RECUSADA, nao porque o
+        snapshot mentiu. A prova do anti-`or "mt5"` nao depende do catalogo:
+        com o estado gravado no motor, o snapshot repete o que esta la,
+        inclusive uma corretora que nao esta ativa.
         """
         m = motor_pronto()
-        m.configurar({"broker": "binance", "market": "crypto-spot"})
-        assert m.snapshot()["broker"] == "binance", (
-            "snapshot devolve uma corretora diferente da configurada"
+        m.broker = "mexc"
+        m.market = "crypto-spot"
+        assert m.snapshot()["broker"] == "mexc", (
+            "snapshot devolveu outra corretora: o `or mt5` voltou"
+        )
+        assert m.snapshot()["broker"] != "mt5", (
+            "snapshot inventou MT5 onde o estado diz mexc"
         )
 
+    def test_corretora_planejada_nao_entra_no_snapshot_pela_configuracao(self):
+        """O caso que deveria reprovar: `configurar` com exchange `planned`.
+
+        Recusa com motivo E o estado fica intacto. Se a recusa fosse silenciosa
+        e o estado ficasse meio trocado, o painel mostraria uma corretora que
+        nao vai operar.
+        """
+        m = motor_pronto()
+        r = m.configurar({"broker": "binance", "market": "crypto-spot"})
+        assert r["ok"] is False
+        assert "Binance" in r["error"] and "execucao habilitada" in r["error"]
+        assert m.snapshot()["broker"] == "", (
+            "a recusa gravou uma corretora que o motor nao aceitou"
+        )
     def test_snapshot_nao_inventa_corretora_quando_nao_escolhida(self):
         """Sem corretora escolhida, o painel mostra vazio — nao MT5."""
         m = motor_pronto()
@@ -735,28 +761,67 @@ class TestMultiAlvos:
         assert r["ok"] is False
         assert "um tf por ativo" in r["error"].lower()
 
-    def test_mesmo_ativo_em_corretoras_diferentes_ok(self):
+    def test_alvo_planejado_recusa_a_lista_inteira(self):
+        """MEDIDO 13/11/2026: `configurar_alvos` e atomico.
+
+        Um alvo em corretora `planned` recusa a lista INTEIRA e nao deixa
+        nenhum alvo meio gravado: `{"ok": false, "error": "MEXC nao tem
+        execucao no catalogo"}` com `alvos == []`. Este bloco era
+        `test_mesmo_ativo_em_corretoras_diferentes_ok`, mandava BTCUSD no mt5
+        e BTCUSDT na mexc, e exigia `ok is True`.
+
+        A propriedade original (o mesmo ativo em DUAS corretoras) nao e
+        mensuravel enquanto so o mt5 esta ativo; o mensuravel e que a segunda
+        corretora nao entra calada, nem em parte.
+        """
         m = motor_pronto()
         r = m.configurar_alvos([
             {"broker": "mt5", "market": "crypto-spot", "symbol": "BTCUSD", "timeframe": "H1"},
             {"broker": "mexc", "market": "crypto-spot", "symbol": "BTCUSDT", "timeframe": "H1"},
         ])
-        assert r["ok"] is True
-        assert len(r["alvos"]) == 2
+        assert r["ok"] is False
+        assert "MEXC" in r["error"] and "execucao" in r["error"]
+        assert m.alvos == [], f"a recusa gravou alvos em parte: {m.alvos}"
 
     def test_mercado_incompativel_recusa(self):
-        m = motor_pronto()
-        r = m.configurar_alvos([
+        """A checagem de mercado continua existindo — e com motivo proprio.
+
+        MEDIDO 13/11/2026: um alvo `mexc` + `forex` e recusado por
+        DISPONIBILIDADE ("MEXC nao tem execucao no catalogo"), e essa recusa
+        acontece ANTES da checagem de mercado; o teste antigo passava sem
+        exercitar o mercado nenhum. Por isso o mercado e medido na corretora
+        que existe: `mt5` + mercado inexistente precisa citar o mercado.
+        """
+        planejada = motor_pronto()
+        r = planejada.configurar_alvos([
             {"broker": "mexc", "market": "forex", "symbol": "EURUSD", "timeframe": "H1"},
         ])
-        assert r["ok"] is False
+        assert r["ok"] is False and "execucao" in r["error"]
+
+        ativa = motor_pronto()
+        r2 = ativa.configurar_alvos([
+            {"broker": "mt5", "market": "nao-existe", "symbol": "EURUSD", "timeframe": "H1"},
+        ])
+        assert r2["ok"] is False
+        assert "nao opera em 'nao-existe'" in r2["error"], r2["error"]
+        assert ativa.alvos == []
 
     def test_ciclo_alvos_opera_cada_um_uma_vez(self):
+        """MEDIDO 13/11/2026: dois alvos no mt5, cada um operado uma vez.
+
+        Este teste usava `mexc` como segundo alvo; a exchange esta `planned`,
+        entao a lista era recusada e sobrava 1 resultado. A propriedade que
+        importa — N alvos, N ordens, e nenhuma duplicata na mesma janela —
+        e mensuravel com dois graficos do mt5. Medido: ciclo1 -> 2 resultados,
+        2 chamadas, `agir=[True, True]`; ciclo2 -> 2 resultados, ainda 2
+        chamadas, `agir=[False, False]`.
+        """
         m = motor_pronto()
-        m.configurar_alvos([
+        r = m.configurar_alvos([
             {"broker": "mt5", "market": "forex", "symbol": "EURUSD", "timeframe": "H1"},
-            {"broker": "mexc", "market": "crypto-spot", "symbol": "BTCUSDT", "timeframe": "H1"},
+            {"broker": "mt5", "market": "forex", "symbol": "GBPUSD", "timeframe": "H1"},
         ])
+        assert r["ok"] is True, r.get("error")
         chamadas: list[dict] = []
         resultados = m.ciclo_alvos(
             lambda s, t: InferenciaFalsa(signal="BUY", confianca=72.0, edge=0.12),
@@ -768,24 +833,38 @@ class TestMultiAlvos:
         resultados2 = m.ciclo_alvos(
             lambda s, t: InferenciaFalsa(signal="BUY", confianca=72.0, edge=0.12),
             enviar_espiao(chamadas), risco)
+        assert len(resultados2) == 2
         assert all(not d.agir for d in resultados2)
         assert len(chamadas) == 2
 
     def test_falha_de_um_nao_derruba_os_outros(self):
+        """MEDIDO 13/11/2026 com dois alvos do mt5: EURUSD levanta, GBPUSD opera.
+
+        `resultados` mantem os DOIS alvos: EURUSD com `agir=False` e motivo
+        "inferencia falhou: MT5 fora do ar", GBPUSD com `agir=True`. Antes o
+        segundo alvo era `mexc`, que o catalogo recusa, e sobrava 1 resultado:
+        o teste media a recusa da corretora, nao a tolerancia a falha.
+        """
         m = motor_pronto()
-        m.configurar_alvos([
+        r = m.configurar_alvos([
             {"broker": "mt5", "market": "forex", "symbol": "EURUSD", "timeframe": "H1"},
-            {"broker": "mexc", "market": "crypto-spot", "symbol": "BTCUSDT", "timeframe": "H1"},
+            {"broker": "mt5", "market": "forex", "symbol": "GBPUSD", "timeframe": "H1"},
         ])
+        assert r["ok"] is True, r.get("error")
+
         def _inferir(s, t):
             if "EUR" in s:
                 raise RuntimeError("MT5 fora do ar")
             return InferenciaFalsa(signal="BUY", confianca=72.0, edge=0.12)
-        resultados = m.ciclo_alvos(_inferir, enviar_espiao([]), risco)
-        assert len(resultados) == 2
-        assert resultados[1].agir is True or resultados[1].motivo
 
-
+        chamadas: list[dict] = []
+        resultados = m.ciclo_alvos(_inferir, enviar_espiao(chamadas), risco)
+        assert len(resultados) == 2, "a falha de um alvo derrubou o outro"
+        por_symbol = {d.symbol: d for d in resultados}
+        assert por_symbol["EURUSD"].agir is False
+        assert "MT5 fora do ar" in por_symbol["EURUSD"].motivo
+        assert por_symbol["GBPUSD"].agir is True
+        assert len(chamadas) == 1
 class TestSlTpEmDinheiroNoMotor:
     """
     SL/TP EM DINHEIRO NO MOTOR (05/10/2026)

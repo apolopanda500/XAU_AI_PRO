@@ -82,7 +82,16 @@ CRIPTO: frozenset[str] = frozenset({
 
 #: Metais. XAGUSD tem so 946 linhas — entra, mas com volume muito menor que
 #: o XAU (46.463). Ver `volume_por_simbolo()` antes de treinar.
-METAIS: frozenset[str] = frozenset({"XAUUSD", "XAGUSD"})
+#:
+#: `GOLD` entra por MEDICAO na conta 391773676 (XMGlobal-MT5 14), 22/11/2026:
+#: nessa corretora o ouro a vista e listado como `GOLD`, nao como `XAUUSD`, e
+#: o grafico que a frota opera usa `GOLD`. Sem esta linha `classe_de("GOLD")`
+#: devolvia `OUTROS`, o `MULTI_METALS` ficava inalcancavel e o gateway
+#: respondia "modelo nao publicado ou ausente" — o EA lia isso como ausencia
+#: de IA, nao como ausencia de MAPA. Nao e presuncao de ativo: e a tabela de
+#: mapeamento que AGENTS §3 permite, e o nome so entrou depois de medido no
+#: Market Watch e no arquivo `permission_state_GOLD.csv` do proprio EA.
+METAIS: frozenset[str] = frozenset({"XAUUSD", "XAGUSD", "GOLD"})
 
 #: Forex — o conjunto inteiro do dataset. Sao pares de moeda contra USD, que e
 #: o que o dono chama de "FIAT": a moeda individualmente e fiat; o que se

@@ -4,6 +4,20 @@ from pathlib import Path
 import pandas as pd
 
 
+def _abrir_dataset(caminho):
+    """Abre o dataset em modo binario, aceitando .csv e .csv.gz.
+
+    Higiene de disco (11/11/2026): o dataset diario chegou a 140 MB em .csv e
+    foi arquivado em .gz. Sem esta abertura, o arquivo comprimido seria lido
+    como binario e o parser devolveria lixo em vez de recusar.
+    """
+    import gzip
+
+    if str(caminho).lower().endswith(".gz"):
+        return gzip.open(caminho, "rb")
+    return open(caminho, "rb")
+
+
 class DataEngineXAU:
     def __init__(self, dataset_path: str | Path | None = None):
         if dataset_path is not None:
@@ -44,7 +58,7 @@ class DataEngineXAU:
             "KDI_MINUS",
         ]
 
-        with open(self.dataset, "rb") as f:
+        with _abrir_dataset(self.dataset) as f:
             content = f.read()
 
         # Opcao B (ETAPA 15.2.2): detectar encoding via BOM (robustez do consumidor).

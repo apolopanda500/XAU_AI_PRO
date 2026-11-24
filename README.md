@@ -6,7 +6,7 @@
 [![Rust](https://github.com/apolopanda500/XAU_AI_PRO/actions/workflows/rust.yml/badge.svg?branch=main)](https://github.com/apolopanda500/XAU_AI_PRO/actions/workflows/rust.yml)
 [![Validação e Empacotamento](https://github.com/apolopanda500/XAU_AI_PRO/actions/workflows/deploy.yml/badge.svg?branch=main)](https://github.com/apolopanda500/XAU_AI_PRO/actions/workflows/deploy.yml)
 
-**Versão:** `1.2.9` · **Página:** <https://apolopanda500.github.io/XAU_AI_PRO/> · **Plataforma:** Windows
+**Versão:** `1.2.191` · **Página:** <https://apolopanda500.github.io/XAU_AI_PRO/> · **Plataforma:** Windows
 
 Plataforma de operação para MetaTrader 5 e múltiplas corretoras: gateway local em
 Python, interface desktop em React/TypeScript (Tauri), núcleo em Rust, aplicação
@@ -66,14 +66,15 @@ Set-Location XAU_AI_PRO
 
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt -r requirements-dev.txt
-
-# interface desktop legada (Tkinter)
-.\.venv\Scripts\python.exe app\main.py
 ```
 
-Aplicação empacotada: `XAU_AI_PRO.cmd` ou `Run_XAU_AI_PRO.bat`. O instalador é
-gerado por `installer\build_installer.cmd` e produz `installer\XAU_AI_PRO_Setup.exe`,
-instalando em `MQL5\Files\XAU_AI_PRO` sem privilégios de administrador.
+O produto distribuído é o **aplicativo desktop** (Tauri, `frontend/`). O instalador
+NSIS (e a alternativa MSI) é gerado por `scripts\build_app.bat` e instala em
+`%LOCALAPPDATA%\XAU AI PRO`, sem privilégios de administrador.
+
+Para desenvolver o frontend localmente: `cd frontend; npm ci; npm run dev`.
+A aplicação Tkinter legada (`app/main.py`) continua disponível no código, mas não
+é o produto.
 
 ## Testes
 

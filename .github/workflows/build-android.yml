@@ -1,0 +1,90 @@
+# XAU_AI_PRO - APK Android (Tauri v2).
+#
+# Gera o .apk a partir da MESMA base do desktop: `frontend/` (React) +
+# `frontend/src-tauri/` (Rust). Nao existe segundo aplicativo para manter.
+#
+# Roda em Ubuntu porque o Android NDK para Windows e a cadeia de assinatura
+# sao mais frageis la; o resultado e o mesmo APK universal.
+#
+# O `tauri android init` so e executado se `gen/android/` ainda nao existir: a
+# pasta e grande (gradlew, wrapper, manifests) e nao deve ser versionada. No CI
+# ela nasce a cada execucao.
+name: Build Android (Tauri v2 - APK)
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-android:
+    name: APK universal (Android)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Rust stable com alvos Android
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android, armv7-linux-androideabi, x86_64-linux-android
+
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: SDK Android
+        uses: android-actions/setup-android@v3
+
+      - name: NDK
+        run: sdkmanager "ndk;26.3.11579264"
+
+      # O nucleo Rust e o mesmo do desktop; no Android ele entra como biblioteca.
+      - name: Compilar nucleo Rust (release)
+        run: cargo build --release --manifest-path core/Cargo.toml
+
+      - name: Instalar dependencias do frontend
+        working-directory: frontend
+        run: npm ci
+
+      - name: Inicializar projeto Android (se necessario)
+        working-directory: frontend
+        run: |
+          if [ ! -d src-tauri/gen/android ]; then
+            npx tauri android init
+          else
+            echo "gen/android ja existe; reaproveitando a configuracao"
+          fi
+
+      - name: Gerar APK
+        working-directory: frontend
+        run: npx tauri android build --apk
+
+      - name: Guardar APK como artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: XAU_AI_PRO-Android-APK
+          path: frontend/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      # No Android o app aponta para o PC do operador (Tailscale), nao para um
+      # servidor publico: por isso o release do APK e anexado, mas o app nao
+      # recebe URL fixa de producao neste workflow.
+      - name: Anexar APK ao release (somente tags)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: frontend/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          fail_on_unmatched_files: true

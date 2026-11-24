@@ -1,0 +1,89 @@
+# XAU_AI_PRO - instalador Windows (Tauri v2).
+#
+# Publica o instalador .exe do Trading Desk a cada tag `v*`.
+#
+# Por que um workflow separado do `build-installer.yml`: aquele empacota o
+# launcher PyInstaller (`launcher.spec`), que e outro artefato, com outra
+# cadeia de recursos. Este empacota o app Tauri (`frontend/`), que e a base
+# multiplataforma. Manter os dois juntos fazia uma falha no Tauri derrubar (ou
+# travar) o instalador PyInstaller que ja funcionava.
+#
+# O Tauri so empacota o que estiver em `frontend/src-tauri/` no momento do
+# build, e o `tauri.conf.json` declara como recursos:
+#   Python/models/**/* , core/xau-ai-pro-core.exe , bridge/**/*
+# Por isso o nucleo Rust e compilado ANTES e o executavel e copiado para dentro
+# de `src-tauri/core/`. Sem essa copia o build passa e o instalador sai sem o
+# nucleo - defeito silencioso, que e o pior tipo.
+name: Release Desktop (Tauri v2 - Windows)
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Instalador Windows (x64)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Rust stable com cache
+        uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            core
+            frontend/src-tauri
+
+      - name: Node.js 22 com cache de npm
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      # O nucleo e o mesmo do mobile: um so codigo Rust para as duas plataformas.
+      - name: Compilar nucleo Rust (release)
+        run: cargo build --release --manifest-path core/Cargo.toml
+
+      - name: Enviar recursos para dentro do pacote Tauri
+        shell: pwsh
+        run: |
+          $alvo = 'frontend/src-tauri/core'
+          New-Item -ItemType Directory -Force -Path $alvo, 'frontend/src-tauri/Python/models' | Out-Null
+          $exe = 'core/target/release/xau-ai-pro-core.exe'
+          if (!(Test-Path $exe)) { throw "Nucleo Rust nao foi compilado: $exe" }
+          Copy-Item $exe -Destination $alvo -Force
+          Write-Host "Recurso empacotado: $alvo/xau-ai-pro-core.exe"
+
+      - name: Instalar dependencias do frontend
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build Tauri e publicacao do release (rascunho)
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: frontend
+          tagName: v__VERSION__
+          releaseName: "XAU AI PRO v__VERSION__"
+          releaseBody: "Instalador Windows compilado por CI (Tauri v2 + nucleo Rust + gateway Python)."
+          releaseDraft: true
+          prerelease: false
+
+      - name: Registrar hashes dos artefatos
+        shell: pwsh
+        run: |
+          $bundles = Get-ChildItem -Recurse -File -Path 'frontend/src-tauri/target/release/bundle' -Include '*.exe','*.msi' -ErrorAction SilentlyContinue
+          if (!$bundles) { throw 'Nenhum instalador foi gerado em src-tauri/target/release/bundle' }
+          foreach ($a in $bundles) {
+            Write-Host $a.FullName
+            Get-FileHash $a.FullName -Algorithm SHA256 | Format-List
+          }

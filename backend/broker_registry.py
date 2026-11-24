@@ -79,6 +79,15 @@ def normalize_market(value: str) -> str:
         "futures": "crypto-futures", "futuros": "crypto-futures", "crypto_futures": "crypto-futures",
         "forex": "forex", "metals": "metals", "indices": "indices", "stocks": "stocks",
         "commodities": "commodities", "bonds": "bonds", "options": "options", "other": "other",
+        # Singular do motor / da classe do ativo -> plural do gateway.
+        # A hierarquia publica `asset_class` no singular (metal, index, equity...)
+        # e o `auto_engine`/ficha do app carregam singular; sem este mapa
+        # `normalize_read_scope` recusava `metal` e o grafico caia no fallback
+        # publico do yahoo (MEDIDO 12/11/2026, app 1.2.181: OHLC plano).
+        "metal": "metals", "index": "indices", "indice": "indices",
+        "stock": "stocks", "equity": "stocks", "acao": "stocks",
+        "commodity": "commodities", "commodities": "commodities",
+        "bond": "bonds", "titulo": "bonds",
     }
     return aliases.get(normalized, normalized)
 

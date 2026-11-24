@@ -21,12 +21,10 @@ export type TabType =
 export type ThemeName =
   | 'dark'
   | 'dourado_dark'
-  | 'laranja_dark'
   | 'light'
   | 'ocean_dark'
   | 'emerald_dark'
   | 'rose_dark'
-  | 'violet_dark';
 
 // Sub-aba ativa dentro da aba Operar. Persiste para que sair e voltar nao
 // empurre o operador de volta para o topo da pilha.

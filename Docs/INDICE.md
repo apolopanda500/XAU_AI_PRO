@@ -1,6 +1,6 @@
 # Índice de Docs — XAU AI PRO
 
-Atualizado em **22/10/2026**. Este mapa existe porque a pasta chegou a ter
+Atualizado em **13/11/2026** (02:05). Ciclo de 13/11, versao PC **1.2.191**: ver [`SESSAO_20261113_0033_CONCLUSAO_VERSAO_1_2_191.md`](./SESSAO_20261113_0033_CONCLUSAO_VERSAO_1_2_191.md) - o grafico da aba ROBO pedia o NOME DO MODELO (`MULTI_METALS`) em vez do par (fechado no ciclo 1.2.183) e o gateway que o instalador empacota agora e o 1.2.191 (a `bridge` estava em 1.2.183 com o MESMO tamanho e hash diferente; `test_artefato_congelado.py` 8 passed, `test_ai_inference.py` 91 passed, versao 1.2.191 em 9 portadores). Instalador NSIS `XAU AI PRO_1.2.191_x64-setup.exe` (142 121 988 B) em `dist/installers/`; **instalacao pendente de acao do dono**, roteiro em [`INSTALAR_1_2_191_DONO.md`](./INSTALAR_1_2_191_DONO.md).
 61 arquivos com quatro "FINAL" e cinco "HANDOFF" disputando o mesmo assunto.
 
 **Comece por:** [`CONVERSA_20261022_BATERIAS_FIXADAS_CI_VERDE_E_DEPLOY.md`](./CONVERSA_20261022_BATERIAS_FIXADAS_CI_VERDE_E_DEPLOY.md) —

@@ -38,6 +38,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiBase } from '../lib/api';
 import { useAppStore } from '../hooks/useAppStore';
+import { ehClasseDeModelo } from '../lib/parNaTela';
 import { useAutoState } from '../hooks/queries';
 import ModelCover from './ModelCover';
 import '../theme/robo.css';
@@ -194,14 +195,64 @@ export default function ListaModelos() {
     Por isso os dois vão juntos, para `selectedSymbol` e para o timeframe do
     motor.
   */
-const escolher = async (m: ModeloTreinado) => {
-    setSelectedSymbol(m.symbol);
+  /*
+    O CARD DE CLASSE NAO ESCOLHE PAR (12/11/2026)
+    ==============================================
+    MEDIDO no app instalado 1.2.182 (12/11 23:50): clicar no card
+    `MODELO MULTI_METALS 5M` gravava `MULTI_METALS` em `selectedSymbol` e mandava
+    o MESMO texto como `simbolo` para `/api/auto/config`. A aba ROBO passava a
+    pedir candles de `MULTI_METALS` — que nao existe em corretora nenhuma — e a
+    tela dizia:
+
+        Gráfico indisponível: nenhuma fonte publica respondeu para MULTI_METALS
+        M5 (binance: ...; yahoo: ...; frankfurter: ...)
+
+    O grafico vazio nao era do grafico: era o NOME DO MODELO no lugar do par.
+
+    O backend ja sabia disso e a tela nao perguntava. Medido no Python do repo:
+
+        simbolo_valido('MULTI_METALS')    -> False
+        classe_de('MULTI_METALS')         -> OUTROS
+        _tentativas_multi('MULTI_METALS') -> []
+        _tentativas_multi('XAUUSD','M5')  -> [('MULTI_METALS','MULTI_METALS_M5'), ...]
+
+    A ultima linha e a regra que resolve o caso SEM adivinhar ativo (§3): o
+    modelo de classe entra SOZINHO para o ativo real que o operador escolheu
+    (`_classe_multi_de` le a classe do simbolo). Entao o card de classe nao
+    precisa — e nao pode — escolher par nenhum:
+
+      - com par ja escolhido, ele troca SO o periodo desse par (o modelo da
+        classe e o que vai decidir por ele, de qualquer forma);
+      - sem par escolhido, ele RECUSA com motivo, nomeando a classe, em vez de
+        inventar um ativo ou gravar o nome do modelo.
+  */
+  const escolher = async (m: ModeloTreinado) => {
     setRecusa('');
+    const deClasse = m.id.startsWith('MULTI_');
+    const classe = deClasse ? m.id.slice('MULTI_'.length) : '';
+    /*
+      `parNaTela` e a MESMA regra que a barra, o painel e o grafico leem. Um
+      `selectedSymbol` que ja esteja com o nome do modelo (persistido no
+      localStorage de quem clicou antes desta correcao) nao conta como par.
+    */
+    const escolhidoNaTela = ehClasseDeModelo(selectedSymbol)
+      ? ''
+      : String(selectedSymbol ?? '').trim().toUpperCase();
+    const par = deClasse ? escolhidoNaTela : String(m.symbol ?? '').trim().toUpperCase();
+    if (!par) {
+      setRecusa(
+        deClasse
+          ? `${m.id} é um modelo de CLASSE — cobre os ativos da classe ${classe}, não um par. Escolha o par em «Par para operar»: o modelo da classe entra sozinho para o ativo que você escolher.`
+          : `${m.label ?? m.id} veio sem par: sem símbolo não há gráfico nem inferência.`,
+      );
+      return;
+    }
+    setSelectedSymbol(par);
     try {
       const r = await fetch(`${apiBase()}/api/auto/config`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ simbolo: m.symbol, timeframe: m.timeframe }),
+        body: JSON.stringify({ simbolo: par, timeframe: m.timeframe }),
         signal: AbortSignal.timeout(10_000),
       });
       const d = (await r.json().catch(() => ({}))) as {
@@ -224,7 +275,7 @@ const escolher = async (m: ModeloTreinado) => {
         setRecusa(d.error ?? `HTTP ${r.status}`);
       } else if (d.ok === false) {
         setRecusa(
-          `Modelo aplicado ao motor (${m.symbol} · ${d.timeframe ?? m.timeframe}), mas o automático não liga ainda: ${d.error ?? ''}`,
+          `Modelo aplicado ao motor (${par} · ${d.timeframe ?? m.timeframe}), mas o automático não liga ainda: ${d.error ?? ''}`,
         );
       }
       autoQ.refetch?.();
@@ -345,7 +396,12 @@ const escolher = async (m: ModeloTreinado) => {
                 />
                 <dl className="robo-modelo-mini">
                   <div>
-                    <dt>Par</dt>
+                    {/* CORRIGIDO 23/11/2026 ("leitura horrivel" no celular): o
+                        rotulo fixo "Par" repetido em 17 linhas era enganoso nos
+                        modelos de classe — "classe METALS" nao e um par que se
+                        possa escolher. Agora a coluna diz "Classe" quando o
+                        valor e uma classe, e "Par" quando e um ativo real. */}
+                    <dt>{m.id.startsWith('MULTI_') ? 'Classe' : 'Par'}</dt>
                     <dd>
                       <strong>
                         {m.id.startsWith('MULTI_') ? rotuloClasseMulti(m.id) : m.symbol}

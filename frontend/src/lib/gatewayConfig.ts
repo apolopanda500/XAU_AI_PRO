@@ -77,7 +77,16 @@ export function normalizeWsUrl(valor: string, origem: string): string {
 }
 
 export function gatewayConfigurado(): { apiBase: string; wsUrl: string } {
-  return { apiBase: ler(CHAVE_API_BASE), wsUrl: ler(CHAVE_WS_URL) };
+  // CORRIGIDO 23/11/2026 ("login mostra gateway nao configurado"): a tela de
+  // login lia SOMENTE o localStorage. Com o app recem-instalado, a chave esta
+  // vazia e o painel dizia "vai tentar 127.0.0.1", mesmo com VITE_API_BASE
+  // correto no build. Referencia LITERAL para o Vite substituir em build —
+  // a leitura indireta ((import.meta as X).env?.VITE_*) nao era injetada.
+  const salvo = ler(CHAVE_API_BASE);
+  const salvoWs = ler(CHAVE_WS_URL);
+  const apiBase = salvo || import.meta.env.VITE_API_BASE || '';
+  const wsUrl = salvoWs || import.meta.env.VITE_WS_URL || '';
+  return { apiBase, wsUrl };
 }
 
 /** Grava a configuracao. Retorna o motivo da recusa quando invalido. */

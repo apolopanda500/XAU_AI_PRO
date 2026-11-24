@@ -72,7 +72,6 @@ const contaDaCaptura = {
 
 const estado = vi.hoisted(() => ({
   conta: {} as Record<string, unknown>,
-  criptos: [] as Array<Record<string, unknown>>,
 }));
 
 vi.mock('../hooks/queries', () => ({
@@ -80,7 +79,6 @@ vi.mock('../hooks/queries', () => ({
   useAccount: () => ({ data: estado.conta }),
   usePositions: () => ({ data: { positions: [] } }),
   useJournal: () => ({ data: { lines: [] }, isFetching: false }),
-  useAllCryptoAccounts: () => ({ data: estado.criptos }),
   useAutoState: () => ({ data: null }),
   useUniversalOverview: () => ({ data: { connections: [] } }),
   useUniversalAccount: () => ({ data: {} }),
@@ -259,51 +257,29 @@ describe('a margem livre vem da chave que o PRODUTOR manda', () => {
 });
 
 /*
-  A LINHA DE CONTA FALHA DIZ O MOTIVO (12/10/2026)
-  =================================================
-  MEDIDO nas capturas do dono (Operacoes): quatro linhas WARN — "MEXC / Spot
-  indisponível", "MEXC / Futuros indisponível", e o mesmo para BINANCE — sem
-  dizer POR QUE. Chave invalida, IP bloqueado, sem permissao e gateway fora
-  produziam a mesma linha, e o operador nao tinha por onde comecar (a rede,
-  medida do repo, responde 200 nas duas — nao e conectividade).
+  O TERMINAL NAO PROBE MEXC/BINANCE (13/11/2026)
+  ==============================================
+  MEDIDO no app instalado: quatro linhas WARN apareciam a cada 30s
+  ("MEXC / Spot indisponivel", "MEXC / Futuros", "BINANCE / Spot",
+  "BINANCE / Futuros") com HTTP 503 — o backend recusa porque
+  mexc/binance nao estao ativos (operacao restrita a MT5). O probe
+  nao produzia valor, so ruido no painel.
 
-  O gateway devolve o motivo; o `catch` do `useAllCryptoAccounts` o engolia.
-  Agora ele viaja em `error` e a linha o mostra, cortado em 90.
+  O dono mandou remover os residuos. Este teste reprova se qualquer
+  como essas linhas volte a ser renderizada.
 */
-describe('a conta de exchange que falha diz o motivo na linha', () => {
+describe('o terminal nao probe MEXC/Binance', () => {
   beforeEach(() => {
     estado.conta = { ...contaDaCaptura };
-    estado.criptos = [];
   });
   afterEach(cleanup);
 
-  it('PROVA: falha COM motivo mostra o motivo na linha', () => {
-    estado.criptos = [
-      { broker: 'mexc', market: 'crypto-spot', ok: false, balance: null, currency: 'USDT', assets: [], error: 'API key invalida (401)' },
-    ];
+  it('PROVA NEGATIVA: o painel nao contem MEXC, BINANCE ou conta cripto', () => {
     const { container } = render(<UniversalLiveTerminal />);
     const corpo = container.textContent ?? '';
-    expect(corpo).toContain('Spot indisponível');
-    expect(corpo).toContain('API key invalida (401)');
-  });
-
-  it('PROVA: falha SEM motivo mantem o texto antigo, sem dois-pontos solto', () => {
-    estado.criptos = [
-      { broker: 'binance', market: 'crypto-futures', ok: false, balance: null, currency: 'USDT', assets: [] },
-    ];
-    const { container } = render(<UniversalLiveTerminal />);
-    const corpo = container.textContent ?? '';
-    expect(corpo).toContain('Futuros indisponível');
-    expect(corpo).not.toContain('Futuros indisponível:');
-  });
-
-  it('PROVA NEGATIVA: motivo longo e cortado — a linha continua sendo uma linha', () => {
-    estado.criptos = [
-      { broker: 'mexc', market: 'crypto-spot', ok: false, balance: null, currency: 'USDT', assets: [], error: `x`.repeat(200) },
-    ];
-    const { container } = render(<UniversalLiveTerminal />);
-    const corpo = container.textContent ?? '';
-    expect(corpo).toContain('Spot indisponível: ' + 'x'.repeat(90));
-    expect(corpo).not.toContain('x'.repeat(91));
+    expect(corpo).not.toContain('MEXC');
+    expect(corpo).not.toContain('BINANCE');
+    expect(corpo).not.toContain('Futuros indispon');
+    expect(corpo).not.toContain('Spot indispon');
   });
 });
