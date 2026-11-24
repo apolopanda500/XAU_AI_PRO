@@ -71,10 +71,13 @@ jobs:
       - name: Inicializar projeto Android (se necessario)
         working-directory: frontend
         run: |
-          if [ ! -d src-tauri/gen/android ]; then
+          # A pasta pode existir no repo sem o build.gradle.kts (gerado pelo
+          # `tauri android init`, nao versionado). MEDIDO 24/11: checar so a
+          # pasta deixava a etapa "Gerar APK" reprovar com No such file.
+          if [ ! -f src-tauri/gen/android/app/build.gradle.kts ]; then
             npx tauri android init
           else
-            echo "gen/android ja existe; reaproveitando a configuracao"
+            echo "gen/android/app/build.gradle.kts ja existe; reaproveitando"
           fi
 
       - name: Gerar APK
