@@ -43,7 +43,7 @@ jobs:
       # certa NAO e recolocar `ref:` aqui: e mergear a default na `develop`
       # para ela nao ficar atras das correcoes. O passo seguinte publica a
       # branch e o commit testados, para a proxima falha nao custar uma sessao.
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Registar o codigo testado (branch + commit)
         env:
@@ -58,11 +58,11 @@ jobs:
             echo "::warning::Execucao manual numa branch nao-default e permitida, mas o resultado nao descreve o que embarca."
           fi
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
           cache: pip
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
