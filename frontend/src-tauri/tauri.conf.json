@@ -21,7 +21,6 @@
       "icons/icon.ico"
     ],
     "resources": [
-      "Python/models/**/*",
       "core/xau-ai-pro-core.exe",
       "bridge/**/*"
     ],
