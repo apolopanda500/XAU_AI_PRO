@@ -85,8 +85,35 @@
 .robo {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  min-height: 100%;
+  gap: 8px;
+  height: 100%;
+  min-height: 0;
+  /* A página rola DENTRO de si mesma: `.content` não entrega a rolagem ao
+     WebView neste layout (medido: wheel e setas não moviam nada), então
+     quem garante o acesso ao gráfico e ao ticket é esta coluna. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: var(--border) transparent;
+}
+
+/* O slot do gráfico ocupa a altura natural do conteúdo da aba ROBÔ.
+   NÃO usar flex:1 aqui: com altura fixa no pai, os filhos com
+   `overflow: hidden` viravam min-height:auto = 0 e o gráfico sumia
+   (medido via CDP em 13/11/2026: .grafico-viewport ficava com h=0
+   e a toolbar do .price-chart era recortada pelo card com h=26px).
+   A página rola dentro de `.robo` (overflow-y: auto). */
+.robo-grafico-slot {
+  flex: 0 0 auto;
+  width: 100%;
+  min-width: 0;
+  display: flex;
+}
+.robo-grafico-slot > .robo-grafico {
+  flex: 0 0 auto;
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 /* ---------- Sub-abas do robô ---------- */

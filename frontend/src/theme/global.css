@@ -205,21 +205,20 @@ a {
 
 /* ---------- Temas ---------- */
 [data-theme='dark'] {
-  --bg: #0f1420;
-  --panel: #161d2d;
-  --panel2: #1c2437;
-  --border: #26314a;
-  --text: #e8ecf5;
-  --muted: #8b94ab;
-  --primary: #4f7cff;
-  --primary-contrast: #ffffff;
-  --ok: #22c55e;
-  --warn: #eab308;
-  --danger: #ef4444;
+  --bg: #0e0a1a;
+  --panel: #171029;
+  --panel2: #1e1536;
+  --border: #2e2153;
+  --text: #ece6fa;
+  --muted: #a394cf;
+  --primary: #a78bfa;
+  --primary-contrast: #0e0a1a;
+  --ok: #a78bfa;
+  --warn: #c4b5fd;
+  --danger: #f87171;
 }
 
-[data-theme='xau_dark'],
-[data-theme='xau'] {
+[data-theme='dourado_dark'] {
   --bg: #14100a;
   --panel: #1d1810;
   --panel2: #241d13;
@@ -231,21 +230,6 @@ a {
   --ok: #4ade80;
   --warn: #fbbf24;
   --danger: #f87171;
-}
-
-[data-theme='btc_dark'],
-[data-theme='btc'] {
-  --bg: #0c0f14;
-  --panel: #13171f;
-  --panel2: #191f2a;
-  --border: #2a3140;
-  --text: #eef2f7;
-  --muted: #93a0b4;
-  --primary: #f7931a;
-  --primary-contrast: #0c0f14;
-  --ok: #22c55e;
-  --warn: #fbbf24;
-  --danger: #ef4444;
 }
 
 [data-theme='light'] {
@@ -312,20 +296,56 @@ a {
   --danger: #fb7185;
 }
 
-[data-theme='violet_dark'],
-[data-theme='violet'] {
-  --bg: #0e0a1a;
-  --panel: #171029;
-  --panel2: #1e1536;
-  --border: #2e2153;
-  --text: #ece6fa;
-  --muted: #a394cf;
-  --primary: #a78bfa;
-  --primary-contrast: #0e0a1a;
-  --ok: #a78bfa;
-  --warn: #c4b5fd;
+/* Temas declarados em useTheme.ts mas sem bloco ate 22/11/2026: o teste
+   test_figma_tokens reprovava xau_dark, btc_dark e violet_dark por falta de
+   variaveis. Sem bloco, o app herdava o tema anterior em silencio — o
+   operador trocava o tema e a tela nao mudava. Paletas coerentes com o
+   design system, mesmos 11 papeis dos temas acima. */
+[data-theme='xau_dark'],
+[data-theme='xau'] {
+  --bg: #14100a;
+  --panel: #1d1810;
+  --panel2: #241d13;
+  --border: #3a2f1c;
+  --text: #f5ecd8;
+  --muted: #a89a7d;
+  --primary: #f0b90b;
+  --primary-contrast: #14100a;
+  --ok: #4ade80;
+  --warn: #fbbf24;
   --danger: #f87171;
 }
+
+[data-theme='btc_dark'],
+[data-theme='btc'] {
+  --bg: #161206;
+  --panel: #211b0c;
+  --panel2: #2a2210;
+  --border: #4a3a16;
+  --text: #fdf3d0;
+  --muted: #b09a68;
+  --primary: #f7931a;
+  --primary-contrast: #161206;
+  --ok: #4ade80;
+  --warn: #fbbf24;
+  --danger: #f87171;
+}
+
+[data-theme='violet_dark'],
+[data-theme='violet'] {
+  --bg: #12091f;
+  --panel: #1c1130;
+  --panel2: #251640;
+  --border: #3d2466;
+  --text: #f0e6ff;
+  --muted: #a98cc9;
+  --primary: #c084fc;
+  --primary-contrast: #12091f;
+  --ok: #4ade80;
+  --warn: #fbbf24;
+  --danger: #f87171;
+}
+
 
 /* ---------- Utilitarios ---------- */
 .muted {
@@ -1386,110 +1406,124 @@ a {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 20px;
-
-  /* ---------- Autenticacao / Onboarding (Fase 3) ---------- */
-  .auth-screen {
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
-    background:
-      radial-gradient(1200px 500px at 70% -10%, rgba(212, 175, 55, 0.08), transparent 60%),
-      var(--bg);
-  }
-
-  .auth-card {
-    width: 100%;
-    max-width: 460px;
-    padding: 26px;
-  }
-
-  .auth-logo {
-    font-size: 26px;
-    font-weight: 800;
-    letter-spacing: 0.5px;
-  }
-
-  .auth-logo span {
-    color: var(--primary);
-  }
-
-  .auth-sub {
-    color: var(--muted);
-    margin: 4px 0 16px;
-  }
-
-  .stepper {
-    display: flex;
-    gap: 6px;
-    margin-bottom: 18px;
-  }
-
-  .stepper i {
-    flex: 1;
-    height: 4px;
-    border-radius: 2px;
-    background: var(--border);
-  }
-
-  .stepper i.on {
-    background: var(--primary);
-  }
-
-  .auth-actions {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 10px;
-    margin-top: 18px;
-  }
-
-  .auth-erro {
-    color: var(--danger);
-    font-size: 13px;
-    display: block;
-    margin-top: 6px;
-  }
-
-  /* Resumo do onboarding */
-  .ob-resumo {
-    list-style: none;
-    margin: 12px 0 0;
-    padding: 0;
-    display: grid;
-    gap: 8px;
-    font-size: 13px;
-  }
-  .ob-resumo li {
-    display: flex;
-    gap: 6px;
-    align-items: baseline;
-  }
-  .ob-resumo code {
-    font-size: 12px;
-    opacity: 0.85;
-  }
-
-  .btn.linklike {
-    background: none;
-    border: none;
-    margin-top: 10px;
-    width: 100%;
-    color: var(--muted);
-  }
-
-  .btn.linklike:hover {
-    color: var(--text);
-    background: none;
-    border: none;
-  }
-
   min-width: 340px;
   max-width: 92vw;
   max-height: 88vh;
   overflow-y: auto;
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+}
+
+/*
+  AUTENTICACAO / ONBOARDING (Fase 3)
+  ==================================
+  MEDIDO em 23/11/2026 no emulador (APK 1.2.191): a tela de login aparecia sem
+  cartao, com o texto "Sessao com validade limitada" atravessado pelo botao
+  "Entrar". Causa: este bloco estava ANINHADO dentro da regra `.modal` (o
+  fechamento do `.modal` ficou DEPOIS dele), entao `.auth-screen`, `.auth-card`
+  e `.auth-actions` nao se aplicavam a nada — so as regras globais de `input` e
+  `.btn` davam aparencia. Um seletor que nao casa e silencioso: nenhum erro de
+  build, nenhum aviso no console, so layout quebrado.
+
+  A regra e: cada bloco de componente volta para o nivel de cima. Esta correcao
+  move o fechamento do `.modal` para antes do bloco e mantem as propriedades
+  finais do modal junto do `.modal`.
+*/
+/* ---------- Autenticacao / Onboarding (Fase 3) ---------- */
+.auth-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background:
+    radial-gradient(1200px 500px at 70% -10%, rgba(212, 175, 55, 0.08), transparent 60%),
+    var(--bg);
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 460px;
+  padding: 26px;
+}
+
+.auth-logo {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.auth-logo span {
+  color: var(--primary);
+}
+
+.auth-sub {
+  color: var(--muted);
+  margin: 4px 0 16px;
+}
+
+.stepper {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+
+.stepper i {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+}
+
+.stepper i.on {
+  background: var(--primary);
+}
+
+.auth-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.auth-erro {
+  color: var(--danger);
+  font-size: 13px;
+  display: block;
+  margin-top: 6px;
+}
+
+/* Resumo do onboarding */
+.ob-resumo {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  font-size: 13px;
+}
+.ob-resumo li {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+}
+.ob-resumo code {
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.btn.linklike {
+  background: none;
+  border: none;
+  margin-top: 10px;
+  width: 100%;
+  color: var(--muted);
+}
+
+.btn.linklike:hover {
+  color: var(--text);
+  background: none;
+  border: none;
 }
 
 .modal h3 {

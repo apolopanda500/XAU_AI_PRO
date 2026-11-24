@@ -1,4 +1,233 @@
-﻿# CHANGELOG
+
+## [Unreleased] - 13/11/2026 - app: ROBO sem scroll emperrado, grafico acessivel
+
+### Corrigido
+- `frontend/src/theme/robo.css`: `.robo` agora e `height: 100%` com
+  `min-height: 0` e `overflow-y: auto` (a pagina rola dentro de si; o
+  `.content` nao entregava a rolagem ao WebView - medido: wheel e setas
+  nao moviam nada). Novo `.robo-grafico-slot` ocupa o espaco restante da
+  viewport da aba ROBO.
+- `frontend/src/theme/robo.css`: a pagina rola dentro de si (`overflow-y: auto`). CORREÇÃO DE RAIZ (medido via CDP no WebView2 em
+  13/11/2026): com altura fixa no slot flex, os filhos com `overflow: hidden`
+  recebiam `min-height: auto = 0` (regra CSS flex) e a cadeia `.robo-grafico-slot`
+  → `.robo-grafico` → `.grafico-viewport` → `.price-chart` encolhia até 0 — a
+  toolbar do `.price-chart` ficava clipada pelo card com h=26px e o canvas nunca
+  aparecia. Agora o slot é `flex: 0 0 auto` (altura natural) e a altura da página
+  é natural (`.grafico-viewport` sem altura fixa; `height: auto` na viewport e na
+  wrap; `min-height: 260px` na wrap) — tudo flui e pagina rola dentro de `.robo`.
+  LARGURA também foi corrigida (2ª medição CDP): o slot `flex: 0 0 auto` resolvia a
+  largura pela max-content (2282px) e o gráfico era desenhado fora da tela — agora
+  `.robo-grafico-slot` e `.robo-grafico` usam `width: 100%` e `min-width: 0`.
+- `frontend/src/components/charts/PriceChart.tsx`: a lista de indicadores
+  (`PainelIndicadores`) passou a ficar recolhida em `<details>` ("Indicadores
+  (7)") por padrão, para a toolbar encolher de ~498 para ~230px e o canvas subir.
+- `frontend/src/components/RobotTabs.tsx`: o grafico (`AcompanharModelos`)
+  passa a viver dentro do `.robo-grafico-slot`.
+- `frontend/src/components/AcompanharModelos.tsx` e
+  `frontend/src/theme/market.css`: `.grafico-viewport` usa `height: 100%`
+  (antes `calc(100vh - 470px)`, que empurrava o canvas para abaixo da dobra
+  em 839px de viewport).
+- `frontend/src/components/RobotTabs.test.tsx`: assercao atualizada para o
+  slot; 56/56 verdes. `tsc --noEmit` exit 0.
+
+## [Unreleased] - 13/11/2026 - app: fusao de temas dark e violet
+
+### Corrigido
+- `data-theme='dark'` adota a paleta violeta que estava reservada para
+  `violet_dark` (fundo `#0e0a1a`, acento `#a78bfa`, borda `#2e2153`).
+- Removido o tema `violet_dark` (theme id, entradas em `useTheme.ts`,
+  `useAppStore.ts`, `wallpapers.css`, `global.css`, `quantum.css`,
+  `settings.css`).
+- `normalizeTheme` migra `violet_dark` → `dark`; o `.theme-swatch-dark`
+  passou a usar cor violeta.
+- `useTheme.migracao.test.ts` agora cobre a migrcao `violet_dark → dark`.
+- Testes da fronteira: 1017/1017 verdes; `tsc --noEmit` exit 0.
+
+
+### Corrigido
+- `frontend/src/hooks/useTheme.ts`: removido o tema `laranja_dark` (tema superado
+  de cripto/BTC). `btc_dark` e `laranja_dark` migram para `dark` em
+  `normalizeTheme`. Removido `[data-theme='btc_dark']` e o alias `[btc]` do
+  `global.css`, o `.wallpaper-laranja` do `wallpapers.css`, o bloco BTC do
+  `quantum.css` e os `.theme-swatch.t-btc_dark`/`.t-dourado_dark` do
+  `settings.css`. Testes de migração e `ativoPresumido` alinhados.
+- `frontend/src/theme/settings.css`: renomeadas as classes do swatch do
+  dourado (`theme-swatch.t-xau_dark`/`.theme-swatch-xau_dark` →
+  `t-dourado_dark`/`.theme-swatch-dourado_dark`) — a província de seletores
+  dizia respeito a `xau_dark`, ID que o produto não emite mais, e o swatch do
+  Dourado ficava sem estilo.
+- `frontend/src/components/UniversalLiveTerminal.tsx` (+ `hooks/queries.ts`):
+  removidos os probes ao vivo `MEXC / Spot`, `MEXC / Futuros`,
+  `BINANCE / Spot` e `BINANCE / Futuros` (`/api/universal/account`), que
+  geravam quatro linhas WARN com HTTP 503 a cada 30 s no terminal ao vivo —
+  ruído para um broker fora de escopo.
+- `frontend/src/lib/marketApi.ts` (`MARKET_SOURCES`): removidas as corretoras
+  `binance`, `mexc`, `bybit`, `okx`; sobrou `mt5` (a única ativa). Testes
+  `marketApi.test.ts` adaptados para MT5 sem afrouxar asserções.
+- `frontend/src/components/DeclaracoesConfianca.tsx`: a linha do gateway
+  passou a descrever o gateway local do app (em vez de um endereço fixo
+  9011, que não é onde o app fala hoje).
+- `frontend/src/theme/indicadores.css`: indicadores agora em grelha de 2
+  colunas (antes, 7 linhas verticais consumindo a altura toda).
+- `frontend/src/components/AcompanharModelos.tsx`: altura da viewport do
+  gráfico para `calc(100vh - 470px)`, para o gráfico caber no ecrã sem scroll.
+
+### Documentado
+- `README.md`: seção "Começar" descreve o produto como é hoje (app desktop
+  Tauri, instalação por NSIS em `%LOCALAPPDATA%\XAU AI PRO`); a página de
+  apresentação (`site/index.html`) passou a 1.2.191 e ao estado atual do ciclo.
+
+
+
+### Corrigido (defeito que sairia no instalador)
+- `frontend/src-tauri/bridge/`: estava defasado em relacao a `dist/mt5-gateway`. Os dois
+  declaravam o MESMO tamanho (28 759 944 B) e hashes DIFERENTES: o bridge dizia
+  `gateway_build xau-ai-pro-1.2.183-universal-20261113` e o dist dizia `1.2.191`. Como
+  `tauri.conf.json` empacota `bridge/**/*` e nunca o `dist`, o NSIS sairia com o gateway
+  velho. Corrigido com `robocopy /MIR dist\mt5-gateway -> bridge` e provado por hash:
+  `bridge/mt5-gateway.exe` e `dist/mt5-gateway/mt5-gateway.exe` passaram a ser
+  `C42E18F9408A7AC4B281BA969BEE08577075D25ED923F3B485832BFE55308A8F`.
+
+### Alterado
+- Versao do produto `1.2.183 -> 1.2.191` em `Docs/version.json` e nos 9 portadores de
+  `scripts/sync_version.py` (`VERSION`, `pyproject.toml`, os dois `package.json`,
+  `Cargo.toml` do core e do src-tauri, `tauri.conf.json` e `frontend/src/version.ts`).
+  A direcao foi subir o produto, e nao rotular o EA para baixo, porque o EA e
+  genuinamente 1.2.191 (`Enterprise/VersionManager.mqh` tem entradas reais ate v1.2.191,
+  patch maximo 191 em 210 ocorrencias). Rotular o EA de 1.2.183 seria mentira.
+- `dist/mt5-gateway`: bundle congelado reconstruido com PyInstaller (155 s, 3 498
+  arquivos); o anterior ficou em `dist/mt5-gateway.bak_182`.
+
+### Testes
+- `tests/test_ai_inference.py`: duas travas estavam ERRADAS e foram consertadas, nao
+  afrouxadas. (1) a assercao de que a recusa do modelo do ativo nao pode ser apagada
+  usava um duble que lia o campo errado; agora injeta o duble e exige
+  `meta["cobertura_sobre_recusa"]`. (2) `assert "_" not in r.modelo` proibia o `_` do
+  proprio ID do artefato (`MULTI_METALS`, regra D-175: artefato primeiro, alvo depois) e
+  passou a medir so o ALVO (`XAUUSD 1H`). Prova negativa: as duas versoes antigas
+  reprovam. Resultado: **91 passed**.
+- `tests/test_versao_consistente.py`: **6 passed** com a versao unica.
+
+### Empacotado (nao instalado)
+- `dist/installers/XAU AI PRO_1.2.191_x64-setup.exe` (NSIS, 142 121 988 B,
+  SHA256 `83553C5999E4AF1109D92310312B1469682F27B6A221E422C58B03207083B56E`) e
+  `XAU AI PRO_1.2.191_x64_en-US.msi` (210 434 790 B). `npx tauri build` com
+  `CARGO_TARGET_DIR` fora do repositorio, 13m26s, 0 erros. Prova de que o instalador
+  levou o gateway certo: o `bridge/mt5-gateway.exe` estagiado no `release` tem hash
+  identico ao do `dist`. A instalacao escreve em `%LOCALAPPDATA%`, fora das raizes de
+  escrita do agente, e por isso e passo do dono (ver `Docs/INSTALAR_1_2_191_DONO.md`).
+# CHANGELOG
+
+## [1.2.183] - 13/11/2026 - PC: o grafico da aba ROBO pede o PAR, nao o nome do modelo
+
+### Corrigido (causa real do "Grafico indisponivel")
+- `frontend/src/lib/parNaTela.ts`: novo `ehClasseDeModelo()` (`/^MULTI_[A-Z0-9_]+$/`) e
+  `parDeVerdade()`. O nome de um modelo de CLASSE nunca mais conta como par: `parNaTela`
+  filtra os DOIS lados (motor e tela), o que tambem limpa um `selectedSymbol` ja gravado no
+  `localStorage` (o store e zustand `persist`, por isso o valor antigo voltava a cada arranque).
+- `frontend/src/components/ListaModelos.tsx::escolher`: o card de classe nao escreve simbolo.
+  Com par ja escolhido na tela ele troca so o periodo e manda o par; sem par **recusa com
+  motivo** ("modelo de CLASSE ... escolha o par em «Par para operar»"). Nenhum ativo e
+  presumido (AGENTS.md 3).
+- `frontend/src/components/SeletorModelo.tsx`: a mesma guarda na lista de pares e no valor
+  lido do store (fechou os 5 testes que falhavam por heranca do valor persistido).
+
+### Medido (13/11/2026 - no repositorio e no artefacto, nao suposto)
+- `classe_de('MULTI_METALS') = OUTROS`, `simbolo_valido('MULTI_METALS') = False`,
+  `_tentativas_multi('MULTI_METALS','M5') = []`: o backend **nunca** aceitou o nome do modelo
+  como ativo — quem o gravava era o frontend (`m.symbol` do `MULTI_METALS.meta.json`).
+- `_tentativas_multi('XAUUSD','M5') = [('MULTI_METALS','MULTI_METALS_M5'),
+  ('MULTI_METALS','MULTI_METALS')]`: o modelo de classe entra sozinho para o par real.
+- Rota do grafico: `_universal_candles('mt5','metals','MULTI_METALS')` -> `ok=False`,
+  `count=0`, `fallback_publico=None` (recusa com motivo, nunca dado falso);
+  `_universal_candles('mt5','metals','XAUUSD')` -> `ok=True`, `count=10`,
+  `source='mt5_gateway'`, `fallback_publico=None`, ultima vela
+  O 3.918,76 / H 3.921,40 / L 3.917,63 / C 3.919,43. O singular `'metal'` devolve as
+  mesmas 10 velas (aliasing `metal`->`metals`).
+
+### Testes
+- `npx vitest run`: **83 ficheiros, 1019 testes, todos verdes** (`VITEST_EXIT=0`, 668 s).
+- `npx tsc --noEmit`: `TSC_EXIT=0`.
+- `tests/test_candles_publicos_sem_conta.py`: **16 passed** (as 4 falhas herdadas de
+  "so MT5 ativo" foram fechadas).
+- A trava antiga de `ListaModelos.test.tsx` esperava `corpo.simbolo === 'MULTI_METALS'`, ou
+  seja, **travava o defeito**; foi reescrita para exigir o par do operador e ganhou prova
+  negativa (card de classe sem par RECUSA e nao grava nada).
+
+### Build
+- 8 manifestos em `1.2.183`; `gateway_build = xau-ai-pro-1.2.183-universal-20261113`.
+- Core Rust: `xau-ai-pro-core.exe` 9 157 120 B. Gateway PyInstaller: `mt5-gateway.exe`
+  28 759 944 B, 3497 ficheiros em `_internal` (sincronizado para `frontend/src-tauri/bridge`).
+- Bundle NSIS: `XAU AI PRO_1.2.183_x64-setup.exe`, 142 102 924 B, SHA256
+  `EEB57D996A9A5F9A47FC3EA1D29277BB9B9EF31CF536EE4E94594CFECC4D5AAD`;
+  `XAU AI PRO.exe` 13 998 080 B, FileVersion e ProductVersion `1.2.183`.
+- Bateria do artefacto (`scripts/medir_artefato_gateway.py --exe Temp\dist-gw\...`):
+  **exit 0** — 5 rotas `401` sem token, `401` com token errado,
+  `withdrawals_enabled=False`, `transfers_enabled=False`, ordem `execute=false` ->
+  `stage=validated`, `gateway_build=xau-ai-pro-1.2.183-universal-20261113`.
+
+### Nao feito, e por que
+- **Instalacao nao executada**: o NSIS escreve em `%LOCALAPPDATA%\XAU AI PRO` e em
+  `Program Files`, fora das raizes autorizadas do terminal. E acao do dono.
+- O bundle **MSI** ficou pendurado (`light.exe` escreveu `output.wixpdb` e nunca criou
+  `output.msi`); a corrida foi terminada e o NSIS reconstruido com `--bundles nsis`, que e
+  o entregavel.
+
+## [1.2.182] - 12/11/2026 - PC: o grafico da aba ROBO volta a ser dado do MT5
+### Corrigido
+- `frontend/src/lib/mercadoCanonico.ts` (novo) e `PriceChart.tsx::mercadoParaConsulta`: o
+  nome do mercado passa a ser canonizado no ULTIMO portao antes da consulta
+  (`metal`->`metals`, `index`/`indice`->`indices`, `stock`/`equity`->`stocks`,
+  `commodity`->`commodities`, `bond`->`bonds`, `crypto`->`crypto-spot`). Nome
+  desconhecido continua a voltar como veio (`cfd`->`cfd`): quem recusa e o
+  `normalizeMarketSource`, com motivo (AGENTS.md 3).
+- `frontend/src/components/OperacaoAutomatica.tsx` e `AcompanharModelos.tsx`: o mercado
+  vem de `mercadoDoAtivo` (a ficha que a corretora publica), nao do singular cru do motor.
+
+### Medido (12/11/2026, no ARTEFACTO congelado - nao no fonte)
+- `GET /api/universal/candles?broker=mt5&market=metal&symbol=XAUUSD&timeframe=M1&limit=3`
+  -> `http=200`, `count=10`, `source=mt5_gateway`, `fallback_publico=None`, ultima vela
+  O 3911.23 / H 3911.49 / L 3909.38 / C 3909.39. Antes: erro -> fallback publico
+  (yahoo GC=F) com a ultima vela degenerada (`Abr=Max=Min=Fecha`).
+- Bateria de artefacto (`scripts/medir_artefato_gateway.py`): fail-closed nas rotas sem
+  token, token errado 401, ordem `execute=false` -> `stage=validated`,
+  `withdrawals_enabled=False`, `transfers_enabled=False`,
+  `gateway_build=xau-ai-pro-1.2.182-universal-20261112`.
+
+### Build
+- `scripts/sync_version.py`: 8 manifestos alinhados a `1.2.182` (`VERSION`,
+  `pyproject.toml`, `backend/package.json`, `frontend/package.json`,
+  `frontend/src-tauri/Cargo.toml`, `tauri.conf.json`, `core/Cargo.toml`,
+  `frontend/src/version.ts`); `GATEWAY_BUILD` derivado, nao escrito a mao.
+- Core Rust recompilado: `core/Cargo.lock` mudou 1 linha (versao do pacote local).
+- Gateway PyInstaller: 28 759 944 B, 3497 ficheiros em `_internal`.
+- Bundle NSIS: `XAU AI PRO_1.2.182_x64-setup.exe`, 142 143 096 B, SHA256
+  `71EFF9CBA6F91401D3531113C6771C490162996D06C3A52C837C232D2F573B1C`;
+  `XAU AI PRO.exe` com FileVersion e ProductVersion `1.2.182`.
+- Frontend: `npm test` 1015/1015 (83 ficheiros), `tsc --noEmit` exit 0, `vite build` exit 0.
+
+### Nao feito, e por que
+- **Instalacao do NSIS nao executada**: o instalador escreve fora das raizes permitidas
+  do terminal (`%LOCALAPPDATA%\XAU AI PRO`, `Program Files`). Exige acao do dono.
+- Bundle **MSI** nao completou: `failed to bundle project: O arquivo ja esta sendo usado
+  por outro processo (os error 32)` ao aplicar a informacao de versao. O NSIS, que e o
+  entregavel, completou.
+- `dist\mt5-gateway` estava bloqueado (`PermissionError WinError 5`); o gateway foi
+  construido em `Temp\dist-gw` e sincronizado para `frontend\src-tauri\bridge`.
+
+## [Unreleased] - 12/11/2026 — PC: gráfico MT5 com classe institucional singular
+### Corrigido
+- `backend/broker_registry.py`: `normalize_market` agora mapeia a classe do ativo no
+  singular (`metal`, `index`, `indice`, `stock`, `equity`, `commodity`, `bond`,
+  `titulo`) para o plural esperado pelo `MT5_MARKETS` (`metals`, `indices`,
+  `stocks`, `commodities`, `bonds`). Antes disso, `normalize_read_scope('mt5','metal',…)`
+  levantava `ValueError("mercado não suportado para mt5")`, o gateway devolvia
+  resposta sem velas com `fallback_publico: true`, e a aba ROBÔ → GRÁFICO AO VIVO
+  mostrava dado público stale (Yahoo GC=F M1 ~3916, último candle plano —
+  `Abr=Máx=Mín=Fecha`) mesmo com o MT5 vivo. Medido 12/11/2026:
+  `_universal_candles('mt5','metal','XAUUSD','M1',3)` → 10 candles reais MT5.
+- Ver `Docs/FINALIZAR_VERSAO_PC_20261112.md` para o diagnóstico completo e a
+  divisão de trabalho CMD/ALFA/DELTA.
 
 ## [Unreleased] - Auditoria de segurança + correção anti-falso-positivo
 ### Segurança

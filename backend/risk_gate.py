@@ -38,9 +38,10 @@ class RiskLimits:
     max_positions: int = 5
     max_daily_trades: int = 20
     max_drawdown_pct: float = 15.0
-    # Antes None (=> checagem pulada). 50 pontos cobre Ouro/Forex/Indices com
-    # folga em condicoes normais e barra o spread de noticia ou horario morto.
-    max_spread: float = 50.0
+    # DECISAO DONO 23/11: 50 pontos barrava ETHUSD (spread real 300 pontos).
+    # 400 mantem o filtro ativo (barra noticia/horario morto) e permite cripto.
+    # O MaxSpreadPct=0.6% do EA continua como primeira linha de defesa.
+    max_spread: float = 400.0
     # Nocional por operacao. 0.10 lote de XAU a ~4000 com contrato 100 = 40.000
     # de nocional; 100.000 barra Forex/Indice sem barrar Ouro.
     max_notional: float = 100_000.0

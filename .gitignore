@@ -306,3 +306,4 @@ app/data/subscriptions.json
 *.bom
 /Scaffolds/
 /audit_xau_ai_pro.json
+gateway_autostart.log.1

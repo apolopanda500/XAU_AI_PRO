@@ -47,7 +47,7 @@ class UniversalRouter:
         contract.update({"request_id": request.request_id, "account_id": request.account_id, "broker": request.broker, "market": request.market, "symbol": request.symbol, "side": request.side, "quantity": request.quantity, "price": request.price, "status": "pending_manual_review"})
         if request.broker == "mexc":
             adapter = MexcExecutionAdapter("futures" if request.market in {"futures", "crypto-futures"} else "spot")
-            contract["adapter_payload"] = adapter.prepare(symbol=request.symbol, side=request.side, order_type=request.order_type, quantity=request.quantity, price=request.price, request_id=request.request_id, confirm=request.confirm)
+            contract["adapter_payload"] = adapter.prepare(symbol=request.symbol, side=request.side, order_type=request.order_type, quantity=request.quantity, price=request.price, request_id=request.request_id, confirm=request.confirm, stop_loss=request.stop_loss, take_profit=request.take_profit)
         elif request.broker in {"binance", "bybit", "okx", "mt5"}:
             if request.broker == "binance":
                 adapter = BinanceExecutionAdapter("futures" if request.market in {"futures", "crypto-futures"} else "spot")
@@ -57,7 +57,7 @@ class UniversalRouter:
                 adapter = OkxExecutionAdapter("futures" if request.market in {"futures", "crypto-futures"} else "spot")
             else:
                 adapter = MT5ExecutionAdapter()
-            contract["adapter_payload"] = adapter.prepare(symbol=request.symbol, side=request.side, order_type=request.order_type, quantity=request.quantity, price=request.price, request_id=request.request_id, confirm=request.confirm)
+            contract["adapter_payload"] = adapter.prepare(symbol=request.symbol, side=request.side, order_type=request.order_type, quantity=request.quantity, price=request.price, request_id=request.request_id, confirm=request.confirm, stop_loss=request.stop_loss, take_profit=request.take_profit)
             contract["status"] = "pending_manual_review"
         return contract
 

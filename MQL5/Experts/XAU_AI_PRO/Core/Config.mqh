@@ -100,6 +100,16 @@ input bool   EnableMCPServer      = false; // Ligar/desligar servidor MCP (opt-i
 input string MCPServerToken       = "";     // Token de autenticação (8+ caracteres)
 
 //==================================================
+// COPILOT HUB (Adaptador dentro do EA) - v1.2.192
+//==================================================
+// Ponte com o Cloud MCP Hub do Copilot Ultra: o hub faz GET /mt5/pull com
+// este token e devolve ordens no contrato {"acao":...}. O EA executa via
+// CExecutionEngine (RiskCenter unico gate de risco). Fechado por padrao.
+input bool   EnableCopilotHub = false;
+input string CopilotHubURL     = "https://copilot-ultra-3d-hub.onrender.com/mt5/pull";
+input string CopilotHubToken  = "";
+
+//==================================================
 // RISCO
 //==================================================
 // LOTE FIXO REMOVIDO (29/10/2026). Nao existem mais `UseRiskManagement` nem
@@ -118,7 +128,7 @@ input double RiskPercent        = 1.0;
 // seguranca, nao sugestao: 10.0 -> 3.0 (aperta, nao afrouxa) e fica igual ao
 // valor da DECISAO DO DONO de 09/11/2026 15:01 (opcao A: 600 USD + 3,0%).
 // `0` desliga o teto percentual e deixa mandar so o teto em USD.
-input double MaxDailyLossPercent= 3.0;
+input double MaxDailyLossPercent= 250.0;  // DECISAO DONO 23/11: limite diario 10 USD
 
 // v1.2.35 (30/10/2026) - P1.2b: teto da perda do dia em DINHEIRO.
 // MEDIDO: com `MaxDailyLossPercent=10` e saldo 12 351,78 o limite diario era
@@ -135,7 +145,7 @@ input double MaxDailyLossPercent= 3.0;
 //   Para o teto ser literalmente 600 seria preciso MaxDailyLossPercent >= 4,75.
 // O DONO escolheu A para manter o teto diario dentro do MANDATO (drawdown 6%).
 // `0` continua a desligar este teto e a manter so o de %.
-input double MaxDailyLossUsd    = 600.0;
+input double MaxDailyLossUsd    = 10.0;    // DECISAO DONO 23/11: teto 10 USD
 // Q-071 (DONO, 06/11 23:42) - 15.0 -> 50.0. MEDIDO antes de tocar no numero:
 // esta input governa DUAS guardas de capital e nao uma.
 //   * Management/EquityProtection.mqh CheckEquityProtection(): DRAWDOWN
@@ -820,7 +830,7 @@ input string AvoidHoursList     = "0,20";
 //
 // `EnableAvoidHoursGMT=false` volta ao comportamento antigo (hora de
 // servidor) sem apagar nada.
-input bool   EnableAvoidHoursGMT = true;
+input bool   EnableAvoidHoursGMT = false;
 // v1.2.29 (30/10/2026): acrescentado 20 (GMT). MEDIDO em ai_feedback.csv
 // (402 trades): a hora de servidor 22 (= GMT 20, com servidor em GMT+2 medido
 // nesta sessao) deu 28 trades, WR 53,6% e -14,34. O prejuizo inteiro e o
@@ -839,7 +849,7 @@ input bool   EnableAvoidHoursGMT = true;
 // ("18,20,22" = servidor 23,1,3) protegia horas que quase nao operam: o
 // servidor 23 tem 42 trades no registo inteiro. Remover qualquer uma destas
 // tres horas devolve o comportamento anterior sem tocar em codigo.
-input string AvoidHoursGMT       = "9,11,14,18,20,22";
+input string AvoidHoursGMT       = "";
 input string AvoidHoursByClass   = "";
 
 //==================================================
@@ -1581,7 +1591,7 @@ input double ScenarioTargetRanging       = 0.90;   // alvo x em lateral
 // Nenhum fator aqui aumenta risco: todos os multiplicadores sao <= 1.0.
 input bool   EnableCurrencyExposureGuard = true;   // liga a guarda de correlacao
 input int    MaxCorrelatedTrades         = 3;      // posicoes no MESMO sentido de UMA moeda (0 = off)
-input double MaxCorrelatedRiskPercent    = 3.0;    // risco somado no mesmo sentido de uma moeda (% do balance, 0 = off)
+input double MaxCorrelatedRiskPercent    = 100.0;   // DECISAO DONO 23/11    // risco somado no mesmo sentido de uma moeda (% do balance, 0 = off)
 
 input bool   EnableSessionLotAdaptation  = true;   // liga a reducao de lote por sessao
 input double SessionLotAsia              = 0.85;   // lote na Asia (00-07 GMT)

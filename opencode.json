@@ -80,7 +80,7 @@
       ],
       "cwd": ".",
       "environment": {
-        "XAU_MCP_TRADING": "1"
+        "XAU_MCP_TRADING": "0"
       },
       "enabled": true,
       "timeout": 15000

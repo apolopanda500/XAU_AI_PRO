@@ -12,19 +12,19 @@
 
 /* Tema Dark (Padrão) — Azul elétrico + Ciano */
 [data-theme='dark'] {
-  --quantum-primary: #4f7cff;
-  --quantum-secondary: #00d4ff;
-  --quantum-accent: #a855f7;
-  --quantum-glow: rgba(79, 124, 255, 0.6);
-  --quantum-glow-soft: rgba(79, 124, 255, 0.25);
-  --quantum-energy: #00d4ff;
-  --quantum-particle: rgba(79, 124, 255, 0.8);
-  --quantum-border: rgba(79, 124, 255, 0.4);
-  --quantum-bg-wave: rgba(79, 124, 255, 0.03);
+  --quantum-primary: #a78bfa;
+  --quantum-secondary: #c4b5fd;
+  --quantum-accent: #8b5cf6;
+  --quantum-glow: rgba(167, 139, 250, 0.6);
+  --quantum-glow-soft: rgba(167, 139, 250, 0.25);
+  --quantum-energy: #c4b5fd;
+  --quantum-particle: rgba(167, 139, 250, 0.8);
+  --quantum-border: rgba(167, 139, 250, 0.4);
+  --quantum-bg-wave: rgba(167, 139, 250, 0.03);
 }
 
 /* Tema XAU Dark — Dourado + Âmbar */
-[data-theme='xau_dark'] {
+[data-theme='dourado_dark'] {
   --quantum-primary: #f0b90b;
   --quantum-secondary: #fbbf24;
   --quantum-accent: #d97706;
@@ -34,19 +34,6 @@
   --quantum-particle: rgba(240, 185, 11, 0.8);
   --quantum-border: rgba(240, 185, 11, 0.4);
   --quantum-bg-wave: rgba(240, 185, 11, 0.03);
-}
-
-/* Tema BTC Dark — Laranja + Vermelho */
-[data-theme='btc_dark'] {
-  --quantum-primary: #f7931a;
-  --quantum-secondary: #fb923c;
-  --quantum-accent: #ef4444;
-  --quantum-glow: rgba(247, 147, 26, 0.6);
-  --quantum-glow-soft: rgba(247, 147, 26, 0.25);
-  --quantum-energy: #fb923c;
-  --quantum-particle: rgba(247, 147, 26, 0.8);
-  --quantum-border: rgba(247, 147, 26, 0.4);
-  --quantum-bg-wave: rgba(247, 147, 26, 0.03);
 }
 
 /* Tema Light — Roxo suave + Azul */
@@ -848,15 +835,3 @@
   --quantum-bg-wave: rgba(251, 113, 133, 0.03);
 }
 
-/* Tema Violet Dark — Violeta */
-[data-theme='violet_dark'] {
-  --quantum-primary: #a78bfa;
-  --quantum-secondary: #c4b5fd;
-  --quantum-accent: #8b5cf6;
-  --quantum-glow: rgba(167, 139, 250, 0.6);
-  --quantum-glow-soft: rgba(167, 139, 250, 0.25);
-  --quantum-energy: #c4b5fd;
-  --quantum-particle: rgba(167, 139, 250, 0.8);
-  --quantum-border: rgba(167, 139, 250, 0.4);
-  --quantum-bg-wave: rgba(167, 139, 250, 0.03);
-}

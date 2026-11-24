@@ -1,0 +1,432 @@
+/*
+  MODO DE LEITURA — CELULAR VERTICAL (22/11/2026, pedido do dono)
+  ================================================================
+  "vamos encaixar tudo melhor / melhorar modos de leituras para celular".
+
+  POR QUE UM ARQUIVO SEPARADO E CARREGADO POR ULTIMO
+  --------------------------------------------------
+  O global.css (100 KB) tem mais de 15 media queries espalhadas que mudam
+  `.content`, grids e tabelas em breakpoints diferentes (1100, 900, 820,
+  700, 560, 480, 420). Duas regras do mesmo seletor em folhas diferentes
+  brigam na cascata, e o resultado e o que o operador vê: tabela apertada,
+  indicador cortado, aba ilegível.
+
+  Aqui fica UMA unica camada de leitura, importada DEPOIS de todos os temas
+  (ver main.tsx). Ela nao apaga regra nenhuma: ela apenas TEM a ultima palavra
+  no que importa para leitura no celular na vertical. Regra antiga que nao
+  conflita continua valendo.
+
+  O QUE Muda (e por que)
+  ----------------------
+  - Sidebar vira navegacao INFERIOR (>= largura utila, menos rolagem lateral).
+  - Tabelas largas deixam de exigir scroll horizontal: cada linha vira um
+    bloco com rotulo, usando data-label (ver nota abaixo).
+  - Lista de indicadores vai para UMA coluna com toque comfortable.
+  - Area minima de toque de 44px e tipografia minima legivel.
+
+  NOTA SOBRE data-label: as tabelas que ja tem `data-label` nos <td> ganham
+  rotulo automaticamente. Tabelas sem data-label continuam legiveis (o texto
+  do cabecalho fica acima via thead) — nenhuma tela fica em branco por causa
+  deste arquivo.
+*/
+
+@media (max-width: 700px) and (orientation: portrait) {
+  /* ---------- 1. Layout: sidebar -> barra inferior ---------- */
+  .app-shell {
+    display: block;
+    height: 100%;
+    padding-bottom: calc(58px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .main {
+    height: 100%;
+  }
+
+  .sidebar,
+  .sidebar.collapsed {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    width: 100% !important;
+    height: calc(56px + env(safe-area-inset-bottom, 0px));
+    padding: 0 4px env(safe-area-inset-bottom, 0px);
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-around;
+    border-right: 0;
+    border-top: 1px solid var(--border);
+    background: var(--panel);
+    z-index: 60;
+    box-shadow: 0 -6px 18px rgba(0, 0, 0, 0.35);
+  }
+
+  /* O botao de recolher nao faz sentido numa barra fixa de 6 itens. */
+  .sidebar .collapse-btn,
+  .sidebar .brand,
+  .sidebar .sidebar-footer {
+    display: none !important;
+  }
+
+  .sidebar .nav-list {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-around;
+    width: 100%;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .sidebar .nav-item {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 48px;
+    flex-direction: column;
+    gap: 2px;
+    padding: 4px 2px;
+    border-radius: 8px;
+  }
+
+  /* O label some quando a sidebar esta "collapsed" no desktop; na barra
+     inferior ele PRECISA voltar, senao so ficam icones sem nome. */
+  .sidebar .nav-label,
+  .sidebar.collapsed .nav-label {
+    display: block !important;
+    font-size: 10px;
+    line-height: 1.1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+
+  /* ---------- 2. Conteudo: largura utila e respiro ---------- */
+  .content {
+    padding: 12px 12px calc(20px + env(safe-area-inset-bottom, 0px)) !important;
+    -webkit-overflow-scrolling: touch;
+    font-size: 15px;
+    line-height: 1.45;
+  }
+
+  .content > .page-head {
+    margin-bottom: 12px !important;
+  }
+
+  .content > .page-head h1 {
+    font-size: 21px;
+    line-height: 1.2;
+  }
+
+  /* Cards empilhados: uma coluna, sem cortar conteudo. */
+  .content > .grid,
+  .content .card > .grid,
+  .grid.cols-2,
+  .grid.cols-3,
+  .grid.cols-4 {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 10px !important;
+  }
+
+  .content .card {
+    padding: 12px !important;
+    border-radius: 10px;
+  }
+
+  /* ---------- 3. Tabelas e grades: leitura em coluna ---------- */
+  /* Nunca rolagem horizontal para ver preco/volume: o dado vem primeiro. */
+  .table-scroll,
+  .tbl-wrap {
+    overflow-x: visible !important;
+    -webkit-overflow-scrolling: auto;
+  }
+
+  .tbl,
+  table {
+    width: 100% !important;
+    display: block;
+    border-collapse: collapse !important;
+  }
+
+  .tbl thead,
+  table thead {
+    /* O cabecalho vira legenda de secao, mas nao desaparece. */
+    display: block;
+  }
+
+  .tbl thead tr,
+  table thead tr {
+    display: block;
+  }
+
+  .tbl thead th,
+  table thead th {
+    display: inline-block;
+    width: auto;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    padding: 2px 6px !important;
+  }
+
+  .tbl tbody,
+  table tbody {
+    display: block;
+  }
+
+  .tbl tbody tr,
+  table tbody tr {
+    display: block;
+    padding: 8px 0;
+    margin-bottom: 8px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--panel2, rgba(255, 255, 255, 0.02));
+  }
+
+  .tbl tbody td,
+  table tbody td {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    width: 100% !important;
+    padding: 4px 10px !important;
+    border: 0 !important;
+    text-align: left !important;
+    font-size: 14px;
+    line-height: 1.35;
+  }
+
+  /* Rotulo vem do data-label quando existe; senao o valor fica sozinho
+     (ainda legivel — não inventamos texto que o componente nao tem). */
+  .tbl tbody td[data-label]::before,
+  table tbody td[data-label]::before {
+    content: attr(data-label);
+    flex: 0 0 42%;
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .tbl tbody td:not([data-label]) {
+    justify-content: flex-start;
+  }
+
+  /* Numeros alinhados a direita, legiveis, sem quebrar. */
+  .tbl td.num,
+  .tbl th.num,
+  .num,
+  .kpi-value {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    font-size: 14px !important;
+  }
+
+  /* ---------- 4. Indicadores: um por linha, toque confortavel ---------- */
+  .painel-indicadores-lista {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 8px !important;
+  }
+
+  .indicador-item {
+    min-height: 48px;
+    padding: 8px 4px;
+  }
+
+  .indicador-item-mede {
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  .indicador-item .btn {
+    min-height: 44px;
+    min-width: 72px;
+  }
+
+  /* ---------- 5. Toque e contraste ---------- */
+  button,
+  .btn,
+  select,
+  input[type='button'],
+  input[type='submit'],
+  .nav-item {
+    min-height: 44px !important;
+  }
+
+  .btn.sm,
+  button.sm {
+    min-height: 40px !important;
+    padding: 8px 12px !important;
+  }
+
+  /* Texto never abaixo de 12px no celular (evita "leitura horrivel"). */
+  .content .muted,
+  .content .hint,
+  .content .kpi-label,
+  .content .kpi-sub,
+  .content small {
+    font-size: 12px !important;
+    line-height: 1.35;
+  }
+
+  /* Evita que o teclado ou a barra do navegador cubra campos. */
+  input,
+  select,
+  textarea {
+    font-size: 16px !important; /* <16px dispara zoom no iOS/Android */
+    max-width: 100%;
+  }
+
+  /* ---------- 6. Terminal MT5: nada de informacao cortada ---------- */
+  /* `mt5-terminal.css` tem overflow:hidden + nowrap nas celulas. No celular
+     isso cortava saldo/equity/margem sem deixar rolar. Aqui a faixa quebra
+     em linhas legiveis e a tabela de posicoes pode rolar horizontalmente
+     (com indicacao) em vez de esconder o numero. */
+  .mt-status-strip {
+    overflow: visible !important;
+    gap: 6px 0 !important;
+    padding: 4px 0 !important;
+  }
+
+  .mt-status-strip > span,
+  .mt-celula {
+    flex: 1 1 calc(50% - 1px);
+    min-width: calc(50% - 1px) !important;
+    white-space: normal !important;
+    flex-wrap: wrap;
+    padding: 4px 8px !important;
+    border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .mt-celula em,
+  .mt-status-strip em {
+    font-size: 11px !important;
+  }
+
+  .mt-celula strong,
+  .mt-status-strip strong {
+    font-size: 13px !important;
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    word-break: break-word;
+  }
+
+  .mt-celula-auto strong {
+    overflow: visible !important;
+    text-overflow: clip !important;
+  }
+
+  .mt5-table,
+  .mt5-table th,
+  .mt5-table td {
+    white-space: normal !important;
+    font-size: 13px !important;
+  }
+
+  /* Tabela de posicoes: rolagem horizontal controlada, com sombra lateral
+     para o operador saber que existe mais conteudo. */
+  .mt5-table-wrap,
+  .table-scroll:has(.mt5-table) {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+
+  /* ---------- 7. Cabeçalhos e navegação: nada cortado ---------- */
+  /* Titulo de card e contador nao podem sair da tela nem colar um no outro. */
+  .robo-modelos-cabeca,
+  .card > .section-head,
+  .content > .page-head {
+    flex-wrap: wrap !important;
+    gap: 6px 10px !important;
+    overflow: visible !important;
+  }
+
+  .robo-modelos-titulo,
+  .robo-modelos-cabeca .muted {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    max-width: 100% !important;
+    font-size: 13px !important;
+    line-height: 1.35 !important;
+  }
+
+  /* O relogio "UTC auto" no topo darfoid nao pode ser cortado na direita. */
+  .topnav-status,
+  .utc-clock,
+  .clock-chip {
+    flex-shrink: 1 !important;
+    min-width: 0 !important;
+    white-space: normal !important;
+    overflow: visible !important;
+  }
+
+  /* Barra inferior deve ficar ACIMA da barra de navegação do Android,
+     senao os rotulos (Historico, Configuracao) sao cortados pela linha branca. */
+  .sidebar {
+    padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px)) !important;
+    height: calc(60px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .sidebar .nav-label {
+    font-size: 10px !important;
+    line-height: 1.1 !important;
+    white-space: nowrap !important;
+    /* "Configuracao" cortado em "Configurac..." na barra de 6 itens:
+       reduzir 1px e permitir encolher o texto evita o ellipsis. */
+    font-size: 9px !important;
+    letter-spacing: -0.3px !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
+    text-overflow: clip !important;
+  }
+
+  /* Topo: "WS Offline" e "IA: Inativo" nao podem quebrar em duas linhas. */
+  .topnav-status > *,
+  .topnav-status span {
+    white-space: nowrap !important;
+  }
+  .topnav-status {
+    gap: 8px !important;
+    font-size: 11px !important;
+  }
+
+  .app-shell {
+    padding-bottom: calc(66px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  /* Grafico ocupa a largura toda sem cortar o ultimo candle. */
+  .price-chart,
+  .chart-wrap,
+  .chart-container,
+  [data-testid='price-chart'] {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: 240px;
+  }
+}
+
+/*
+  Terraços intermediarios (700-900px): tabelas ainda cabem, mas com
+  numerais tabulares e sem scroll horizontal forçado.
+*/
+@media (min-width: 701px) and (max-width: 900px) and (orientation: portrait) {
+  .table-scroll,
+  .tbl-wrap {
+    overflow-x: auto !important;
+  }
+  .tbl td.num,
+  .num,
+  .kpi-value {
+    font-variant-numeric: tabular-nums;
+  }
+}

@@ -17,7 +17,7 @@ class MT5ExecutionError(RuntimeError):
 
 
 class MT5ExecutionAdapter:
-    def prepare(self, *, symbol, side, order_type, quantity, price=None, request_id, confirm, available=None):
+    def prepare(self, *, symbol, side, order_type, quantity, price=None, request_id, confirm, available=None, stop_loss=None, take_profit=None):
         if not request_id or not confirm:
             raise MT5ExecutionError('request_id e confirmação manual são obrigatórios')
         if not symbol or side.lower() not in {'buy', 'sell'} or quantity <= 0:
@@ -30,7 +30,8 @@ class MT5ExecutionAdapter:
             # O SL e o TP chegam como `stop_loss`/`take_profit` no pedido
             # universal. `_trade_order` lê `sl`/`tp`, e a tradução acontece em
             # `para_o_gateway_mt5` — que é testada.
-            'stop_loss': None, 'take_profit': None,
+            # CORRECAO 23/11: repassar SL/TP para o gateway (antes eram None -> posicao sem stop).
+            'stop_loss': stop_loss, 'take_profit': take_profit,
         }
 
     def execute(self, order, *, explicit_authorization):
@@ -79,7 +80,9 @@ def para_o_gateway_mt5(order: dict) -> dict:
     return {
         'symbol': order['symbol'],
         'side': str(order['side']).upper(),
-        'volume': order['quantity'],
+        # CORRECAO 23/11: o roteador passa o adapter_payload, que usa 'volume'.
+        # Aceitar os dois nomes evita KeyError 'quantity' no motor automatico.
+        'volume': order.get('quantity', order.get('volume', 0.0)),
         'sl': order.get('stop_loss') or 0.0,
         'tp': order.get('take_profit') or 0.0,
         'confirm': bool(order.get('confirm', True)),

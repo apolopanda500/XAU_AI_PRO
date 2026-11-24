@@ -72,8 +72,6 @@ const contaDaCaptura = {
 
 const estado = vi.hoisted(() => ({
   conta: {} as Record<string, unknown>,
-  criptos: [] as Array<Record<string, unknown>>,
-  overviewConnections: [] as Array<Record<string, unknown>>,
 }));
 
 vi.mock('../hooks/queries', () => ({
@@ -81,9 +79,8 @@ vi.mock('../hooks/queries', () => ({
   useAccount: () => ({ data: estado.conta }),
   usePositions: () => ({ data: { positions: [] } }),
   useJournal: () => ({ data: { lines: [] }, isFetching: false }),
-  useAllCryptoAccounts: () => ({ data: estado.criptos }),
   useAutoState: () => ({ data: null }),
-  useUniversalOverview: () => ({ data: { connections: estado.overviewConnections } }),
+  useUniversalOverview: () => ({ data: { connections: [] } }),
   useUniversalAccount: () => ({ data: {} }),
   useUniversalPositions: () => ({ data: { positions: [] } }),
 }));
@@ -260,60 +257,29 @@ describe('a margem livre vem da chave que o PRODUTOR manda', () => {
 });
 
 /*
-  CORRETORAS PLANEJADAS SAEM DO FEED (18/11/2026)
-  ===============================================
-  Decisao do dono: MEXC/BINANCE/BYBIT/OKX em estado planejado/inativo nao
-  aparecem no feed, mesmo com credencial invalida - so voltam ao ver quando
-  a conta responde `ok: true` no gateway. MT5 e MOTOR sempre ficam.
-  Ver lib/terminalFeed.ts (regras de src/lib/terminalFeed.test.ts).
+  O TERMINAL NAO PROBE MEXC/BINANCE (13/11/2026)
+  ==============================================
+  MEDIDO no app instalado: quatro linhas WARN apareciam a cada 30s
+  ("MEXC / Spot indisponivel", "MEXC / Futuros", "BINANCE / Spot",
+  "BINANCE / Futuros") com HTTP 503 — o backend recusa porque
+  mexc/binance nao estao ativos (operacao restrita a MT5). O probe
+  nao produzia valor, so ruido no painel.
+
+  O dono mandou remover os residuos. Este teste reprova se qualquer
+  como essas linhas volte a ser renderizada.
 */
-describe('corretoras planejadas ficam fora do feed', () => {
+describe('o terminal nao probe MEXC/Binance', () => {
   beforeEach(() => {
     estado.conta = { ...contaDaCaptura };
-    estado.criptos = [];
-    estado.overviewConnections = [];
   });
   afterEach(cleanup);
 
-  it('PROVA: falha com motivo NAO aparece - planejada nao conectada', () => {
-    estado.criptos = [
-      { broker: 'mexc', market: 'crypto-spot', ok: false, balance: null, currency: 'USDT', assets: [], error: 'API key invalida (401)' },
-    ];
+  it('PROVA NEGATIVA: o painel nao contem MEXC, BINANCE ou conta cripto', () => {
     const { container } = render(<UniversalLiveTerminal />);
     const corpo = container.textContent ?? '';
-    expect(corpo).not.toContain('Spot indisponivel');
-    expect(corpo).not.toContain('API key invalida');
-    expect(corpo).toContain('MT5');
-  });
-
-  it('PROVA: falha sem motivo tambem NAO aparece', () => {
-    estado.criptos = [
-      { broker: 'binance', market: 'crypto-futures', ok: false, balance: null, currency: 'USDT', assets: [] },
-    ];
-    const { container } = render(<UniversalLiveTerminal />);
-    const corpo = container.textContent ?? '';
-    expect(corpo).not.toContain('Futuros indisponivel');
-  });
-
-  it('PROVA NEGATIVA: motivo longo continua invisivel - planejada nao conectada', () => {
-    estado.criptos = [
-      { broker: 'mexc', market: 'crypto-spot', ok: false, balance: null, currency: 'USDT', assets: [], error: 'x'.repeat(200) },
-    ];
-    const { container } = render(<UniversalLiveTerminal />);
-    const corpo = container.textContent ?? '';
-    expect(corpo).not.toContain('x'.repeat(20));
-  });
-
-  it('PROVA POSITIVA: broker conectada na Carteira VOLTA a aparecer no feed', () => {
-    estado.criptos = [
-      { broker: 'mexc', market: 'crypto-spot', ok: true, balance: 10, currency: 'USDT', assets: [] },
-    ];
-    estado.overviewConnections = [
-      { broker: 'MT5', market: 'mt5', status: 'conectada', active: true },
-      { broker: 'MEXC', market: 'crypto-spot', status: 'conectada', active: true },
-    ];
-    const { container } = render(<UniversalLiveTerminal />);
-    const corpo = container.textContent ?? '';
-    expect(corpo).toContain('MEXC');
+    expect(corpo).not.toContain('MEXC');
+    expect(corpo).not.toContain('BINANCE');
+    expect(corpo).not.toContain('Futuros indispon');
+    expect(corpo).not.toContain('Spot indispon');
   });
 });

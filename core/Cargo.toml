@@ -1,11 +1,12 @@
 [package]
 name = "xau-ai-pro-core"
-version = "1.2.185"
+version = "1.2.191"
 edition = "2021"
 
 [lib]
 name = "xau_ai_pro_core"
 path = "src/lib.rs"
+crate-type = ["rlib", "cdylib"]
 
 [[bin]]
 name = "xau-ai-pro-core"

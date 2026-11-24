@@ -148,15 +148,23 @@ def main() -> int:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
     print("datasets:")
-    fontes = [DATA / "dataset_legacy_20260910_1730.csv", DATA / "dataset.csv"]
-    fontes += sorted(DATA.glob("dataset_mt5_*.csv"))
+    if args.fontes:
+        fontes = [Path(x.strip()) for x in args.fontes.split(",") if x.strip()]
+    else:
+        fontes = [DATA / "dataset_legacy_20260910_1730.csv", DATA / "dataset.csv"]
+        fontes += sorted(DATA.glob("dataset_mt5_*.csv"))
+        # .csv.gz entra na mesma lista: e o mesmo dataset comprimido para nao
+        # encher o disco (11/11/2026). DataEngineXAU descomprime em memoria, e
+        # a dedup por (Time, Symbol) resolve o caso de existirem os dois.
+        fontes += sorted(DATA.glob("dataset_mt5_*.csv.gz"))
     df = carregar(fontes)
 
-    simbolos = (
-        sorted(df["Symbol"].dropna().unique())
-        if args.todos
-        else [args.symbol]
-    )
+    if args.simbolos:
+        simbolos = [s.strip().upper() for s in args.simbolos.split(",") if s.strip()]
+    elif args.todos:
+        simbolos = sorted(df["Symbol"].dropna().unique())
+    else:
+        simbolos = [args.symbol]
     timeframes = [x.strip() for x in args.timeframes.split(",") if x.strip()]
 
     MODELOS.mkdir(parents=True, exist_ok=True)

@@ -19,16 +19,14 @@ import {
   useAccount,
   usePositions,
   useJournal,
-  useAllCryptoAccounts,
-  useUniversalOverview,
   useAutoState,
+  useUniversalOverview,
   useUniversalAccount,
   useUniversalPositions,
 } from '../hooks/queries';
 import { fmtNum, clsPnl, sideOfPosition, extractSymbol, requestId } from '../lib/format';
 import { notify } from '../lib/notify';
 import { classificarJournal } from '../lib/journalKind';
-import { filtrarEventosAtivos } from '../lib/terminalFeed';
 import '../theme/mini-terminal.css';
 import '../theme/mt5-terminal.css';
 
@@ -154,7 +152,6 @@ export default function UniversalLiveTerminal() {
   const accountQ = useAccount();
   const positionsQ = usePositions();
   const journalQ = useJournal(10); // journal MT5: 10s (baixa latência)
-  const cryptoQ = useAllCryptoAccounts(); // cripto: 30s (fundo de Rede)
   const autoQ = useAutoState(); // motor automático: 5s
   /*
     CONTAS CONECTADAS, SEM MT5 ABERTO (12/10/2026).
@@ -163,7 +160,7 @@ export default function UniversalLiveTerminal() {
     `Saldo 11.47 / Capital 16.53 / Margem 0.83 / Livre 15.70 / Nível
     1991.57%`. O terminal lia tudo por `/api/account` + `/api/positions`
     (MT5 fixo): com o terminal fechado a tela apagava, mesmo com
-    Binance/MEXC conectadas.
+    outras corretoras conectadas.
     O overview (`/api/universal/overview`) lista cada conexão com `status`
     próprio e `mt5_required: false`: MT5 pode estar `offline` e a exchange
     `conectada` na mesma resposta. Conta e posições abaixo preferem o
@@ -337,64 +334,8 @@ export default function UniversalLiveTerminal() {
       });
     }
 
-    // Contas de cripto (Spot/Futuros de MEXC e Binance) — conteúdo de conta real, não "informação básica"
-    for (const c of cryptoQ.data ?? []) {
-      if (!c.ok) {
-        /*
-          O MOTIVO VAI NA LINHA (12/10/2026). "Spot indisponível" sozinho fez
-          o dono perguntar o que havia de errado com a conta: chave invalida,
-          IP bloqueado e gateway fora produziam a mesma linha. O motivo vem em
-          `c.error` (ver `queries.ts`); cortado em 90 para a linha continuar
-          sendo uma linha. Sem motivo, o texto continua o de sempre.
-        */
-        const motivo = String(c.error ?? '').trim().slice(0, 90);
-        rows.push({
-          id: `cry-${c.broker}-${c.market}`,
-          source: c.broker.toUpperCase(),
-          info: `${c.market === 'crypto-spot' ? 'Spot' : 'Futuros'} indisponível${motivo ? `: ${motivo}` : ''}`,
-          at: now,
-          kind: 'WARN',
-        });
-        continue;
-      }
-      const bal = fmtNum(c.balance, 2);
-      const assets = c.assets.length ? ` · ${c.assets.length} ativos` : '';
-      rows.push({
-        id: `cry-${c.broker}-${c.market}`,
-        source: c.broker.toUpperCase(),
-        info: `${c.market === 'crypto-spot' ? 'Conta Spot' : 'Conta Futuros'} · saldo ${bal} ${c.currency}${assets}`,
-        at: now,
-        kind: 'INFO',
-      });
-    }
-    return rows.sort((a, b) => b.at.getTime() - a.at.getTime()).slice(0, 20);
-    // Corretoras planejadas (MEXC/BINANCE/BYBIT/OKX) so entram no feed
-    // quando a conta responde ok no gateway - e MT5/MOTOR sempre ficam.
-    // Ver lib/terminalFeed.ts.
-  }, [journalQ.data, cryptoQ.data, auto]);
-
-  // Corretoras ATIVAS na carteira (MT5 + exchange conectada), vindas do MESMO
-  // overview que a Carteira exibe. Corretoras planejadas (MEXC/BINANCE/BYBIT/
-  // OKX) aparecem no feed SOMENTE quando conectadas - o dono nao quer ver
-  // restos de contas inativas, mesmo com credencial errada.
-  const conectadosKey = conexoes
-    .filter(
-      (c) =>
-        (c.active === true) || String(c.status ?? '').toLowerCase() === 'conectada',
-    )
-    .map((c) => String(c.broker ?? '').trim().toUpperCase())
-    .filter(Boolean)
-    .sort()
-    .join(',');
-
-  const eventosFiltrados = useMemo(
-    () =>
-      filtrarEventosAtivos(events, conectadosKey ? conectadosKey.split(',') : []).slice(0, 14),
-    // String estavel como dependencia: `conexoes` e um array novo a cada
-    // fetch e dispararia o memo a cada 15s sem mudar nada.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [events, conectadosKey],
-  );
+    return rows.sort((a, b) => b.at.getTime() - a.at.getTime()).slice(0, 14);
+  }, [journalQ.data, auto]);
 
   // Fechamento de posição via gateway.
   //
@@ -526,7 +467,6 @@ const flutuanteDoMt5 = account?.profit;
     void statusQ.refetch();
     void accountQ.refetch();
     void positionsQ.refetch();
-    void cryptoQ.refetch();
   };
 
   return (
@@ -805,7 +745,7 @@ const flutuanteDoMt5 = account?.profit;
             </tr>
           </thead>
           <tbody>
-            {eventosFiltrados.map((event) => (
+            {events.map((event) => (
               <tr key={event.id}>
                 <td className="mono">{event.at.toLocaleTimeString('pt-BR')}</td>
                 <td>
@@ -817,7 +757,7 @@ const flutuanteDoMt5 = account?.profit;
                 <td>{event.info}</td>
               </tr>
             ))}
-            {!eventosFiltrados.length && (
+            {!events.length && (
               <tr>
                 <td colSpan={4} className="mt-empty">
                   {journalQ.isFetching ? 'Lendo journal…' : 'Nenhum evento.'}

@@ -129,7 +129,7 @@ def _patch_gateway_build(path: Path, build: str) -> bool:
     linha = f"export const GATEWAY_BUILD = '{build}';"
     if "export const GATEWAY_BUILD" in text:
         new, n = re.subn(
-            r"export const GATEWAY_BUILD = '[^']*'", linha, text, count=1
+            r"export const GATEWAY_BUILD = '[^']*';*", linha, text, count=1
         )
         if n == 0 or new == text:
             return False

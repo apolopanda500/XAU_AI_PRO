@@ -255,7 +255,13 @@ describe('os modelos multi-classe tem chave propria e rotulo que nao repete', ()
   /** O valor do par nas mini informacoes do card (o `dd` do `dt` "Par"). */
   const parDe = (card: Element) => {
     const blocos = Array.from(card.querySelectorAll('.robo-modelo-mini > div'));
-    const par = blocos.find((d) => d.querySelector('dt')?.textContent === 'Par');
+    // O rotulo da coluna e "Par" para ativo real e "Classe" para modelo de
+    // classe (23/11). O teste continua medindo o VALOR — nunca o rotulo —
+    // para nao enfraquecer a asserção (AGENTS.md 6).
+    const par = blocos.find((d) => {
+      const dt = (d.querySelector('dt')?.textContent ?? '').trim();
+      return dt === 'Par' || dt === 'Classe';
+    });
     return (par?.querySelector('dd')?.textContent ?? '').trim();
   };
 
@@ -279,6 +285,12 @@ describe('os modelos multi-classe tem chave propria e rotulo que nao repete', ()
   it('clicar no H1 seleciona o H1, e nao o M5 da primeira linha', async () => {
     // Mede a CHAVE. Com `key={m.id}`, o React reaproveitava o no da primeira
     // linha e a escolha do operador caia no periodo errado.
+    //
+    // O PAR E O DO OPERADOR (12/11/2026): o card de CLASSE nao escreve par
+    // nenhum — o nome do modelo (`MULTI_METALS`) nao e ativo, e o backend o
+    // recusa (`simbolo_valido` -> False). Sem par escolhido o card RECUSA (ver
+    // o teste seguinte), entao aqui o operador ja escolheu `XAUUSD`.
+    M.simbolo = 'XAUUSD';
     M.modelos = [multi('M5'), multi('H1')];
     render(<ListaModelos />);
     await waitFor(() => expect(linhas()).toHaveLength(2));
@@ -292,7 +304,35 @@ describe('os modelos multi-classe tem chave propria e rotulo que nao repete', ()
     expect(configs.length, 'clicar no H1 tem de mandar UMA configuracao').toBe(1);
     const corpo = configs[0].body as { simbolo: string; timeframe: string };
     expect(corpo.timeframe).toBe('H1');
-    expect(corpo.simbolo).toBe('MULTI_METALS');
+    // O SIMBOLO DO MOTOR NAO E O NOME DO MODELO (12/11/2026).
+    // Esta trava ANTES esperava `MULTI_METALS` — travava o DEFEITO: o motor
+    // ficava com um nome que nao tem candle em corretora nenhuma, e a aba ROBO
+    // dizia "nenhuma fonte publica respondeu para MULTI_METALS M5".
+    expect(corpo.simbolo, 'o par do operador, nunca o nome do modelo').toBe('XAUUSD');
+    expect(corpo.simbolo).not.toBe('MULTI_METALS');
+  });
+
+  it('card de CLASSE sem par escolhido RECUSA, e nao grava o nome do modelo', async () => {
+    // PROVA NEGATIVA do defeito medido no app instalado 1.2.182: sem par, o
+    // clique gravava `MULTI_METALS` no store E no motor, e o grafico pedia
+    // candles desse "par". Recusa com motivo (§3), nunca ativo inventado.
+    M.simbolo = '';
+    M.modelos = [multi('M5')];
+    render(<ListaModelos />);
+    await waitFor(() => expect(linhas()).toHaveLength(1));
+
+    fireEvent.click(linhas()[0]);
+    await waitFor(() =>
+      expect(document.body.textContent).toContain('modelo de CLASSE'),
+    );
+    expect(document.body.textContent).toContain('classe METALS');
+    expect(document.body.textContent).toContain('Par para operar');
+    // Nada foi escrito: nem no store, nem no motor.
+    expect(M.simbolo, 'o store nao recebe nome de modelo').toBe('');
+    expect(
+      M.chamadas.filter((c) => String(c.url).includes('/api/auto/config')).length,
+      'sem par nao ha o que configurar',
+    ).toBe(0);
   });
 
   it('o nome no card nao repete o par', async () => {

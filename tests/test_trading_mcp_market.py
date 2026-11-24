@@ -43,9 +43,15 @@ def test_crypto_ticker_simbolo_normalizado(http_stub):
     assert path == "https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT"
 
 
-def test_crypto_ticker_padrao_btc(http_stub):
-    mcp.tool_call("crypto_ticker", {})
-    assert http_stub[-1][0].endswith("symbol=BTCUSDT")
+def test_crypto_ticker_sem_simbolo_recusa_sem_tocar_a_rede(http_stub):
+    # MEDIDO 13/11/2026: `crypto_ticker` com payload vazio devolve
+    # `{"error": "symbol e obrigatorio; nenhum ativo e presumido"}` e NAO
+    # chama a Binance. AGENTS.md secao 3: ativo vazio e RECUSA COM MOTIVO,
+    # nunca um ativo padrao. Este teste era `symbol=BTCUSDT` presumido.
+    resposta = mcp.tool_call("crypto_ticker", {})
+    assert resposta == {"error": "symbol e obrigatorio; nenhum ativo e presumido"}
+    assert http_stub == [], "o simbolo foi presumido e a exchange foi consultada"
+    assert "BTCUSDT" not in json.dumps(resposta)
 
 
 def test_ferramentas_de_mercado_sao_somente_leitura():

@@ -8,8 +8,22 @@
 // A PORTA do localhost desktop NÃO morre aqui: vem de `lib/portas.ts`, que a
 // pergunta ao Tauri. Ver o motivo medido em `portas.ts`.
 import { baseGatewayLocal, ehGatewayLocal, portaGateway, portaWsMercado } from './portas';
-type ViteEnv = { env?: Record<string, string | undefined> };
-const viteEnv: ViteEnv = (import.meta as unknown as ViteEnv) ?? {};
+// CORRIGIDO 22/11/2026 ("APK nunca liga"): a leitura indireta
+// `(import.meta as ViteEnv).env?.VITE_*` NAO e substituida pelo Vite em build —
+// ele so injeta referencias LITERAIS `import.meta.env.VITE_*`. Resultado: no
+// APK as variaveis do .env.production chegavam vazias e o app caira no
+// loopback 127.0.0.1:9001 (que no Android nao e o PC).
+//
+// Declaracao literal para o TypeScript (sem `any`): o Vite substitui cada
+// `import.meta.env.VITE_*` abaixo pelo valor do .env.production no build.
+interface ImportMeta {
+  readonly env: ImportMetaEnv;
+}
+interface ImportMetaEnv {
+  readonly VITE_API_BASE?: string;
+  readonly VITE_WS_URL?: string;
+  readonly VITE_GATEWAY_TOKEN?: string;
+}
 
 function stored(key: string): string {
   try {
@@ -37,7 +51,7 @@ export function isMobileRuntime(): boolean {
 // pista de que a porta era o motivo. A porta é uma MEDIDA, e quem mede é o
 // Tauri (que lê `XAU_GATEWAY_PORT`). Aqui só se usa o valor que ele mandou.
 export function apiBase(): string {
-  const explicit = stored('xau-api-base') || viteEnv.env?.VITE_API_BASE;
+  const explicit = stored('xau-api-base') || import.meta.env.VITE_API_BASE;
   if (explicit) return explicit;
   const local = baseGatewayLocal();
   if (local) return local;
@@ -59,9 +73,22 @@ export function apiBase(): string {
 // eram o mesmo número; no dia em que a porta fosse movida, o Rust subiria na
 // nova e o preço deixaria de atualizar, sem erro nenhum.
 export function wsUrl(): string {
-  const explicita = stored('xau-ws-url') || viteEnv.env?.VITE_WS_URL;
+  const explicita = stored('xau-ws-url') || import.meta.env.VITE_WS_URL;
   if (explicita) return explicita;
   return `ws://127.0.0.1:${portaWsMercado()}/ws/market`;
+}
+
+/**
+ * INDICA SE HA SERVIDOR WS REAL CONFIGURADO (22/11/2026).
+ * O gateway FastAPI declara `transport: http-polling, websocket: false`: NAO
+ * tem rota /ws/market. Sem esta funcao o hook tentava `ws://127.0.0.1:9002`
+ * no desktop e `ws://10.0.2.2:9002` no Android, onde nao ha servidor — o
+ * resultado era loop de reconexao e aviso de Mixed Content no WebView.
+ * Os dados do app vem por HTTP polling; WS e apenas o feed de preco.
+ * `true` so quando o usuario/build configurou um WS explicito.
+ */
+export function temWsConfigurado(): boolean {
+  return Boolean(stored('xau-ws-url') || import.meta.env.VITE_WS_URL);
 }
 
 // ---------------------------------------------------------------------------
@@ -73,39 +100,12 @@ export function wsUrl(): string {
 // ---------------------------------------------------------------------------
 
 const SESSION_KEY = 'xau-session-token';
-const SESSION_UNTIL_KEY = 'xau-session-until';
-const DAY_MS = 86_400_000;
 
 export function sessionToken(): string {
-  return stored(SESSION_KEY);
-}
-
-/** Grava quando a sessao lembrada neste aparelho expira (ms epoch). */
-export function setSessionUntil(until: number | null): void {
-  try {
-    if (typeof window === 'undefined') return;
-    if (until && Number.isFinite(until)) {
-      window.localStorage.setItem(SESSION_UNTIL_KEY, String(Math.trunc(until)));
-    } else {
-      window.localStorage.removeItem(SESSION_UNTIL_KEY);
-    }
-  } catch {
-    // localStorage indisponível: segue sem prazo local.
-  }
-}
-
-/** Timestamp de expiração salvo, ou null quando não há prazo local. */
-export function sessionUntil(): number | null {
-  const raw = stored(SESSION_UNTIL_KEY);
-  if (!raw) return null;
-  const n = Number(raw);
-  return Number.isFinite(n) && n > 0 ? n : null;
-}
-
-/** `true` só quando há prazo salvo e ele já venceu. */
-export function sessionExpirou(): boolean {
-  const until = sessionUntil();
-  return until !== null && Date.now() >= until;
+  const sessao = stored(SESSION_KEY);
+  if (sessao) return sessao;
+  // APK configurado pelo DONO: API_TOKEN fixo embutido no build (sem login/expiracao).
+  return import.meta.env.VITE_GATEWAY_TOKEN || "";
 }
 
 export function setSessionToken(token: string): void {
@@ -120,12 +120,6 @@ export function setSessionToken(token: string): void {
 
 export function clearSessionToken(): void {
   setSessionToken('');
-  setSessionUntil(null);
-}
-
-/** Lembra a sessão neste aparelho por N dias (0/odd = nunca). */
-export function lembrarSessao(dias: 0 | 7 | 30 | 90): void {
-  setSessionUntil(dias > 0 ? Date.now() + dias * DAY_MS : null);
 }
 
 export type LoginResult =

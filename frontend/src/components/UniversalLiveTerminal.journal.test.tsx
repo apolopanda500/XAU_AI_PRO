@@ -31,7 +31,6 @@ vi.mock('../hooks/queries', () => ({
   }),
   usePositions: () => ({ data: { positions: [] } }),
   useJournal: () => ({ data: { lines: estado.journal }, isFetching: false }),
-  useAllCryptoAccounts: () => ({ data: [] }),
   useAutoState: () => ({ data: null }),
   useUniversalOverview: () => ({ data: { connections: [] } }),
   useUniversalAccount: () => ({ data: {} }),

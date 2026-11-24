@@ -7,7 +7,7 @@ from backend.bybit_client import BybitClient
 from backend.broker_registry import capability_matrix
 from backend.mexc_client import MexcClient
 from backend.okx_client import OkxClient
-from backend.mt5_gateway import _assets_from_raw, _candles_from_raw, _normalize_exchange_account, _universal_quotes
+from backend.mt5_gateway import _assets_from_raw, _candles_from_raw, _normalize_exchange_account, _quote_from_raw, _universal_quotes
 from backend.universal_contracts import validate_read_scope
 
 
@@ -24,19 +24,56 @@ def test_invalid_or_control_values_are_not_balance():
     assert result["available"] == 0
 
 
-def test_universal_quotes_normalize_source_identity(monkeypatch):
-    monkeypatch.setattr("backend.mt5_gateway._universal_quote", lambda broker, market, symbol: {
-        "symbol": symbol.lower(), "bid": 100.0, "ask": 101.0, "source": "binance_api",
-    })
-    result = _universal_quotes("binance", "crypto-spot", ["btcusdt"])
-    quote = result["quotes"][0]
-    assert result["source"] == "universal_gateway"
+def test_quote_from_raw_normaliza_identidade_da_fonte():
+    """A identidade da cotacao nasce no normalizador, nao na corretora ligada.
+
+    Este era o teste da normalizacao de `symbol`/`source`, e ele continua a
+    valer sem corretora activa porque `_quote_from_raw` e funcao pura: o
+    `symbol` devolvido e SEMPRE o pedido, na forma canonica do app. A OKX
+    nomeia o par `BTC-USDT` e a Binance `BTCUSDT` - sem esta regra o mesmo
+    ativo apareceria como dois instrumentos na tela.
+    """
+    quote = _quote_from_raw("binance", "crypto-spot", "BTCUSDT",
+                            {"symbol": "BTCUSDT", "bidPrice": "99", "askPrice": "101"})
     assert quote["broker"] == "binance"
     assert quote["market"] == "crypto-spot"
     assert quote["symbol"] == "BTCUSDT"
+    assert quote["source_symbol"] == "BTCUSDT"
     assert quote["source"] == "binance_api"
-    assert quote["timestamp"] is None
-    assert quote["received_at"]
+    assert (quote["bid"], quote["ask"]) == (99.0, 101.0)
+    assert quote["status"] == "ok"
+    # O simbolo PEDIDO manda, mesmo quando o upstream devolve outro nome.
+    okx = _quote_from_raw("okx", "crypto-spot", "BTCUSDT",
+                          {"instId": "BTC-USDT", "bidPx": "1", "askPx": "2"})
+    assert okx["symbol"] == "BTCUSDT"
+    assert okx["source_symbol"] == "BTC-USDT"
+
+
+def test_quotes_de_corretora_planejada_recusam_com_motivo(monkeypatch):
+    """Binance esta `planned`: recusa NOMEADA, e o cliente NAO e consultado.
+
+    MEDIDO em 12/11/2026: `READ_BROKERS == ['mt5']` e as oito exchanges do
+    catalogo estao `planned`. O teste antigo exigia `quotes[0]` de binance -
+    exigia dado de uma corretora que o proprio catalogo diz nao estar
+    disponivel. A exigencia certa e a recusa, com o motivo e com o escopo
+    pedido devolvidos: e isso que o operador le na tela.
+    """
+    from backend.broker_registry import BROKERS
+
+    assert BROKERS["binance"].status == "planned"
+    assert "binance" not in gateway_module.READ_BROKERS
+
+    chamadas: list = []
+    monkeypatch.setattr("backend.mt5_gateway._universal_quote",
+                        lambda *a, **k: chamadas.append((a, k)) or {})
+
+    result = _universal_quotes("binance", "crypto-spot", ["btcusdt"])
+
+    assert result["quotes"] == [] and result["count"] == 0
+    assert result["status"] == "unsupported"
+    assert result["error"] == "corretora não suportada"
+    assert result["symbols"] == ["BTCUSDT"]
+    assert chamadas == [], "a corretora planejada foi consultada mesmo assim"
 
 
 def test_read_scope_rejects_cross_market_and_oversized_symbol():
@@ -101,8 +138,20 @@ def test_binance_quote_combines_book_and_stats(monkeypatch):
 
 
 def test_capability_matrix_is_single_and_fail_closed(monkeypatch):
+    from backend.broker_registry import BROKERS
+
+    # O conjunto vem do CATALOGO e a ancora e fixa: se alguem reactivar uma
+    # corretora sem querer, `ativas` muda e a assercao abaixo muda com ele -
+    # por isso as duas linhas seguintes sao explicitas e nao derivadas.
+    ativas = {bid for bid, definicao in BROKERS.items() if definicao.status == "active"}
+    assert "mt5" in ativas, "o MT5 e a corretora que opera: nao pode sair da matriz"
+    assert {"binance", "mexc", "bybit", "okx"}.isdisjoint(ativas), (
+        "as quatro exchanges estao `planned` desde 12/11/2026: se voltaram a "
+        "`active`, esta assercao tem de ser revista DE PROPOSITO, nao em silencio"
+    )
+
     matrix = capability_matrix()
-    assert {row["broker"] for row in matrix} == {"mt5", "binance", "mexc", "bybit", "okx"}
+    assert {row["broker"] for row in matrix} == ativas
     # App desbloqueado: toda corretora ativa expoe execucao e sai de somente-leitura.
     assert all(row["execution"] for row in matrix)
     assert all(row["withdrawals"] is False for row in matrix)
@@ -124,12 +173,28 @@ def test_capability_matrix_is_single_and_fail_closed(monkeypatch):
 
 def test_planned_brokers_stay_out_of_the_matrix():
     # Corretoras apenas planejadas nao podem aparecer como disponiveis.
+    # MEDIDO em 12/11/2026: sao OITO, nao quatro - `binance`, `mexc`, `bybit`
+    # e `okx` tambem sairam da lista activa por pedido do dono. A assercao e
+    # explicita (e nao derivada do catalogo) para que reactivar uma delas
+    # reprove aqui em vez de passar em silencio.
     with_planned = capability_matrix(include_planned=True)
     estados = {row["status"] for row in with_planned}
     assert "planned" in estados
     planejadas = {row["broker"] for row in with_planned if row["status"] == "planned"}
-    assert planejadas == {"bitget", "coinbase", "kraken", "kucoin"}
-    assert all(row["capabilities"] == [] for row in with_planned if row["status"] == "planned")
+    assert planejadas == {"binance", "mexc", "bybit", "okx",
+                          "bitget", "coinbase", "kraken", "kucoin"}
+    # As quatro que tem cliente escrito (binance/mexc/bybit/okx) DECLARAM
+    # capacidades no catalogo mesmo estando `planned` - isso descreve o que o
+    # codigo suporta, nao que a corretora esteja disponivel. As quatro sem
+    # cliente (bitget/coinbase/kraken/kucoin) declaram lista vazia. O que este
+    # teste protege e a DISPONIBILIDADE: `status` e o sinal, e a matriz por
+    # omissao nao inclui nenhuma delas (provado na linha seguinte).
+    com_cliente = {"binance", "mexc", "bybit", "okx"}
+    por_broker = {row["broker"]: row for row in with_planned}
+    assert all(por_broker[b]["capabilities"] == [] for b in planejadas - com_cliente)
+    assert all(por_broker[b]["status"] == "planned" for b in planejadas)
+    # PROVA NEGATIVA: sem `include_planned` nenhuma delas entra na matriz.
+    assert planejadas.isdisjoint({row["broker"] for row in capability_matrix()})
 
 
 def test_asset_capability_matrix_reflects_mt5_trade_mode():

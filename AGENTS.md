@@ -464,3 +464,34 @@ tempo, e o sintoma parece "o projeto quebrou". **Nunca** esconder falha de teste
 alheio em silêncio — nomeie o arquivo e o dono.
 
 
+
+---
+
+## 15. Duas copias do EA: qual teste le qual (MEDIDO 13/11/2026)
+
+Existem **duas** copias de `XAU_AI_PRO` na maquina, e elas nao sao iguais:
+
+| Copia | Caminho (a partir da pasta de dados do terminal) | Quem le |
+|---|---|---|
+| Canonica (repo do EA) | `MQL5\Experts\XAU_AI_PRO\` | MetaEditor, grafico, operador |
+| Embutida (repo do app) | `MQL5\Files\XAU_AI_PRO\MQL5\Experts\XAU_AI_PRO\` | `tests/test_versao_consistente.py` |
+
+`tests/test_versao_consistente.py` calcula `RAIZ = Path(__file__).resolve().parent.parent`
+e le `RAIZ / "MQL5" / "Experts" / "XAU_AI_PRO"`. Como o teste vive no repo do app, ele le a
+copia **EMBUTIDA**, nunca a canonica.
+
+**Consequencia medida:** a versao do EA "mudou" entre duas medicoes seguidas (1.391 e 1.410)
+sem que ninguem tivesse recompilado nada - as duas leituras foram em copias diferentes.
+Antes de dizer a versao do EA, diga **de qual copia**. Na copia embutida o par correto e
+`#property version "1.391"` + `EA_VERSION_STRING "1.2.191"`, porque a formula do teste e
+`major.minor*100+patch` (`2*100+191 = 391`). Relabelar o EA para baixo, para casar com o
+produto, seria mentira: o `VersionManager.mqh` da copia embutida tem 210 ocorrencias de
+`v1.2.x` com entradas reais de changelog ate `v1.2.191`.
+
+**Regra:** ao mexer em EA, altere a copia **canonica**; se `test_versao_consistente`
+precisar passar, sincronize a embutida - ou decida remover a embutida (P1.3634).
+Nunca edite a embutida acreditando que esta editando o EA que o grafico executa.
+
+**Prova de que a medicao e a unica fonte:** o tamanho do `.mq5` e igual nas duas copias
+(104 834 B) mesmo quando o conteudo diverge. Tamanho nao distingue copia; caminho e hash
+distinguem.

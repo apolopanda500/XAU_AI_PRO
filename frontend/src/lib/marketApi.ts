@@ -353,15 +353,6 @@ export const MARKET_SOURCES: readonly MarketSourceOption[] = [
     ],
     enabled: true,
   },
-  {
-    broker: 'binance',
-    label: 'Binance',
-    markets: ['crypto-spot', 'crypto-futures'],
-    enabled: true,
-  },
-  { broker: 'mexc', label: 'MEXC', markets: ['crypto-spot', 'crypto-futures'], enabled: true },
-  { broker: 'bybit', label: 'Bybit', markets: ['crypto-spot', 'crypto-futures'], enabled: true },
-  { broker: 'okx', label: 'OKX', markets: ['crypto-spot', 'crypto-futures'], enabled: true },
 ];
 
 const SOURCE_REJECTION = /simulated|simulation|mock|mocked|fake|dummy|synthetic|placeholder/i;

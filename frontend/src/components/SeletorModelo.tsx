@@ -37,6 +37,7 @@ import { parseAssetCatalog, type AssetRow } from '../lib/brokerCatalog';
 import { useCatalogoAtivos } from '../hooks/useCatalogoAtivos';
 import { escopoAtivo } from '../lib/escopoAtivo';
 import { useAutoState } from '../hooks/queries';
+import { ehClasseDeModelo } from '../lib/parNaTela';
 import type { Broker } from '../lib/connections';
 
 // Base resolvida por chamada (13/10/2026), nunca congelada no topo do modulo.
@@ -197,7 +198,7 @@ export default function SeletorModelo() {
     presumido: continua sem escolha ate o operador clicar.
   */
   const simbolosDosModelos = useMemo(
-    () => [...new Set(modelos.map((m) => String(m.symbol || '').toUpperCase()).filter(Boolean))],
+    () => [...new Set(modelos.map((m) => String(m.symbol || '').toUpperCase()).filter((s) => s && !ehClasseDeModelo(s)))],
     [modelos],
   );
   const paresElegiveis = useMemo(() => {
@@ -245,7 +246,11 @@ export default function SeletorModelo() {
   );
 
   const simbolo = useMemo(() => {
-    const atual = (selectedSymbol || '').toUpperCase();
+    // O estado persistido pode ter ficado com o nome do modelo de CLASSE
+    // (ex.: MULTI_METALS) - nao e um par (MEDIDO 13/11/2026: MULTI_METALS no
+    // seletor, grafico indisponivel). Vale '', nunca o nome da classe.
+    const atualBruto = (selectedSymbol || '').toUpperCase().trim();
+    const atual = ehClasseDeModelo(atualBruto) ? '' : atualBruto;
     // O par já escolhido vence, desde que ainda exista nas opcoes (catalogo
     // ou modelos — ver `paresElegiveis`).
     if (atual && paresElegiveis.includes(atual)) return atual;

@@ -10,12 +10,14 @@ import sys
 import time
 import os
 import copy
+import logging
 from pathlib import Path
 from typing import Any
 import asyncio
+import threading
 from urllib.parse import unquote
 
-from fastapi import Body, FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -32,15 +34,12 @@ from backend import copilot
 from backend import intent_log
 from backend import persistent_queue
 from backend import watchdog
-from backend import mobile_command
 from backend.backtest import run_backtest
 from backend.third_party_ea import evaluate_all as evaluate_third_party_ea
 from Python.model_registry import model_catalog
 from backend.planos.social_paper import follow_strategy, following_strategies, list_strategies, unfollow_strategy
 from backend.planos.subscriptions import activate_local_plan, get_subscription, list_plans
 from backend import remote_auth
-from backend import mobile_control
-from backend import models_profiles_api
 
 API_TOKEN = gw.API_TOKEN
 RATE_LIMIT_MAX = gw.RATE_LIMIT_MAX
@@ -79,6 +78,43 @@ def _session_user_id(token: str) -> int:
         return 0
     _SESSION_CACHE[token] = agora + _SESSION_CACHE_TTL
     return user_id
+
+
+def _carimbar_log_uvicorn() -> None:
+    """Poe hora nos registos do uvicorn (P1.3669).
+
+    O uvicorn configura o logging ANTES de importar a aplicacao, e o formatter
+    por omissao e "%(levelprefix)s %(message)s" -- sem hora. As linhas
+    "WARNING:  Invalid HTTP request received." saem sem instante, portanto nao
+    se podem correlacionar ao segundo com o journal do EA (que tem hora). Sem
+    essa correlacao, o 1003 do terminal e um numero solto e a causa fica em
+    hipotese.
+
+    Idempotente e sem tocar na mensagem: so acrescenta o prefixo de tempo. Se o
+    handler ja tiver hora no formato, nao e mexido. O `levelprefix` e do
+    formatter do uvicorn -- um `logging.Formatter` cru rebentaria com KeyError
+    em cada linha, por isso o fallback troca `levelprefix` por `levelname`.
+    """
+    formato = "%(asctime)s.%(msecs)03d %(levelprefix)s %(message)s"
+    datafmt = "%Y-%m-%d %H:%M:%S"
+    try:
+        from uvicorn.logging import DefaultFormatter as _Fmt  # type: ignore
+    except Exception:  # noqa: BLE001 - sem uvicorn nao ha log do uvicorn
+        formato = "%(asctime)s.%(msecs)03d %(levelname)s %(message)s"
+        _Fmt = logging.Formatter  # type: ignore[assignment]
+    for nome in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+        registo = logging.getLogger(nome)
+        for handler in list(registo.handlers):
+            atual = handler.formatter
+            if atual is not None and "asctime" in (getattr(atual, "_fmt", "") or ""):
+                continue
+            try:
+                handler.setFormatter(_Fmt(formato, datafmt))
+            except Exception:  # noqa: BLE001 - log nunca derruba o arranque
+                continue
+
+
+_carimbar_log_uvicorn()
 
 
 app = FastAPI(
@@ -165,6 +201,303 @@ async def health() -> dict:
 
 
 # --------------------------------------------------------------------------
+# P1.3662 (ALFA, 16/11/2026) - CONTADOR REAL DE PEDIDOS AO /api/ai/predict
+#
+# O PROBLEMA QUE ISTO RESOLVE
+# O journal do EA imprime "[AI] GATEWAY | HTTP 1003" no maximo UMA VEZ POR
+# CONTA A CADA 300 s (`AccountLogGatePodeImprimir("aigw_http_1003", 300)`).
+# Logo os numeros que se leem no FORWARD.md e nas medicoes dos agentes sao um
+# PISO, nao uma taxa: medem o portao de log, nao a falha. MEDIDO em 16/11/2026:
+# as linhas saiam a 5,0-7,1 min uma da outra, exactamente o portao.
+#
+# COMO O NUMERO PASSA A SER VERDADEIRO
+# Um pedido que chega ao gateway e contado aqui. Um pedido que o terminal NAO
+# consegue completar (o 1003) nunca chega - e por isso a diferenca entre o
+# esperado (o que o EA e o servico deviam pedir) e o contado aqui E a taxa de
+# falha, medida do lado que nao tem portao de log.
+#
+# LIMITES DECLARADOS: contador em memoria, zera no restart (o `desde` diz
+# quando). Nao substitui o journal: mede o outro lado.
+# --------------------------------------------------------------------------
+_METRICAS_T0 = time.time()
+_METRICAS = {
+    "pedidos": 0,            # chamadas aceites pela rota
+    "respondidos": 0,        # ok=True e available=True (previsao util)
+    "indisponiveis": 0,      # ok=True e available=False (modelo nao publicado, etc)
+    "erros": 0,              # ok=False ou excecao
+    "sem_simbolo": 0,        # recusa na porta (simbolo vazio)
+    "calculados": 0,         # inferencia realmente executada (custo de CPU)
+    "cache_hits": 0,         # servido do cache curto (P1.3664)
+    "partilhados": 0,        # pedido concorrente que esperou a mesma inferencia
+    "timeouts_servidor": 0,  # P1.3671: teto de tempo do servidor (recusa com motivo)
+    "calc_ms_total": 0.0,
+    "calc_ms_max": 0.0,
+    "duracao_ms_total": 0.0,
+    "duracao_ms_max": 0.0,
+    "ultimo_ts": 0.0,
+    "maior_intervalo_s": 0.0,
+    "ultimos_motivos": {},   # motivo -> contagem (indisponiveis e erros)
+    "por_symbol": {},        # simbolo -> {pedidos, respondidos}
+    "por_timeframe": {},
+}
+_METRICAS_LOCK = threading.Lock()
+
+
+def _metrics_predict(symbol: str, timeframe: str, resposta, motivo: str = "",
+                     duracao_s: float = 0.0) -> None:
+    """Regista um pedido ao /api/ai/predict. Nunca levanta excecao.
+
+    A instrumentacao nao pode derrubar a rota que instrumenta: todo o corpo
+    vai dentro de try/except e uma falha aqui nao altera a resposta.
+    """
+    try:
+        agora = time.time()
+        with _METRICAS_LOCK:
+            _METRICAS["pedidos"] += 1
+            if duracao_s > 0:
+                ms = duracao_s * 1000.0
+                _METRICAS["duracao_ms_total"] += ms
+                if ms > _METRICAS["duracao_ms_max"]:
+                    _METRICAS["duracao_ms_max"] = ms
+            anterior = _METRICAS["ultimo_ts"]
+            if anterior > 0:
+                gap = agora - anterior
+                if gap > _METRICAS["maior_intervalo_s"]:
+                    _METRICAS["maior_intervalo_s"] = gap
+            _METRICAS["ultimo_ts"] = agora
+            if motivo == "sem_simbolo":
+                _METRICAS["sem_simbolo"] += 1
+            elif motivo == "cache":
+                _METRICAS["cache_hits"] += 1
+            elif motivo == "partilhado":
+                _METRICAS["partilhados"] += 1
+            elif motivo == _MOTIVO_TEMPO_SERVIDOR:
+                # P1.3671: o servidor desistiu de esperar e devolveu recusa com
+                # motivo. Contar isto como "calculado" inflaria `calc_ms_max`
+                # com o proprio teto e estragaria o instrumento que mede a
+                # cauda de latencia - que e o numero que se quer vigiar.
+                _METRICAS["timeouts_servidor"] += 1
+            else:
+                _METRICAS["calculados"] += 1
+                if duracao_s > 0:
+                    ms_calc = duracao_s * 1000.0
+                    _METRICAS["calc_ms_total"] += ms_calc
+                    if ms_calc > _METRICAS["calc_ms_max"]:
+                        _METRICAS["calc_ms_max"] = ms_calc
+            if motivo != "sem_simbolo":
+                if isinstance(resposta, dict) and resposta.get("ok") and resposta.get("available"):
+                    _METRICAS["respondidos"] += 1
+                elif isinstance(resposta, dict) and resposta.get("ok"):
+                    _METRICAS["indisponiveis"] += 1
+                else:
+                    _METRICAS["erros"] += 1
+            if motivo:
+                _METRICAS["ultimos_motivos"][motivo] = (
+                    _METRICAS["ultimos_motivos"].get(motivo, 0) + 1)
+            sim = str(symbol or "").strip().upper()
+            if sim:
+                alvo = _METRICAS["por_symbol"].setdefault(sim, {"pedidos": 0, "respondidos": 0})
+                alvo["pedidos"] += 1
+                if isinstance(resposta, dict) and resposta.get("ok") and resposta.get("available"):
+                    alvo["respondidos"] += 1
+            tf = str(timeframe or "").strip().upper()
+            if tf:
+                _METRICAS["por_timeframe"][tf] = _METRICAS["por_timeframe"].get(tf, 0) + 1
+    except Exception:  # noqa: BLE001 - metrica nunca derruba a rota
+        pass
+
+
+@app.get("/api/metrics")
+async def metrics() -> dict:
+    """Contador real de pedidos ao /api/ai/predict desde o arranque (P1.3662).
+
+    `pedidos` conta o que CHEGOU. O que nao chega (transporte 1001/1003 do lado
+    do terminal) so aparece por diferenca face ao esperado - e essa diferenca e
+    o unico numero que nao esta filtrado por um portao de log.
+    """
+    with _METRICAS_LOCK:
+        pedidos = _METRICAS["pedidos"]
+        total_ms = round(_METRICAS["duracao_ms_total"], 1)
+        instantaneo = {
+            "pedidos": pedidos,
+            "respondidos": _METRICAS["respondidos"],
+            "indisponiveis": _METRICAS["indisponiveis"],
+            "erros": _METRICAS["erros"],
+            "sem_simbolo": _METRICAS["sem_simbolo"],
+            "calculados": _METRICAS["calculados"],
+            "cache_hits": _METRICAS["cache_hits"],
+            "partilhados": _METRICAS["partilhados"],
+            "timeouts_servidor": _METRICAS["timeouts_servidor"],
+            "calc_ms_media": (round(_METRICAS["calc_ms_total"] / _METRICAS["calculados"], 1)
+                              if _METRICAS["calculados"] else 0.0),
+            "calc_ms_max": round(_METRICAS["calc_ms_max"], 1),
+            "duracao_ms_media": round(total_ms / pedidos, 1) if pedidos else 0.0,
+            "duracao_ms_max": round(_METRICAS["duracao_ms_max"], 1),
+            "maior_intervalo_s": round(_METRICAS["maior_intervalo_s"], 1),
+            "ultimo_pedido_ha_s": (round(time.time() - _METRICAS["ultimo_ts"], 1)
+                                   if _METRICAS["ultimo_ts"] else None),
+            "motivos": dict(_METRICAS["ultimos_motivos"]),
+            "por_symbol": {k: dict(v) for k, v in _METRICAS["por_symbol"].items()},
+            "por_timeframe": dict(_METRICAS["por_timeframe"]),
+        }
+    return {
+        "ok": True,
+        "desde_ts": int(_METRICAS_T0),
+        "desde_s": int(time.time() - _METRICAS_T0),
+        "predict": instantaneo,
+        "nota": ("contador em memoria, zera no restart; o journal do EA tem "
+                 "portao de 300 s por conta+motivo, este nao tem portao"),
+    }
+
+
+# --------------------------------------------------------------------------
+# P1.3664 (ALFA, 16/11/2026) - CACHE CURTO + PEDIDO PARTILHADO NO /api/ai/predict
+#
+# O QUE FOI MEDIDO ANTES DE MEXER (P1.3662/P1.3663, 17:57-18:07)
+# 103 pedidos/min para 13 simbolos, media de 555-1518 ms por inferencia,
+# maximo de 32 637 ms - mais do que o dobro do AIRequestTimeoutMs = 15000 do
+# EA. Cada pedido acima de 15 s e um 1003 garantido no journal. A frota pede
+# ~56/min (13 graficos a 15 s + servico); o dobro disso significa pedidos
+# REDUNDANTES a competir pela mesma CPU.
+#
+# O QUE ESTE BLOCO FAZ: nada muda no que a inferencia calcula, so quantas
+# vezes o mesmo calculo e feito dentro de uma janela curta.
+#   (a) CACHE de TTL curto por (simbolo, timeframe). Serve a mesma previsao a
+#       quem pedir de novo dentro de XAU_PREDICT_CACHE_S (5 s por omissao).
+#   (b) PARTILHA do pedido em curso: dois pedidos iguais concorrentes esperam
+#       a MESMA inferencia em vez de lancarem duas. E isto que corta o pico -
+#       o cache sozinho nao cortava, porque dois pedidos simultaneos chegam
+#       antes de existir resultado para guardar.
+#
+# PORQUE E QUE 5 SEGUNDOS E DEFENSAVEL: o proprio EA ja aceita previsao com
+# 15 s de idade (AIPollSeconds = 15, Config.mqh:51). O cache do gateway e
+# MAIS curto que o cache do cliente, logo nao acrescenta erro de decisao que
+# o cliente ja nao tivesse assumido. A previsao servida e sempre uma previsao
+# REAL calculada sobre candles reais - nunca um valor fabricado: o cache so
+# devolve o que a inferencia devolveu.
+#
+# DESLIGAR: XAU_PREDICT_CACHE_S=0 desliga o cache (a partilha de pedido
+# concorrente mantem-se: partilhar nao devolve nada velho, devolve o
+# resultado do pedido que ja estava a correr).
+# --------------------------------------------------------------------------
+def _pred_cache_ttl_s() -> float:
+    try:
+        valor = float(os.environ.get("XAU_PREDICT_CACHE_S", "5") or 0.0)
+    except (TypeError, ValueError):
+        return 5.0
+    return max(0.0, valor)
+
+
+_PRED_CACHE: dict[tuple[str, str], tuple[float, Any]] = {}
+_PRED_TAREFAS: dict[tuple[str, str], Any] = {}
+_PRED_LOCK = threading.Lock()
+
+
+def _pred_cache_get(chave: tuple[str, str]) -> Any | None:
+    """Devolve a previsao em cache se ainda estiver dentro do TTL."""
+    ttl = _pred_cache_ttl_s()
+    if ttl <= 0:
+        return None
+    with _PRED_LOCK:
+        entrada = _PRED_CACHE.get(chave)
+    if not entrada:
+        return None
+    quando, resposta = entrada
+    if (time.time() - quando) > ttl:
+        return None
+    return resposta
+
+
+def _pred_cache_put(chave: tuple[str, str], resposta: Any) -> None:
+    """Guarda o resultado e poda entradas velhas (o dicionario nao cresce sem fim)."""
+    ttl = _pred_cache_ttl_s()
+    if ttl <= 0:
+        return
+    agora = time.time()
+    with _PRED_LOCK:
+        _PRED_CACHE[chave] = (agora, resposta)
+        if len(_PRED_CACHE) > 256:
+            limite = agora - (ttl * 4.0)
+            for antiga in [k for k, v in _PRED_CACHE.items() if v[0] < limite]:
+                _PRED_CACHE.pop(antiga, None)
+
+
+# --------------------------------------------------------------------------
+# P1.3671 (ALFA, 16/11/2026) - TETO DE TEMPO NO SERVIDOR
+#
+# O QUE ESTAVA MEDIDO ANTES DE MEXER (18:18, processo pid 16504): um unico
+# calculo de previsao levou **26 195,8 ms** (`calc_ms_max` do `/api/metrics`)
+# contra `AIRequestTimeoutMs = 15000` (`Config.mqh:65`). Um calculo acima de
+# 15 s e um `1003` garantido no journal: o cliente desiste, recebe `corpo=0B`,
+# e o servidor termina o trabalho para ninguem. O cache do P1.3664 reduz a
+# FREQUENCIA destes eventos (menos calculos = menos oportunidades), mas nao
+# corta a CAUDA - um calculo lento continua a acontecer.
+#
+# O QUE ESTE BLOCO FAZ: o servidor deixa de esperar indefinidamente. Aos 12 s
+# (variavel `XAU_PREDICT_TIMEOUT_S`) devolve uma RECUSA COM MOTIVO
+# (`available: false`, `reason: tempo_limite_do_servidor`) em vez de deixar o
+# cliente bater no proprio teto.
+#
+# PORQUE RECUSAR E MELHOR DO QUE ESPERAR
+#   - para o cliente: nao gasta 15 s nem produz `1003`; recebe uma resposta
+#     HTTP valida em 12 s. O EA trata `available=false` como "sem previsao" e
+#     nao opera naquele ciclo - exactamente o que ja acontecia quando o 1003
+#     estourava, mas agora com motivo escrito.
+#   - para o servidor: o trabalho NAO e cancelado (`asyncio.shield`). Quando
+#     termina, o resultado entra no cache e o pedido seguinte aproveita-o. O
+#     `add_done_callback` garante que a tarefa sai do mapa mesmo que ninguem
+#     volte a pedi-la (sem isto ficava la para sempre).
+#   - para a medicao: o `1003` deixa de ser a unica testemunha. Passa a haver
+#     um contador `timeouts_servidor` no `/api/metrics`, que nao tem portao de
+#     log, e o `1003` do journal passa a significar "problema de transporte",
+#     nao "calculo lento".
+#
+# LIMITE DECLARADO: recusar nao acelera a inferencia. Se a media continuar a
+# subir, o que falta e cortar o custo do calculo, nao o tempo de espera.
+# --------------------------------------------------------------------------
+_MOTIVO_TEMPO_SERVIDOR = "tempo_limite_do_servidor"
+
+
+def _pred_timeout_s() -> float:
+    """Teto de tempo do servidor para uma previsao. Por omissao 12 s.
+
+    Clamp em [1, 14]: acima de 14 nao protege nada, porque o cliente desiste
+    primeiro aos 15 s (`Config.mqh:65`) e o resultado e o mesmo `1003`, so que
+    mais tarde. `XAU_PREDICT_TIMEOUT_S=0` NAO desliga o teto - para desligar o
+    teto o valor tem de ser alto, e o clamp impede isso de proposito: um
+    servidor que espera mais do que o cliente e um servidor que trabalha para
+    ninguem.
+    """
+    try:
+        valor = float(os.environ.get("XAU_PREDICT_TIMEOUT_S", "12") or 12.0)
+    except (TypeError, ValueError):
+        return 12.0
+    return min(14.0, max(1.0, valor))
+
+
+def _pred_tarefa_terminou(chave: tuple[str, str], tarefa) -> None:  # type: ignore[no-untyped-def]
+    """Limpa a tarefa partilhada e guarda o resultado tardio no cache.
+
+    Chamado pelo `add_done_callback`, logo corre no event loop. Uma tarefa que
+    terminou depois de o cliente desistir e trabalho feito: guarda-se, para o
+    pedido seguinte o aproveitar em vez de o repetir.
+    """
+    try:
+        with _PRED_LOCK:
+            if _PRED_TAREFAS.get(chave) is tarefa:
+                _PRED_TAREFAS.pop(chave, None)
+        if tarefa.cancelled():
+            return
+        if tarefa.exception() is not None:
+            return
+        resultado = tarefa.result()
+        if isinstance(resultado, dict):
+            _pred_cache_put(chave, resultado)
+    except Exception:  # noqa: BLE001 - limpeza nunca derruba o event loop
+        pass
+
+
+# --------------------------------------------------------------------------
 # Autenticacao por usuario (fluxo do app Android)
 #
 # O desktop injeta XAU_GATEWAY_TOKEN pelo proprio Tauri. O Android nao tem
@@ -247,23 +580,6 @@ async def ai_models() -> dict:
     return {"ok": True, "models": model_catalog(), "source": "local_model_artifacts"}
 
 
-@app.get("/api/models/catalog")
-async def models_catalog() -> dict:
-    from Python.train_universal_onnx import read_manifest
-    manifest = read_manifest()
-    if not manifest:
-        return {"ok": False, "motivo": "model_manifest.json ausente", "models": []}
-    return {"ok": True, "model": manifest, "source": "model_manifest.json"}
-
-
-@app.get("/api/models/asset-profiles")
-async def models_asset_profiles(catalog_json: str = "[]") -> dict:
-    meta = models_profiles_api.load_manifest_metrics()
-    catalog = models_profiles_api.parse_catalog(catalog_json)
-    return {"ok": True, "count": len(models_profiles_api.build_profiles(catalog, meta)),
-            "profiles": models_profiles_api.build_profiles(catalog, meta)}
-
-
 @app.get("/api/ai/trained")
 async def ai_trained() -> dict:
     """Inventario dos modelos realmente treinados, com os metricos do treino.
@@ -298,6 +614,7 @@ async def ai_predict(symbol: str = "", timeframe: str = "") -> dict:
     e dizer isso logo, sem tocar no terminal.
     """
     if not str(symbol or "").strip():
+        _metrics_predict("", timeframe, None, "sem_simbolo")
         return {
             "ok": False,
             "available": False,
@@ -305,10 +622,56 @@ async def ai_predict(symbol: str = "", timeframe: str = "") -> dict:
             "symbol": "",
             "timeframe": timeframe,
         }
-    return await _read_call(
-        lambda: _ai_predict_sync(symbol, timeframe),
-        timeout=30.0,
-    )
+    inicio = time.time()
+    # P1.3664: cache curto e partilha do pedido em curso. `chave` e o par que
+    # define o calculo; dois pedidos com a mesma chave sao o MESMO calculo.
+    chave = (str(symbol).strip().upper(), str(timeframe or "").strip().upper())
+    em_cache = _pred_cache_get(chave)
+    if em_cache is not None:
+        _metrics_predict(symbol, timeframe, em_cache, "cache")
+        return copy.deepcopy(em_cache)
+
+    tarefa = _PRED_TAREFAS.get(chave)
+    partilhado = tarefa is not None and not tarefa.done()
+    if not partilhado:
+        tarefa = asyncio.ensure_future(
+            _read_call(lambda: _ai_predict_sync(symbol, timeframe), timeout=30.0))
+        _PRED_TAREFAS[chave] = tarefa
+        # P1.3671: sair do mapa e guardar o resultado tardio, mesmo que o
+        # cliente ja tenha desistido. Sem isto a tarefa ficava no dicionario
+        # para sempre quando o teto estoura e ninguem volta a pedir.
+        tarefa.add_done_callback(lambda t, k=chave: _pred_tarefa_terminou(k, t))
+    limite = _pred_timeout_s()
+    try:
+        # P1.3671: `shield` protege a inferencia do teto. O cliente recebe a
+        # recusa aos 12 s; o calculo continua e o resultado vai para o cache.
+        resposta = await asyncio.wait_for(asyncio.shield(tarefa), timeout=limite)
+    except asyncio.TimeoutError:
+        decorrido = time.time() - inicio
+        resposta = {
+            "ok": True,
+            "available": False,
+            "reason": _MOTIVO_TEMPO_SERVIDOR,
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "elapsed_ms": round(decorrido * 1000.0, 1),
+            "limite_ms": round(limite * 1000.0, 1),
+        }
+        _metrics_predict(symbol, timeframe, resposta, _MOTIVO_TEMPO_SERVIDOR,
+                         decorrido)
+        return resposta
+    except Exception as exc:  # noqa: BLE001 - a metrica regista e a excecao sobe
+        _metrics_predict(symbol, timeframe, None, type(exc).__name__,
+                         time.time() - inicio)
+        raise
+    finally:
+        if _PRED_TAREFAS.get(chave) is tarefa and tarefa.done():
+            _PRED_TAREFAS.pop(chave, None)
+    _pred_cache_put(chave, resposta)
+    _metrics_predict(symbol, timeframe, resposta,
+                     "partilhado" if partilhado else "",
+                     time.time() - inicio)
+    return copy.deepcopy(resposta)
 
 
 def _ai_predict_sync(symbol: str, timeframe: str) -> dict:  # type: ignore[no-untyped-def]
@@ -386,7 +749,67 @@ def _ai_predict_sync(symbol: str, timeframe: str) -> dict:  # type: ignore[no-un
             "timeframe": timeframe,
         }
     resultado = ai_inference.inferir(symbol, df, timeframe)
-    return {"ok": True, **resultado.para_dict()}
+    resposta = {"ok": True, **resultado.para_dict()}
+    # REFINE 23/11: perfil de spread por hora (ticks reais) viaja JUNTO com a
+    # previsao ate ao EA, porque o servico XAI_RefreshPredictions grava o corpo
+    # tal qual em Data\prediction_<SIM>.json. E MEDICAO: nao altera risco/lote/
+    # alvo/stop, apenas da ao EA o custo real do spread por hora do servidor.
+    # REFINE 23/11: o perfil de spread le ~2M ticks e DEMORA. Nunca bloqueia
+    # a predicao: so anexa se ja estiver em cache; o Calculate em background
+    # fica a cargo do endpoint /api/market/spread-profile (1x/hora por simbolo).
+    try:
+        from backend import spread_profile
+        perfil_spread = spread_profile.cache(simbolo_corretora)
+        if perfil_spread is not None:
+            atr = float(getattr(resultado, "atr", 0.0) or 0.0)
+            ponto = float(getattr(resultado, "point", 0.0) or 0.0)
+            stop_pts = (atr / ponto) if (atr > 0 and ponto > 0) else 0.0
+            if stop_pts > 0:
+                perfil_spread = dict(perfil_spread)
+                p90 = float(perfil_spread.get("spread_p90_points", 0.0))
+                perfil_spread["spread_cost_1r_pct"] = round(100.0 * p90 / stop_pts, 2)
+            resposta["spread_profile"] = perfil_spread
+            resposta["spread_best_hour"] = perfil_spread.get("best_hour", -1)
+            resposta["spread_worst_hour"] = perfil_spread.get("worst_hour", -1)
+            resposta["spread_p90_points"] = perfil_spread.get("spread_p90_points", 0.0)
+            resposta["spread_cost_1r_pct"] = perfil_spread.get("spread_cost_1r_pct", 0.0)
+    except Exception:
+        pass
+    return resposta
+
+
+@app.get("/api/market/calendar-tradingview")
+async def calendar_tradingview_endpoint(force: bool = False) -> dict:
+    """Calendario TradingView: resultado/previsao/anterior + unidade, 19 paises.
+
+    REFINE 23/11: portado do app Android (gratis, sem chave). Fallback para o
+    feed ForexFactory ja existente. Nao altera risco/entrada/saida.
+    """
+    from backend import calendar_tradingview
+    return calendar_tradingview.eventos(force=force)
+
+
+@app.get("/api/market/news")
+async def market_news_endpoint(force: bool = False) -> dict:
+    """Noticias de mercado gratuitas (Google News RSS, fallback news.dat local).
+
+    REFINE 23/11: contexto gratis ja usado no app Android, agora tambem no
+    gateway. Nao negocia e nao altera risco/lote/alvo/stop.
+    """
+    from backend import market_news
+    return market_news.noticias(force=force)
+
+
+@app.get("/api/market/spread-profile")
+async def spread_profile_endpoint(symbol: str = "", stop_points: float = 0.0) -> dict:
+    """Perfil de spread por hora (ticks reais da corretora, 20 dias).
+
+    MEDICAO gratuita: inspirada no indicador SpreadProfileByHour ja instalado
+    no terminal. Nao negocia e nao altera nenhum limite de risco.
+    """
+    from backend import spread_profile
+    dados = spread_profile.perfil(symbol, stop_points)
+    return {"ok": True, **dados}
 
 
 @app.get("/api/copilot/contexto")
@@ -583,13 +1006,13 @@ async def auto_tick() -> dict:
 
 @app.post("/api/auto/sugerir-limites")
 async def auto_sugerir_limites(request: Request) -> JSONResponse:
-    """A IA SUGERE limites de risco. NÃO grava NADA: quem aplica é o operador.
+    """A IA estuda o cenario e SUGERE limites; quem grava e o operador.
 
-    Mesma rota que o gateway legado (`backend/mt5_gateway.py`,
-    `/api/auto/sugerir-limites`): leitura com corpo JSON `{simbolo, timeframe,
-    broker, market}` — declarar/sugerir não executa ordem, não liga motor e não
-    grava limites. Sem isso a aba de Risco ficava com `HTTP 404` porque a rota
-    só existia no servidor legado.
+    MEDIDO em 17/11/2026: a rota existia em `mt5_gateway.py` (porta 9001) e
+    NAO existia aqui. O app passou a subir este modulo
+    (`uvicorn backend.fastapi_gateway:app --port 9027`), e a aba Risco mostrava
+    "IA sem sugestao: HTTP 404" - um 404 de ROTA AUSENTE, nao de dado ausente.
+    Nada e gravado e nada e ligado por esta chamada: ela so devolve numeros.
     """
     try:
         corpo = await request.json()
@@ -597,13 +1020,77 @@ async def auto_sugerir_limites(request: Request) -> JSONResponse:
         return _send({"ok": False, "error": "corpo JSON invalido"}, 400)
     if not isinstance(corpo, dict):
         return _send({"ok": False, "error": "corpo JSON invalido"}, 400)
+    simbolo = str(corpo.get("simbolo") or "").strip()
+    timeframe = str(corpo.get("timeframe") or "").strip()
+    if not simbolo or not timeframe:
+        # Recusa com motivo, nunca limite padrao: sugestao sem par/periodo
+        # seria numero magico apresentado como decisao da IA.
+        return _send({"ok": False, "error": "simbolo e timeframe sao obrigatorios"}, 400)
+    try:
+        resultado = await _read_call(
+            auto_engine.sugerir_limites,
+            simbolo,
+            timeframe,
+            str(corpo.get("broker") or ""),
+            str(corpo.get("market") or ""),
+            timeout=30.0,
+        )
+        return _send(resultado if isinstance(resultado, dict) else {"ok": True})
+    except Exception as exc:  # noqa: BLE001 - o motivo vai para a tela
+        return _send({"ok": False, "error": str(exc)}, _read_error_status(exc))
 
-    return _send(auto_engine.sugerir_limites(
-        str(corpo.get("simbolo") or ""),
-        str(corpo.get("timeframe") or ""),
-        str(corpo.get("broker") or ""),
-        str(corpo.get("market") or ""),
-    ))
+
+@app.get("/api/publico/ohlc")
+async def publico_ohlc(
+    symbol: str = Query(min_length=1),
+    timeframe: str = Query(default="M5"),
+    limit: int = Query(default=300, ge=1, le=2000),
+) -> JSONResponse:
+    """Candles da fonte publica (sem corretora conectada).
+
+    MEDIDO em 17/11/2026: existia so em `mt5_gateway.py`. Sem esta rota, o
+    grafico caia em "Grafico indisponivel: Gateway HTTP 404" sempre que nenhuma
+    conexao estava configurada - porque e justamente nesse caso que o
+    `AcompanharModelos` escolhe a rota LIVRE em vez de `/api/universal/candles`.
+    """
+    from backend import mercado_publico
+
+    try:
+        resultado = await _read_call(
+            mercado_publico.ohlc_publico, symbol, timeframe, limit, timeout=20.0
+        )
+        return _send(resultado if isinstance(resultado, dict) else {"ok": True, "candles": resultado})
+    except ValueError as exc:
+        return _send({"ok": False, "error": str(exc)}, 400)
+    except Exception as exc:  # noqa: BLE001 - "nao consegui perguntar" != "nao tem dado"
+        return _send({"ok": False, "error": str(exc), "fonte": None}, 503)
+
+
+@app.get("/api/latencia")
+async def latencia() -> JSONResponse:
+    """Latencia medida por corretora. Ausente aqui = 404 silencioso na barra."""
+    from backend import latencia as _latencia
+
+    try:
+        resultado = await _read_call(_latencia.medir_todas, timeout=20.0)
+        return _send(resultado if isinstance(resultado, dict) else {"ok": True})
+    except Exception as exc:  # noqa: BLE001
+        return _send({"ok": False, "error": str(exc)}, 503)
+
+
+@app.get("/api/acesso")
+async def acesso() -> JSONResponse:
+    """Nivel de acesso do operador. Ausente aqui = 404 silencioso no menu."""
+    from backend.acesso import acesso as _acesso
+
+    try:
+        resultado = await _read_call(_acesso, timeout=12.0)
+        payload = dict(resultado) if isinstance(resultado, dict) else {}
+        payload.setdefault("ok", True)
+        payload["withdrawals_enabled"] = False
+        return _send(payload)
+    except Exception as exc:  # noqa: BLE001
+        return _send({"ok": False, "error": str(exc)}, 503)
 
 
 @app.get("/api/universal/overview")
@@ -1100,84 +1587,6 @@ async def risk_state_route() -> JSONResponse:
         return _send(await _read_call(gw._risk_state, gw._mt5()))
     except Exception as exc:
         return _send({"ok": False, "error": str(exc)}, 503)
-
-
-@app.get("/api/mobile/control")
-async def mobile_control_route() -> JSONResponse:
-    """Retrato da conta ativa para a tela movel - SOMENTE LEITURA.
-
-    O QUE ESTA ROTA NAO FAZ: nao envia ordem, nao fecha posicao, nao altera
-    stop, nao cancela e nao movimenta saldo. Nao existe verbo de escrita para
-    ela em lugar nenhum - `backend/mobile_control.py` so normaliza leitura.
-
-    POR QUE ELA NAO REAPROVEITA `/api/positions`
-    --------------------------------------------
-    Aquele payload devolve a lista crua. O celular precisa de tres coisas que a
-    lista crua nao da: (a) `ok`/`motivo` por bloco, para separar "nao ha
-    posicao" de "nao consegui perguntar"; (b) simbolo vazio RECUSADO com
-    motivo, em vez de virar linha em branco; (c) o selo `read_only` explicito,
-    que a tela usa como fail-closed (servidor que nao declarar leitura nao e
-    exibido).
-
-    `positions_available`/`pending_orders_available` vem do terminal e NAO sao
-    presumidos: sem eles, lista vazia por falha seria lida como conta zerada.
-    """
-    bruto: dict = {}
-    erros: list[str] = []
-    try:
-        bruto = await _read_call(gw._payload)
-    except Exception as exc:  # noqa: BLE001 - leitura nunca derruba a rota
-        erros.append(f"terminal: {exc}")
-    try:
-        saude = gw._status_snapshot()
-    except Exception as exc:  # noqa: BLE001
-        saude = {"ok": False}
-        erros.append(f"saude: {exc}")
-    try:
-        risco = await _read_call(gw._risk_state, gw._mt5())
-    except Exception as exc:  # noqa: BLE001
-        risco = {}
-        erros.append(f"risco: {exc}")
-
-    corpo = mobile_control.montar_de_leitura(bruto, saude, risco, erros)
-    return _send(corpo)
-
-
-@app.post("/api/mobile/command")
-async def mobile_command_route(body: dict[str, Any] = Body(...)) -> JSONResponse:
-    """Comando ao painel movel - TRAVADO POR PADRAO (fail-closed).
-
-    So monta file quando `XAU_MOBILE_CONTROL_ENABLED=1` no ambiente; sem a
-    variavel a rota responde 403 e NAO escreve em lugar nenhum. Mesmo ligado,
-    "executar" significa APENAS gravar um comando unico em `Data/remote_cmd.json`
-    para quem quer que o consuma depois (EA, quando recompilado para ler o
-    arquivo). Esta rota NUNCA dispara ordem no MT5 diretamente.
-    """
-    if not mobile_command.comandos_habilitados():
-        return _send(
-            {
-                "ok": False,
-                "error": "controle movel desabilitado (XAU_MOBILE_CONTROL_ENABLED != 1)",
-            },
-            403,
-        )
-
-    confirm = body.get("confirm") is True
-    if not confirm:
-        return _send({"ok": False, "error": "confirm=true obrigatorio para destravar acao."}, 400)
-
-    try:
-        payload = mobile_command.montar_comando(
-            action=body.get("action"),
-            value=body.get("value"),
-            profile=body.get("profile"),
-            command_id=body.get("command_id"),
-            confirm=confirm,
-        )
-        resultado = mobile_command.escrever_comando(payload)
-    except ValueError as exc:
-        return _send({"ok": False, "error": str(exc)}, 400)
-    return _send(resultado)
 
 
 @app.get("/api/economic/alerts")
@@ -1765,6 +2174,14 @@ def main() -> None:
     )
     uvicorn.run(app, host="127.0.0.1", port=_porta, log_level="info")
 
+
+# Rotas espelhadas da mt5_gateway (auto/sugerir-limites, publico/ohlc).
+# Sem isto o modulo ficava orfao e test_sem_codigo_morto.py reprovava.
+try:
+    from backend import rotas_espelho_mt5
+    app.include_router(rotas_espelho_mt5.router)
+except Exception:
+    pass
 
 if __name__ == "__main__":
     main()

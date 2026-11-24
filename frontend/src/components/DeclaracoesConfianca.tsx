@@ -15,7 +15,6 @@ import { APP_VERSION } from '../version';
 import '../theme/confianca.css';
 
 const api = apiBase();
-
 /** A trava unica do projeto. Nenhuma delas muda em nenhum plano. */
 const TRAVAS_FIXAS = [
   {
@@ -49,6 +48,7 @@ export default function DeclaracoesConfianca({ statusGateway }: Props) {
   const [conta, setConta] = useState<{ login?: string; broker?: string; servidor?: string } | null>(
     null,
   );
+  const [gateway, setGateway] = useState<string | null>(null);
   /*
     A rota antiga `/api/mt5/account` nao aparece mais neste arquivo, e o teste
     `tests/test_endpoints_e_seguranca.py::test_rota_chamada_existe` garante
@@ -73,6 +73,25 @@ export default function DeclaracoesConfianca({ statusGateway }: Props) {
     agora pega: ele compara as rotas que o frontend chama com as que o backend
     declara, arquivo a arquivo.
   */
+  /* Health do gateway local: se responder, mostra ok + build; se nao responder,
+     o texto diz "nao verificado" em vez de fingir. */
+  useEffect(() => {
+    let vivo = true;
+    fetch(`${api}/api/health`, { signal: AbortSignal.timeout(4000) })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!vivo) return;
+        const build = d?.gateway_build ?? d?.service ?? null;
+        setGateway(build ? String(build) : 'respondendo sem build declarado');
+      })
+      .catch(() => {
+        if (vivo) setGateway(null);
+      });
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
   useEffect(() => {
     let vivo = true;
     fetch(`${api}/api/status`, { signal: AbortSignal.timeout(5000) })
@@ -106,8 +125,8 @@ export default function DeclaracoesConfianca({ statusGateway }: Props) {
         <div className="selo-desenvolvedor">
           <span className="selo-rotulo">Desenvolvido por</span>
           <strong className="selo-nome-dev">Henrique de Carvalho</strong>
-          <a className="selo-contato" href="mailto:rickjax123@gmail.com">
-            rickjax123@gmail.com
+          <a className="selo-contato" href="mailto:rickjax1234@gmail.com">
+            rickjax1234@gmail.com
           </a>
           <a className="selo-contato" href="tel:+5521983158911">
             +55 (21) 9-8315-8911
@@ -118,12 +137,14 @@ export default function DeclaracoesConfianca({ statusGateway }: Props) {
       <section className="confianca-bloco">
         <h3>O que este app e</h3>
         <p>
-          Terminal local de operacao com governanca de risco, para ouro/metal e multiplas corretoras.
-          O modelo de IA roda na sua maquina, aponta a direcao e mostra a confianca — voce decide se
-          a ordem sai. O app nao negocia sozinho sem voce pedir.
+          Terminal local de operacao com governanca de risco, para ouro/metal. O modelo de IA roda na
+          sua maquina, aponta a direcao e mostra a confianca - voce decide se a ordem sai. O EA opera
+          no MetaTrader 5 (build v1.2.210, janela de forward de 30 dias aberta em 12/11/2026) e o
+          desktop fala com o gateway local do proprio app - sem token valido de sessao, toda rota
+          devolve 401. O app nao negocia sozinho sem voce pedir.
         </p>
         <p className="muted">
-          Conta conectada agora:{' '}
+          Build: XAU AI PRO v{APP_VERSION} · Windows · conta conectada agora:{' '}
           {conta?.login
             ? `${conta.login} · ${conta.broker ?? conta.servidor ?? 'broker local'}`
             : 'nenhuma (o app funciona sem corretora)'}
@@ -152,7 +173,8 @@ export default function DeclaracoesConfianca({ statusGateway }: Props) {
         {/* statusGateway nao e passado por caller hoje; o fallback nao finge um teste
             que nao rodou ("verificando...") — declara o que a tela sabe. */}
         <p className="muted">
-          Estado do gateway agora: {statusGateway ?? 'não verificado nesta tela'}
+          Estado do gateway agora:{' '}
+          {statusGateway ?? gateway ?? 'nao verificado (a chamada /api/health falhou ou o gateway ainda nao subiu)'}
         </p>
       </section>
     </div>

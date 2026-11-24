@@ -63,6 +63,13 @@ const estado = vi.hoisted(() => ({
   }>,
   pedidos: [] as Array<{ symbol: string; market: string; timeframe: string }>,
   /**
+   * O `market` COM QUE `useCatalogoAtivos` FOI CHAMADO, em cada render.
+   *
+   * E o argumento que vira `?market=` na URL do catalogo — e o elo em que o
+   * singular `metal` derrubava a ficha e, com ela, o grafico (12/11/2026).
+   */
+  escoposCatalogo: [] as string[],
+  /**
    * Quando preenchido, `getCandles` LANCA este motivo — e é o caso do
    * intervalo de 30s falhar depois de o gráfico já ter dado (captura das
    * 12:24, MT5 fechado).
@@ -99,7 +106,16 @@ vi.mock('../hooks/useAppStore', () => ({
     seletor({ selectedSymbol: estado.parDaTela }),
 }));
 vi.mock('../hooks/useCatalogoAtivos', () => ({
-  useCatalogoAtivos: () => estado.catalogo,
+  /*
+    O ESCOPO COM QUE O CATALOGO FOI PEDIDO (12/11/2026).
+    Sem guardar o argumento, este duble escondia metade do defeito: o catalogo
+    era pedido com `market=metal` (recusado pelo gateway) e o teste nao via —
+    so enxergava o sintoma la na frente, no grafico caindo para o publico.
+  */
+  useCatalogoAtivos: (_broker: string, market: string) => {
+    estado.escoposCatalogo.push(String(market ?? ''));
+    return estado.catalogo;
+  },
 }));
 vi.mock('../lib/marketApi', () => ({
   /*
@@ -242,6 +258,7 @@ beforeEach(() => {
   estado.auto = null;
   estado.parDaTela = 'BTCUSD';
   estado.pedidos = [];
+  estado.escoposCatalogo = [];
   estado.catalogo = [];
   estado.falhaCandles = null;
   estado.fonte = null;
@@ -934,5 +951,89 @@ describe('alternar sem-par e com-par nao quebra os hooks (11/10/2026)', () => {
     // PROVA NEGATIVA: a secao nao caiu no ErrorBoundary em nenhuma troca.
     expect(document.body.textContent ?? '').not.toContain('Minified React error');
     expect(document.body.textContent ?? '').not.toContain('indisponível');
+  });
+});
+
+/*
+  O MERCADO DO MOTOR E O SINGULAR DA CORRETORA (12/11/2026)
+  =========================================================
+  MEDIDO no app instalado 1.2.181, captura das 22:40, aba ROBO, grafico ao vivo
+  de XAUUSD M1:
+
+      M1 · Abr 3.917,60089766 · Max igual · Min igual · Fecha igual
+         · yahoo · dados publicos (sem execucao)
+
+  O yahoo estava DECLARADO — por isso nada parecia quebrado. A cadeia medida:
+
+    1. `auto.market` chega `metal`, no SINGULAR (a classe que a corretora
+       publica: `asset_class = metal`).
+    2. `useCatalogoAtivos(mt5, 'metal')` pedia
+       `/api/universal/assets?broker=mt5&market=metal`.
+    3. O gateway recusava: so conhece `metals` (o CMD corrigiu o
+       `normalize_market` do lado de la em 12/11, e a correcao daqui e a outra
+       metade — o app nao pode MANDAR o nome que precisa ser traduzido).
+    4. Sem catalogo nao ha ficha, sem ficha o mercado derivado fica `''`, e
+       `configurado` falso cai na rota LIVRE (`/api/publico/ohlc`) — yahoo, com
+       a ultima vela degenerada (Abr = Max = Min = Fecha).
+
+  O caso 2 e o que este teste mede pelo caminho que o componente controla: o
+  mercado que ele DERIVA e entrega adiante. O duble de `useCatalogoAtivos`
+  recebe esse mercado como argumento, e aqui ele e lido.
+*/
+describe('o mercado do motor chega ao gateway na grafia do gateway (12/11/2026)', () => {
+  it('PROVA: `auto.market = metal` vira `metals` no pedido dos candles', async () => {
+    estado.auto = {
+      ativo: false,
+      simbolo: 'XAUUSD',
+      broker: 'mt5',
+      market: 'metal',
+      timeframe: 'M1',
+    };
+    estado.parDaTela = 'XAUUSD';
+    estado.catalogo = [{ symbol: 'XAUUSD', assetClass: 'metal', contractSize: 100 }];
+    render(<AcompanharModelos />);
+
+    await waitFor(() => expect(estado.pedidos.length).toBeGreaterThan(0), { timeout: 5000 });
+    // O pedido sai com o plural — e NAO com o singular que o motor mandou.
+    expect(estado.pedidos[0].market).toBe('metals');
+    expect(estado.pedidos[0].market).not.toBe('metal');
+    // E o grafico recebe o mesmo nome que a consulta.
+    expect(screen.getByTestId('market').textContent).toBe('metals');
+    /*
+      E o CATALOGO tambem foi pedido no plural: era ESTE o elo que derrubava a
+      ficha (e, sem ficha, o grafico inteiro). Nenhum render pediu `metal`.
+    */
+    expect(estado.escoposCatalogo).not.toContain('metal');
+    expect(estado.escoposCatalogo).toContain('metals');
+  });
+
+  it('PROVA: ficha AINDA NAO CHEGOU — o pedido e da CORRETORA, nunca do publico', async () => {
+    /*
+      Este e o caso exato da captura: o catalogo do gateway ainda nao voltou
+      (ou voltou vazio porque o mercado foi recusado), entao `mercadoDaFicha`
+      e `null` e quem manda e o `auto.market` do motor.
+
+      Com o singular repassado, a cadeia terminava no yahoo. Com a grafia
+      canonica, o pedido sai para o MT5 — que E o dono do dado quando o
+      terminal esta aberto.
+    */
+    estado.auto = {
+      ativo: false,
+      simbolo: 'XAUUSD',
+      broker: 'mt5',
+      market: 'metal',
+      timeframe: 'M1',
+    };
+    estado.parDaTela = 'XAUUSD';
+    estado.catalogo = [];
+    render(<AcompanharModelos />);
+
+    await waitFor(() => expect(estado.pedidos.length).toBeGreaterThan(0), { timeout: 5000 });
+    // NENHUM pedido pela rota livre: o publico nao e resposta para um mercado
+    // que o motor declarou.
+    expect(estado.pedidos.every((p) => p.market !== 'livre')).toBe(true);
+    expect(estado.pedidos[0].market).toBe('metals');
+    // E o grafico desenha com o que veio do MT5, nao com o vazio do publico.
+    await waitFor(() => expect(screen.getByTestId('candles').textContent).toBe('1'));
   });
 });

@@ -60,8 +60,8 @@ const NAO_E_TESTE = (caminho: string) => !/\.test\./.test(caminho);
  * IDs de tema que tinham nome de ativo, e que NAO podem voltar (10/10/2026).
  *
  * MEDIDO: os dois temas se chamavam `xau_dark` e `btc_dark` — apelidos de COR com
- * nome de ativo. Renomeados para a cor que descrevem (`dourado_dark`,
- * `laranja_dark`), com migracao em `useTheme.ts` para a preferencia ja salva.
+ * nome de ativo. `xau_dark` foi renomeado para `dourado_dark` (10/10/2026);
+ * `laranja_dark` foi REMOVIDO (13/11/2026) e `btc_dark` agora migra para `dark`.
  *
  * Estao fora do `NOMES_DE_ATIVO` porque `XAU` e `BTC` sozinhos nao podem entrar
  * la: o nome do PRODUTO ȁ "XAU AI PRO" e apareceria falso positivo em todo
@@ -126,8 +126,8 @@ describe('o frontend NAO presume nenhum ativo', () => {
 
   it('nenhum ID de tema com nome de ativo', () => {
     /*
-      Os dois temas `xau_dark` e `btc_dark` foram renomeados para
-      `dourado_dark` e `laranja_dark` em 10/10/2026.
+      Os temas `xau_dark` e `btc_dark` viraram `dourado_dark` (10/10/2026) e
+      `dark` (13/11/2026, com `laranja_dark` removido).
 
       REGRA: o ID velho pode existir em UM lugar so — o mapa de MIGRACAO de
       `hooks/useTheme.ts`, e so como CHAVE, para a preferencia ja salva do
