@@ -45,14 +45,20 @@ jobs:
           java-version: "17"
 
       - name: SDK Android
-        uses: android-actions/setup-android@v3
-        with:
-          cmdline-tools-version: 11076708
-          accept-sdk-licenses: true
+        # O runner ubuntu-latest ja traz cmdline-tools pre-instalados. A action
+        # setup-android@v3 instala o pacote 'tools' (obsoleto) e reprova com
+        # exit code 1 (medido em 24/11/2026). Usamos o sdkmanager do runner.
+        run: |
+          export ANDROID_HOME=/usr/local/lib/android/sdk
+          export ANDROID_SDK_ROOT=$ANDROID_HOME
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1 || true
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-35" "build-tools;34.0.0"
 
       - name: NDK
         # 28.2.13676358 e a versao medida no PC do DONO.
-        run: sdkmanager "ndk;28.2.13676358"
+        run: |
+          export ANDROID_HOME=/usr/local/lib/android/sdk
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;28.2.13676358"
 
       # O nucleo Rust e o mesmo do desktop; no Android ele entra como biblioteca.
       - name: Compilar nucleo Rust (release)
