@@ -100,6 +100,8 @@ export function temWsConfigurado(): boolean {
 // ---------------------------------------------------------------------------
 
 const SESSION_KEY = 'xau-session-token';
+const SESSION_EXPIRY_KEY = 'xau-session-expiry';
+const LEMBRAR_KEY = 'xau-lembrar-dias';
 
 export function sessionToken(): string {
   const sessao = stored(SESSION_KEY);
@@ -199,4 +201,20 @@ export function isGatewayRequest(input: unknown): boolean {
   } catch {
     return false;
   }
+}
+
+
+// Exportacoes usadas por UserSessionGate/LoginScreen (perdidas no conflito 24/11).
+export function sessionExpirou(): boolean {
+  try {
+    const exp = typeof window !== "undefined" ? window.localStorage.getItem(SESSION_EXPIRY_KEY) : null;
+    if (!exp) return false; // token fixo embutido no APK nunca expira
+    return Date.now() >= Number(exp);
+  } catch { return false; }
+}
+
+export function lembrarSessao(dias: number): void {
+  try {
+    if (typeof window !== "undefined") window.localStorage.setItem(LEMBRAR_KEY, String(Math.max(0, dias)));
+  } catch {}
 }
