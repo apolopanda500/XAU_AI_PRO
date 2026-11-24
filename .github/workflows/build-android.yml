@@ -46,9 +46,13 @@ jobs:
 
       - name: SDK Android
         uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: 11076708
+          accept-sdk-licenses: true
 
       - name: NDK
-        run: sdkmanager "ndk;26.3.11579264"
+        # 28.2.13676358 e a versao medida no PC do DONO.
+        run: sdkmanager "ndk;28.2.13676358"
 
       # O nucleo Rust e o mesmo do desktop; no Android ele entra como biblioteca.
       - name: Compilar nucleo Rust (release)
