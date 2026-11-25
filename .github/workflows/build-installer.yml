@@ -18,14 +18,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout completo (historico)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # O gitleaks so ve o que esta no historico. Sem `fetch-depth: 0` a
           # busca fica restrita ao ultimo commit e passa por cima de um
           # segredo que entrou e saiu antes.
           fetch-depth: 0
       - name: Varredura de segredos (historico completo)
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Impede o job de publicar o relatorio em Run Analysis mesmo
@@ -38,10 +38,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Python 3.11
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.11"
           cache: "pip"
@@ -83,7 +83,7 @@ jobs:
           }
 
       - name: Publicar artefato (todas as execucoes)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: XAU_AI_PRO_Setup
           path: dist/XAU_AI_PRO_Setup_*.exe

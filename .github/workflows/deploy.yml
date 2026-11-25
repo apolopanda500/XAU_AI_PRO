@@ -41,11 +41,11 @@ jobs:
       package-name: ${{ steps.package.outputs.name }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
@@ -71,7 +71,7 @@ jobs:
           zip -r "dist/${PN}.zip" Python backend app mcp requirements.txt > /dev/null
           echo "name=${PN}" >> "$GITHUB_OUTPUT"
       - name: Upload artefato
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7
         with:
           name: pkg-${{ steps.package.outputs.name }}
           path: dist/*.zip
