@@ -31,12 +31,19 @@ de um terminal específico.
 
 ```json
 {"schema":"ea-heartbeat.v1","state":"RUNNING","timestamp":"2026.10.26 22:10:05",
- "login":12345678,"server":"MetaQuotes-Demo","symbol":"XAUUSD","timeframe":15,
+ "login":12345678,"server":"MetaQuotes-Demo","symbol":"FLEET","writer_symbol":"XAUUSD",
+ "timeframe":0,"writer_timeframe":15,
  "autotrading":true,"balance":1000.00,"equity":1000.00,"positions":0,"write_count":123}
 ```
 
-`timestamp` é **hora do servidor**. Use exatamente esse valor no campo `ts` do
-comando (ver 3.3).
+`timestamp` é **UTC (`TimeGMT`, v1.2.203)**. Use exatamente esse valor no campo
+`ts` do comando (ver 3.3).
+
+Desde 25/11/2026 `symbol`/`timeframe` descrevem a **frota** de EAs da conta,
+não o último gráfico que gravou o arquivo comum: várias instâncias LIVE
+compartilham `XAU_AI_PRO_heartbeat.json` e, antes disso, o leitor via o símbolo
+oscular a cada segundo. `writer_symbol`/`writer_timeframe` são campos **aditivos**
+e dizem quem gravou por último; o schema continua `ea-heartbeat.v1`.
 
 ### 2.2 Comando (app → EA)
 

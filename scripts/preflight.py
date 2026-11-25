@@ -404,13 +404,19 @@ AUTORIZACOES_MQL5: dict[str, dict[str, str]] = {
     "Integration/EAHeartbeat.mqh": {
         "commit": "pendente",
         "motivo": (
-            "Integracao do modulo de heartbeat que existia apenas no terminal. "
-            "Grava XAU_AI_PRO_heartbeat.json (FILE_COMMON), consumido por "
-            "backend/ea_manager.py para dizer se o EA esta vivo. Copiado "
-            "verbatim, sem alteracao."
+            "MEDIDO 25/11/2026: varias instancias LIVE (GOLD, BTCUSD, ETHUSD, "
+            "EURUSD) gravam o MESMO XAU_AI_PRO_heartbeat.json em FILE_COMMON e "
+            "o gateway le o ultimo gravador. O campo `symbol` oscilava a cada "
+            "segundo e o TopNav alternava `no grafico · EURUSD 5` e `no grafico "
+            "· GOLD 5`. O heartbeat representa a FROTA de EAs da conta, nao um "
+            "grafico: `symbol` virou rotulo estavel `FLEET` e `timeframe` 0; o "
+            "simbolo/timeframe reais foram para `writer_symbol`/"
+            "`writer_timeframe` (campos aditivos, schema v1 inalterado). A "
+            "separacao do backtest (XAU_AI_PRO_heartbeat_tester.json) ficou "
+            "intocada. Nenhum campo de risco/ordem foi alterado."
         ),
-        "compilado": "sim - junto com o acima",
-        "reanexado": "NAO - mesma razao",
+        "compilado": "sim - MetaEditor64, pytest tests/test_mql5_compila.py: 2 passed",
+        "reanexado": "pendente - exige reanexar os EAs no MT5 sem fechar o terminal",
     },
     "Enterprise/VersionManager.mqh": {
         "commit": "pendente",

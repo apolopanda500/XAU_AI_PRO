@@ -244,13 +244,31 @@ mudou duas vezes durante a sessao (`9468 → 10536 → 15936`) sem acao desta
 sessao; se o operador nao reiniciou o MT5, o motivo precisa ser apurado antes
 de confiar na continuidade do forward.
 
-### Abertos para decisao do operador
+### Tres decisoes resolvidas (autorizadas e recomendadas pelo operador)
 
-1. Assinatura definitiva do APK: o instalado usa a chave debug do SDK; qual
-   keystore de producao deve assinar o artefato final?
-2. Heartbeat `EA:` oscilante: varios EAs escrevem o mesmo
-   `XAU_AI_PRO_heartbeat.json`. Corrigir exige recompilar e reanexar EAs nos
-   graficos com forward/backtest em andamento. Autorizar a intervencao?
-3. `scripts/exportar_dataset_mt5.py` esta modificado por outra mao (inclusao
-   de `GOLD`, `BTCUSD`, `ETHUSD`). Foi deixado fora do commit `4a3e0e83`;
-   deseja que seja separado em commit proprio?
+| Decisao | Antes | Depois (medido) |
+|---|---|---|
+| Dataset MT5 | `SIMBOLOS` so com `XAUUSD`; `GOLD` nunca exportado e `MULTI_METALS` aprendeu com 384 barras de um simbolo que o grafico nao executa | Commit separado `6cc5e53` publicado em `origin/main` com `GOLD`, `BTCUSD`, `ETHUSD`. Ausente na corretora e ignorado com mensagem, nunca inventado. |
+| Assinatura do APK | debug key do SDK (`CN=Android Debug`), SHA `921DB1A0.BE8BD4A4` | Keystore de release dedicada `C:\Users\Micro\.android\xau-ai-pro-release.jks`, alias `xau-ai-pro`, RSA 2048, validade 10000 dias; senha aleatoria em `xau-ai-pro-release.key` com ACL restrita (nunca impressa). APK `qa-android/ciclo2/assinado/app-universal-release.apk`, SHA-256 `8A493028...7428C2`, `apksigner verify`: **Verifies**, v2=true, v3=true, 1 signer, DN `CN=XAU AI PRO`. `versionCode=1002191`, `versionName=1.2.191` inalterados. `adb uninstall` + `adb install` **Success**. |
+| Heartbeat oscilante | `/api/status` com `ea_heartbeat.symbol` alternando entre `EURUSD`, `GOLD`, `BTCUSD`; TopNav alternava `no gráfico · EURUSD 5` / `no gráfico · GOLD 5` | `Integration/EAHeartbeat.mqh` (copia canonica **e** embutida): `symbol="FLEET"`, `timeframe=0`, com `writer_symbol`/`writer_timeframe` aditivos. Separacao do tester intacta. `pytest tests/test_heartbeat_frota.py`: **3 passed** (inclui prova negativa: o formato antigo com `_Symbol` reprova). `pytest tests/test_mql5_compila.py`: **2 passed** no MetaEditor64. |
+
+Keystore/senha ficam FORA do repositorio e nao sao registrados em log, commit
+ou mensagem. Se o operador ja tiver uma keystore corporativa, basta substituir
+o caminho e o alias na proxima assinatura; o APK atual e valido para uso e
+instalacao, mas nao tera a mesma identidade de um keystore oficial futura.
+
+### Ainda pendente (acao do operador, nao automatizada neste ambiente)
+
+- **Reanexar os EAs no MT5** para que o `.ex5` recompilado passe a gravar o
+  novo formato. O codigo compilou, mas o heartbeat lido agora ainda e o dos
+  EAs antigos: sem reanexacao nao ha medicao pos disponivel. Nao ha ferramenta
+  MCP de reanexacao nesta sessao e `backend/chart_attach.py` corretamente se
+  recusa a gravar `.chr` com `terminal64.exe` aberto (PID `15936`), para nao
+  derrubar o forward. Feche apenas os graficos e reanexe os mesmos EAs com as
+  mesmas entradas, sem tocar em `Ligar IA`, automacao, limites ou ordens.
+- Depois da reanexacao, conferir `/api/status`: `ea_heartbeat.symbol` deve ser
+  `FLEET` e `writer_symbol` deve mostrar o ultimo grafico, sem oscilacao no
+  `symbol`.
+- Relink da conta `420750145 @ XMGlobal-MT5 17` no APK recem-instalado via
+  `Sincronizar MT5` (acao segura, ja usada neste ciclo). Nenhuma ordem foi
+  enviada.
