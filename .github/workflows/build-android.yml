@@ -26,10 +26,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Node.js 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "22"
 
@@ -39,7 +39,7 @@ jobs:
           targets: aarch64-linux-android, armv7-linux-androideabi, x86_64-linux-android
 
       - name: Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: "temurin"
           java-version: "17"
@@ -85,7 +85,7 @@ jobs:
         run: npx tauri android build --apk
 
       - name: Guardar APK como artefato
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: XAU_AI_PRO-Android-APK
           path: frontend/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
@@ -101,7 +101,7 @@ jobs:
       # falha `resource path 'core/xau-ai-pro-core.exe' doesn't exist`.
       - name: Anexar APK ao release (somente tags)
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: frontend/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
           fail_on_unmatched_files: true
