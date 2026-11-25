@@ -212,8 +212,45 @@ correcao e um seletor explicito, nao um ajuste de pixel numa captura.
 - `frontend/src/hooks/useMarketWebSocket.ts` e `TopNav.tsx`: sem WS
   configurado nao abre socket e o chip diz `HTTP`, nao `WS Offline`.
 
-### Depois
+### Depois (medido apos build e instalacao limpa)
 
-A preencher apos rebuild, assinatura com chave debug, instalacao limpa e nova
-varredura das telas afetadas. Nenhuma ordem foi enviada e nenhum parametro de
-risco foi alterado neste ciclo.
+| Medicao | Depois |
+|---|---|
+| Commit `4a3e0e83` / workflows | **9 workflows success**, inclusive Android, CI, validacao universal, Rust, Pylint, CodeQL e Security |
+| Build Android `45569094436` | **success em 10m54s** |
+| Artefato / APK aberto | `XAU_AI_PRO-Android-APK`, 15.983.103 B compactado; unsigned 41.161.747 B; assinado debug **41.224.774 B** |
+| SHA-256 (unsigned / assinado) | `BA9442DC…D91EF1A` / `921DB1A0…BE8BD4A4` |
+| Versao instalada | `versionName=1.2.191`, `versionCode=1002191`, `targetSdk=37` |
+| Instalacao limpa | `adb uninstall` + `adb install` → **Success**; SELF-TEST de assinatura OK (`C=US, O=Android, CN=Android Debug`) |
+| Chip de transporte | **`HTTP`** em Operacao, Modelos, Risco, Operacoes, Carteira, Historico, Calendario, Sistema, Configuracoes, Conexoes e Confianca. **`WS Offline` = 0 ocorrencias** |
+| Separador em Conexoes | `&middot;` literal **ausente**; U+00B7 (`·`) **presente** — `420750145 · XMGlobal-MT5 17 · Michele Dos Santos` |
+| Imagens da marca | mesmos bounds `[28,36][123,131]` e `[244,931][362,1050]`; mesma amostra de pixels (95x95, desvio 65,3/66,7/66,5, 1012 cores; 118x119, desvio 43,9/48,0/49,7, 977 cores) — a mudanca e reserva de layout, nao cosmética |
+| Cabecalho de Confianca | e-mail de **32 → 40 px** de altura; telefone de **34 → 42 px**; nome, versao e contatos presentes, sem corte |
+| Logcat do app | nenhum `Uncaught`, `TypeError`, `FATAL EXCEPTION` ou erro de recurso; apenas ruido de frame rate do WebView |
+| Conta no app | `Conta 420750145 @ XMGlobal-MT5 17 vinculada e escolhida para o app. Nenhuma ordem foi enviada.` |
+
+As capturas ficam em `ciclo2/depois` (`operacao`, `config`, `confianca`,
+`conexoes`, `modelos`, `risco`, `operacoes`, `carteira`, `historico`,
+`calendario`, `sistema`), uma para cada tela varrida. O comparador
+`ciclo2/compara.py` le os dois diretorios e reproduz a tabela acima a partir
+dos XML e PNG, sem depender de leitura visual.
+
+Nenhuma ordem foi enviada, nenhum parametro de risco foi alterado, nenhum
+`Ligar IA`/automacao/`Aplicar limites ao motor` foi acionado. Gateway,
+backtests e forward continuam de pe. Medido no fim: gateway PID `7396` em
+`127.0.0.1:9027`, terminal PID `15936` em `127.0.0.1:9001`, quatro
+`metatester64`/`MetaTester64`, `MetaEditor64` PID `13116`. O PID do terminal
+mudou duas vezes durante a sessao (`9468 → 10536 → 15936`) sem acao desta
+sessao; se o operador nao reiniciou o MT5, o motivo precisa ser apurado antes
+de confiar na continuidade do forward.
+
+### Abertos para decisao do operador
+
+1. Assinatura definitiva do APK: o instalado usa a chave debug do SDK; qual
+   keystore de producao deve assinar o artefato final?
+2. Heartbeat `EA:` oscilante: varios EAs escrevem o mesmo
+   `XAU_AI_PRO_heartbeat.json`. Corrigir exige recompilar e reanexar EAs nos
+   graficos com forward/backtest em andamento. Autorizar a intervencao?
+3. `scripts/exportar_dataset_mt5.py` esta modificado por outra mao (inclusao
+   de `GOLD`, `BTCUSD`, `ETHUSD`). Foi deixado fora do commit `4a3e0e83`;
+   deseja que seja separado em commit proprio?
