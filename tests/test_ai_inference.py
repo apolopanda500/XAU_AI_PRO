@@ -16,6 +16,21 @@ from backend import ai_inference as ai
 from backend.ai_inference import _RE_SIMBOLO, _nome_de_artefato
 
 
+# Os testes que CARREGAM artefato so tem sentido no checkout de operacao:
+# `.pkl`/`.meta.json` treinados nao vao no git. O runner limpo nao tem catalogo
+# e as demais classes ja pulam por esse motivo. Sem o guard, a ausencia do
+# modelo aparecia como "modelo nao publicado" — a culpa errada (AGENTS #5).
+SEM_CATALOGO_MODELO = pytest.mark.skipif(
+    not (ai.MODELOS_DIR.exists() and any(ai.MODELOS_DIR.glob("*.meta.json"))),
+    reason=(
+        "sem catalogo de modelos neste checkout: os .pkl e .meta.json sao "
+        "artefatos de treino e nao vao no git (.gitignore). O CI roda o "
+        "checkout limpo e nao tem o catalogo; o inventario real e verificado "
+        "por scripts/auditar_governanca_modelos.py na maquina de operacao."
+    ),
+)
+
+
 def _candles(n: int = 1200, seed: int = 11, freq: str = "5min") -> pd.DataFrame:
     """Serie com vol coerente com o ATR (ver train_v2 para o porque)."""
     rng = np.random.default_rng(seed)
@@ -42,6 +57,7 @@ def test_sem_candles_nao_inventa_sinal():
     assert "candles" in r.motivo
 
 
+@SEM_CATALOGO_MODELO
 def test_periodo_reprovado_no_ativo_e_coberto_pela_classe():
     """OPCAO (b) DA Q-177 — AUTORIZADA PELO DONO EM 10/11/2026 (D-175).
 
@@ -62,6 +78,7 @@ def test_periodo_reprovado_no_ativo_e_coberto_pela_classe():
     assert r.modelo_classe in r.para_dict()["class_model"]
 
 
+@SEM_CATALOGO_MODELO
 def test_a_recusa_do_modelo_do_ativo_nao_e_apagada(monkeypatch):
     """A cobertura da classe NAO pode esconder que o ativo foi reprovado.
 
@@ -337,6 +354,7 @@ class TestNenhumAtivoPresumido:
         assert r.disponivel is False
         assert "INEXISTENTE_QUALQUER" not in str(r.modelo or "")
 
+    @SEM_CATALOGO_MODELO
     def test_simbolo_e_preservado_ao_carregar(self):
         """`_carregar` normaliza caixa, mas nao troca o ativo.
 
@@ -669,6 +687,7 @@ class TestGrafiaDoGatewayNaoCegaAInferencia:
             "timestamp": base["Time"].dt.strftime("%Y-%m-%dT%H:%M:%SZ"),
         })
 
+    @SEM_CATALOGO_MODELO
     def test_inferencia_publica_com_as_chaves_do_gateway(self):
         """PROVA POSITIVA: com a grafia do produtor, a previsao SAI."""
         ai.limpar_cache()
@@ -677,6 +696,7 @@ class TestGrafiaDoGatewayNaoCegaAInferencia:
         assert r.confianca > 0.0, r.motivo
         assert r.modelo_classe == "MULTI_FIAT", r.modelo
 
+    @SEM_CATALOGO_MODELO
     def test_h1_do_gateway_tambem_publica(self):
         """O EA pede H1 em todos os 15 graficos; e o periodo que falhava."""
         ai.limpar_cache()
