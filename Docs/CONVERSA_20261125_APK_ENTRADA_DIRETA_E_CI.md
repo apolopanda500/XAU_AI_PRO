@@ -444,6 +444,54 @@ jsdom não faz layout — o defeito só apareceu no aparelho.
 - `npx vitest run` completo: **94 arquivos, 1064 testes passed** em 370,80s
   (antes: 94 arquivos, 1062 testes — +2 testes).
 
-Essa correção exige um novo build do APK — o instalado no emulador ainda tem
-o grid antigo. Somente depois do rebuild sera possivel fazer
-`Sincronizar MT5` no emulador.
+## 11. Ciclo 5 — APK final, `Config` tocável e MT5 vinculado (25/11/2026)
+
+Commit `284b94bd` publicado em `origin/main`. Build Android final
+`45677084995` concluído em **10m35s** (`success`); artefato baixado, assinado
+com a keystore definitiva (`Verifies`, v2/v3 true, 1 signer `CN=XAU AI PRO`,
+`versionCode 1002191`, `versionName 1.2.191`, 41.224.774 bytes, SHA-256
+`C34CFCCC…CBD96DBC`) e instalado no `emulator-5554` com `uninstall` + `install`
+**Success**.
+
+### Antes e depois do 6º botão, medido no aparelho
+
+| Medicao | Antes (ciclo 4) | Depois (ciclo 5) |
+|---|---|---|
+| Bounds de `Config` | `[0,0][0,0]` | **`[596,1122][712,1267]`** |
+| Tap em `(654,1194)` | continuava em `Sistema` | abre `CONFIGURAÇÕES` |
+| Grid no bundle | `repeat(${Ba.length}, 1fr)` | `repeat(${Ba.length}, minmax(0, 1fr))` |
+
+O helper `qa-emulador.ps1` tambem foi endurecido: ignora nos com bounds
+`[0,0][0,0]`, que era exatamente o que escondia o botao fora da viewport.
+
+### Navegação e vinculação, medidas no APK final
+
+- `Config` -> `Conexões & Corretoras` -> `Sincronizar MT5`: em retrato, o painel
+  fica abaixo da nav vertical, por isso foi preciso rolar até o botao aparecer
+  com bounds `[170,775][511,866]`. Tap em `(340,820)` produziu
+  **`MT5 sincronizado: 420750145 @ XMGlobal-MT5 17. Conexão registrada como as
+  demais e marcada como conta ativa.`** A linha da conta passou a mostrar
+  `Em uso`. Nenhuma ordem foi enviada.
+- `Confiança & Responsável` abriu com `DESENVOLVIDO POR`,
+  `O QUE ESTE APP NUNCA FAZ` e `Build: XAU AI PRO v1.2.191 · Windows · conta
+  conectada agora: 420750145 · Michele Dos Santos`.
+- Abas `Operar`, `Carteira`, `Histórico`, `Calendário`, `Sistema` e `Config`
+  varridas uma a uma, todas renderizando.
+- Nuance de medicao: o uiautomator devolve o `title` do `<span>` em vez do
+  texto interno. Por isso o chip `HTTP` nao aparece no XML; por CDP
+  (`Runtime.evaluate` no WebView) mediu-se `innerText="HTTP"`, `title="Gateway
+  por HTTP polling; nenhum servidor WebSocket configurado."`, `visivel=true`,
+  `EA: no gráfico · FLEET` e `WS Offline=false`. O app segue sem socket aberto.
+
+### Estado do sistema após o QA
+
+- `logcat -t 3000` filtrado por `Uncaught|TypeError|ReferenceError|ERR_|net::|FATAL
+  EXCEPTION`: **0 erros**.
+- Tunel: `/api/health` **200 com token** e **401 sem token** (prova negativa);
+  `/api/status` com `schema=ea-heartbeat.v1`, `symbol=FLEET`,
+  `writer_symbol=Nvidia`, `writer_timeframe=5`, `live=true`, `age_sec=0.3`,
+  conta `420750145 @ XMGlobal-MT5 17`, `mode=REAL`, `confirmed=false`.
+- Processos intactos: `terminal64` 1, `metatester64`/`MetaTester64` 4,
+  `cloudflared` 2. Gateway local escutando em `127.0.0.1:9027`.
+- Nao foram acionados `Ligar IA`, automacao, `Aplicar limites ao motor`,
+  parametro de risco, compra ou venda. O painel permaneceu `Parado`.
