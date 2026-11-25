@@ -1,0 +1,33 @@
+# XAU_AI_PRO - Python Dependencies
+# Gold (XAU) AI Trading System
+# Install with: pip install -r requirements.txt
+
+# Data Processing
+pandas
+numpy
+
+# Machine Learning
+scikit-learn
+scipy
+joblib
+xgboost
+lightgbm
+catboost
+
+# Visualization
+matplotlib
+plotly
+
+# Web Framework
+# Streamlit removido: o dashboard web nao faz parte do EXE GUI-only
+# (launcher.spec) e streamlit exige pillow<13, travando o Pillow 13.
+fastapi
+uvicorn
+pydantic
+litellm
+openai
+
+# Utilities
+MetaTrader5
+python-dateutil
+six
