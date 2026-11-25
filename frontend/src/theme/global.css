@@ -4447,8 +4447,10 @@ input:focus-visible {
    ---------------------------------------------------------------------------
    MEDIDO no SM-A057M (1080x2400 @420dpi), 18/11/2026: com o trilho lateral de
    64px E a barra inferior visiveis ao mesmo tempo, o celular perdia ~70px de
-   largura util e o cabecalho encostava nas 2 navegacoes. A barra inferior ja
-   cobre todas as abas - o trilho era redundante. No telefone ele some.
+   largura util e o cabecalho encostava nas 2 navegacoes. O trilho era
+   redundante, EXCETO por `settings`: ate 25/11/2026 a barra inferior nao
+   trazia Configurações e o telefone nao alcançava Conexões & Corretoras.
+   Corrigido em MobileBottomNav.tsx (6 itens). No telefone o trilho some.
    ------------------------------------------------------------------------ */
 @media (max-width: 768px) {
   .sidebar {

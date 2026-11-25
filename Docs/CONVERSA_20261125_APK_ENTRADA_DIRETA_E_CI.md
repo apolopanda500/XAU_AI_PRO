@@ -340,3 +340,71 @@ local sao, e sera preciso rebuildar.
   `ciclo2/antes` e `ciclo2/depois`).
 - `Sincronizar MT5` no emulador para religar `420750145 @ XMGlobal-MT5 17`,
   sem tocar em `Ligar IA`, automacao, limites ou ordens.
+
+## 8. Emulador — antes do rebuild com a URL nova
+
+Espaco separado: `Temp/opencode/qa-android/emulador/antes` (nao misturado com
+`ciclo2/antes`, `ciclo2/depois` nem `ciclo3/assinado`). App aberto no
+`emulator-5554`, PID `5179`, com o APK assinado que ainda traz a URL morta.
+
+| Medicao | Antes (URL antiga) |
+|---|---|
+| Chip de transporte | `Gateway por HTTP polling; nenhum servidor WebSocket configurado.` — sem `WS Offline` |
+| Cabecalho `AI` | `Inativo` |
+| Cabecalho `EA` | **`sem leitura`** — o gateway local esta sao, mas o app aponta para hostname que nao resolve |
+| Robo | `Sem par escolhido`, `sem corretora`, `Reconectando.`, `Parado` |
+| Modelos | `Nao foi possivel ler os modelos.` |
+| Logcat filtrado (`ERR_`, `net::`, `FATAL EXCEPTION`, `trycloudflare`) | nenhuma linha — a falha e silenciosa na UI, sem erro de JS |
+
+E a prova negativa que faltava: gateway `ok=true` com heartbeat `live=true`,
+tunel novo `200` com token e `401` sem token, e ainda assim o app instalado
+mostra `EA: sem leitura`. O defecto e a URL embutida, nao o gateway nem o EA.
+O helper `qa-emulador.ps1` teve um erro de sintaxe descoberto aqui
+(`$_.content-desc` interpretado como subtracao); corrigido para
+`$_.'content-desc'` antes de qualquer captura.
+
+## 9. Emulador — depois do rebuild da URL (medido antes da correção da nav)
+
+Mesmo espaco `emulador/depois`, APK `ciclo3/assinado` instalado com
+`uninstall` + `install` **Success**; assinatura `Verifies`, v2/v3 true, 1
+signer `CN=XAU AI PRO`, SHA-256 `60381EBC…4FD391`, 41.224.774 bytes.
+
+| Tela | Depois (URL nova) | Antes (URL morta) |
+|---|---|---|
+| Operacao | `EA: no gráfico · FLEET`, `Gateway HTTP`, `Parado`, `Gateway por HTTP polling` sem `WS Offline` | `EA: sem leitura`, `Reconectando.` |
+| Modelos | `8 artefatos`, `17 de 17 períodos podem operar` | `Nao foi possivel ler os modelos.` |
+| Operações (terminal ao vivo) | `saldo 9,92`, `patrimônio 15,06` lidos do gateway | sem leitura |
+| Carteira | `Ao vivo · 17:51:42`, `Contas conectadas 1/1`, `MT5 · Conectada · 9,92` | sem corretora |
+| Histórico | `REGISTRO UNIVERSAL`, `Exibindo 21` | — |
+| Calendário | `101 eventos`, `Atualizado 17:52:55` | — |
+| Sistema | `Gateway respondendo`, `Latência 470 ms`, `Mobile ativo` | — |
+
+Nenhum `Uncaught`, `TypeError`, `FATAL EXCEPTION` ou `net::` no logcat do app.
+Nenhuma ordem, `Ligar IA`, automacao ou limite de risco foi acionado.
+
+### Defeito descoberto no QA: Configurações inalcançável no telefone
+
+MEDIDO no `emulator-5554` (720px): `@media (max-width:768px)` esconde o
+`.sidebar`, e `MobileBottomNav` tinha apenas 5 itens — `robot`, `portfolio`,
+`history`, `calendar`, `system`. `settings` ficou **fora** da navegação, e
+`Configurações → Conexões & Corretoras` (onde o dono vincula a conta MT5)
+ficou inalcançável no APK. O comentario do CSS afirmava que "a barra inferior
+ja cobre todas as abas" — estava errado e foi corrigido junto.
+
+Correcao aplicada:
+
+- `frontend/src/components/MobileBottomNav.tsx`: 6 itens, com
+  `{ id: 'settings', label: 'Config', icon: '🔧' }`; `ITEMS` renomeado para
+  `MOBILE_NAV_ITEMS` e exportado, `gridTemplateColumns` acompanha o tamanho.
+- `frontend/src/theme/comment` no `global.css` atualizado com a medição.
+- `frontend/src/components/MobileBottomNav.test.tsx`: 3 testes, incluindo
+  **prova negativa** (a lista antiga de 5 itens nao contém `settings` e o
+  predicado TEM de reprovar) e o clique em `Config` mudando `activeTab`.
+- `npx vitest run src/components/MobileBottomNav.test.tsx`: **3 passed**;
+  `npx tsc --noEmit`: **0 erros** (0 bytes de saida);
+  `npx vitest run` completo: **94 arquivos, 1062 testes passed** em 361,45s
+  (antes: 93 arquivos, 1059 testes — +1 arquivo, +3 testes).
+
+Essa correção exige um novo build do APK — o instalado no emulador ainda tem
+a barra de 5 itens. Somente depois do rebuild sera possivel fazer
+`Sincronizar MT5` no emulador.

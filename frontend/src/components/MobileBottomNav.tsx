@@ -4,12 +4,21 @@ import { isMobileRuntime } from '../lib/api';
 
 type Item = { id: TabType; label: string; icon: string };
 
-const ITEMS: Item[] = [
+/*
+  MEDIDO 25/11/2026 no emulator-5554 (720px): o sidebar some em <=768px e a
+  bottom-nav tinha so 5 itens, sem `settings`. Isso deixava
+  Configurações -> Conexões & Corretoras (onde o dono vincula a conta MT5)
+  ALCANZAVEL SOMENTE no desktop/celular largo. O comentario do CSS dizia que
+  a barra inferior cobria todas as abas — mentira medida. `settings` entra
+  aqui para o APK entrar direto no app e ainda permitir vincular a conta.
+*/
+export const MOBILE_NAV_ITEMS: Item[] = [
   { id: 'robot', label: 'Operar', icon: '📈' },
   { id: 'portfolio', label: 'Carteira', icon: '💼' },
   { id: 'history', label: 'Histórico', icon: '🕘' },
   { id: 'calendar', label: 'Calendário', icon: '📅' },
   { id: 'system', label: 'Sistema', icon: '⚙️' },
+  { id: 'settings', label: 'Config', icon: '🔧' },
 ];
 
 export const MobileBottomNav: React.FC = () => {
@@ -27,7 +36,7 @@ export const MobileBottomNav: React.FC = () => {
         bottom: 0,
         zIndex: 20,
         display: 'grid',
-        gridTemplateColumns: `repeat(${ITEMS.length}, 1fr)`,
+        gridTemplateColumns: `repeat(${MOBILE_NAV_ITEMS.length}, 1fr)`,
         gap: 4,
         padding: '6px 6px calc(6px + env(safe-area-inset-bottom, 0px))',
         background: 'rgba(7, 11, 20, 0.96)',
@@ -36,7 +45,7 @@ export const MobileBottomNav: React.FC = () => {
       }}
       className="mobile-bottom-nav"
     >
-      {ITEMS.map((item) => {
+      {MOBILE_NAV_ITEMS.map((item) => {
         const isActive = active === item.id;
         return (
           <button
