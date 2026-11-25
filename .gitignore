@@ -188,8 +188,14 @@ frontend/.vite/
 Tools/LibreHardwareMonitor/
 Tools/create_fg.bat
 Tools/create_fg.py
-frontend/public/xau-ai-pro-*.png
-frontend/public/favicon.png
+
+# Assets do FRONTEND devem ser versionados (25/11/2026).
+# MEDIDO no APK 1.2.191: o Tauri embedava /index.html e /assets/*.js|css no
+# libxau_ai_pro_desktop_lib.so, mas NAO embedava /xau-ai-pro-mark.png nem
+# /xau-ai-pro-quantum-cover.png. No PC os arquivos existiam (por isso o desktop
+# parecia certo); no checkout limpo do CI eles nao existiam e o APK nascia sem
+# logo, sem capa e sem favicon. Ignorar estes PNGs e transformar arte do produto
+# em arquivo local — o build Android passa a depender de byte nao versionado.
 frontend/src-tauri/icons/xau-ai-pro-mark.png
 Docs/branding/*.png
 

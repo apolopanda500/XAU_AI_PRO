@@ -1,14 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  connectionAction,
   detectTerminal,
   marketsFor,
   requestConnection,
-  saveExchange,
   type Connection,
   type TerminalAccount,
 } from '../lib/connections';
 import { contaAtivaId, definirEscopoAtivo } from '../lib/escopoAtivo';
+import {
+  mercadoDoIdMt5,
+  resumoSincronizacaoMt5,
+  sincronizarMercadosMt5,
+} from '../lib/sincronizarMt5';
 
 /*
   CONTA MT5 — O UNICO PASSO QUE SOBRA PARA O USUARIO DO APK
@@ -18,11 +21,17 @@ import { contaAtivaId, definirEscopoAtivo } from '../lib/escopoAtivo';
   nem senha: a credencial do MT5 e a SESSAO ABERTA NO PC, e o gateway a le.
 
   Este painel usa EXATAMENTE o caminho ja usado pelo ConnectionSettings —
-  as mesmas funcoes de `lib/connections`, nao uma reimplementacao:
+  as mesmas funcoes de `lib/connections`, reunidas em `sincronizarMt5`:
 
     detectTerminal()  -> GET  /api/status        (conta logada no terminal)
-    saveExchange()    -> POST /api/connections   (registra a conta, sem segredo)
+    saveExchange()    -> POST /api/connections   (registra CADA mercado, sem segredo)
     connectionAction()-> POST /api/connections/{id}/test  (leitura, sem ordem)
+
+  UM CLIQUE, TODOS OS MERCADOS (25/11/2026): antes so `marketsFor('mt5')[0]`
+  era registrado e o operador via uma linha (forex) e achava que era so isso.
+  O catalogo da corretora tem nove mercados — forex, metais, indices, acoes,
+  commodities, titulos, cripto spot, cripto futuros e outros — e a sessao MT5
+  serve todos eles (`connection_store.resolve_connection`).
 
   MT5 e uma corretora de SESSAO: `connection_service._gravar` grava a conexao
   sem API key e devolve `credential_source: "session"`. Por isso nao ha campo
@@ -69,17 +78,18 @@ export default function MT5AccountsPanel() {
     setErro('');
     setStatus('');
     try {
-      const conta = await detectTerminal();
-      const servidor = conta.server.trim();
-      const rotulo = [conta.name, servidor].filter(Boolean).join(' @ ') || `conta ${conta.login}`;
-      const id = await saveExchange('mt5', MERCADO_MT5, rotulo, '', '');
-      await connectionAction(id, 'test');
-      definirEscopoAtivo('mt5', MERCADO_MT5, id);
-      setDetectada(conta);
-      setAtiva(id);
-      setStatus(
-        `Conta ${conta.login} @ ${servidor} vinculada e escolhida para o app. Nenhuma ordem foi enviada.`,
-      );
+      // Preserva a escolha anterior quando ela ainda existe: sincronizar nao
+      // pode trocar o mercado ativo do motor sem o operador pedir.
+      const escolhidaAntes = contaAtivaId();
+      const relatorio = await sincronizarMercadosMt5();
+      const idAtivo = Object.values(relatorio.ids).includes(escolhidaAntes)
+        ? escolhidaAntes
+        : relatorio.ids[relatorio.mercados[0]];
+      const mercadoAtivo = mercadoDoIdMt5(relatorio, idAtivo) ?? relatorio.mercados[0];
+      definirEscopoAtivo('mt5', mercadoAtivo, idAtivo);
+      setDetectada(relatorio.conta);
+      setAtiva(idAtivo);
+      setStatus(resumoSincronizacaoMt5(relatorio));
       await carregar();
     } catch (exc) {
       setErro(exc instanceof Error ? exc.message : 'Falha ao sincronizar a conta MT5.');
@@ -98,8 +108,10 @@ export default function MT5AccountsPanel() {
     <div className="card compact-card connection-manager">
       <h2>Conta MT5</h2>
       <p className="muted">
-        Vincule a conta aberta no MetaTrader 5 do computador. Nenhuma senha e enviada
-        pelo celular e nenhuma ordem e enviada por esta tela.
+        Um clique vincula a conta aberta no MetaTrader 5 a TODOS os mercados do
+        terminal — forex, metais, indices, cripto e os demais — e mostra todos
+        juntos abaixo. Nenhuma senha e enviada pelo celular e nenhuma ordem e
+        enviada por esta tela.
       </p>
 
       {erro && <p className="auth-erro" role="alert">{erro}</p>}
@@ -125,14 +137,14 @@ export default function MT5AccountsPanel() {
           disabled={ocupado || !detectada}
           onClick={() => void sincronizar()}
         >
-          {ocupado ? 'Sincronizando…' : 'Sincronizar MT5'}
+          {ocupado ? 'Sincronizando…' : 'Sincronizar MT5 (todos os mercados)'}
         </button>
         <button type="button" className="btn ghost" disabled={ocupado} onClick={() => void carregar()}>
           Atualizar
         </button>
       </div>
 
-      <h3>Contas MT5 vinculadas</h3>
+      <h3>Contas MT5 vinculadas · todos os mercados</h3>
       {contas.length === 0 ? (
         <p className="hint">Nenhuma conta MT5 registrada ainda.</p>
       ) : (

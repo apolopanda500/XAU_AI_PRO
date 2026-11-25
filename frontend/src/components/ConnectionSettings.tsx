@@ -13,6 +13,10 @@ import {
   type Connection,
   type TerminalAccount,
 } from '../lib/connections';
+import {
+  resumoSincronizacaoMt5,
+  sincronizarMercadosMt5,
+} from '../lib/sincronizarMt5';
 
 const TODAS: Broker[] = ['mt5', 'binance', 'mexc', 'bybit', 'okx'];
 
@@ -140,26 +144,25 @@ export default function ConnectionSettings() {
   // ter que inventar um apelido so para a linha aparecer.
   const save = async () => {
     if (broker === 'mt5') {
-      const current = await detectTerminal();
-      setAccount(current);
-      // O nome digitado manda; sem ele, o rotulo vem do terminal. Era o
-      // unico jeito de distinguir duas conexoes de sessao, e o campo nao
-      // existia para MT5 — agora existe para os dois caminhos.
       /*
-        O ROTULO CARREGA O SERVIDOR, e isso e o que torna dois servidores
-        distin��os. Sem ele, XMGlobal-MT5 14 e XMGlobal-MT5 20 produziriam
-        rotulos iguais e a segunda conexao sobrescreveria a primeira — o
-        operador veria uma linha e acharia que a outra foi perdida.
+        UM CLIQUE, TODOS OS MERCADOS (25/11/2026).
+        ==========================================
+        Antes aqui so entrava `market` — o mesmo mercado do `<select>`. O
+        operador cadastrava forex e achava que cripto/indices ficavam de fora.
+        O catalogo MT5 tem nove mercados e a sessao do terminal serve todos;
+        `sincronizarMercadosMt5` faz o mesmo caminho de leitura/gravacao em
+        cada um, sem ordem. O `<select>` agora escolhe qual mercado fica ATIVO,
+        nao quais mercados sao cadastrados.
       */
-      const servidorNome = server.trim() || String(current.server || '').trim();
-      const rotulo =
-        name.trim() ||
-        [current.name, servidorNome].filter(Boolean).join(' @ ') ||
-        `conta ${current.login}`;
-      const id = await saveExchange(broker, market, rotulo, '', '');
+      const relatorio = await sincronizarMercadosMt5({ nome: name, servidor: server });
+      setAccount(relatorio.conta);
       await load();
-      await connectionAction(id, 'test');
-      setVerified((values) => ({ ...values, [id]: 'Sessão do terminal' }));
+      setVerified((values) => ({
+        ...values,
+        ...Object.fromEntries(
+          relatorio.validadas.map((id) => [id, 'Sessão do terminal']),
+        ),
+      }));
       /*
         SINCRONIZAR TAMBEM ESCOLHE (11/10/2026, fim do beco sem saida).
         ================================================================
@@ -170,10 +173,9 @@ export default function ConnectionSettings() {
         nao existia. Sincronizar o terminal E a escolha: passou no teste de
         leitura, virou a conta ativa da ROBO.
       */
-      definirEscopoAtivo('mt5', market, id);
-      setStatus(
-        `MT5 sincronizado: ${current.login} · ${current.server}. Conexão registrada como as demais e marcada como conta ativa.`,
-      );
+      const mercadoAtivo = relatorio.ids[market] ? market : relatorio.mercados[0];
+      definirEscopoAtivo('mt5', mercadoAtivo, relatorio.ids[mercadoAtivo]);
+      setStatus(resumoSincronizacaoMt5(relatorio));
       return;
     }
     const id = await saveExchange(broker, market, name, key, secret, passphrase);
@@ -349,6 +351,12 @@ export default function ConnectionSettings() {
           </select>
         </label>
       </div>
+      {broker === 'mt5' && (
+        <p className="hint">
+          Sincronizar MT5 registra todos os mercados do terminal de uma vez. O mercado
+          escolhido acima e apenas o que fica ativo para o app.
+        </p>
+      )}
 
 <fieldset disabled={busy} style={{ border: 0, padding: 0 }}>
         <div className="order-ticket-grid">

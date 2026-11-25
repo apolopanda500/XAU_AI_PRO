@@ -89,10 +89,21 @@ describe('ConnectionSettings — o botão de salvar nunca é um botão morto', (
     render(<ConnectionSettings />);
     await waitFor(() => expect(botaoSalvar().disabled).toBe(false));
     fireEvent.click(botaoSalvar());
-    await waitFor(() => expect(M.salvas).toHaveLength(1));
+    await waitFor(() => expect(M.salvas).toHaveLength(2));
     // O rótulo vem do terminal, não de um campo que o operador nunca preencheu.
     expect(M.salvas[0].label).toContain('XMGlobal-MT5 14');
     expect(M.salvas[0].broker).toBe('mt5');
+  });
+
+  it('UM CLIQUE registra todos os mercados do catalogo, nao so o selecionado', async () => {
+    render(<ConnectionSettings />);
+    await waitFor(() => expect(botaoSalvar().disabled).toBe(false));
+    fireEvent.click(botaoSalvar());
+    await waitFor(() => expect(M.salvas).toHaveLength(2));
+    expect(M.salvas.map((linha) => linha.market)).toEqual(['metals', 'forex']);
+    // O selet diz `metals`; mesmo assim `forex` tambem entrou. Era exatamente
+    // o mercado que ficava de fora antes do helper compartilhado.
+    expect(M.acoes.filter((acao) => acao.comando === 'test')).toHaveLength(2);
   });
 
   it('sem sessão do MT5, o botão diz o que falta em vez de só apagar', async () => {
@@ -205,7 +216,7 @@ describe('ConnectionSettings — escolher a conta grava a conta ativa', () => {
     render(<ConnectionSettings />);
     await waitFor(() => expect(botaoSalvar().disabled).toBe(false));
     fireEvent.click(botaoSalvar());
-    await waitFor(() => expect(M.salvas).toHaveLength(1));
+    await waitFor(() => expect(M.salvas).toHaveLength(2));
     await waitFor(() =>
       expect(window.localStorage.getItem('xau-active-account')).toBe('mt5:metals'),
     );
