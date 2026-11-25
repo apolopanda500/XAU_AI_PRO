@@ -5,6 +5,7 @@ import { useAuthStore } from '../auth/authStore';
 import { definirPin, removerPin, validarPin, verificarPin } from '../auth/auth';
 import { THEMES } from '../hooks/useTheme';
 import ConnectionSettings from './ConnectionSettings';
+import MT5AccountsPanel from './MT5AccountsPanel';
 import ConnectedDevicesPanel from './ConnectedDevicesPanel';
 import DeclaracoesConfianca from './DeclaracoesConfianca';
 import PlanoConfig from './PlanoConfig';
@@ -41,15 +42,6 @@ export default function SettingsCore() {
   const setHasPin = useAuthStore((state) => state.setHasPin);
   const [section, setSection] = useState<Section>('general');
   const [status, setStatus] = useState('');
-  const [autoLogin, setAutoLogin] = useState<{
-    configured?: boolean;
-    login?: number | null;
-    server?: string | null;
-  } | null>(null);
-  const [loginMt5, setLoginMt5] = useState('');
-  const [senhaMt5, setSenhaMt5] = useState('');
-  const [serverMt5, setServerMt5] = useState('');
-  const [loginMsg, setLoginMsg] = useState('');
   const [pin1, setPin1] = useState('');
   const [pin2, setPin2] = useState('');
   const [pinAtual, setPinAtual] = useState('');
@@ -74,44 +66,8 @@ export default function SettingsCore() {
     const timer = window.setInterval(refreshAccount, 15000);
     return () => window.clearInterval(timer);
   }, []);
-  const carregarLogin = () => {
-    fetch(`${apiBase()}/api/mt5/auto-login`, { signal: AbortSignal.timeout(5000) })
-      .then((r) => r.json())
-      .then((d: any) => {
-        setAutoLogin(d && typeof d === 'object' ? d : null);
-        if (d?.server) setServerMt5(String(d.server));
-        if (d?.login) setLoginMt5(String(d.login));
-      })
-      .catch(() => setAutoLogin(null));
-  };
-  const salvarLogin = async (limpar = false) => {
-    setLoginMsg('');
-    try {
-      const resposta = await fetch(`${apiBase()}/api/mt5/auto-login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(
-          limpar
-            ? { clear: true }
-            : { login: loginMt5.trim(), password: senhaMt5, server: serverMt5.trim() },
-        ),
-        signal: AbortSignal.timeout(10000),
-      });
-      const dados = (await resposta.json().catch(() => ({}))) as { ok?: boolean; error?: string };
-      if (!resposta.ok || dados.ok === false) {
-        setLoginMsg(dados.error ?? `recusado (${resposta.status})`);
-        return;
-      }
-      setSenhaMt5('');
-      setLoginMsg(limpar ? 'Login automatico removido.' : 'Login automatico salvo.');
-      carregarLogin();
-    } catch {
-      setLoginMsg('Nao foi possivel falar com o gateway.');
-    }
-  };
   useEffect(() => {
     if (section !== 'connections') return;
-    carregarLogin();
     let active = true;
     const check = async () => {
       const items: Record<string, string> = {};
@@ -329,63 +285,21 @@ export default function SettingsCore() {
                 />
               </label>
             </div>
-            <div className="settings-rows">
-              <label className="switch-row">
-                <span>Login automatico do MT5</span>
-                <span className="hint" style={{ margin: 0 }}>
-                  {autoLogin?.configured
-                    ? `configurado: ${autoLogin.login ?? '--'} @ ${autoLogin.server ?? '--'}`
-                    : 'nao configurado'}
-                </span>
-              </label>
-              <label className="switch-row">
-                <span>Login</span>
-                <input
-                  className="input"
-                  inputMode="numeric"
-                  value={loginMt5}
-                  onChange={(e) => setLoginMt5(e.target.value)}
-                  placeholder="numero da conta"
-                />
-              </label>
-              <label className="switch-row">
-                <span>Servidor</span>
-                <input
-                  className="input"
-                  value={serverMt5}
-                  onChange={(e) => setServerMt5(e.target.value)}
-                  placeholder="nome do servidor"
-                />
-              </label>
-              <label className="switch-row">
-                <span>Senha</span>
-                <input
-                  className="input"
-                  type="password"
-                  value={senhaMt5}
-                  onChange={(e) => setSenhaMt5(e.target.value)}
-                  placeholder="guardada cifrada no Windows"
-                  autoComplete="new-password"
-                />
-              </label>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <button type="button" className="btn" onClick={() => void salvarLogin(false)}>
-                  Salvar login automatico
-                </button>
-                {autoLogin?.configured && (
-                  <button type="button" className="btn btn-ghost" onClick={() => void salvarLogin(true)}>
-                    Remover
-                  </button>
-                )}
-                <span className="hint" style={{ margin: 0 }}>{loginMsg}</span>
-              </div>
-            </div>
+            {/*
+              LOGIN AUTOMATICO SAIU (25/11/2026).
+              ==================================
+              O gateway ativo (fastapi_gateway:9027) NAO tem a rota
+              `/api/mt5/auto-login`: medida HTTP 404. O bloco oferecia
+              campos de login/senha que gravavam em um endpoint inexistente —
+              uma tela que prometia configurar o que nao configura.
+
+              A credencial do MT5 e a SESSAO do terminal aberto no PC. O painel
+              abaixo usa as rotas reais (`/api/status` e `/api/connections`),
+              sem transportar senha pelo celular e sem enviar ordens.
+            */}
+            <MT5AccountsPanel />
             <ConnectionSettings />
             <ConnectedDevicesPanel />
-            <p className="hint">
-              O app abre o terminal MT5 sozinho e entra na conta salva. Se a senha do terminal nao
-              estiver salva, preencha o login automatico acima: a senha fica cifrada pelo Windows.
-            </p>
           </div>
         )}
         {section === 'security' && (

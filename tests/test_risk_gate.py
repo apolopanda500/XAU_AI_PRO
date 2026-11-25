@@ -40,7 +40,10 @@ def test_trade_within_limits_is_allowed():
     {'daily_trades': float('nan')},
     {'daily_trades': 1.5},
     {'open_positions': -1},
-    {'spread': 51},
+    # O dono elevou o teto de 50 para 400 pontos em 23/11: 50 barrava ETHUSD
+    # (spread real ~300). A trava continua existindo — o caso de reprova tem
+    # de estar ACIMA do limite vigente, nao no numero antigo.
+    {'spread': 401},
     {'notional': 100_001},
 ])
 def test_trade_outside_limits_is_rejected(overrides):

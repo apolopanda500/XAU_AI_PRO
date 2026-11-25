@@ -93,7 +93,7 @@ export const MobileBiometricLock: React.FC<MobileBiometricLockProps> = ({ onUnlo
             cursor: busy ? 'default' : 'pointer',
           }}
         >
-          {busy ? 'Verificando...' : 'Desbloquear com Digital / Face'}
+          {busy ? 'Verificando…' : 'Desbloquear com Digital / Face'}
         </button>
 
         <form onSubmit={handlePinSubmit} style={{ display: 'flex', gap: '8px' }}>

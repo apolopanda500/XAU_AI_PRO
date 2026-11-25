@@ -27,7 +27,11 @@ class BinanceExecutionAdapter:
     def client(self) -> BinanceClient:
         return BinanceClient(self.market)
 
-    def prepare(self, *, symbol, side, order_type, quantity, price=None, request_id, confirm, available=None):
+    def prepare(self, *, symbol, side, order_type, quantity, price=None, request_id, confirm, available=None, stop_loss=None, take_profit=None):
+        # stop_loss/take_profit fazem parte do contrato do router universal.
+        # Spot da Binance nao aceita SL/TP na ordem de entrada (exige OCO/stop
+        # separado), por isso os campos sao aceites e ignorados aqui; o MT5 e
+        # quem os aplica (backend/mt5_execution.py).
         if not request_id or not confirm:
             raise BinanceExecutionError("request_id e confirmacao manual sao obrigatorios")
         if not symbol or side.lower() not in {"buy", "sell"} or quantity <= 0:

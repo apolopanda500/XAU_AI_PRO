@@ -92,9 +92,13 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      # No Android o app aponta para o PC do operador (Tailscale), nao para um
-      # servidor publico: por isso o release do APK e anexado, mas o app nao
-      # recebe URL fixa de producao neste workflow.
+      # O APK nasce CONFIGURADO: `frontend/.env.production` leva a URL do
+      # gateway e o token embutido (VITE_API_BASE / VITE_GATEWAY_TOKEN), e o
+      # `vite build` disparado pelo Tauri aqui dentro le esse arquivo. Nao ha
+      # tela de URL nem login de conta do app: so falta vincular a conta MT5
+      # aberta no PC. Os recursos de desktop (core.exe/bridge) ficam em
+      # `tauri.windows.conf.json`; no Android eles nao existem e causavam a
+      # falha `resource path 'core/xau-ai-pro-core.exe' doesn't exist`.
       - name: Anexar APK ao release (somente tags)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2

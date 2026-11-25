@@ -961,64 +961,69 @@ describe('sem conta salva: recusa com motivo, nunca MT5 fixo (11/10/2026)', () =
 });
 
 /*
-  UM GRAFICO SO, NA SUB-ABA OPERACAO (11/10/2026)
-  ===============================================
+  UM GRAFICO SO, NA SUB-ABA OPERACAO (11/10/2026, reafirmado em 24/11/2026)
+  =========================================================================
   Decisao do dono: duas sub-abas estavam com o grafico duplicado — remover de
   uma, apenas 1 grafico. Antes o `<AcompanharModelos />` era sempre visivel,
   embaixo de qualquer sub-aba: o mesmo grafico em quatro lugares, quatro
   consultas e quatro polls para o mesmo par.
+
+  ESTE BLOCO FOI CORRIGIDO, NAO AFROUXADO (24/11/2026)
+  ----------------------------------------------------
+  O commit 8ee8a00e trocou o `Secao hidden` por montagem condicional: o grafico
+  so existe na Operacao, e as outras abas nao pagam o custo de um canvas
+  oculto. As assercoes antigas ("montado e hidden nas outras abas") cobriam o
+  comportamento anterior e reprovavam com 0 montagens — o codigo, nao o teste,
+  mudou por decisao explicita. A trava agora mede o que foi decidido: UMA
+  montagem na Operacao, ZERO nas demais, e nenhuma duplicata ao alternar.
 */
-describe('um grafico so, sempre montado e visivel so na Operacao (18/11/2026)', () => {
+describe('um grafico so, e so na Operacao (11/10/2026, reafirmado 24/11/2026)', () => {
   const montar = (container: HTMLElement) =>
     container.querySelectorAll('[data-testid="painel-grafico"]');
-  const visivel = (container: HTMLElement) => {
-    const el = container.querySelector('[data-testid="painel-grafico"]');
-    if (!el) return false;
-    return el.closest('[hidden]') === null;
-  };
 
   it('PROVA: na Operacao (padrao), o grafico esta la, visivel, e e UM so', () => {
     const { container } = render(<RobotTabs />);
     expect(container.querySelector('.robo-sub-aba.ativa')?.textContent).toBe('Operação');
     expect(montar(container).length).toBe(1);
-    expect(visivel(container)).toBe(true);
+    expect(montar(container)[0].closest('[hidden]')).toBeNull();
   });
 
   it.each(['Modelos', 'Risco', 'Operações'] as const)(
-    'PROVA: na sub-aba %s o grafico fica oculto (hidden), mas segue montado',
+    'PROVA: na sub-aba %s nao ha grafico montado (nenhum canvas ocioso)',
     async (aba) => {
       const { container } = render(<RobotTabs />);
       fireEvent.click(screen.getByRole('tab', { name: aba }));
       await waitFor(() => {
         expect(container.querySelector('.robo-sub-aba.ativa')?.textContent).toBe(aba);
       });
-      expect(montar(container).length).toBe(1);
-      expect(visivel(container)).toBe(false);
+      expect(montar(container).length).toBe(0);
     },
   );
 
-  it('PROVA: voltar para a Operacao revela o grafico de novo - ainda UM so', async () => {
+  it('PROVA: voltar para a Operacao remonta o grafico - ainda UM so', async () => {
     const { container } = render(<RobotTabs />);
     fireEvent.click(screen.getByRole('tab', { name: 'Modelos' }));
     await waitFor(() => {
       expect(container.querySelector('.robo-sub-aba.ativa')?.textContent).toBe('Modelos');
     });
-    expect(visivel(container)).toBe(false);
+    expect(montar(container).length).toBe(0);
 
     fireEvent.click(screen.getByRole('tab', { name: 'Operação' }));
     await waitFor(() => {
       expect(container.querySelector('.robo-sub-aba.ativa')?.textContent).toBe('Operação');
     });
     expect(montar(container).length).toBe(1);
-    expect(visivel(container)).toBe(true);
+    expect(montar(container)[0].closest('[hidden]')).toBeNull();
   });
 
-  it('PROVA NEGATIVA: sempre existe EXATAMENTE UMA montagem do grafico na pagina', () => {
+  it('PROVA NEGATIVA: NUNCA ha mais de UMA montagem do grafico ao alternar abas', () => {
     const { container } = render(<RobotTabs />);
     const abas = ['Operação', 'Modelos', 'Risco', 'Operações'] as const;
     for (const aba of abas) {
       fireEvent.click(screen.getByRole('tab', { name: aba }));
-      expect(montar(container).length).toBe(1);
+      const quantidade = montar(container).length;
+      expect(quantidade).toBeLessThanOrEqual(1);
+      expect(quantidade).toBe(aba === 'Operação' ? 1 : 0);
     }
   });
 });

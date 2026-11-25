@@ -105,9 +105,30 @@ const LEMBRAR_KEY = 'xau-lembrar-dias';
 
 export function sessionToken(): string {
   const sessao = stored(SESSION_KEY);
-  if (sessao) return sessao;
+  if (sessao) {
+    // Sessao lembrada vencida nao pode esconder o token fixo do build. No APK
+    // configurado o token embutido nunca expira; uma data antiga no aparelho
+    // faria o app pedir login de novo sem necessidade.
+    if (!sessionExpirou()) return sessao;
+  }
   // APK configurado pelo DONO: API_TOKEN fixo embutido no build (sem login/expiracao).
   return import.meta.env.VITE_GATEWAY_TOKEN || "";
+}
+
+/** O build recebeu um token fixo do gateway (APK configurado pelo dono). */
+export function temTokenEmbutido(): boolean {
+  return Boolean(import.meta.env.VITE_GATEWAY_TOKEN);
+}
+
+/**
+ * Ha credencial para falar com o gateway sem pedir login de conta do app.
+ *
+ * Regra do APK: token embutido entra direto, sempre. Token lembrado so vale
+ * enquanto nao venceu. Sem nenhum dos dois, a tela de conexao MT5 aparece.
+ */
+export function temSessaoMobile(): boolean {
+  if (temTokenEmbutido()) return true;
+  return sessionToken() !== '' && !sessionExpirou();
 }
 
 export function setSessionToken(token: string): void {

@@ -87,5 +87,53 @@ function instalarResizeObserver(): void {
   (globalThis as { ResizeObserver?: unknown }).ResizeObserver = ResizeObserverDuble;
 }
 
+/**
+ * `getContext('2d')` tambem falta no jsdom (25/11/2026).
+ * =====================================================
+ * O `lightweight-charts` pede o contexto ao criar o canvas; o jsdom devolve
+ * null e imprime "Not implemented: HTMLCanvasElement's getContext()". E erro
+ * de AMBIENTE, nao de codigo — o mesmo tipo de lacuna do matchMedia acima.
+ *
+ * O duble NAO desenha nada e NAO inventa dado de mercado: so responde as
+ * chamadas de pintura para que o componente possa montar. `measureText` e
+ * `createLinearGradient` precisam devolver objeto, nao undefined, porque a
+ * biblioteca le `.width` e chama `.addColorStop()`.
+ */
+function instalarCanvas(): void {
+  if (typeof HTMLCanvasElement === 'undefined') return;
+  if (typeof HTMLCanvasElement.prototype.getContext === 'function') {
+    // O jsdom instala uma funcao que lanca "Not implemented"; substitui so
+    // essa, preservando uma implementacao real (navegador) se existir.
+    try {
+      const ctx = HTMLCanvasElement.prototype.getContext('2d');
+      if (ctx) return;
+    } catch {
+      /* jsdom: segue para o duble */
+    }
+  }
+  const gradient = { addColorStop: () => {} };
+  const basico: Record<string, unknown> = {
+    canvas: null,
+    measureText: () => ({ width: 0 }),
+    createLinearGradient: () => gradient,
+    createRadialGradient: () => gradient,
+    createPattern: () => null,
+    getImageData: () => ({ data: new Uint8ClampedArray(0) }),
+    isPointInPath: () => false,
+  };
+  const contexto = new Proxy(basico, {
+    get: (alvo, chave) => {
+      if (chave in alvo) return alvo[chave as string];
+      return () => {};
+    },
+    set: (alvo, chave, valor) => {
+      alvo[chave as string] = valor;
+      return true;
+    },
+  });
+  HTMLCanvasElement.prototype.getContext = (() => contexto) as unknown as typeof HTMLCanvasElement.prototype.getContext;
+}
+
 instalarMatchMedia();
 instalarResizeObserver();
+instalarCanvas();

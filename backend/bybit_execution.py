@@ -29,7 +29,12 @@ class BybitExecutionAdapter:
 
     def prepare(self, *, symbol: str, side: str, order_type: str, quantity: float,
                 price: float | None = None, request_id: str, confirm: bool,
-                available: float | None = None) -> dict:
+                available: float | None = None, stop_loss: float | None = None,
+                  take_profit: float | None = None) -> dict:
+
+        # stop_loss/take_profit: contrato do router universal. Esta corretora
+        # nao aceita SL/TP na ordem de entrada (spot), por isso os campos
+        # sao aceites e ignorados; o MT5 aplica-os em mt5_execution.py.
         if not request_id or not confirm:
             raise BybitExecutionError("request_id e confirmação manual são obrigatórios")
         if not symbol or side.lower() not in {"buy", "sell"} or quantity <= 0:

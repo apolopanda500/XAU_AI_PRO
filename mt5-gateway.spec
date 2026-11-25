@@ -208,6 +208,19 @@ a = Analysis(
         'backend.ea_map',
         'backend.ea_manager',
         'backend.ea_deploy',
+        # MODULOS ESQUECIDOS NO CONGELAMENTO (25/11/2026)
+        #
+        # `test_spec_gateway.py` varre `backend/*.py` e reprovou com 7 nomes
+        # ausentes aqui. Sem eles o `.exe` sobe e a rota/tela correspondente
+        # falha sem excecao visivel — o mesmo defeito dos blocos acima. A lista
+        # e declarada explicitamente porque todos sao imports dentro de funcao.
+        'backend.calendar_tradingview',
+        'backend.market_news',
+        'backend.mobile_command',
+        'backend.mobile_control',
+        'backend.models_profiles_api',
+        'backend.rotas_espelho_mt5',
+        'backend.spread_profile',
         'Python.model_registry',
         'Python.ai.train_v2',
         'pandas', 'sklearn', 'joblib', 'requests',
