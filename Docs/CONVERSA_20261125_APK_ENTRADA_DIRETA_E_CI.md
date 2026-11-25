@@ -495,3 +495,196 @@ O helper `qa-emulador.ps1` tambem foi endurecido: ignora nos com bounds
   `cloudflared` 2. Gateway local escutando em `127.0.0.1:9027`.
 - Nao foram acionados `Ligar IA`, automacao, `Aplicar limites ao motor`,
   parametro de risco, compra ou venda. O painel permaneceu `Parado`.
+
+## 12. Ciclo 6 - URL estavel e APK no celular fisico (25/11/2026)
+
+O dominio pai `xau-gateway-tunnel.com` custava USD 11,17/ano e foi recusado.
+Caminho escolhido pelo dono: **Proxy Worker gratuito**.
+
+| Item | Medido |
+|---|---|
+| URL estavel do app | `https://xau-gw-proxy.rickjax123.workers.dev` |
+| Binding do Worker | `UPSTREAM_BASE` -> `https://staying-better-hours-johnny.trycloudflare.com` |
+| Conta/ID do Worker | `03071acfcc40e9b53fa953e22d15942c` / `98be257b621a4fb9bf96a22df4d3d3cc` |
+| Versao publicada | `f3b028d8-0d19-4414-9e2f-b17e9bbd3e6b` |
+| `/api/health` | **200 com token**, **401 sem token** (prova negativa) |
+| Tunel morto | quick tunnel antigo `separated-chuck...` devolvia `Unauthorized: Tunnel not found`; PID 1280 ainda tenta reconectar, PID 9024 atende |
+| Unico `.env.production` alterado | `VITE_API_BASE` apontando para o Worker |
+| Commit publicado | `aab1d63` (`build(android): apontar gateway para proxy estavel workers.dev`) |
+| Build Android | `45699872259`, `success`, ~10m07s |
+| APK assinado | `Verifies`, v2/v3 true, 1 signer `CN=XAU AI PRO`, RSA 2048, `versionCode 1002191`, `versionName 1.2.191`, 41.224.774 bytes |
+| SHA-256 do APK | `0EAF6949902A430BFAE2347968A895E45005D4BE74598C50A07B56358B1B267D` |
+| Celular fisico `R9XY1016R6V` | APK antigo removido, logcat limpo, APK novo instalado e aberto; abre direto, sem login, chip `HTTP`, `EA: no grafico · FLEET`, `Parado`, **0 erros** relevantes no logcat |
+
+O Worker antigo `xau-ai-pro` continua sendo so o frontend estatico e nao foi
+alterado. O gateway local segue em `127.0.0.1:9027` (PID 13188) e o Worker
+fala com ele pelo tunel; nenhuma senha ou token foi impresso.
+
+## 13. Ciclo 7 - todos os mercados MT5 e a causa dos selos quebrados (25/11/2026)
+
+### 13.1 "so esta lendo uma conta, quero tudo junto"
+
+MEDIDO no APK 1.2.191: `Sincronizar MT5` chamava `saveExchange` uma unica vez,
+com `marketsFor('mt5')[0]`. O backend ja aceita os nove mercados
+(`backend/broker_registry.py::MT5_MARKETS`) e `connection_store.resolve_connection`
+trata sessao MT5 como valida em todos eles; o frontend era que registrava so um.
+
+Mudanca:
+
+- `frontend/src/lib/sincronizarMt5.ts` (novo): `sincronizarMercadosMt5()` le a
+  sessao uma vez, registra e testa os nove mercados no mesmo caminho das outras
+  conexoes (`detectTerminal`, `saveExchange`, `connectionAction(id,'test')`).
+  Falha isolada vira `falhas` no relatorio e nao apaga os outros. Nenhum mercado
+  registrado = erro, nunca relatorio de sucesso. Nenhuma ordem e enviada.
+- `MT5AccountsPanel`: botao unico `Sincronizar MT5 (todos os mercados)`;
+  preserva o ID ativo anterior quando ele continua existindo; mostra
+  `9/9 mercados registrados (...)` e `Nenhuma ordem foi enviada.`
+- `ConnectionSettings`: usa o mesmo helper; o `<select>` passa a escolher so
+  qual mercado fica **ativo**, nao quais mercados sao cadastrados.
+- ID gravado e `broker:market:nome` (`lib/connections.ts`), distinto por
+  mercado; conferido no backend (`connection_service._gravar`).
+
+Validacao: `npx tsc --noEmit` EXIT=0; 3 arquivos focados **27 testes passed**;
+provas negativas (mercado fora do catalogo nao entra, falha isolada dita na
+tela, nenhum registrado nao gera sucesso).
+
+### 13.2 "os selos e imagens do xa ai pro continuam bugado"
+
+Causa **medida**, sem suposicao:
+
+| Medicao | Antes | Depois da causa |
+|---|---|---|
+| Entradas no APK | so `assets/tauri.conf.json`, `assets/dexopt/*`, `res/*.png`, libs | os PNGs do frontend nao estao no APK |
+| Conteudo do `lib/arm64-v8a/libxau_ai_pro_desktop_lib.so` | `/index.html`, `/favicon.ico`, `/assets/App-*.js`, `/assets/index-*.js|css` | **nenhum** `/xau-ai-pro-mark.png`, `/xau-ai-pro-quantum-cover.png`, `/favicon.png` |
+| `frontend/public/` no PC | 3 PNGs presentes (1254x1254; 2.155.508, 2.155.508, 2.291.309 bytes) | desktop parecia certo |
+| `git ls-files frontend/public` | so `index.html` | os 3 PNGs ignorados por `.gitignore:191-192` |
+
+O checkout limpo do CI nao tinha os PNGs; `npm run build` gerava `dist` sem
+eles e o Tauri os omitia do embed. No PC os arquivos existiam, por isso o
+defeito so aparecia no APK. Correcao: remover as duas regras de ignore,
+versionar os 3 PNGs e travar com `tests/test_assets_frontend.py` (2 testes,
+inclusive prova negativa de que `Docs/branding/*.png` continua ignorado).
+
+Nuance de medicao: `?` e `\\u0007` vistos no console do PowerShell eram
+artefato de encoding cp1252, **nao defeito do app**. O XML do uiautomator
+contem `\\U0001f916` (🤖) corretamente.
+
+### 13.3 Validacao completa e publicacao
+
+| Comando | Resultado |
+|---|---|
+| `npx tsc --noEmit` | **EXIT=0** |
+| `npx vitest run` | **95 arquivos, 1073 testes passed**, EXIT=0 |
+| `npm run build` | **EXIT=0**, 214 modulos, 1,28s |
+| `.venv\Scripts\python.exe -m pytest -q tests` | **1636 passed, 2 skipped, 9 warnings**, EXIT=0 |
+| `pytest -q tests/test_assets_frontend.py` | **2 passed** |
+| Commit / push | `56d7f6b` em `origin/main` |
+| Build Android | `45704662419` disparado |
+
+### 13.4 Estado medido e o que nao foi feito
+
+- Processos intactos: `terminal64` 1, `metatester64`/`MetaTester64` 4,
+  `cloudflared` 3, gateway em `127.0.0.1:9027` (PID 13188) e terminal em
+  `127.0.0.1:9001` (PID 13516).
+- No celular fisico o cabecalho mostrou `EA: RUNNING · sem sinal ha 142s`;
+  o app segue sem socket WebSocket e com chip `HTTP`.
+- Conta REAL lida: `420750145 @ XMGlobal-MT5 17`, `mode=REAL`,
+  `confirmed=false`. **Nenhuma ordem foi enviada.**
+- Nao foram acionados `Ligar IA`, automacao, `Aplicar limites ao motor`,
+  parametro de risco, compra ou venda.
+- Perguntas que continuam com o dono: (1) confirmar formalmente a conta REAL
+  antes de qualquer operacao; (2) se algum outro selo/imagem especifico ainda
+  parece errado, indicar qual tela e qual elemento, porque os PNGs do frontend
+  agora estao versionados e a proxima instalacao tera que medir o embed.
+
+## 14. Ciclo 8 - o APK novo prova os selos, e o terminal some (25/11/2026)
+
+### 14.1 Build, assinatura e embed
+
+| Item | Antes (ciclo 6) | Depois (ciclo 7) |
+|---|---|---|
+| Build | `45699872259`, `success` | `45704662419`, `success` em **9m0s**, `headSha 56d7f6b` |
+| APK assinado | 41.224.774 bytes | **58.919.494 bytes** |
+| SHA-256 | `0EAF6949...B267D` | `7DA834B621D4BD815349FB92CB0EA9018FC9FAE8A7595AAF14C360F636D5A60B` |
+| Assinatura | v2/v3 true, 1 signer `CN=XAU AI PRO`, RSA 2048 | v2/v3 true, 1 signer `CN=XAU AI PRO`, RSA 2048 |
+| `lib/arm64-v8a/libxau_ai_pro_desktop_lib.so` | 10.720.208 bytes | **15.143.352 bytes** (+4.423.144) |
+| `/xau-ai-pro-mark.png` no `.so` | **0 ocorrencias** | **1 ocorrencia** (offset 936.653) |
+| `/xau-ai-pro-quantum-cover.png` no `.so` | **0** | **1** (offset 3.981.091) |
+| `/favicon.png` no `.so` | **0** | **1** (offset 3.981.079) |
+| `/index.html`, `/assets/App-*` no `.so` | presentes | presentes (inalterados) |
+
+O artefato do CI e o upload-artifact v7, nome `XAU_AI_PRO-Android-APK`.
+A senha da keystore foi passada por variavel de ambiente (`env:` do
+`apksigner`), nunca por linha de comando, log ou mensagem — o arquivo
+`.key` nao termina em newline e `--ks-pass file:` devolvia
+`end of file reached`. Nenhuma senha foi impressa.
+
+### 14.2 Prova no aparelho (CDP no emulador, uiautomator no fisico)
+
+No `emulator-5554`, com CDP ligado (`webview_devtools_remote_14453`), o DOM
+mediu:
+
+- `document.title = "XAU AI PRO - Trading Desk"`, `location.href =
+  https://tauri.localhost/`, 400 nos, texto real da tela.
+- `document.images`: duas entradas de `/xau-ai-pro-mark.png`, ambas
+  `complete=true`, `naturalWidth=1254`, `naturalHeight=1254`.
+- `performance.getEntriesByType('resource')`: `/xau-ai-pro-mark.png`
+  **200** (duas vezes) e `/xau-ai-pro-quantum-cover.png` **200**.
+- `getComputedStyle(app-shell).backgroundImage` contem
+  `url("https://tauri.localhost/xau-ai-pro-quantum-cover.png")`.
+
+Ou seja: **logo, capa e favicon deixaram de estar quebrados**. Os `?` vistos
+no console do PowerShell seguem sendo artefato de cp1252; o XML do
+uiautomator contem `U+1F916` (🤖) e os textos "O QUE ESTE APP NUNCA FAZ",
+"Saque e transferencia nao existem.", "Execucao real desligada por padrao."
+corretamente. Nao ha mais imagem ausente para apontar.
+
+No celular fisico `R9XY1016R6V` o APK foi instalado com `uninstall` +
+`install` **Success**, aberto direto no app, e as telas `Operar`, `Carteira`,
+`Histórico`, `Calendário`, `Sistema`, `Config`, `Conexões & Corretoras` e
+`Confiança & Responsável` foram varridas: 33 a 70 nos por tela, **0 erros**
+de JS/rede no logcat (filtro por PID do app). O app segue em `HTTP`, sem
+socket WebSocket. O CDP nao existe no fisico; por isso a prova de imagem
+foi feita no emulador com o **mesmo APK assinado**.
+
+### 14.3 O bloqueio da sincronizacao: nao e o helper
+
+MEDIDO em `/api/status` (gateway local `127.0.0.1:9027` **e** Worker estavel):
+`terminal_connected=false`, `account` vazio. O app replica isso na tela
+("Nenhuma conta logada no terminal"). No XML do botao:
+`Sincronizar MT5 (todos os mercados)` com **`enabled="false"`** — o
+componente desabilita quando `!detectada` (`MT5AccountsPanel.tsx:137`).
+O clique por coordenadas, portanto, nao chama `sincronizarMercadosMt5`:
+nao e falha do helper, e pre-condicao ausente.
+
+Causa do `terminal_connected=false`, medida: **`terminal64.exe nao esta mais
+rodando`**. O ultimo registro do journal do MT5 e de **18:26:30**
+(`[LEARN] historico verificado ...`), e a porta `127.0.0.1:9001` esta livre.
+Antes do QA o mesmo par estava vivo (`terminal64` PID 13516 / porta 9001).
+Os 4 `metatester64`/`MetaTester64` (backtest) e os 3 `cloudflared` seguem
+intactos; o gateway segue em `9027` (PID 13188). Nenhum comando desta sessao
+encerrou o terminal: as acoes foram `git`, `adb`, `gh`, `npm`, `pytest` e
+leituras de API. Nao ha auditoria do Windows (`Event ID 4689`) para dizer
+quem o fechou.
+
+Antes disso, baseline em `/api/connections`: 6 conexoes, apenas 4 mercados
+MT5 distintos (`forex`, `metals`, `indices`, `crypto-futures`). Depois do QA
+a contagem nao mudou — prova de que **nenhum mercado foi registrado sem
+sessao**, como o helper exige. A prova positiva de `9/9 mercados registrados`
+fica condicionada a `terminal_connected=true`.
+
+### 14.4 Estado e perguntas ao dono
+
+- Nao foram acionados `Ligar IA`, automacao, `Aplicar limites ao motor`,
+  parametro de risco, compra ou venda. Nenhuma ordem foi enviada.
+- Gateway estavel respondeu `/api/health` **200** com token durante todo o
+  ciclo; o Worker antigo `xau-ai-pro` continua so frontend estatico.
+- Perguntas:
+  1. O `terminal64.exe` foi fechado de proposito? Posso reabri-lo (sem tocar
+     nos 4 backtests) para restaurar o forward e permitir a prova de
+     `9/9 mercados registrados`? Reabrir nao reanexa o EA ao grafico — isso
+     precisa de acao explicita no terminal.
+  2. Confirmo formalmente a conta REAL `420750145 @ XMGlobal-MT5 17`
+     (`mode=REAL`, `confirmed=false`) antes de qualquer operacao?
+  3. Algum selo ou imagem especifica ainda parece errada? Se sim, qual tela e
+     qual elemento — porque os tres PNGs agora estao no `.so` e carregam 200.
