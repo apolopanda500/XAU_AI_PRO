@@ -55,6 +55,13 @@ const contadores = { criadas: 0, removidas: 0 };
 const pedidos: Array<{ price: number; title: string; color: string }> = [];
 
 vi.mock('lightweight-charts', () => {
+  // v5: definicoes substituem os quatro metodos `add*Series`. O duble escolhe
+  // a serie pela identidade da definicao e reprova qualquer outra — prova
+  // negativa contra o codigo que passar `LineSeries` para candles, por exemplo.
+  const CandlestickSeries = { id: 'candlestick' };
+  const LineSeries = { id: 'line' };
+  const AreaSeries = { id: 'area' };
+  const HistogramSeries = { id: 'histogram' };
   const criarSerie = (_nome: string) => ({
     setData: vi.fn(),
     applyOptions: vi.fn(),
@@ -71,15 +78,17 @@ vi.mock('lightweight-charts', () => {
       const coord = coordenadaDe(p);
       return dentroDaEscala(coord) ? coord : null;
     }),
-    setMarkers: vi.fn(),
     remove: vi.fn(),
   });
   return {
     createChart: vi.fn(() => ({
-      addCandlestickSeries: vi.fn(() => criarSerie('candle')),
-      addLineSeries: vi.fn(() => criarSerie('linha')),
-      addAreaSeries: vi.fn(() => criarSerie('area')),
-      addHistogramSeries: vi.fn(() => criarSerie('histograma')),
+      addSeries: vi.fn((definicao: unknown) => {
+        if (definicao === CandlestickSeries) return criarSerie('candle');
+        if (definicao === LineSeries) return criarSerie('linha');
+        if (definicao === AreaSeries) return criarSerie('area');
+        if (definicao === HistogramSeries) return criarSerie('histograma');
+        throw new Error(`definicao de serie inesperada: ${String(definicao)}`);
+      }),
       removeSeries: vi.fn(),
       priceScale: vi.fn(() => ({ applyOptions: vi.fn() })),
       subscribeCrosshairMove: vi.fn(),
@@ -92,6 +101,12 @@ vi.mock('lightweight-charts', () => {
         subscribeVisibleLogicalRangeChange: vi.fn(() => ({ unsubscribe: vi.fn() })),
       })),
     })),
+    // `setMarkers` so existe no plugin de marcadores da v5.
+    createSeriesMarkers: vi.fn(() => ({ setMarkers: vi.fn() })),
+    CandlestickSeries,
+    LineSeries,
+    AreaSeries,
+    HistogramSeries,
     ColorType: { Solid: 'solid', Vertical: 'vertical' },
     CrosshairMode: { Magnet: 0, Normal: 1 },
   };

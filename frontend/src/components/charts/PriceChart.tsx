@@ -8,11 +8,17 @@ import '../../theme/mt5-terminal.css';
 import '../../theme/menu-grafico.css';
 import {
   createChart,
+  createSeriesMarkers,
+  AreaSeries,
+  CandlestickSeries,
+  HistogramSeries,
+  LineSeries,
   type IChartApi,
   type ISeriesApi,
   type AutoscaleInfo,
   type CandlestickData,
   type LineData,
+  type SeriesMarker,
   type UTCTimestamp,
   ColorType,
   CrosshairMode,
@@ -607,6 +613,14 @@ export default function PriceChart({
   const emaRef = useRef<Array<ISeriesApi<'Line'>>>([]);
   const overlaysRef = useRef<Record<string, ISeriesApi<'Line'>>>({});
   const volumeRef = useRef<ISeriesApi<'Histogram'> | null>(null);
+  /*
+    Na v5 os marcadores sao um PLUGIN da serie, nao um metodo dela
+    (`series.setMarkers` nao existe mais). Ele nasce ligado a UMA serie: trocar
+    o tipo do grafico recria a serie, entao o plugin tambem tem de ser recriado.
+    Guardar o plugin no ref e o que impede o sinal de ficar desenhado na serie
+    antiga — o mesmo defeito do "troquei para linha e continuei vendo candle".
+  */
+  const marcadoresRef = useRef<ReturnType<typeof createSeriesMarkers> | null>(null);
   const legendaRef = useRef<HTMLDivElement>(null);
   /*
     Quantos candles JA FORAM ENQUADRADOS pelo `fitContent`.
@@ -1213,14 +1227,14 @@ const activeMarket = mercadoParaConsulta(market, broker);
     /*
     A SERIE DE PRECO NASCE NO EFEITO DO `tipoGrafico`, E AQUI NAO.
 
-    MEDIDO: ela nascia neste ponto e ficava FIXA. `addCandlestickSeries` e
-    `addLineSeries` sao metodos DIFERENTES — trocar o tipo nao e opcao de
-    `applyOptions` — entao o botao "tipo de grafico" teria sido decorativo, como
-    o botao EMA. Ver `criarSerie` e o efeito que a consome.
+    MEDIDO: ela nascia neste ponto e ficava FIXA. `CandlestickSeries` e
+    `LineSeries` sao DEFINICOES DIFERENTES no `addSeries` da v5 - trocar o tipo
+    nao e opcao de `applyOptions` - entao o botao "tipo de grafico" teria sido
+    decorativo, como o botao EMA. Ver `criarSerie` e o efeito que a consome.
 
     Este efeito cria o grafico e o VOLUME, que nao depende do tipo de preco.
   */
-    const volume = chart.addHistogramSeries({
+    const volume = chart.addSeries(HistogramSeries, {
       priceFormat: { type: 'volume' },
       priceScaleId: 'vol',
     });
@@ -1315,6 +1329,7 @@ chartRef.current = chart;
       chartRef.current = null;
       seriesRef.current = null;
       volumeRef.current = null;
+      marcadoresRef.current = null;
     };
   }, [height]);
 
@@ -1413,7 +1428,7 @@ const recalcularEscalaPreco = useCallback(() => {
 const criarSerie = useCallback(
   (chart: IChartApi, tipo: TipoGrafico) => {
     if (tipo === 'candles') {
-      return chart.addCandlestickSeries({
+      return chart.addSeries(CandlestickSeries, {
         upColor: '#2ecc71',
         downColor: '#e74c3c',
         borderVisible: false,
@@ -1423,7 +1438,7 @@ const criarSerie = useCallback(
       }) as ISeriesApi<'Candlestick'>;
     }
     if (tipo === 'area') {
-      return chart.addAreaSeries({
+      return chart.addSeries(AreaSeries, {
         lineColor: '#4f7cff',
         topColor: 'rgba(79,124,255,.28)',
         bottomColor: 'rgba(79,124,255,.02)',
@@ -1431,7 +1446,7 @@ const criarSerie = useCallback(
         autoscaleInfoProvider: fornecerEscala,
       }) as unknown as ISeriesApi<'Candlestick'>;
     }
-    return chart.addLineSeries({
+    return chart.addSeries(LineSeries, {
       color: '#4f7cff',
       lineWidth: 2,
       autoscaleInfoProvider: fornecerEscala,
@@ -1444,6 +1459,8 @@ useEffect(() => {
   if (!chartReady) return undefined;
   const chart = chartRef.current;
   if (!chart) return undefined;
+  // Plugin de marcadores vive da serie: serie nova, plugin novo.
+  marcadoresRef.current = null;
   seriesRef.current = criarSerie(chart, tipoGrafico);
   // O sinal de que a serie existe. Sem ele, o efeito que desenha os dados roda
   // uma vez (com a serie `null`), sai, e nunca mais — e o grafico fica vazio.
@@ -1755,17 +1772,23 @@ useEffect(() => {
     // Sinais do modelo sobre as barras. So BUY/SELL entram; NEUTRAL e
     // recusa nao marcam o grafico (marcador sem decisao e ruido).
     const times = new Set(data.map((d) => d.time));
-    series.setMarkers(
-      markers
-        .filter((m) => (m.signal === 'BUY' || m.signal === 'SELL') && times.has(m.time as UTCTimestamp))
-        .map((m) => ({
-          time: m.time as UTCTimestamp,
-          position: m.signal === 'BUY' ? 'belowBar' : 'aboveBar',
-          color: m.signal === 'BUY' ? '#2ecc71' : '#e74c3c',
-          shape: m.signal === 'BUY' ? 'arrowUp' : 'arrowDown',
-          text: m.text ?? m.signal,
-        })),
-    );
+    const pontos: SeriesMarker<UTCTimestamp>[] = markers
+      .filter((m) => (m.signal === 'BUY' || m.signal === 'SELL') && times.has(m.time as UTCTimestamp))
+      .map((m) => ({
+        time: m.time as UTCTimestamp,
+        position: m.signal === 'BUY' ? 'belowBar' : 'aboveBar',
+        color: m.signal === 'BUY' ? '#2ecc71' : '#e74c3c',
+        shape: m.signal === 'BUY' ? 'arrowUp' : 'arrowDown',
+        text: m.text ?? m.signal,
+      }));
+    // `createSeriesMarkers` cria o plugin UMA vez na serie atual; as cotacoes
+    // seguintes so atualizam os pontos. Recriar o plugin a cada tick piscaria
+    // o sinal na tela e deixaria pontos antigos presos na serie descartada.
+    if (!marcadoresRef.current) {
+      marcadoresRef.current = createSeriesMarkers(series, pontos);
+    } else {
+      marcadoresRef.current.setMarkers(pontos);
+    }
     // Linhas de posicao: recriadas a cada render (a API nao atualiza em
     // lote — remover e recriar e o caminho documentado).
     for (const antiga of linhasRef.current) {
@@ -1803,7 +1826,7 @@ useEffect(() => {
         if (existente) {
           existente.setData(pontos);
         } else if (pontos.length) {
-          emaSerie[idx] = chartRef.current!.addLineSeries({
+          emaSerie[idx] = chartRef.current!.addSeries(LineSeries, {
             color: cores[idx],
             lineWidth: 1,
             priceLineVisible: false,
@@ -1859,7 +1882,7 @@ useEffect(() => {
         return;
       }
       if (!chartRef.current) return;
-      const serie = chartRef.current.addLineSeries({
+      const serie = chartRef.current.addSeries(LineSeries, {
         color: cor,
         lineWidth: largura,
         priceLineVisible: false,

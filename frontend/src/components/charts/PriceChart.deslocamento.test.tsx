@@ -44,7 +44,6 @@ vi.mock('lightweight-charts', () => {
     setData: vi.fn(),
     createPriceLine: vi.fn(() => ({ remove: vi.fn() })),
     removePriceLine: vi.fn(),
-    setMarkers: vi.fn(),
     remove: vi.fn(),
   };
   const serie = {
@@ -61,23 +60,23 @@ vi.mock('lightweight-charts', () => {
     }),
     coordinateToPrice: vi.fn(() => 1),
   };
+  // v5: a serie e escolhida pela DEFINICAO exportada, nao pelo nome do metodo.
+  // Uma definicao desconhecida e ERRO — o teste nao pode passar com a serie
+  // errada desenhada por um duble permissivo.
+  const CandlestickSeries = { id: 'candlestick' };
+  const LineSeries = { id: 'line' };
+  const AreaSeries = { id: 'area' };
+  const HistogramSeries = { id: 'histogram' };
   const novoGrafico = () => ({
-    addCandlestickSeries: vi.fn((o: Record<string, unknown>) => {
-      criado.candle += 1;
+    addSeries: vi.fn((definicao: unknown, o: Record<string, unknown>) => {
       reg.criacaoSerie.push(o);
-      return serie;
-    }),
-    addLineSeries: vi.fn((o: Record<string, unknown>) => {
-      reg.criacaoSerie.push(o);
-      return serie;
-    }),
-    addAreaSeries: vi.fn((o: Record<string, unknown>) => {
-      reg.criacaoSerie.push(o);
-      return serie;
-    }),
-    addHistogramSeries: vi.fn((o: Record<string, unknown>) => {
-      reg.criacaoSerie.push(o);
-      return volume;
+      if (definicao === CandlestickSeries) {
+        criado.candle += 1;
+        return serie;
+      }
+      if (definicao === LineSeries || definicao === AreaSeries) return serie;
+      if (definicao === HistogramSeries) return volume;
+      throw new Error(`definicao de serie inesperada: ${String(definicao)}`);
     }),
     removeSeries: vi.fn(),
     priceScale: vi.fn(() => ({ applyOptions: vi.fn(), width: () => LARGURA_ESCALA })),
@@ -107,6 +106,14 @@ vi.mock('lightweight-charts', () => {
       reg.criacaoGrafico.push(o);
       return novoGrafico();
     }),
+    // Na v5 o marcador e um PLUGIN: `setMarkers` so existe nele, nunca na
+    // serie. Se o codigo voltar a chamar `series.setMarkers`, estes testes
+    // quebram com TypeError — nao passam calado.
+    createSeriesMarkers: vi.fn(() => ({ setMarkers: vi.fn() })),
+    CandlestickSeries,
+    LineSeries,
+    AreaSeries,
+    HistogramSeries,
     ColorType: { Solid: 'solid', Vertical: 'vertical' },
     CrosshairMode: { Magnet: 0, Normal: 1 },
   };

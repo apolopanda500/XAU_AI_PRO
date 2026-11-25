@@ -13,9 +13,9 @@
 // `aria-pressed` e nao mudava a tela: o estado vivia no pai e o pai nunca era
 // avisado. Estes testes medem o ESTADO que o grafico recebe, e nao o atributo.
 //
-// O mock do lightweight-charts registra QUAL SERIE foi criada. Trocar o tipo de
-// grafico so e real se `addCandlestickSeries`/`addLineSeries`/`addAreaSeries`
-// mudarem de verdade — e nao se a cor do botao mudar.
+// O mock do lightweight-charts registra QUAL DEFINICAO de serie foi usada no
+// `addSeries` da v5. Trocar o tipo de grafico so e real se a definicao mudar de
+// verdade - e nao se a cor do botao mudar. Uma definicao desconhecida e ERRO.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MarketCandle } from '../../lib/marketApi';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -36,6 +36,10 @@ const seriesComDados: Array<{ setData: ReturnType<typeof vi.fn> }> = [];
 const fitContentChamadas = { n: 0 };
 
 vi.mock('lightweight-charts', () => {
+  const CandlestickSeries = { id: 'candlestick' };
+  const LineSeries = { id: 'line' };
+  const AreaSeries = { id: 'area' };
+  const HistogramSeries = { id: 'histogram' };
   const criarSerie = (nome: 'candle' | 'linha' | 'area') => {
     criado[nome] += 1;
     const serie = {
@@ -44,7 +48,6 @@ vi.mock('lightweight-charts', () => {
       createPriceLine: vi.fn(() => ({ remove: vi.fn() })),
       removePriceLine: vi.fn(),
       coordinateToPrice: vi.fn(() => 0),
-      setMarkers: vi.fn(),
       remove: vi.fn(),
       __tipo: nome,
     };
@@ -54,10 +57,12 @@ vi.mock('lightweight-charts', () => {
   };
   return {
     createChart: vi.fn(() => ({
-      addCandlestickSeries: vi.fn(() => criarSerie('candle')),
-      addLineSeries: vi.fn(() => criarSerie('linha')),
-      addAreaSeries: vi.fn(() => criarSerie('area')),
-      addHistogramSeries: vi.fn(() => criarSerie('candle')),
+      addSeries: vi.fn((definicao: unknown) => {
+        if (definicao === CandlestickSeries || definicao === HistogramSeries) return criarSerie('candle');
+        if (definicao === LineSeries) return criarSerie('linha');
+        if (definicao === AreaSeries) return criarSerie('area');
+        throw new Error(`definicao de serie inesperada: ${String(definicao)}`);
+      }),
       removeSeries: vi.fn(),
       priceScale: vi.fn(() => ({ applyOptions: vi.fn() })),
       subscribeCrosshairMove: vi.fn(),
@@ -72,6 +77,12 @@ timeScale: vi.fn(() => ({
         subscribeVisibleTimeRangeChange: vi.fn(() => ({ unsubscribe: vi.fn() })),
       })),
     })),
+    // v5: `setMarkers` e do plugin, nunca da serie.
+    createSeriesMarkers: vi.fn(() => ({ setMarkers: vi.fn() })),
+    CandlestickSeries,
+    LineSeries,
+    AreaSeries,
+    HistogramSeries,
     ColorType: { Solid: 'solid', Vertical: 'vertical' },
     CrosshairMode: { Magnet: 0, Normal: 1 },
   };
@@ -245,10 +256,10 @@ describe('a barra do grafico — tipo de grafico', () => {
     Este e o teste que impede o botao decorativo. Se a troca so mudasse a cor, o
     `aria-pressed` passaria e o grafico continuaria desenhando candle.
 
-    `addCandlestickSeries` e `addLineSeries` sao METODOS DIFERENTES: nao ha
-    `applyOptions` que transforme candle em linha. Por isso o grafico TEM de
-    criar outra serie — e remover a antiga, senao a vela continua por cima da
-    linha.
+    Na v5, `CandlestickSeries` e `LineSeries` sao DEFINICOES DIFERENTES passadas
+    ao `addSeries`: nao ha `applyOptions` que transforme candle em linha. Por
+    isso o grafico TEM de criar outra serie - e remover a antiga, senao a vela
+    continua por cima da linha.
     */
     render(<PriceChart symbol="BTCUSD" candles={CANDLES} />);
     const candlesAntes = criado.candle;

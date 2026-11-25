@@ -19,17 +19,29 @@ const createLineSeries = vi.fn(() => ({ setData: seriesSetData, createPriceLine:
 const createHistogramSeries = vi.fn(() => ({ setData: seriesSetData }));
 let fitContent = vi.fn();
 
-vi.mock('lightweight-charts', () => ({
-  // O enum real: Magnet = 0, Normal = 1. O componente usa `CrosshairMode.Normal`
-  // (mouse livre, 12/10/2026) — sem esta exportacao o mock quebra na importacao.
-  CrosshairMode: { Normal: 1, Magnet: 0, Hidden: 2, MagnetOHLC: 3 },
-  createChart: vi.fn(() => ({
-    addLineSeries: createLineSeries,
-    addHistogramSeries: createHistogramSeries,
-    timeScale: () => ({ fitContent: () => fitContent() }),
-    remove: vi.fn(),
-  })),
-}));
+vi.mock('lightweight-charts', () => {
+  // v5: `addLineSeries`/`addHistogramSeries` nao existem. O duble recebe a
+  // DEFINICAO e so devolve a serie correta se ela for a esperada — passar a
+  // definicao errada reprova com erro, em vez de desenhar outra coisa calado.
+  const LineSeries = { id: 'line' };
+  const HistogramSeries = { id: 'histogram' };
+  return {
+    LineSeries,
+    HistogramSeries,
+    // O enum real: Magnet = 0, Normal = 1. O componente usa `CrosshairMode.Normal`
+    // (mouse livre, 12/10/2026) - sem esta exportacao o mock quebra na importacao.
+    CrosshairMode: { Normal: 1, Magnet: 0, Hidden: 2, MagnetOHLC: 3 },
+    createChart: vi.fn(() => ({
+      addSeries: vi.fn((definicao: unknown) => {
+        if (definicao === LineSeries) return createLineSeries();
+        if (definicao === HistogramSeries) return createHistogramSeries();
+        throw new Error(`definicao de serie inesperada: ${String(definicao)}`);
+      }),
+      timeScale: () => ({ fitContent: () => fitContent() }),
+      remove: vi.fn(),
+    })),
+  };
+});
 
 import { GraficoIndicador } from './GraficoIndicador';
 import type { MarketCandle } from '../../lib/marketApi';
@@ -94,6 +106,9 @@ describe('GraficoIndicador — o painel', () => {
   });
 
   it('MACD desenha as tres series: histograma, macd e sinal', () => {
+    // PROVA NEGATIVA embutida no duble: se o componente pedir `LineSeries`
+    // para o histograma, o mock lanca e a contagem nao fecha. Nao basta o
+    // `addSeries` existir — tem de receber a definicao certa.
     render(<GraficoIndicador candles={candles(80)} indicador="macd" />);
     expect(createHistogramSeries).toHaveBeenCalledTimes(1);
     expect(createLineSeries).toHaveBeenCalledTimes(2);

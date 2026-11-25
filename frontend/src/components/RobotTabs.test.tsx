@@ -613,6 +613,9 @@ describe('OperacaoAutomatica — a logica que ja funcionava', () => {
     */
     renderPainel();
     await ticketMontado();
+    // O corpo so traz sl_preco/tp_preco DEPOIS que o efeito do 1:1 escreveu o
+    // status. Esperar so o botao e a corrida que reprovou no CI com NaN.
+    await ticketComPadrao11();
     for (const nome of ['1:1', '1:2', '1:3', '1:4']) {
       expect(screen.queryByRole('button', { name: nome })).toBeNull();
     }

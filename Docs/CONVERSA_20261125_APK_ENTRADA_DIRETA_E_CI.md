@@ -1,6 +1,6 @@
-# 25/11/2026 — APK entra direto no app, CI do Android e estado medido
+# 25/11/2026 - APK entra direto no app, CI do Android e migrate para charts v5
 
-Regra de leitura: o comando vence qualquer número escrito aqui.
+Regra de leitura: o comando vence qualquer numero escrito aqui.
 
 ## 1. O que mudou
 
@@ -10,7 +10,7 @@ Regra de leitura: o comando vence qualquer número escrito aqui.
   devolve o app direto. `LoginScreen`, `FirstRunWizard` e
   `MobileBiometricLock` nao sao usados no gate.
 - `frontend/src/components/MT5AccountsPanel.tsx`: unico passo deixado para o
-  operador — sincronizar a conta MT5 aberta no PC. Usa `lib/connections`
+  operador - sincronizar a conta MT5 aberta no PC. Usa `lib/connections`
   (`detectTerminal`, `saveExchange`, `connectionAction`), as mesmas rotas do
   `ConnectionSettings`: `/api/status`, `/api/connections`. Nao pede senha.
 - `frontend/src/components/SettingsCore.tsx`: bloco morto do
@@ -18,7 +18,7 @@ Regra de leitura: o comando vence qualquer número escrito aqui.
 - `frontend/src/components/MobileCommandCenter.tsx` e o teste removidos:
   componente orfa, rotas `/api/mobile/command` e `/api/mobile/control` nao
   existem no gateway.
-- `frontend/src-tauri/tauri.conf.json`: `resources: []` — os recursos
+- `frontend/src-tauri/tauri.conf.json`: `resources: []` - os recursos
   `core/xau-ai-pro-core.exe` e `bridge/**/*` foram para
   `tauri.windows.conf.json`. No Android eles nao existiam e causavam
   `resource path 'core/xau-ai-pro-core.exe' doesn't exist`.
@@ -35,14 +35,15 @@ Regra de leitura: o comando vence qualquer número escrito aqui.
 | `45545644746` | `error[E0308]` em `core/src/market/state.rs:63`: `Message::Text` espera `Utf8Bytes`, recebe `String` | bump do `axum 0.8.9` pelo Dependabot | `Message::Text(text.into())` no `push_text` |
 
 O mesmo `E0308` derrubou os workflows `Rust`, `CI` e `Validacao e Empacotamento`
-do commit `487ee916`; a correcao acima cobre os quatro.
+do commit `487ee916`; a correcao acima cobre os quatro. O build Android
+`45546286652` fechou **success em 10m35s**.
 
 ### Testes Python que so falhavam no CI (corrigido em `5d7809d`)
 
 Os 5 testes `test_ai_inference.py` reprovados nos workflows `ci`,
 `Validacao e Empacotamento` e `XAU AI PRO - validacao universal` exigem
 artefatos `MULTI_*` treinados, que nao vao no git. Executados localmente nos
-mesmos nos antes da correcao: **8 passed** — o checkout do runner e que nao
+mesmos nos antes da correcao: **8 passed** - o checkout do runner e que nao
 tem o catalogo. A suite ja tem `skipif` por ausencia de catalogo para outras
 classes; estes 5 ficaram de fora e receberam o mesmo guard.
 
@@ -61,48 +62,97 @@ commit `64d5dca` fechou **success** apos a correcao do axum.
   aceitos e ignorados onde a corretora nao suporta, conforme o contrato do
   router universal. O MT5 aplica.
 - `mt5-gateway.spec`: `hiddenimports` dos 7 modulos antes ausentes no bundle.
-- `.gitignore`: `*.bak_*` ignorado — backup que a suite gera antes de
+- `.gitignore`: `*.bak_*` ignorado - backup que a suite gera antes de
   reescrever modelos nao pode entrar no git.
+
+### Migracao para lightweight-charts 5.3.0 (esta rodada)
+
+MEDIDO: o `node_modules` local estava em `4.2.3`, mas o `package-lock.json`
+fixa `5.3.0` - `npm ci` confirmou. O CI sempre usou a versao do lockfile, por
+isso o typecheck do run `45546743177` reprovou com `addHistogramSeries is not
+a function` e os testes de grafico falharam. Nao foi opcao fixar a versao
+antiga: a migracao foi feita na API da versao instalada.
+
+- `PriceChart.tsx` e `GraficoIndicador.tsx`: `addSeries(definicao, opcoes)` com
+  `CandlestickSeries`, `LineSeries`, `AreaSeries` e `HistogramSeries`.
+- Marcadores: `createSeriesMarkers(series, pontos)` substituiu
+  `series.setMarkers(...)`. O plugin fica em `marcadoresRef` e e recriado
+  quando o tipo de grafico troca a serie — senao o sinal ficaria preso na
+  serie antiga.
+- Os 5 dubles de teste exportam as definicoes e escolhem a serie por
+  IDENTIDADE; definicao desconhecida lanca erro. Prova negativa: passar
+  `LineSeries` onde o codigo pede candle reprova, em vez de desenhar a serie
+  errada calado.
+- `RobotTabs.test.tsx`: o caso dos presets espera `ticketComPadrao11()`
+  antes de ler `sl_preco`/`tp_preco`. O corpo so contem esses campos depois
+  que o efeito do 1:1 escreveu o status; esperar so o botao era a corrida
+  que produzia `expected NaN to be close to 4136.46`. A trava continua
+  exigindo os mesmos numeros — so a espera mudou.
+- `tests/test_chaos_persistence.py`: `monkeypatch` congela
+  `mobile_control.time` no teste de rajada concorrente. `gerado_em` e
+  `int(time())`: 20 respostas que cruzam um segundo legitimo eram diferentes
+  por ruido. A igualdade integral das 20 respostas NAO foi afrouxada. O novo
+  teste `01b` prova o contrario: com relogios diferentes o payload muda, e
+  so em `gerado_em` — se outra campo tambem variasse, ele reprova.
 
 ## 2. Numeros medidos
 
 | Medicao | Resultado |
 |---|---|
-| `npx tsc --noEmit` (pos-rebase, npm 2.12.x) | **OK**, 0 erros |
-| `npx vitest run` (antes dos bumps) | **1064 passed** |
-| `npx vitest run` (pos-bumps e remocoes) | **1049 passed**, 90 arquivos em 99,06s |
+| `npx tsc --noEmit` (pos-migracao v5) | **EXIT=0**, 0 erros |
+| `npx vitest run` (pos-migracao v5, lockfile 5.3.0) | **90 arquivos, 1049 testes passed** em 77,25s |
+| `test_chaos_persistence.py` isolado, 3 rodadas seguidas | **4 passed** em cada rodada |
+| `npx vitest run` (no run `45546743177`, codigo v4 + lib v5) | 4 falhas: 3x `addHistogramSeries is not a function`, 1x `NaN` |
 | `cargo fmt --all -- --check` (pos-correcao axum) | **OK** |
 | `test_ai_inference.py` (catalogo real / vazio) | **91 passed** / **5 skipped** nas provas negativas |
-| Suite Python completa | **1630 passed, 2 skipped, 9 warnings** em 541,62s |
+| Suite Python completa (antes desta rodada) | **1630 passed, 2 skipped, 9 warnings** em 541,62s |
 | Artefato/spec (`test_bundle_gateway_artefato.py`, `test_spec_gateway.py`, `test_artefato_congelado.py`) | **27 passed** em 31,18s |
 | `scripts/sync_version.py --check` | **Todos alinhados**, versao `1.2.191` |
 | PyInstaller rebuild | **exit 0**; `mt5-gateway.exe` 28.949.497 bytes |
 | Hash do bundle (`dist` vs `frontend/src-tauri/bridge`) | **SHA256 identicos** |
 | Tunel com token (`/api/health`, `/api/status`, `/api/connections`) | **HTTP 200 nas 3**; sem token, **401** |
+| Build Android `45546286652` | **success em 10m35s** |
+| Artefato Android | `app-universal-release-unsigned.apk`, **39,2 MB**, SHA256 comecando em `1AF0FF0609805BEB` |
+| APK instalado no QA (`R9XY1016R6V`) | `com.xau_ai_pro.desktop`, `versionName=1.2.191`, `versionCode=1002191`, `targetSdk=37`; assinado com chave debug local |
 | Limpeza Windows (`limpeza_segura.ps1 -Apply -DebugCache`) | 2 passagens; 1o removeu `frontend/src-tauri/NONE`; 2o "Nenhum temporario" |
 | Disco C: apos limpeza | **1,98 GB livres** |
 
 ## 3. Estado do terminal medido (ninguem foi desligado)
 
 - `MetaEditor64.exe` PID `13116`, desde 24/11 19:26:37.
-- `metatester64.exe` PID `7604`, desde 25/11 00:39:02 — backtest ativo.
+- `metatester64.exe` PID `7604`, desde 25/11 00:39:02 - backtest ativo.
 - `terminal64.exe` PID `4256`, desde 25/11 00:43:41.
-- Gateway: PID `7396`, `127.0.0.1:9027`, build
-  `xau-ai-pro-1.2.191-universal-20261113`. Nenhuma destas sessoes foi
-  encerrada por esta sessao.
-- Celular fisico conectado: `R9XY1016R6V` (`SM_A057M`). O emulador
-  `emulator-5554` nao aparece mais na lista atual do `adb devices`.
+- Gateway: PID `7396`, `127.0.0.1:9027`. Nenhuma destas sessoes foi encerrada
+  por esta sessao.
+- Celular fisico conectado: `R9XY1016R6V` (`SM_A057M`), Android 15. O
+  emulador `emulator-5554` nao aparece mais na lista do `adb devices`.
+- QA no aparelho: app abre direto, sem login/URL/conta do app. Abas
+  `Operacao`, `Modelos`, `Risco`, `Operacoes` medidas por `uiautomator dump`.
+  Em `Configuracoes > Conexoes & Corretoras`: `CONTA MT5`, o texto "Nenhuma
+  senha e enviada pelo celular...", contas vinculadas e botoes
+  `Sincronizar MT5` / `Usar esta conta`.
+- ATENCAO: o gateway reporta `terminal_connected=false`,
+  `mt5_connected=false`, `account=null` e `ea_heartbeat.live=false` com
+  `age_sec≈1040`. A sessao MT5 do PC precisa ser reabastecida pelo operador
+  para o forward real. Nao foi mexida nesta sessao.
 
 ## 4. O que ainda NAO foi feito
 
-- Baixar o APK do run `45545644746`, instalar no celular e varrer as telas.
-  O APK antigo de 386 MB abria tela preta; só o artefato do CI conta.
-- Confirmar na tela que nao aparece login/URL/conta do app e que so falta
-  vincular a conta MT5 — inclusive checar se o `AuthGate` (PIN de
-  `auth.json`) trava em instalacao limpa.
-- Deploy final do `.ex5` e atualizacao de modelos/backtest: as equipes alfa e
-  delta encerraram com `Free usage limit reached` e precisam ser feitas
-  manualmente. Nenhum parametro de risco foi alterado.
+- Commit/push das correcoes v5 e dos testes; acompanhar todos os workflows
+  do novo commit ate verde. Os runs do commit `236a035`: `45546743177`
+  (validacao universal) e `45546743320` (Validacao e Empacotamento)
+  falharam; `CodeQL`, `Security Checks`, `Pylint`, `CI`, `ci` e `Rust`
+  fecharam success.
+- Reconstruir o APK apos a correcao v5: o APK instalado para QA foi compilado
+  com a dependencia 5.3.0 mas com chamadas de API v4, entao o grafico pode
+  estar quebrado. Repetir instalacao limpa e varredura de telas, com atencao
+  especial a candles/volume/indicadores.
+- Confirmar com o operador a forma de assinatura definitiva do APK (o QA usou
+  chave debug do Android SDK) e reabastecer a sessao MT5 para forward real.
+- Deploy final do `.ex5`: nenhuma mudanca MQL5 nesta rodada, entao nao ha
+  `.ex5` novo para publicar. Atualizacao de modelos/backtest continua manual
+  (equipes alfa/delta encerraram com `Free usage limit reached`). Nenhum
+  parametro de risco foi alterado.
 - Publicacao no MQL5 CodeBase: **nao autorizada**.
 
 ## 5. Cuidados para o proximo ciclo
@@ -113,3 +163,7 @@ commit `64d5dca` fechou **success** apos a correcao do axum.
 - Nao fechar `terminal64.exe` nem `metatester64.exe` enquanto o backtest roda.
 - Antes de `git status` travar: `limpeza_segura.ps1 -Apply -DebugCache`, sem
   `-BuildArtifacts` com build no ar.
+- O working tree traz 3 arquivos `.bak_*` versionados deletados pela limpeza
+  (`XAU_AI_PRO.ex5.bak_15h40`, `vite.config.ts.bak_20261113`,
+  `start_gateway_autostart.cmd.bak_20261117`). Nao foram incluidos neste
+  commit; decisao pendente do operador.

@@ -49,7 +49,6 @@ vi.mock('lightweight-charts', () => {
     setData: vi.fn(),
     createPriceLine: vi.fn(() => ({ remove: vi.fn() })),
     removePriceLine: vi.fn(),
-    setMarkers: vi.fn(),
     remove: vi.fn(),
   };
   const serie = {
@@ -68,23 +67,22 @@ vi.mock('lightweight-charts', () => {
     }),
     coordinateToPrice: vi.fn(() => 1),
   };
+  // v5: so `addSeries(definicao, opcoes)`. Uma definicao desconhecida e ERRO,
+  // para o duble nao deixar passar a serie errada como se estivesse certa.
+  const CandlestickSeries = { id: 'candlestick' };
+  const LineSeries = { id: 'line' };
+  const AreaSeries = { id: 'area' };
+  const HistogramSeries = { id: 'histogram' };
   const novoGrafico = () => ({
-    addCandlestickSeries: vi.fn((o: Record<string, unknown>) => {
-      criado.candle += 1;
+    addSeries: vi.fn((definicao: unknown, o: Record<string, unknown>) => {
       reg.criacaoSerie.push(o);
-      return serie;
-    }),
-    addLineSeries: vi.fn((o: Record<string, unknown>) => {
-      reg.criacaoSerie.push(o);
-      return serie;
-    }),
-    addAreaSeries: vi.fn((o: Record<string, unknown>) => {
-      reg.criacaoSerie.push(o);
-      return serie;
-    }),
-    addHistogramSeries: vi.fn((o: Record<string, unknown>) => {
-      reg.criacaoSerie.push(o);
-      return volume;
+      if (definicao === CandlestickSeries) {
+        criado.candle += 1;
+        return serie;
+      }
+      if (definicao === LineSeries || definicao === AreaSeries) return serie;
+      if (definicao === HistogramSeries) return volume;
+      throw new Error(`definicao de serie inesperada: ${String(definicao)}`);
     }),
     removeSeries: vi.fn(),
     priceScale: vi.fn(() => ({ applyOptions: vi.fn(), width: () => 60 })),
@@ -113,6 +111,12 @@ vi.mock('lightweight-charts', () => {
   });
   return {
     createChart: vi.fn(() => novoGrafico()),
+    // `setMarkers` existe so no plugin na v5 — nunca na serie.
+    createSeriesMarkers: vi.fn(() => ({ setMarkers: vi.fn() })),
+    CandlestickSeries,
+    LineSeries,
+    AreaSeries,
+    HistogramSeries,
     ColorType: { Solid: 'solid', Vertical: 'vertical' },
     CrosshairMode: { Magnet: 0, Normal: 1 },
   };

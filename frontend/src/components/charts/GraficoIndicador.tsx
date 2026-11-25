@@ -1,15 +1,27 @@
 import { useEffect, useRef } from 'react';
-import { createChart, CrosshairMode, type IChartApi, type ISeriesApi, type UTCTimestamp } from 'lightweight-charts';
+import {
+  createChart,
+  CrosshairMode,
+  HistogramSeries,
+  LineSeries,
+  type IChartApi,
+  type ISeriesApi,
+  type UTCTimestamp,
+} from 'lightweight-charts';
 import type { MarketCandle } from '../../lib/marketApi';
 import { rsiValores, macdValores, stocValores } from './PriceChart';
 
 /*
   PAINEL DE INDICADOR ABAIXO DO PRECO (05/10/2026)
   ==================================================
-  MEDIDO: `lightweight-charts` esta na **4.2.3**, e pane (varias series em
-  quadros empilhados dentro do mesmo chart) so existe a partir da **v5**. Entao
-  RSI e MACD nao podem virar pane aqui sem trocar a biblioteca no meio do
-  ciclo.
+  MEDIDO: a dependencia e **lightweight-charts 5.3.0**. A v5 trocou
+  `chart.addLineSeries()` por `chart.addSeries(LineSeries, ...)`; o duble de
+  teste tem de conhecer as DEFINICOES, nao so o metodo `addSeries`, para nao
+  passar com a serie errada desenhada.
+
+  RSI e MACD seguem em canvas separado, com o proprio eixo: pane nao e
+  necessario para o que o operador precisa ler aqui, e trocar a arquitetura no
+  meio do ciclo de correcao da API seria risco a mais.
 
   A solucao medida e a mesma do MT5: um segundo canvas DEBAIXO do preco, com o
   proprio eixo. Sem depender de recurso inexistente, e sem subir a dependencia
@@ -68,7 +80,7 @@ export function GraficoIndicador({ candles, indicador, altura = 132 }: Props) {
     const fecha = candles.map((c) => c.close);
 
     if (indicador === 'rsi') {
-      const serie: ISeriesApi<'Line'> = chart.addLineSeries({
+      const serie: ISeriesApi<'Line'> = chart.addSeries(LineSeries, {
         color: '#5aa9e6',
         lineWidth: 1,
         priceLineVisible: false,
@@ -99,13 +111,13 @@ export function GraficoIndicador({ candles, indicador, altura = 132 }: Props) {
         title: 'sobrevendido',
       });
     } else if (indicador === 'stoch') {
-      const serieK: ISeriesApi<'Line'> = chart.addLineSeries({
+      const serieK: ISeriesApi<'Line'> = chart.addSeries(LineSeries, {
         color: '#5aa9e6',
         lineWidth: 1,
         priceLineVisible: false,
         lastValueVisible: true,
       });
-      const serieD: ISeriesApi<'Line'> = chart.addLineSeries({
+      const serieD: ISeriesApi<'Line'> = chart.addSeries(LineSeries, {
         color: '#e6a54a',
         lineWidth: 1,
         priceLineVisible: false,
@@ -140,7 +152,7 @@ export function GraficoIndicador({ candles, indicador, altura = 132 }: Props) {
         title: 'sobrevendido',
       });
     } else {
-      const histo: ISeriesApi<'Histogram'> = chart.addHistogramSeries({
+      const histo: ISeriesApi<'Histogram'> = chart.addSeries(HistogramSeries, {
         priceFormat: { type: 'price', precision: 5, minMove: 0.00001 },
         priceLineVisible: false,
         lastValueVisible: false,
@@ -159,13 +171,13 @@ export function GraficoIndicador({ candles, indicador, altura = 132 }: Props) {
           )
           .filter(Boolean) as never,
       );
-      const linhaMacd: ISeriesApi<'Line'> = chart.addLineSeries({
+      const linhaMacd: ISeriesApi<'Line'> = chart.addSeries(LineSeries, {
         color: '#5aa9e6',
         lineWidth: 1,
         priceLineVisible: false,
         lastValueVisible: false,
       });
-      const linhaSinal: ISeriesApi<'Line'> = chart.addLineSeries({
+      const linhaSinal: ISeriesApi<'Line'> = chart.addSeries(LineSeries, {
         color: '#e6a54a',
         lineWidth: 1,
         priceLineVisible: false,

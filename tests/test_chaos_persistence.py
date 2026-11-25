@@ -27,7 +27,15 @@ def _app() -> FastAPI:
     return app
 
 
-def test_chaos_01_rajada_concorrente_de_leitura_sem_duplicacao():
+def test_chaos_01_rajada_concorrente_de_leitura_sem_duplicacao(monkeypatch):
+    """
+    A trava continua sendo a IGUALDADE INTEGRAL das 20 respostas. O que mudou
+    foi o relogio: `montar_snapshot` escreve `gerado_em = int(time())`, entao
+    duas respostas que cruzam um segundo legitimo eram diferentes e a suíte
+    reprovava por RUIDO, nao por duplicacao. Congelar `mobile_control.time`
+    remove so essa variacao — nenhuma asserção foi afrouxada.
+    """
+    monkeypatch.setattr(mobile_control, "time", lambda: 1_700_000_000.0)
     client = TestClient(_app())
     def ler(_):
         r = client.get("/api/mobile/control")
@@ -38,6 +46,22 @@ def test_chaos_01_rajada_concorrente_de_leitura_sem_duplicacao():
     corpos = [c for _, c in resultados]
     assert all(c == corpos[0] for c in corpos)
     assert all(c.get("read_only") is True for c in corpos)
+
+
+def test_chaos_01b_apenas_gerado_em_varia_com_o_tempo():
+    """
+    PROVA NEGATIVA do congelamento acima: com relogios diferentes o payload
+    TEM de mudar, e so pode mudar em `gerado_em`. Se qualquer outro campo
+    tambem variasse com o tempo, a igualdade integral do teste 01 estaria
+    escondendo uma segunda fonte de ruido — e este caso reprova.
+    """
+    antes = mobile_control.montar_snapshot(agora=1_700_000_000.0)
+    depois = mobile_control.montar_snapshot(agora=1_700_000_001.0)
+    assert antes != depois, "gerado_em precisa refletir o tempo"
+    assert antes["gerado_em"] != depois["gerado_em"]
+    antes.pop("gerado_em")
+    depois.pop("gerado_em")
+    assert antes == depois, "nenhum outro campo pode depender do relogio"
 
 
 def test_chaos_02_fail_closed_token_invalido_nao_derruba_servidor():
