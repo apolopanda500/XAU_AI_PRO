@@ -16,26 +16,26 @@
     "android:emulador": "tauri android build --config src-tauri/tauri.emulador.conf.json"
   },
   "dependencies": {
-    "@tanstack/react-query": "^5.103.1",
-    "@tanstack/react-virtual": "^3.14.13",
-    "@tauri-apps/api": "^2.11.1",
-    "@tauri-apps/plugin-notification": "^2.4.0",
-    "axios": "^1.7.7",
-    "lightweight-charts": "^4.2.3",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "zustand": "^4.5.5"
+    "@tanstack/react-query": "^5.108.2",
+    "@tanstack/react-virtual": "^3.14.26",
+    "@tauri-apps/api": "^2.12.5",
+    "@tauri-apps/plugin-notification": "^2.8.1",
+    "axios": "^1.21.1",
+    "lightweight-charts": "^5.3.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "zustand": "^5.1.0"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.11.4",
-    "@testing-library/jest-dom": "^7.0.1",
+    "@tauri-apps/cli": "^2.12.6",
+    "@testing-library/jest-dom": "^8.0.0",
     "@testing-library/react": "^16.3.3",
-    "@types/react": "^18.3.5",
-    "@types/react-dom": "^18.3.0",
-    "@vitejs/plugin-react": "^6.1.1",
-    "jsdom": "^30.1.0",
-    "typescript": "^5.5.4",
-    "vite": "^8.3.1",
-    "vitest": "^5.0.5"
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "jsdom": "^31.0.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.1"
   }
 }
