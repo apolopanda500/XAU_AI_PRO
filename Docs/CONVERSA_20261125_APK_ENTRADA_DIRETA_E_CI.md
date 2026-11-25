@@ -396,7 +396,8 @@ Correcao aplicada:
 - `frontend/src/components/MobileBottomNav.tsx`: 6 itens, com
   `{ id: 'settings', label: 'Config', icon: '🔧' }`; `ITEMS` renomeado para
   `MOBILE_NAV_ITEMS` e exportado, `gridTemplateColumns` acompanha o tamanho.
-- `frontend/src/theme/comment` no `global.css` atualizado com a medição.
+- `frontend/src/theme/global.css`: comentário do `@media (max-width:768px)`
+  atualizado com a medição.
 - `frontend/src/components/MobileBottomNav.test.tsx`: 3 testes, incluindo
   **prova negativa** (a lista antiga de 5 itens nao contém `settings` e o
   predicado TEM de reprovar) e o clique em `Config` mudando `activeTab`.
@@ -405,6 +406,44 @@ Correcao aplicada:
   `npx vitest run` completo: **94 arquivos, 1062 testes passed** em 361,45s
   (antes: 93 arquivos, 1059 testes — +1 arquivo, +3 testes).
 
+## 10. Ciclo 4 — o 6º botão fora da viewport (25/11/2026)
+
+Build `45671660269` concluído em **11m34s**; APK assinado com a keystore
+definitiva, `Verifies` v2/v3 true, 1 signer `CN=XAU AI PRO`, `versionCode
+1002191`, SHA-256 `3CBCE671…CE15CF`, instalado no `emulator-5554` com
+`uninstall` + `install` **Success**.
+
+### Antes (APK do ciclo 4, grid `repeat(6, 1fr)`)
+
+| Medicao | Resultado medido |
+|---|---|
+| DOM | `Config` existe e é `clickable=true` |
+| Bounds do `Config` | **`[0,0][0,0]`** — botão não layoutado, fora da viewport |
+| Tap em `(660,1194)` | continua em `Sistema` |
+| Tap em `(705,1194)` | continua em `Sistema` |
+| Bundle local (`App-B0takEzs.js`) | `gridTemplateColumns: repeat(${Ba.length}, 1fr)`, `Ba` com 6 itens |
+
+Causa: `1fr` tem `min-width:auto`. Com 6 itens em 720px, o conteúdo
+(`font-size 11`, rótulos longos, `gap:4`, `padding:6px`) força a coluna mínima
+e o sexto botão é empurrado para fora. O teste de clique passava no jsdom porque
+jsdom não faz layout — o defeito só apareceu no aparelho.
+
+### Correção aplicada
+
+- `MobileBottomNav.tsx`: `MOBILE_NAV_GRID` exportado com
+  `repeat(${MOBILE_NAV_ITEMS.length}, minmax(0, 1fr))`, usado pelo componente e
+  importado pelo teste (o teste não repete a string); `gap: 2` e
+  `padding: '6px 4px …'`, botão com `padding: '8px 2px'`.
+- `MobileBottomNav.test.tsx`: 5 testes, com **prova negativa** de
+  `repeat(6, 1fr)`; `afterEach(cleanup)` explícito porque o vitest roda sem
+  `globals`; normalização `0px → 0` porque o jsdom reescreve `minmax(0,1fr)`.
+- `npx vitest run src/components/MobileBottomNav.test.tsx`: **5 passed**;
+  `npx tsc --noEmit`: **0 erros**; `npm run build`: OK. O bundle
+  `App-DJiOaT-n.js` contém `Va=repeat(${Ba.length}, minmax(0, 1fr))` e `Ba`
+  com 6 itens (conferido por leitura do bundle, não por suposição).
+- `npx vitest run` completo: **94 arquivos, 1064 testes passed** em 370,80s
+  (antes: 94 arquivos, 1062 testes — +2 testes).
+
 Essa correção exige um novo build do APK — o instalado no emulador ainda tem
-a barra de 5 itens. Somente depois do rebuild sera possivel fazer
+o grid antigo. Somente depois do rebuild sera possivel fazer
 `Sincronizar MT5` no emulador.

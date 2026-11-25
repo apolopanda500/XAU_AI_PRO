@@ -21,6 +21,15 @@ export const MOBILE_NAV_ITEMS: Item[] = [
   { id: 'settings', label: 'Config', icon: '🔧' },
 ];
 
+/*
+  `1fr` tem min-width:auto. Com 6 itens em 720px o sexto botão transbordava
+  para fora da viewport e o uiautomator media bounds [0,0][0,0] — MEDIDO
+  25/11/2026 no emulator-5554. minmax(0,1fr) deixa as colunas encolherem e
+  o `Config` continua tocável. Exportado para o teste exercitar a MESMA
+  constante usada pelo componente, nao uma copia da string.
+*/
+export const MOBILE_NAV_GRID = `repeat(${MOBILE_NAV_ITEMS.length}, minmax(0, 1fr))`;
+
 export const MobileBottomNav: React.FC = () => {
   const mobile = isMobileRuntime();
   const active = useAppStore((s) => (s.activeTab === 'dashboard' ? 'portfolio' : s.activeTab));
@@ -36,9 +45,9 @@ export const MobileBottomNav: React.FC = () => {
         bottom: 0,
         zIndex: 20,
         display: 'grid',
-        gridTemplateColumns: `repeat(${MOBILE_NAV_ITEMS.length}, 1fr)`,
-        gap: 4,
-        padding: '6px 6px calc(6px + env(safe-area-inset-bottom, 0px))',
+        gridTemplateColumns: MOBILE_NAV_GRID,
+        gap: 2,
+        padding: '6px 4px calc(6px + env(safe-area-inset-bottom, 0px))',
         background: 'rgba(7, 11, 20, 0.96)',
         borderTop: '1px solid rgba(148, 163, 184, 0.2)',
         backdropFilter: 'blur(10px)',
@@ -56,7 +65,7 @@ export const MobileBottomNav: React.FC = () => {
             style={{
               border: 'none',
               borderRadius: 10,
-              padding: '8px 4px',
+              padding: '8px 2px',
               background: isActive ? 'rgba(245, 158, 11, 0.16)' : 'transparent',
               color: isActive ? '#fbbf24' : '#cbd5e1',
               display: 'flex',
