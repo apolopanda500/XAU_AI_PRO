@@ -64,14 +64,26 @@ button:disabled {
   backface-visibility: hidden;
 }
 
-/* 5. SELOS (BADGES/CHIPS) NUNCA QUEBRAM OU VAZAM */
+/* 5. SELOS (BADGES/CHIPS) NUNCA QUEBRAM OU VAZAM
+   ------------------------------------------------------------------
+   MEDIDO 25/11/2026 no APK 1.2.191: o seletor amplo `[class*="selo"]`
+   casava 12 classes do fonte, mas so 4 eram selos de verdade. As outras
+   8 (`confianca-selo`, `selo-marca`, `selo-desenvolvedor`, `selo-nome`,
+   `selo-versao`, `selo-rotulo`, `selo-nome-dev`, `selo-contato`) sao o
+   cabecalho de "Confianca & Responsavel": um container flexivel que
+   precisa de `flex-wrap: wrap`, alinhamento proprio e quebra de linha no
+   celular. A reabaixo de selo forçava `inline-flex + nowrap +
+   overflow:hidden + flex-shrink:0` neles, cortando nome/contato em telas
+   estreitas. O mesmo vale para `[class*="badge"]`: so existem `.badge` e
+   `.symbol-badge` no codigo, e um curinga nao traz beneficio nenhum.
+   A correlacao e explicita: se aparecer um selo novo, ele entra aqui. */
 .badge,
 .chip,
 .pill,
 .status-pill,
 .symbol-badge,
-[class*="badge"],
-[class*="selo"] {
+.mc-selo,
+.boleta-selo {
   display: inline-flex;
   align-items: center;
   justify-content: center;

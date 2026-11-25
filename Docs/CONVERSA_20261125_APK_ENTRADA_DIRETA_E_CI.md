@@ -167,3 +167,53 @@ antiga: a migracao foi feita na API da versao instalada.
   (`XAU_AI_PRO.ex5.bak_15h40`, `vite.config.ts.bak_20261113`,
   `start_gateway_autostart.cmd.bak_20261117`). Nao foram incluidos neste
   commit; decisao pendente do operador.
+
+## 6. Ciclo 2 — selos, imagens e transporte (25/11/2026)
+
+Espacos separados por decisao do dono: `Temp/opencode/qa-android/ciclo2/antes`
+guarda a medida com o APK antigo; `.../ciclo2/depois` recebe a medida depois da
+instalacao limpa. Nenhum dos dois diretorios foi limpo entre as passagens.
+
+### Antes (APK 1.2.191 instalado, fonte ja em correcao)
+
+| Medicao | Resultado medido |
+|---|---|
+| `npx tsc --noEmit` | **EXIT=0**, 0 erros (`ciclo2/antes/tsc.txt`) |
+| `npx vitest run` (suíte completa) | **93 arquivos, 1059 testes passed** em 341,57s, **EXIT=0** (`vitest.txt`) |
+| `.venv\Scripts\python.exe -m pytest -q tests` | **1631 passed, 2 skipped, 9 warnings** em 372,15s, **EXIT=0** (`pytest.txt`) |
+| Classes com `selo` no fonte casadas por `[class*="selo"]` | **12**; so **4** eram chips (`boleta-selo`, `boleta-selo-armado`, `boleta-selo-leitura`, `mc-selo`) |
+| Classes sequestradas pela regra de chip | **8**: `confianca-selo`, `selo-marca`, `selo-desenvolvedor`, `selo-nome`, `selo-versao`, `selo-rotulo`, `selo-nome-dev`, `selo-contato` |
+| Efeito da regra | `display:inline-flex`, `white-space:nowrap`, `flex-shrink:0`, `overflow:hidden` no cabecalho que precisa de `flex-wrap:wrap` |
+| Imagem do topo no APK (XML) | `[28,36][123,131]` — 95x95 px fisicos = 34 CSS px |
+| Carimbo do rodape no APK (XML) | `[244,931][362,1050]` — 118x119 px fisicos = 44 CSS px |
+| Amostra de pixels da marca em Configuracao | desvio padrao **65,3 / 66,7 / 66,5**, **1012** cores, borda **17,4** — bitmap carregado, nao caixa vazia |
+| Cabecalho do APK antes do rebuild | `WS Offline` em todas as telas, com gateway HTTP ativo |
+| Separador em `Conexoes & Corretoras` | `&middot;` literal corrigido no fonte para `·`, ainda pendente de rebuild |
+
+O cabecalho de "Confianca & Responsavel" aparece inteiro no dump antes do
+build (`XAU AI PRO`, `v1.2.191`, `DESENVOLVIDO POR`, `Henrique de Carvalho` e os
+dois contatos). O defeito e estrutural e depende da largura: o curinga retira o
+`flex-wrap` do container e impede a quebra em telas mais estreitas. Por isso a
+correcao e um seletor explicito, nao um ajuste de pixel numa captura.
+
+### Correcoes aplicadas antes do build
+
+- `frontend/src/theme/design_system_10_10.css`: `[class*="selo"]` e
+  `[class*="badge"]` substituidos por `.badge`, `.chip`, `.pill`,
+  `.status-pill`, `.symbol-badge`, `.mc-selo`, `.boleta-selo`.
+- `frontend/src/theme/design_system_10_10.test.ts`: prova negativa com o CSS
+  antigo (o detector TEM de reprovar o curinga), prova de que o CSS real nao
+  tem curinga de selo/badge e de que os quatro chips continuam sem vazamento.
+- `frontend/src/components/Sidebar.tsx`: `width`/`height`, `decoding="async"` e
+  `draggable={false}` nas duas imagens da marca; `Sidebar.test.tsx` trava os
+  atributos. Sem dimensoes o navegador reserva 0x0 e o texto salta.
+- `frontend/src/components/MT5AccountsPanel.tsx` e teste proprio: separador
+  `·` no lugar de `&middot;`.
+- `frontend/src/hooks/useMarketWebSocket.ts` e `TopNav.tsx`: sem WS
+  configurado nao abre socket e o chip diz `HTTP`, nao `WS Offline`.
+
+### Depois
+
+A preencher apos rebuild, assinatura com chave debug, instalacao limpa e nova
+varredura das telas afetadas. Nenhuma ordem foi enviada e nenhum parametro de
+risco foi alterado neste ciclo.

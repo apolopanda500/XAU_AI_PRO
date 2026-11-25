@@ -26,11 +26,17 @@ const H = vi.hoisted(() => ({
   runtime: null as unknown,
   status: 'Inativo',
   aiCalls: 0,
+  wsConfigurado: false,
 }));
 
 vi.mock('../hooks/queries', () => ({
   useEaRuntime: () => ({ data: H.runtime, isLoading: false }),
 }));
+
+vi.mock('../lib/api', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../lib/api')>();
+  return { ...real, temWsConfigurado: () => H.wsConfigurado };
+});
 
 const { default: TopNav } = await import('./TopNav');
 const { useInferenciaIA } = await import('../hooks/useAICommunication');
@@ -102,6 +108,33 @@ describe('TopNav — o rótulo do EA vem do heartbeat, não de um texto fixo', (
     await waitFor(() => {
       expect(useAppStore.getState().robotStatus).toContain('ETHUSD');
     });
+  });
+});
+
+describe('TopNav — o chip de transporte diz a verdade', () => {
+  /*
+    MEDIDO no APK 1.2.191, em todas as telas: `WS Offline`. O gateway FastAPI
+    responde `transport: http-polling, websocket: false`, entao nao havia
+    servidor caido — havia um rotulo afirmando um transporte que nao existe.
+    O gateway respondendo era mostrado por outra tela (`Sistema`), e as duas
+    informacoes pareciam se contradizer.
+  */
+  beforeEach(() => {
+    H.wsConfigurado = false;
+    useAppStore.setState({ wsConnected: false });
+  });
+  afterEach(() => cleanup());
+
+  it('sem WS configurado, mostra HTTP e NAO diz "WS Offline"', () => {
+    render(<TopNav />);
+    expect(screen.getByText('HTTP')).toBeTruthy();
+    expect(document.body.textContent).not.toContain('WS Offline');
+  });
+
+  it('PROVA NEGATIVA: com WS configurado, o rotulo WS continua valendo', () => {
+    H.wsConfigurado = true;
+    render(<TopNav />);
+    expect(screen.getByText('WS Offline')).toBeTruthy();
   });
 });
 

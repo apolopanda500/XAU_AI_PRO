@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo } from 'react';
 import { useAppStore } from '../hooks/useAppStore';
 import { useEaRuntime } from '../hooks/queries';
+import { temWsConfigurado } from '../lib/api';
 import SeletorFuso from './SeletorFuso';
 import '../theme/fuso.css';
 
@@ -10,6 +11,14 @@ import '../theme/fuso.css';
 
 export default function TopNav() {
   const wsConnected = useAppStore((s) => s.wsConnected);
+  /*
+    `WS Offline` era um sinal falso: o gateway FastAPI nao tem /ws/market e o
+    APK nao configura VITE_WS_URL. O app inteiro funciona por HTTP polling e
+    o cabecalho dizia `Offline` como se houvesse um servidor caido. Aqui ele
+    diz `HTTP` — o transporte que esta de fato em uso — e so fala em WS quando
+    existe um servidor configurado (25/11/2026).
+  */
+  const wsConfigurado = temWsConfigurado();
   const aiStatus = useAppStore((s) => s.aiStatus);
   const setRobotStatus = useAppStore((s) => s.setRobotStatus);
   const ea = useEaRuntime();
@@ -55,8 +64,16 @@ export default function TopNav() {
   return (
     <header className="topbar">
       <div className="topnav-status">
-        <span className="status">
-          <i className={`dot ${wsConnected ? 'on' : ''}`} /> WS {wsConnected ? 'Online' : 'Offline'}
+        <span
+          className="status"
+          title={
+            wsConfigurado
+              ? 'Feed de preço por WebSocket.'
+              : 'Gateway por HTTP polling; nenhum servidor WebSocket configurado.'
+          }
+        >
+          <i className={`dot ${wsConnected ? 'on' : ''}`} />
+          {wsConfigurado ? `WS ${wsConnected ? 'Online' : 'Offline'}` : 'HTTP'}
         </span>
         <span className="status">🤖 AI: {aiStatus}</span>
         <span className="status">EA: {robotStatus}</span>

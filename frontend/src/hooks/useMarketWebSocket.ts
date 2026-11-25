@@ -2,7 +2,7 @@
 // Handshake Hello, heartbeat com latencia e reconexao com backoff.
 
 import { useEffect, useRef, useCallback } from 'react';
-import { apiBase, sessionToken, wsUrl } from '../lib/api';
+import { apiBase, sessionToken, temWsConfigurado, wsUrl } from '../lib/api';
 import { useAppStore } from './useAppStore';
 import { PROTOCOL_VERSION, WS_PING_INTERVAL_MS, type WsMessageV1 } from '../lib/protocol';
 import { normalizeSymbols } from '../lib/constants';
@@ -125,6 +125,21 @@ export function useMarketWebSocket() {
   );
 
   const connectWebSocket = useCallback(() => {
+    /*
+      FAIL-CLOSED: SEM SERVIDOR WS CONFIGURADO, NAO ABRIR SOCKET (25/11/2026).
+      =====================================================================
+      MEDIDO no APK 1.2.191 em forward real: o cabecalho ficava `WS Offline`
+      em TODAS as telas e o WebView nunca ficava idle. O gateway FastAPI
+      declara `transport: http-polling, websocket: false` — nao existe
+      `/ws/market`. O hook chamava `new WebSocket(getWsUrl())` de qualquer
+      jeito, o socket fechava e `onclose` chamava `connectWebSocket()` de novo,
+      com backoff: loop infinito de tentativa contra um endpoint inexistente.
+      `temWsConfigurado()` existia em `lib/api.ts` e NAO TINHA consumidor —
+      controle sem leitor, que a regra do AGENTS.md 9 proibe.
+      Os dados do app vem por HTTP polling; WS e so o feed de preco, e so
+      existe quando o operador/build configurou um servidor real.
+    */
+    if (!temWsConfigurado()) return;
     const attempt = retryRef.current;
     const delay = Math.min(1000 * 2 ** attempt, 30000);
     if (attempt > 0) console.log(`[WS] reconectando em ${delay}ms`);

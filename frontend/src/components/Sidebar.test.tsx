@@ -58,4 +58,24 @@ describe('Sidebar — recolher e expandir sem perder o botao', () => {
     const botao = (folha.match(/\.sidebar\.collapsed \.collapse-btn\s*\{[^}]*\}/) ?? [])[0] ?? '';
     expect(botao).toContain('width: 100%');
   });
+
+  it('PROVA: marca e carimbo reservam tamanho antes do PNG entrar', () => {
+    useAppStore.setState({ sidebarOpen: true });
+    render(<Sidebar />);
+    const imagens = screen.getAllByAltText('XAU AI PRO') as HTMLImageElement[];
+    expect(imagens.length).toBe(2);
+
+    const [topo, rodape] = imagens;
+    for (const img of imagens) {
+      expect(img.getAttribute('src')).toBe('/xau-ai-pro-mark.png');
+      expect(img.getAttribute('decoding')).toBe('async');
+      expect(img.draggable).toBe(false);
+      // PROVA NEGATIVA: sem width/height o navegador reserva 0x0 e o texto da
+      // marca salta quando o PNG de 2,1 MB termina de decodificar no celular.
+      expect(Number(img.getAttribute('width'))).toBeGreaterThan(0);
+      expect(Number(img.getAttribute('height'))).toBeGreaterThan(0);
+    }
+    expect(Number(topo.getAttribute('width'))).toBe(34);
+    expect(Number(rodape.getAttribute('width'))).toBe(44);
+  });
 });

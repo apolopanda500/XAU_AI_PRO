@@ -108,8 +108,8 @@ export default function MT5AccountsPanel() {
       <h3>Sessao detectada no terminal</h3>
       {detectada ? (
         <p className="hint con-ok">
-          {detectada.login} &middot; {detectada.server}
-          {detectada.name ? ` &middot; ${detectada.name}` : ''}
+          {detectada.login} · {detectada.server}
+          {detectada.name ? ` · ${detectada.name}` : ''}
         </p>
       ) : (
         <p className="hint con-aviso">
@@ -141,9 +141,9 @@ export default function MT5AccountsPanel() {
             const emUso = ativa === conta.id;
             return (
               <li key={conta.id}>
-                {conta.id.split(':').slice(2).join(':') || conta.id} &middot; {conta.market}
-                {conta.active === false ? ' &middot; desativada' : ''}
-                {emUso ? ' &middot; EM USO' : ''}
+                {conta.id.split(':').slice(2).join(':') || conta.id} · {conta.market}
+                {conta.active === false ? ' · desativada' : ''}
+                {emUso ? ' · EM USO' : ''}
                 {!emUso && (
                   <button type="button" className="btn ghost" onClick={() => usar(conta)}>
                     Usar esta conta

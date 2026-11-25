@@ -53,7 +53,15 @@ export default function Sidebar() {
   return (
     <aside className={`sidebar ${open ? '' : 'collapsed'}`} aria-label="Navegação principal">
       <div className="brand">
-        <img className="brand-mark brand-image" src="/xau-ai-pro-mark.png" alt="XAU AI PRO" />
+        <img
+          className="brand-mark brand-image"
+          src="/xau-ai-pro-mark.png"
+          alt="XAU AI PRO"
+          width={34}
+          height={34}
+          decoding="async"
+          draggable={false}
+        />
         {open && <span className="brand-name">XAU AI PRO</span>}
         <button
           type="button"
@@ -106,7 +114,15 @@ export default function Sidebar() {
       */}
       {open && (
         <div className="sidebar-footer">
-          <img className="sidebar-stamp" src="/xau-ai-pro-mark.png" alt="XAU AI PRO" />
+          <img
+            className="sidebar-stamp"
+            src="/xau-ai-pro-mark.png"
+            alt="XAU AI PRO"
+            width={44}
+            height={44}
+            decoding="async"
+            draggable={false}
+          />
         </div>
       )}
     </aside>
