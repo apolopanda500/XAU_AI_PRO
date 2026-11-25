@@ -60,7 +60,7 @@ pub fn encode_message(msg: &WsMessage) -> String {
 
 /// Envia texto pronto ao cliente.
 pub async fn push_text(sender: &mut WsSender, text: String) -> bool {
-    sender.send(Message::Text(text)).await.is_ok()
+    sender.send(Message::Text(text.into())).await.is_ok()
 }
 
 /// Envia erro tipado ao cliente.
