@@ -40,6 +40,14 @@ DATA = RAIZ.parent / "Data"
 # aprender, e o modelo de cada um continuava reprovado. Simbolo ausente na
 # corretora ou sem historico e ignorado com mensagem; nunca e inventado.
 SIMBOLOS = (
+    # MEDIDO 25/11/2026: o EA opera GOLD, BTCUSD e ETHUSD nos graficos e esta
+    # lista tinha so XAUUSD. Efeito medido: o GOLD nunca foi exportado e ficou
+    # com 384 candles, entao o modelo MULTI_METALS aprendeu com 384 barras de
+    # um simbolo que nem e o que o grafico executa. GOLD e o nome desta
+    # corretora para o ouro; XAUUSD fica na lista porque os datasets ja
+    # gravados usam esse nome. Ausente na corretora e ignorado com mensagem,
+    # nunca inventado.
+    "GOLD", "BTCUSD", "ETHUSD",
     "XAUUSD",
     "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "NZDUSD", "USDCAD", "USDCHF",
     "USDBRL", "USDCLP", "USDCOP", "USDCZK", "USDCNH", "USDSEK", "USDSGD",
