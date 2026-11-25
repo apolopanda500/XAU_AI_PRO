@@ -38,6 +38,7 @@ E caro (medido: ~11 s) e externo ao repositorio, entao:
 """
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
@@ -47,7 +48,14 @@ from pathlib import Path
 import pytest
 
 RAIZ = Path(__file__).resolve().parent.parent
-EA = RAIZ / "MQL5" / "Experts" / "XAU_AI_PRO" / "XAU_AI_PRO.mq5"
+EMBUTIDA = RAIZ / "MQL5" / "Experts" / "XAU_AI_PRO" / "XAU_AI_PRO.mq5"
+CANONICA = RAIZ.parents[1] / "Experts" / "XAU_AI_PRO" / "XAU_AI_PRO.mq5"
+
+# MEDIDO 25/11/2026: este teste compilava SOMENTE a copia embutida no repo do
+# app. A copia canonica (a que o grafico executa) mudou as 05:48 e o `.ex5`
+# continuou das 05:41 — o teste passava com o EA de producao defasado. A
+# canonica vence quando existe; a embutida e o fallback para CI sem o terminal.
+EA = CANONICA if CANONICA.is_file() else EMBUTIDA
 
 #: Candidatos de instalacao, do mais especifico ao generico. O primeiro
 #: achado vence. `C:\Program Files\MetaTrader 5` e o padrao do MT5 no
@@ -160,3 +168,56 @@ def test_log_da_compilacao_e_interpretavel():
     assert n_err == 0, f"a propria linha Result reporta {n_err} erro(s)"
     # Nao se fixa um teto de warnings aqui: escolher quais avisos importam e
     # discussao de estilo. O que nao pode e `errors != 0`.
+
+
+def _fonte_mais_recente(ea: Path) -> Path:
+    """O `.mq5` ou qualquer `.mqh` include com mtime maior."""
+    fontes = [ea, *ea.parent.rglob("*.mqh")]
+    return max(fontes, key=lambda p: p.stat().st_mtime)
+
+
+def ex5_defasado(ea: Path) -> bool:
+    """O binario executado pelo grafico e mais velho que algum fonte?"""
+    ex5 = ea.with_suffix(".ex5")
+    if not ex5.is_file():
+        return True
+    return ex5.stat().st_mtime < _fonte_mais_recente(ea).stat().st_mtime
+
+
+def test_ex5_canonico_nao_esta_defasado() -> None:
+    """Compilar na embutida nao prova nada sobre o EA que o MT5 executa.
+
+    MEDIDO 25/11/2026: fonte canonico alterado as 05:48, `.ex5` das 05:41,
+    e `pytest tests/test_mql5_compila.py` verde. A causa era o `EA` desta
+    arquivo apontando para a copia embutida no repositorio do app.
+    """
+    if _metaeditor() is None or not CANONICA.is_file():
+        pytest.skip("sem MetaEditor64 ou sem copia canonica neste ambiente")
+    assert not ex5_defasado(CANONICA), (
+        f"`.ex5` canonico mais velho que {_fonte_mais_recente(CANONICA)}: "
+        "recompile no MetaEditor64 antes de tratar a alteracao como valida"
+    )
+
+
+def test_prova_negativa_detecta_ex5_defasado(tmp_path: Path) -> None:
+    """Arquivo mais velho TEM de ser acusado; mais novo TEM de passar."""
+    ea = tmp_path / "EA.mq5"
+    ea.write_text("// fonte", encoding="utf-8")
+    (tmp_path / "Inc.mqh").write_text("// include", encoding="utf-8")
+    ex5 = ea.with_suffix(".ex5")
+    ex5.write_bytes(b"binario")
+    # Iguala os mtimes ao FONTE MAIS RECENTE, nao ao `.mq5`: o include e
+    # escrito logo depois e, se o binario casar so com o `.mq5`, a guarda
+    # corretamente acusa defasagem e a prova negativa falha por erro do teste.
+    agora = _fonte_mais_recente(ea).stat().st_mtime
+    os.utime(ex5, (agora, agora))
+    assert not ex5_defasado(ea)
+
+    # Include editado DEPOIS do binario: defasado, tem de reprovar.
+    futuro = agora + 60
+    os.utime(tmp_path / "Inc.mqh", (futuro, futuro))
+    assert ex5_defasado(ea)
+
+    # Recompilou: binario mais novo que todos os fontes, volta a passar.
+    os.utime(ex5, (futuro + 60, futuro + 60))
+    assert not ex5_defasado(ea)

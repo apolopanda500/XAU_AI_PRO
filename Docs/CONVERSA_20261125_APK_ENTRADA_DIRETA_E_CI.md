@@ -272,3 +272,71 @@ instalacao, mas nao tera a mesma identidade de um keystore oficial futura.
 - Relink da conta `420750145 @ XMGlobal-MT5 17` no APK recem-instalado via
   `Sincronizar MT5` (acao segura, ja usada neste ciclo). Nenhuma ordem foi
   enviada.
+
+## 7. Ciclo 3 — heartbeat em producao e trava da copia canonica (25/11/2026)
+
+### Antes
+
+| Medicao | Resultado medido |
+|---|---|
+| `ea_heartbeat.symbol` em `/api/status` | oscilava `ETHUSD → EURUSD → GOLD`; `writer_symbol` ausente |
+| `.ex5` canonico | `2026-11-25 05:41`, enquanto o fonte canonico era das `05:48` |
+| `pytest tests/test_mql5_compila.py` | **2 passed**, verde com o EA de producao defasado — o teste compilava so a copia embutida |
+| Gateway local | porta `9027` sem listener (PID antigo morto na reinicializacao externa) |
+| Tunel rapido antigo | `signals-llc-illustrations-viewer.trycloudflare.com` nao resolvia; URL morta embutida no APK assinado |
+
+### Correcoes aplicadas
+
+- `tests/test_mql5_compila.py`: `EA = CANONICA if CANONICA.is_file() else EMBUTIDA`,
+  onde `CANONICA = RAIZ.parents[1]/"Experts"/"XAU_AI_PRO"/"XAU_AI_PRO.mq5"`.
+  Nova guarda `test_ex5_canonico_nao_esta_defasado` compara o mtime do `.ex5`
+  contra o `.mq5` e todos os `.mqh` includes, com prova negativa
+  (`test_prova_negativa_detecta_ex5_defasado`: include mais novo reprova,
+  binario recompilado volta a passar).
+- Compilacao explicita da copia canonica no MetaEditor64.
+
+### Depois (medido)
+
+| Medicao | Resultado medido |
+|---|---|
+| MetaEditor64 na canonica | **`Result: 0 errors, 0 warnings`**; `XAU_AI_PRO.ex5` com mtime `2026-11-25 14:09:42`, 1.137.470 bytes |
+| `pytest -q tests/test_mql5_compila.py` | **4 passed** (antes: 2), incluindo a prova negativa do `.ex5` defasado. A prova negativa era **flaky**: igualava o mtime do `.ex5` ao do `.mq5`, mas o `.mqh` e escrito logo depois e ora casava, ora nao, na granularidade do sistema. Corrigido para usar `_fonte_mais_recente(ea)`; `pytest -q tests/test_mql5_compila.py tests/test_heartbeat_frota.py`: **7 passed** |
+| `pytest -q tests/test_heartbeat_frota.py` | **3 passed** (prova negativa do formato antigo com `_Symbol`) |
+| Gateway local | `start_gateway.bat` sem `real`: PID `13188` listening em `127.0.0.1:9027`; nenhuma porta de execucao armada |
+| `/api/health` | `ok=true`, `source=mt5_gateway`, `gateway_build=xau-ai-pro-1.2.191-universal-20261113` |
+| `/api/status` as `17:18:39` | `schema=ea-heartbeat.v1`, `symbol=FLEET`, `writer_symbol=EURUSD`, `timeframe=0`, `writer_timeframe=5`, `live=true`, `age_sec=0.2`, `state=RUNNING`, `write_count=172` |
+| Conta lida | `420750145 @ XMGlobal-MT5 17`, `Michele Dos Santos`, `balance=9.92`, `equity=15.06`, `mode=REAL`, `account_confirmed=false` — somente leitura, nenhuma ordem |
+| Commit `375af7bd` | **8 workflows `completed success`**: validacao universal, `ci`, `CI`, Rust, Security, Pylint, Validacao e Empacotamento, CodeQL |
+| Emulador | `emulator-5554` online; APK assinado instalado com `Success` (`adb uninstall` + `install`) |
+
+A pendencia de reanexacao do ciclo 2 ficou **resolvida sem intervencao manual
+desta sessao**: o heartbeat em producao passou a gravar `FLEET` com
+`writer_symbol` logo apos a compilacao da copia canonica. A medicao vence a
+suposicao anterior; nao se deve reanexar nada so para "seguir o plano" quando
+o dado ja mostra o formato novo no grafico.
+
+### Novo tunnel medido
+
+O quick tunnel antigo nao resolvia mais. O novo aponta para
+`127.0.0.1:9027` e foi medido **antes** de embutir a URL no APK:
+
+| Medicao | Resultado |
+|---|---|
+| `GET /api/health` com `Authorization: Bearer` | **HTTP 200**, `ok=true`, `source=mt5_gateway`, build `1.2.191` |
+| `GET /api/status` com token | `schema=ea-heartbeat.v1`, `symbol=FLEET`, `writer_symbol=BTCUSD`, `timeframe=0`, `writer_timeframe=5`, `live=true`, `age_sec=0.9`, conta `420750145 @ XMGlobal-MT5 17`, `mode=REAL`, `confirmed=false` |
+| `GET /api/health` sem token | **HTTP 401** — prova negativa, fail-closed intacto |
+
+`frontend/.env.production`: somente a linha `VITE_API_BASE` foi trocada; o token
+permanece o mesmo e nao foi lido nem impresso em nenhum passo. Quick tunnel e
+temporario por definicao: se a URL trocar, o APK fica cego mesmo com gateway
+local sao, e sera preciso rebuildar.
+
+### Pendente neste ciclo
+
+- Commit/push de `tests/test_mql5_compila.py`, `frontend/.env.production` e
+  desta secao em `origin/main`.
+- Rebuild, assinatura com `xau-ai-pro-release.jks` e reinstalacao no emulador;
+  QA das 11 telas com capturas em `qa-android/emulador` (espaco separado de
+  `ciclo2/antes` e `ciclo2/depois`).
+- `Sincronizar MT5` no emulador para religar `420750145 @ XMGlobal-MT5 17`,
+  sem tocar em `Ligar IA`, automacao, limites ou ordens.
