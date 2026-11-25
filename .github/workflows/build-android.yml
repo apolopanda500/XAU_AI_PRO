@@ -24,6 +24,23 @@ jobs:
   build-android:
     name: APK universal (Android)
     runs-on: ubuntu-latest
+    env:
+      # O `.cargo/config.toml` de src-tauri usa `target-dir = "../../Temp/cargo-target"`.
+      # MEDIDO 25/11/2026 (run 45540107567): o cargo compila o ARMv7, termina com
+      # `Finished release`, mas escreve o `.so` em outro lugar quando o Gradle
+      # chama o Tauri com outro cwd — e o Tauri procura em
+      # `<repo>/Temp/cargo-target/armv7-linux-androideabi/release/`, reprovando
+      # com "Library artifact not found ... Make sure your Cargo.toml has [lib]".
+      # O `[lib]` ESTA correto; o que diverge e o caminho. Fixar o absoluto no job
+      # fecha os dois lados no mesmo diretorio (build_app.bat ja faz isso no PC).
+      CARGO_TARGET_DIR: ${{ github.workspace }}/Temp/cargo-target
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      # Sem isto o Tauri escolhe o NDK 30.0.16248370 que ja vem no runner e
+      # ignora o 28.2.13676358 instalado acima — dois lados do mesmo dado
+      # divergindo de novo. Medido no log do run 45540107567.
+      ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/28.2.13676358
+      NDK_HOME: /usr/local/lib/android/sdk/ndk/28.2.13676358
     steps:
       - name: Checkout
         uses: actions/checkout@v7
