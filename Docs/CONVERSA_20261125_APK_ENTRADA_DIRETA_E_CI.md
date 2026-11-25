@@ -37,14 +37,19 @@ Regra de leitura: o comando vence qualquer número escrito aqui.
 O mesmo `E0308` derrubou os workflows `Rust`, `CI` e `Validacao e Empacotamento`
 do commit `487ee916`; a correcao acima cobre os quatro.
 
-### Testes Python que so falham no CI (diagnosticado, pendente)
+### Testes Python que so falhavam no CI (corrigido em `5d7809d`)
 
 Os 5 testes `test_ai_inference.py` reprovados nos workflows `ci`,
 `Validacao e Empacotamento` e `XAU AI PRO - validacao universal` exigem
 artefatos `MULTI_*` treinados, que nao vao no git. Executados localmente nos
-mesmos nos: **8 passed** — o checkout do runner e que nao tem o catalogo. A
-suite ja tem `skipif` por ausencia de catalogo para outras classes; estes 5
-ficaram de fora e precisam do mesmo guard.
+mesmos nos antes da correcao: **8 passed** — o checkout do runner e que nao
+tem o catalogo. A suite ja tem `skipif` por ausencia de catalogo para outras
+classes; estes 5 ficaram de fora e receberam o mesmo guard.
+
+Medido depois: com o catalogo real, `test_ai_inference.py` da **91 passed**;
+com `XAU_MODELOS_DIR` apontado para diretorio vazio, os 5 marcados dao
+**5 skipped** (prova negativa de que o guard funciona). O workflow `Rust` no
+commit `64d5dca` fechou **success** apos a correcao do axum.
 
 ### Outras correcoes da suite
 
@@ -65,6 +70,9 @@ ficaram de fora e precisam do mesmo guard.
 |---|---|
 | `npx tsc --noEmit` (pos-rebase, npm 2.12.x) | **OK**, 0 erros |
 | `npx vitest run` (antes dos bumps) | **1064 passed** |
+| `npx vitest run` (pos-bumps e remocoes) | **1049 passed**, 90 arquivos em 99,06s |
+| `cargo fmt --all -- --check` (pos-correcao axum) | **OK** |
+| `test_ai_inference.py` (catalogo real / vazio) | **91 passed** / **5 skipped** nas provas negativas |
 | Suite Python completa | **1630 passed, 2 skipped, 9 warnings** em 541,62s |
 | Artefato/spec (`test_bundle_gateway_artefato.py`, `test_spec_gateway.py`, `test_artefato_congelado.py`) | **27 passed** em 31,18s |
 | `scripts/sync_version.py --check` | **Todos alinhados**, versao `1.2.191` |
